@@ -125,7 +125,7 @@ function Analitica() {
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary"
-                    style={{ width: `${(p.valor / topProveedores[0].valor) * 100}%` }}
+                    style={{ width: `${(p.valor / (topProveedores[0]?.valor ?? 1)) * 100}%` }}
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">{p.facturas} facturas</p>
