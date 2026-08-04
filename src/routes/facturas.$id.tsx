@@ -137,7 +137,7 @@ function DetalleFactura() {
               <EstadoBadge estado={factura.estado} />
             </div>
             <ol className="mt-5 space-y-4">
-              {factura.historial.map((h, i) => (
+              {factura.historial.map((h: (typeof factura.historial)[number], i: number) => (
                 <li key={i} className="relative pl-6">
                   <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-primary" />
                   {i < factura.historial.length - 1 && (

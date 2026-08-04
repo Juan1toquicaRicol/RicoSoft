@@ -10,33 +10,92 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BandejaRouteImport } from './routes/bandeja'
+import { Route as ContratosRouteImport } from './routes/contratos'
+import { Route as ReglasRouteImport } from './routes/reglas'
+import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
+import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BandejaRoute = BandejaRouteImport.update({
+  id: '/bandeja',
+  path: '/bandeja',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContratosRoute = ContratosRouteImport.update({
+  id: '/contratos',
+  path: '/contratos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReglasRoute = ReglasRouteImport.update({
+  id: '/reglas',
+  path: '/reglas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacturasIndexRoute = FacturasIndexRouteImport.update({
+  id: '/facturas/',
+  path: '/facturas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacturasIdRoute = FacturasIdRouteImport.update({
+  id: '/facturas/$id',
+  path: '/facturas/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bandeja': typeof BandejaRoute
+  '/contratos': typeof ContratosRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas/': typeof FacturasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bandeja': typeof BandejaRoute
+  '/contratos': typeof ContratosRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas': typeof FacturasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bandeja': typeof BandejaRoute
+  '/contratos': typeof ContratosRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas/': typeof FacturasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/bandeja' | '/contratos' | '/reglas' | '/facturas/$id' | '/facturas/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    '/' | '/bandeja' | '/contratos' | '/reglas' | '/facturas/$id' | '/facturas'
+  id:
+    | '__root__'
+    | '/'
+    | '/bandeja'
+    | '/contratos'
+    | '/reglas'
+    | '/facturas/$id'
+    | '/facturas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BandejaRoute: typeof BandejaRoute
+  ContratosRoute: typeof ContratosRoute
+  ReglasRoute: typeof ReglasRoute
+  FacturasIdRoute: typeof FacturasIdRoute
+  FacturasIndexRoute: typeof FacturasIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +107,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bandeja': {
+      id: '/bandeja'
+      path: '/bandeja'
+      fullPath: '/bandeja'
+      preLoaderRoute: typeof BandejaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contratos': {
+      id: '/contratos'
+      path: '/contratos'
+      fullPath: '/contratos'
+      preLoaderRoute: typeof ContratosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reglas': {
+      id: '/reglas'
+      path: '/reglas'
+      fullPath: '/reglas'
+      preLoaderRoute: typeof ReglasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facturas/': {
+      id: '/facturas/'
+      path: '/facturas'
+      fullPath: '/facturas/'
+      preLoaderRoute: typeof FacturasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facturas/$id': {
+      id: '/facturas/$id'
+      path: '/facturas/$id'
+      fullPath: '/facturas/$id'
+      preLoaderRoute: typeof FacturasIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BandejaRoute: BandejaRoute,
+  ContratosRoute: ContratosRoute,
+  ReglasRoute: ReglasRoute,
+  FacturasIdRoute: FacturasIdRoute,
+  FacturasIndexRoute: FacturasIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
