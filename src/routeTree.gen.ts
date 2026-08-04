@@ -10,33 +10,180 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AnaliticaRouteImport } from './routes/analitica'
+import { Route as AuditoriaRouteImport } from './routes/auditoria'
+import { Route as BandejaRouteImport } from './routes/bandeja'
+import { Route as ConfiguracionRouteImport } from './routes/configuracion'
+import { Route as ContratosRouteImport } from './routes/contratos'
+import { Route as CreditosRouteImport } from './routes/creditos'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProyeccionRouteImport } from './routes/proyeccion'
+import { Route as ReglasRouteImport } from './routes/reglas'
+import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
+import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnaliticaRoute = AnaliticaRouteImport.update({
+  id: '/analitica',
+  path: '/analitica',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditoriaRoute = AuditoriaRouteImport.update({
+  id: '/auditoria',
+  path: '/auditoria',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BandejaRoute = BandejaRouteImport.update({
+  id: '/bandeja',
+  path: '/bandeja',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracionRoute = ConfiguracionRouteImport.update({
+  id: '/configuracion',
+  path: '/configuracion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContratosRoute = ContratosRouteImport.update({
+  id: '/contratos',
+  path: '/contratos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreditosRoute = CreditosRouteImport.update({
+  id: '/creditos',
+  path: '/creditos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProyeccionRoute = ProyeccionRouteImport.update({
+  id: '/proyeccion',
+  path: '/proyeccion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReglasRoute = ReglasRouteImport.update({
+  id: '/reglas',
+  path: '/reglas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacturasIndexRoute = FacturasIndexRouteImport.update({
+  id: '/facturas/',
+  path: '/facturas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacturasIdRoute = FacturasIdRouteImport.update({
+  id: '/facturas/$id',
+  path: '/facturas/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analitica': typeof AnaliticaRoute
+  '/auditoria': typeof AuditoriaRoute
+  '/bandeja': typeof BandejaRoute
+  '/configuracion': typeof ConfiguracionRoute
+  '/contratos': typeof ContratosRoute
+  '/creditos': typeof CreditosRoute
+  '/login': typeof LoginRoute
+  '/proyeccion': typeof ProyeccionRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas/': typeof FacturasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analitica': typeof AnaliticaRoute
+  '/auditoria': typeof AuditoriaRoute
+  '/bandeja': typeof BandejaRoute
+  '/configuracion': typeof ConfiguracionRoute
+  '/contratos': typeof ContratosRoute
+  '/creditos': typeof CreditosRoute
+  '/login': typeof LoginRoute
+  '/proyeccion': typeof ProyeccionRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas': typeof FacturasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/analitica': typeof AnaliticaRoute
+  '/auditoria': typeof AuditoriaRoute
+  '/bandeja': typeof BandejaRoute
+  '/configuracion': typeof ConfiguracionRoute
+  '/contratos': typeof ContratosRoute
+  '/creditos': typeof CreditosRoute
+  '/login': typeof LoginRoute
+  '/proyeccion': typeof ProyeccionRoute
+  '/reglas': typeof ReglasRoute
+  '/facturas/$id': typeof FacturasIdRoute
+  '/facturas/': typeof FacturasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/analitica'
+    | '/auditoria'
+    | '/bandeja'
+    | '/configuracion'
+    | '/contratos'
+    | '/creditos'
+    | '/login'
+    | '/proyeccion'
+    | '/reglas'
+    | '/facturas/$id'
+    | '/facturas/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/analitica'
+    | '/auditoria'
+    | '/bandeja'
+    | '/configuracion'
+    | '/contratos'
+    | '/creditos'
+    | '/login'
+    | '/proyeccion'
+    | '/reglas'
+    | '/facturas/$id'
+    | '/facturas'
+  id:
+    | '__root__'
+    | '/'
+    | '/analitica'
+    | '/auditoria'
+    | '/bandeja'
+    | '/configuracion'
+    | '/contratos'
+    | '/creditos'
+    | '/login'
+    | '/proyeccion'
+    | '/reglas'
+    | '/facturas/$id'
+    | '/facturas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AnaliticaRoute: typeof AnaliticaRoute
+  AuditoriaRoute: typeof AuditoriaRoute
+  BandejaRoute: typeof BandejaRoute
+  ConfiguracionRoute: typeof ConfiguracionRoute
+  ContratosRoute: typeof ContratosRoute
+  CreditosRoute: typeof CreditosRoute
+  LoginRoute: typeof LoginRoute
+  ProyeccionRoute: typeof ProyeccionRoute
+  ReglasRoute: typeof ReglasRoute
+  FacturasIdRoute: typeof FacturasIdRoute
+  FacturasIndexRoute: typeof FacturasIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +195,100 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analitica': {
+      id: '/analitica'
+      path: '/analitica'
+      fullPath: '/analitica'
+      preLoaderRoute: typeof AnaliticaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auditoria': {
+      id: '/auditoria'
+      path: '/auditoria'
+      fullPath: '/auditoria'
+      preLoaderRoute: typeof AuditoriaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bandeja': {
+      id: '/bandeja'
+      path: '/bandeja'
+      fullPath: '/bandeja'
+      preLoaderRoute: typeof BandejaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracion': {
+      id: '/configuracion'
+      path: '/configuracion'
+      fullPath: '/configuracion'
+      preLoaderRoute: typeof ConfiguracionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contratos': {
+      id: '/contratos'
+      path: '/contratos'
+      fullPath: '/contratos'
+      preLoaderRoute: typeof ContratosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/creditos': {
+      id: '/creditos'
+      path: '/creditos'
+      fullPath: '/creditos'
+      preLoaderRoute: typeof CreditosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proyeccion': {
+      id: '/proyeccion'
+      path: '/proyeccion'
+      fullPath: '/proyeccion'
+      preLoaderRoute: typeof ProyeccionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reglas': {
+      id: '/reglas'
+      path: '/reglas'
+      fullPath: '/reglas'
+      preLoaderRoute: typeof ReglasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facturas/': {
+      id: '/facturas/'
+      path: '/facturas'
+      fullPath: '/facturas/'
+      preLoaderRoute: typeof FacturasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facturas/$id': {
+      id: '/facturas/$id'
+      path: '/facturas/$id'
+      fullPath: '/facturas/$id'
+      preLoaderRoute: typeof FacturasIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AnaliticaRoute: AnaliticaRoute,
+  AuditoriaRoute: AuditoriaRoute,
+  BandejaRoute: BandejaRoute,
+  ConfiguracionRoute: ConfiguracionRoute,
+  ContratosRoute: ContratosRoute,
+  CreditosRoute: CreditosRoute,
+  LoginRoute: LoginRoute,
+  ProyeccionRoute: ProyeccionRoute,
+  ReglasRoute: ReglasRoute,
+  FacturasIdRoute: FacturasIdRoute,
+  FacturasIndexRoute: FacturasIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
