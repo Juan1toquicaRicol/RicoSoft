@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useFacturas } from "@/hooks/use-facturas";
+import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { money, EstadoFactura, Prioridad } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,7 @@ const estadosFilter: (EstadoFactura | "Todas")[] = [
 function FacturasPage() {
   const { empresaActiva, empresas } = useTenant();
   const { facturas, loading, error, addFactura, updateEstadoFactura } = useFacturas();
+  const { departamentos } = useDepartamentosPublico();
 
   const [estadoSel, setEstadoSel] = useState<(typeof estadosFilter)[number]>("Todas");
   const [q, setQ] = useState("");
@@ -386,15 +388,11 @@ function FacturasPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="Sistemas">Sistemas</SelectItem>
-                    <SelectItem value="Comercial">Comercial</SelectItem>
-                    <SelectItem value="Produccion">Producción</SelectItem>
-                    <SelectItem value="Gestion Humana">Gestión Humana</SelectItem>
-                    <SelectItem value="Contabilidad">Contabilidad</SelectItem>
-                    <SelectItem value="Mantenimiento">Mantenimiento</SelectItem>
-                    <SelectItem value="Compras">Compras</SelectItem>
-                    <SelectItem value="Logistica">Logística</SelectItem>
-                    <SelectItem value="Gerencia">Gerencia</SelectItem>
+                    {departamentos.map((d) => (
+                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                        {d.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

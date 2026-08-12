@@ -87,7 +87,7 @@ export type EstadoSolicitudCompra = "Pendiente" | "En Cotización" | "Aprobada" 
 export interface SolicitudCompra {
   id: string;
   empresaId: string;
-  area: AreaEmpresa;
+  area: string;
   solicitante: string;
   item: string;
   descripcion: string;

@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useServicios } from "@/hooks/use-servicios";
-import { money, AreaEmpresa, PeriodicidadServicio } from "@/lib/data";
+import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
+import { money, PeriodicidadServicio } from "@/lib/data";
 
 export const Route = createFileRoute("/servicios")({
   head: () => ({
@@ -26,12 +27,13 @@ export const Route = createFileRoute("/servicios")({
 function ServiciosPage() {
   const { empresaActiva, empresas } = useTenant();
   const { suscripciones, loading, error, addSuscripcion, toggleEstadoSuscripcion } = useServicios();
+  const { departamentos } = useDepartamentosPublico();
 
   const [modalOpen, setModalOpen] = useState(false);
 
   const [form, setForm] = useState({
     empresaId: empresaActiva === "ALL" ? "001" : empresaActiva,
-    area: "Sistemas" as AreaEmpresa,
+    area: "Sistemas",
     nombreServicio: "",
     proveedor: "",
     periodicidad: "Mensual" as PeriodicidadServicio,
@@ -219,18 +221,14 @@ function ServiciosPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold text-slate-700">Área Categorizada *</Label>
-                <Select value={form.area} onValueChange={(val: any) => setForm({ ...form, area: val })}>
+                <Select value={form.area} onValueChange={(val) => setForm({ ...form, area: val })}>
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="Sistemas">Sistemas</SelectItem>
-                    <SelectItem value="Comercial">Comercial</SelectItem>
-                    <SelectItem value="Produccion">Producción</SelectItem>
-                    <SelectItem value="Gestion Humana">Gestión Humana</SelectItem>
-                    <SelectItem value="Contabilidad">Contabilidad</SelectItem>
-                    <SelectItem value="Mantenimiento">Mantenimiento</SelectItem>
-                    <SelectItem value="Compras">Compras</SelectItem>
-                    <SelectItem value="Logistica">Logística</SelectItem>
-                    <SelectItem value="Gerencia">Gerencia</SelectItem>
+                    {departamentos.map((d) => (
+                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                        {d.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

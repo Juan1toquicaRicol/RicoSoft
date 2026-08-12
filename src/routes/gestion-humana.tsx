@@ -12,7 +12,7 @@ import {
   Mail,
   Send,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useGestionHumana } from "@/hooks/use-gestion-humana";
+import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { money, Empleado, GravedadStrike } from "@/lib/data";
 
 export const Route = createFileRoute("/gestion-humana")({
@@ -67,6 +68,7 @@ function GestionHumana() {
     loading,
     error,
   } = useGestionHumana();
+  const { departamentos } = useDepartamentosPublico();
 
   const [activeTab, setActiveTab] = useState<"expediente" | "permisos" | "faltas" | "comunicados">(
     "expediente",
@@ -87,10 +89,16 @@ function GestionHumana() {
     apellidos: "",
     correo: "",
     cargo: "",
-    area: "Operaciones",
+    area: "",
     fechaContratacion: new Date().toISOString().split("T")[0],
     salarioActual: 2000000,
   });
+
+  // Preselecciona el primer departamento real configurado apenas carguen.
+  useEffect(() => {
+    if (departamentos.length === 0) return;
+    setEmpForm((f) => (f.area ? f : { ...f, area: departamentos[0].nombre }));
+  }, [departamentos]);
 
   const [salarioForm, setSalarioForm] = useState({
     nuevoSalario: 2500000,
@@ -168,7 +176,7 @@ function GestionHumana() {
       apellidos: "",
       correo: "",
       cargo: "",
-      area: "Operaciones",
+      area: "",
       fechaContratacion: new Date().toISOString().split("T")[0],
       salarioActual: 2000000,
     });
@@ -674,21 +682,11 @@ function GestionHumana() {
                     <SelectItem value="todos" className="text-xs font-bold">
                       Toda la Empresa Activa ({filteredEmpleados.length} colaboradores)
                     </SelectItem>
-                    <SelectItem value="Sistemas / TI" className="text-xs">
-                      Área de Sistemas / TI
-                    </SelectItem>
-                    <SelectItem value="Comercial" className="text-xs">
-                      Área Comercial
-                    </SelectItem>
-                    <SelectItem value="Operaciones" className="text-xs">
-                      Área de Operaciones
-                    </SelectItem>
-                    <SelectItem value="Recursos Humanos" className="text-xs">
-                      Área de Recursos Humanos
-                    </SelectItem>
-                    <SelectItem value="Financiera" className="text-xs">
-                      Área Financiera
-                    </SelectItem>
+                    {departamentos.map((d) => (
+                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                        Área de {d.nombre}
+                      </SelectItem>
+                    ))}
                     <SelectItem value="individual" className="text-xs text-blue-800 font-bold">
                       Colaborador Específico...
                     </SelectItem>
@@ -853,11 +851,11 @@ function GestionHumana() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="Sistemas / TI">Sistemas / TI</SelectItem>
-                    <SelectItem value="Comercial">Comercial</SelectItem>
-                    <SelectItem value="Operaciones">Operaciones</SelectItem>
-                    <SelectItem value="Recursos Humanos">Recursos Humanos</SelectItem>
-                    <SelectItem value="Financiera">Financiera</SelectItem>
+                    {departamentos.map((d) => (
+                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                        {d.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
