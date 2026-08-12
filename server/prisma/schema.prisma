@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                String                @id @default(uuid()) @db.UniqueIdentifier
+  nombre            String                @db.VarChar(255)
+  subdomain         String                @unique @db.VarChar(255)
+  createdAt         DateTime              @default(now())
+  auditorias        Auditoria[]
+  colaboradores     Colaborador[]
+  contratos         Contrato[]
+  creditos          CreditoCliente[]
+  departamentos     Departamento[]
+  empleados         Empleado[]
+  facturas          Factura[]
+  faltas            FaltaStrike[]
+  modulos           Modulo[]
+  permisosLaborales PermisoLaboral[]
+  proyecciones      ProyeccionMensual[]
+  reglas            ReglaEnrutamiento[]
+  roles             Rol[]
+  servicios         ServicioSuscripcion[]
+  solicitudesCompra SolicitudCompra[]
+  users             User[]
+}
+
+model User {
+  id               String           @id @default(uuid()) @db.UniqueIdentifier
+  tenantId         String           @db.UniqueIdentifier
+  email            String           @unique @db.VarChar(255)
+  passwordHash     String           @db.Text
+  nombre           String           @db.VarChar(255)
+  rol              String?          @default("COLABORADOR") @db.VarChar(50)
+  createdAt        DateTime         @default(now())
+  activo           Boolean          @default(true)
+  colaboradorId    String?          @db.UniqueIdentifier
+  departamentoId   String?          @db.UniqueIdentifier
+  isSuperadmin     Boolean          @default(false)
+  lastLoginAt      DateTime?
+  rolId            String?          @db.UniqueIdentifier
+  auditoriasHechas Auditoria[]      @relation("UsuarioOrigen")
+  permisosDirectos PermisoUsuario[]
+  colaborador      Colaborador?     @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departamento     Departamento?    @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rolRel           Rol?             @relation(fields: [rolId], references: [id])
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+
+  @@index([tenantId, activo])
+  @@index([tenantId, email])
+}
+
+model Rol {
+  id          String  @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String  @db.UniqueIdentifier
+  nombre      String  @db.VarChar(100)
+  descripcion String? @db.VarChar(255)
+  esSistema   Boolean @default(false)
+  permisos    String  @default("[]") @db.Text
+  tenant      Tenant  @relation(fields: [tenantId], references: [id])
+  users       User[]
+
+  @@index([tenantId])
+}
+
+model PermisoUsuario {
+  id        String  @id @default(uuid()) @db.UniqueIdentifier
+  userId    String  @db.UniqueIdentifier
+  permisoId String  @db.VarChar(100)
+  concedido Boolean
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Auditoria {
+  id              String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String   @db.UniqueIdentifier
+  usuarioId       String   @db.UniqueIdentifier
+  usuarioAfectado String?  @db.VarChar(255)
+  accion          String   @db.VarChar(100)
+  detalle         String   @db.Text
+  createdAt       DateTime @default(now())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  usuario         User     @relation("UsuarioOrigen", fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Departamento {
+  id            String        @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String        @db.UniqueIdentifier
+  nombre        String        @db.VarChar(255)
+  activo        Boolean       @default(true)
+  esSistemas    Boolean       @default(false)
+  colaboradores Colaborador[]
+  modulos       Modulo[]
+  usuarios      User[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+/// Módulos principales de la aplicación (Facturas, Contratos, etc.), agrupables
+/// por Departamento desde Configuración. clave identifica el módulo de forma
+/// estable independientemente del departamento al que esté asignado.
+model Modulo {
+  id             String        @id @default(uuid()) @db.UniqueIdentifier
+  tenantId       String        @db.UniqueIdentifier
+  clave          String        @db.VarChar(100)
+  nombre         String        @db.VarChar(255)
+  ruta           String        @db.VarChar(255)
+  icono          String        @db.VarChar(50)
+  departamentoId String?       @db.UniqueIdentifier
+  activo         Boolean       @default(true)
+  orden          Int           @default(0)
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  departamento   Departamento? @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenantId, clave])
+  @@index([tenantId])
+  @@index([departamentoId])
+}
+
+model Colaborador {
+  id              String        @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String        @db.UniqueIdentifier
+  departamentoId  String?       @db.UniqueIdentifier
+  numero_empleado String        @db.VarChar(50)
+  nombre          String        @db.VarChar(255)
+  apellido        String        @db.VarChar(255)
+  departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  users           User[]
+
+  @@index([tenantId])
+}
+
+model Factura {
+  id           String             @id @default(uuid()) @db.UniqueIdentifier
+  tenantId     String             @db.UniqueIdentifier
+  empresaId    String             @db.VarChar(10)
+  numero       String             @db.VarChar(50)
+  proveedor    String             @db.VarChar(255)
+  nit          String             @db.VarChar(50)
+  contrato     String?            @db.VarChar(100)
+  centroCostos String?            @db.VarChar(100)
+  area         String             @db.VarChar(100)
+  responsable  String             @db.VarChar(255)
+  fecha        DateTime           @default(now())
+  vence        DateTime
+  subtotal     Decimal            @db.Decimal(18, 2)
+  iva          Decimal            @db.Decimal(18, 2)
+  total        Decimal            @db.Decimal(18, 2)
+  moneda       String             @default("COP") @db.VarChar(3)
+  estado       String             @default("Pendiente") @db.VarChar(20)
+  prioridad    String             @default("Media") @db.VarChar(20)
+  origen       String             @default("Carga manual") @db.VarChar(20)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  historial    FacturaHistorial[]
+
+  @@unique([tenantId, empresaId, numero])
+  @@index([tenantId])
+}
+
+model FacturaHistorial {
+  id        String   @id @default(uuid()) @db.UniqueIdentifier
+  facturaId String   @db.UniqueIdentifier
+  actor     String   @db.VarChar(255)
+  accion    String   @db.VarChar(255)
+  detalle   String?  @db.Text
+  createdAt DateTime @default(now())
+  factura   Factura  @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+
+  @@index([facturaId])
+}
+
+model SolicitudCompra {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId       String   @db.UniqueIdentifier
+  empresaId      String   @db.VarChar(10)
+  area           String   @db.VarChar(100)
+  solicitante    String   @db.VarChar(255)
+  item           String   @db.VarChar(255)
+  descripcion    String?  @db.Text
+  cantidad       Int
+  valorEstimado  Decimal  @db.Decimal(18, 2)
+  prioridad      String   @default("Media") @db.VarChar(20)
+  estado         String   @default("Pendiente") @db.VarChar(20)
+  fechaSolicitud DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model ServicioSuscripcion {
+  id              String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String   @db.UniqueIdentifier
+  empresaId       String   @db.VarChar(10)
+  area            String   @db.VarChar(100)
+  nombreServicio  String   @db.VarChar(255)
+  proveedor       String   @db.VarChar(255)
+  periodicidad    String   @db.VarChar(20)
+  costo           Decimal  @db.Decimal(18, 2)
+  moneda          String   @default("COP") @db.VarChar(3)
+  fechaRenovacion DateTime
+  estado          String   @default("Activo") @db.VarChar(30)
+  responsableArea String   @db.VarChar(255)
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Contrato {
+  id              String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String   @db.UniqueIdentifier
+  empresaId       String   @db.VarChar(10)
+  proveedor       String   @db.VarChar(255)
+  cliente         String?  @db.VarChar(255)
+  responsable     String   @db.VarChar(255)
+  supervisor      String?  @db.VarChar(255)
+  gerente         String?  @db.VarChar(255)
+  area            String   @db.VarChar(100)
+  centroCostos    String?  @db.VarChar(100)
+  valorContratado Decimal  @db.Decimal(18, 2)
+  fechaInicio     DateTime
+  fechaFin        DateTime
+  estado          String   @default("Activo") @db.VarChar(20)
+  observaciones   String?  @db.Text
+  createdAt       DateTime @default(now())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model ReglaEnrutamiento {
+  id          String  @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String  @db.UniqueIdentifier
+  nombre      String  @db.VarChar(255)
+  prioridad   Int     @default(1)
+  activa      Boolean @default(true)
+  condiciones String  @db.Text
+  acciones    String  @db.Text
+  ejecuciones Int     @default(0)
+  tenant      Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model CreditoCliente {
+  id       String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId String   @db.UniqueIdentifier
+  cliente  String   @db.VarChar(255)
+  cupo     Decimal  @db.Decimal(18, 2)
+  saldo    Decimal  @db.Decimal(18, 2)
+  vence    DateTime
+  estado   String   @default("Al día") @db.VarChar(20)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model ProyeccionMensual {
+  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId   String   @db.UniqueIdentifier
+  mes        String   @db.VarChar(20)
+  anio       Int
+  proyectado Decimal  @db.Decimal(18, 2)
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, mes, anio])
+  @@index([tenantId])
+}
+
+model Empleado {
+  id                String             @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String             @db.UniqueIdentifier
+  empresaId         String             @db.VarChar(10)
+  documento         String             @db.VarChar(50)
+  nombres           String             @db.VarChar(255)
+  apellidos         String             @db.VarChar(255)
+  correo            String             @db.VarChar(255)
+  cargo             String             @db.VarChar(255)
+  area              String             @db.VarChar(100)
+  fechaContratacion DateTime
+  fechaLiquidacion  DateTime?
+  salarioActual     Decimal            @db.Decimal(18, 2)
+  estado            String             @default("Activo") @db.VarChar(20)
+  createdAt         DateTime           @default(now())
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  faltas            FaltaStrike[]
+  historicoSalario  HistorialSalario[]
+  permisos          PermisoLaboral[]
+
+  @@index([tenantId])
+}
+
+model HistorialSalario {
+  id              String   @id @default(uuid()) @db.UniqueIdentifier
+  empleadoId      String   @db.UniqueIdentifier
+  fecha           DateTime @default(now())
+  salarioAnterior Decimal  @db.Decimal(18, 2)
+  nuevoSalario    Decimal  @db.Decimal(18, 2)
+  motivo          String   @db.VarChar(255)
+  empleado        Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+
+  @@index([empleadoId])
+}
+
+model PermisoLaboral {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId       String   @db.UniqueIdentifier
+  empresaId      String   @db.VarChar(10)
+  empleadoId     String   @db.UniqueIdentifier
+  tipoPermiso    String   @db.VarChar(50)
+  fechaInicio    DateTime
+  fechaFin       DateTime
+  dias           Int
+  observaciones  String?  @db.Text
+  estado         String   @default("Pendiente") @db.VarChar(20)
+  fechaSolicitud DateTime @default(now())
+  empleado       Empleado @relation(fields: [empleadoId], references: [id])
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@index([empleadoId])
+}
+
+model FaltaStrike {
+  id            String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String   @db.UniqueIdentifier
+  empresaId     String   @db.VarChar(10)
+  empleadoId    String   @db.UniqueIdentifier
+  fecha         DateTime @default(now())
+  gravedad      String   @db.VarChar(20)
+  motivo        String   @db.Text
+  descargos     String?  @db.Text
+  registradoPor String   @db.VarChar(255)
+  empleado      Empleado @relation(fields: [empleadoId], references: [id])
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@index([empleadoId])
+}
