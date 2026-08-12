@@ -22,6 +22,9 @@ dist-ssr
 server/.env
 server/.env.*
 
+# Uploaded files (local disk storage, not versioned)
+server/uploads/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

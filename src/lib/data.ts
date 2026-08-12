@@ -23,6 +23,13 @@ export interface Factura {
   estado: EstadoFactura;
   prioridad: Prioridad;
   origen: "Correo" | "Portal" | "OCR" | "Carga manual";
+  archivo: {
+    nombre: string;
+    mime: string | null;
+    tamano: number | null;
+    subidoPor: string | null;
+    subidoEn: string | null;
+  } | null;
   historial: { fecha: string; actor: string; accion: string; detalle?: string }[];
 }
 

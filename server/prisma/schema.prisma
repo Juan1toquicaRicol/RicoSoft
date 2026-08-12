@@ -31,27 +31,27 @@ model Tenant {
 }
 
 model User {
-  id                    String            @id @default(uuid()) @db.UniqueIdentifier
-  tenantId              String            @db.UniqueIdentifier
-  email                 String            @unique @db.VarChar(255)
-  passwordHash          String            @db.Text
-  nombre                String            @db.VarChar(255)
-  telefono              String?           @db.VarChar(50)
-  rol                   String?           @default("COLABORADOR") @db.VarChar(50)
-  createdAt             DateTime          @default(now())
-  activo                Boolean           @default(true)
-  colaboradorId         String?           @db.UniqueIdentifier
-  departamentoId        String?           @db.UniqueIdentifier
-  isSuperadmin          Boolean           @default(false)
-  lastLoginAt           DateTime?
-  rolId                 String?           @db.UniqueIdentifier
-  auditoriasHechas      Auditoria[]       @relation("UsuarioOrigen")
-  permisosDirectos      PermisoUsuario[]
-  solicitudesResueltas  SolicitudCompra[] @relation("SolicitudResueltaPor")
-  colaborador           Colaborador?      @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  departamento          Departamento?     @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  rolRel                Rol?              @relation(fields: [rolId], references: [id])
-  tenant                Tenant            @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  id                   String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId             String            @db.UniqueIdentifier
+  email                String            @unique @db.VarChar(255)
+  passwordHash         String            @db.Text
+  nombre               String            @db.VarChar(255)
+  telefono             String?           @db.VarChar(50)
+  rol                  String?           @default("COLABORADOR") @db.VarChar(50)
+  createdAt            DateTime          @default(now())
+  activo               Boolean           @default(true)
+  colaboradorId        String?           @db.UniqueIdentifier
+  departamentoId       String?           @db.UniqueIdentifier
+  isSuperadmin         Boolean           @default(false)
+  lastLoginAt          DateTime?
+  rolId                String?           @db.UniqueIdentifier
+  auditoriasHechas     Auditoria[]       @relation("UsuarioOrigen")
+  permisosDirectos     PermisoUsuario[]
+  solicitudesResueltas SolicitudCompra[] @relation("SolicitudResueltaPor")
+  colaborador          Colaborador?      @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departamento         Departamento?     @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rolRel               Rol?              @relation(fields: [rolId], references: [id])
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
 
   @@index([tenantId, activo])
   @@index([tenantId, email])
@@ -142,29 +142,35 @@ model Colaborador {
 }
 
 model Factura {
-  id           String             @id @default(uuid()) @db.UniqueIdentifier
-  tenantId     String             @db.UniqueIdentifier
-  empresaId    String             @db.VarChar(10)
-  numero       String             @db.VarChar(50)
-  proveedor    String             @db.VarChar(255)
-  nit          String             @db.VarChar(50)
-  contrato     String?            @db.VarChar(100)
-  centroCostos String?            @db.VarChar(100)
-  area         String             @db.VarChar(100)
-  responsable  String             @db.VarChar(255)
-  fecha        DateTime           @default(now())
-  vence        DateTime
-  subtotal     Decimal            @db.Decimal(18, 2)
-  iva          Decimal            @db.Decimal(18, 2)
-  total        Decimal            @db.Decimal(18, 2)
-  moneda       String             @default("COP") @db.VarChar(3)
-  estado       String             @default("Pendiente") @db.VarChar(20)
-  prioridad    String             @default("Media") @db.VarChar(20)
-  origen       String             @default("Carga manual") @db.VarChar(20)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  tenant       Tenant             @relation(fields: [tenantId], references: [id])
-  historial    FacturaHistorial[]
+  id                     String             @id @default(uuid()) @db.UniqueIdentifier
+  tenantId               String             @db.UniqueIdentifier
+  empresaId              String             @db.VarChar(10)
+  numero                 String             @db.VarChar(50)
+  proveedor              String             @db.VarChar(255)
+  nit                    String             @db.VarChar(50)
+  contrato               String?            @db.VarChar(100)
+  centroCostos           String?            @db.VarChar(100)
+  area                   String             @db.VarChar(100)
+  responsable            String             @db.VarChar(255)
+  fecha                  DateTime           @default(now())
+  vence                  DateTime
+  subtotal               Decimal            @db.Decimal(18, 2)
+  iva                    Decimal            @db.Decimal(18, 2)
+  total                  Decimal            @db.Decimal(18, 2)
+  moneda                 String             @default("COP") @db.VarChar(3)
+  estado                 String             @default("Pendiente") @db.VarChar(20)
+  prioridad              String             @default("Media") @db.VarChar(20)
+  origen                 String             @default("Carga manual") @db.VarChar(20)
+  archivoNombre          String?            @db.VarChar(255)
+  archivoRuta            String?            @db.VarChar(500)
+  archivoMime            String?            @db.VarChar(100)
+  archivoTamano          Int?
+  archivoSubidoPorNombre String?            @db.VarChar(255)
+  archivoSubidoEn        DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id])
+  historial              FacturaHistorial[]
 
   @@unique([tenantId, empresaId, numero])
   @@index([tenantId])

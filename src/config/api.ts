@@ -34,3 +34,47 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
     throw error;
   }
 };
+
+/**
+ * Variante de fetchApi para subir archivos (multipart/form-data). No fija
+ * Content-Type: el navegador debe generar el boundary del multipart.
+ */
+export const fetchApiUpload = async (
+  endpoint: string,
+  formData: FormData,
+  options: RequestInit = {},
+) => {
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      ...options,
+      body: formData,
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || 'Error al subir el archivo.');
+    }
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Failed to fetch') {
+      throw new Error(
+        'No se pudo conectar con el servidor backend. Asegúrate de que Node.js esté corriendo en http://localhost:4000',
+      );
+    }
+    throw error;
+  }
+};
+
+/**
+ * Variante de fetchApi para descargar contenido binario (PDF/imágenes) en
+ * vez de JSON. Devuelve el Blob para poder previsualizarlo en el navegador.
+ */
+export const fetchApiBlob = async (endpoint: string, options: RequestInit = {}) => {
+  const response = await fetch(`${API_URL}${endpoint}`, options);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || 'Error al obtener el archivo.');
+  }
+  return response.blob();
+};

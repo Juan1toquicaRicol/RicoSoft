@@ -1,11 +1,28 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Check, CornerUpLeft, DollarSign, Download, FileText, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  DollarSign,
+  Download,
+  FileText,
+  Loader2,
+  MessageSquare,
+  Paperclip,
+  Send,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/data";
-import { useFacturas } from "@/hooks/use-facturas";
+import { useFacturas, usePollingFacturas } from "@/hooks/use-facturas";
+import { useSession } from "@/lib/session-context";
+import { hasPermission } from "@/lib/session";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 
 export const Route = createFileRoute("/facturas/$id")({
   head: () => ({
@@ -17,13 +34,36 @@ export const Route = createFileRoute("/facturas/$id")({
   component: DetalleFactura,
 });
 
+function formatearTamano(bytes: number | null) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function DetalleFactura() {
   const { id } = Route.useParams();
-  const { facturas, loading, error, updateEstadoFactura } = useFacturas();
+  const {
+    facturas,
+    loading,
+    error,
+    refresh,
+    updateEstadoFactura,
+    subirArchivoFactura,
+    eliminarArchivoFactura,
+    descargarArchivoFactura,
+    agregarComentarioFactura,
+  } = useFacturas();
+  const { user } = useSession();
+
+  // Refresca en segundo plano cada pocos segundos: si otro usuario aprueba,
+  // adjunta un documento o comenta la factura, se ve reflejado sin recargar.
+  usePollingFacturas(refresh);
 
   const factura = facturas.find((f) => f.id === id);
+  const canManageArchivo = hasPermission(user, PERMISOS_SISTEMA.FACTURAS_CREAR);
 
-  if (loading) {
+  if (loading && !factura) {
     return (
       <AppShell title="Cargando factura..." description="RicoSoft Contabilidad">
         <div className="panel p-12 text-center text-sm text-muted-foreground">Cargando...</div>
@@ -58,6 +98,9 @@ function DetalleFactura() {
     ["Prioridad", factura.prioridad],
     ["Origen", factura.origen],
   ];
+
+  const eventosSistema = factura.historial.filter((h) => h.accion !== "Comentario");
+  const comentarios = factura.historial.filter((h) => h.accion === "Comentario");
 
   return (
     <AppShell
@@ -154,28 +197,29 @@ function DetalleFactura() {
             </div>
           </div>
 
-          <div className="panel p-5">
-            <h2 className="text-sm font-semibold">Documento Digitalizado</h2>
-            <div className="mt-4 grid h-52 place-items-center rounded-lg border border-dashed border-border bg-muted/30 text-center">
-              <div>
-                <FileText className="mx-auto h-8 w-8 text-primary opacity-60" />
-                <p className="mt-2 text-sm font-medium">{factura.numero}.pdf</p>
-                <p className="text-xs text-muted-foreground">
-                  Soporte adjunto digitalizado de RicoSoft
-                </p>
-              </div>
-            </div>
-          </div>
+          <DocumentoFactura
+            facturaId={factura.id}
+            archivo={factura.archivo}
+            canManage={canManageArchivo}
+            subirArchivoFactura={subirArchivoFactura}
+            eliminarArchivoFactura={eliminarArchivoFactura}
+            descargarArchivoFactura={descargarArchivoFactura}
+          />
+
+          <ComentariosFactura
+            comentarios={comentarios}
+            onEnviar={(texto) => agregarComentarioFactura(factura.id, texto)}
+          />
         </div>
 
         <div className="space-y-4">
           <div className="panel p-5">
             <h2 className="text-sm font-semibold mb-4">Trazabilidad y Auditoría</h2>
             <ol className="space-y-4">
-              {factura.historial.map((h, i) => (
+              {eventosSistema.map((h, i) => (
                 <li key={i} className="relative pl-6">
                   <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-primary" />
-                  {i < factura.historial.length - 1 && (
+                  {i < eventosSistema.length - 1 && (
                     <span className="absolute left-[4.5px] top-5 h-[calc(100%+0.5rem)] w-px bg-border" />
                   )}
                   <p className="text-xs font-semibold">{h.accion}</p>
@@ -187,10 +231,308 @@ function DetalleFactura() {
                   )}
                 </li>
               ))}
+              {eventosSistema.length === 0 && (
+                <li className="text-xs text-muted-foreground">Sin eventos registrados.</li>
+              )}
             </ol>
           </div>
         </div>
       </div>
     </AppShell>
+  );
+}
+
+interface DocumentoFacturaProps {
+  facturaId: string;
+  archivo: {
+    nombre: string;
+    mime: string | null;
+    tamano: number | null;
+    subidoPor: string | null;
+    subidoEn: string | null;
+  } | null;
+  canManage: boolean;
+  subirArchivoFactura: (id: string, file: File) => Promise<void>;
+  eliminarArchivoFactura: (id: string) => Promise<void>;
+  descargarArchivoFactura: (id: string) => Promise<Blob>;
+}
+
+function DocumentoFactura({
+  facturaId,
+  archivo,
+  canManage,
+  subirArchivoFactura,
+  eliminarArchivoFactura,
+  descargarArchivoFactura,
+}: DocumentoFacturaProps) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [cargandoVista, setCargandoVista] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
+  const [errorArchivo, setErrorArchivo] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    let urlCreada: string | null = null;
+
+    if (archivo) {
+      setCargandoVista(true);
+      descargarArchivoFactura(facturaId)
+        .then((blob) => {
+          if (cancelado) return;
+          urlCreada = URL.createObjectURL(blob);
+          setBlobUrl(urlCreada);
+        })
+        .catch(() => {
+          if (!cancelado) setBlobUrl(null);
+        })
+        .finally(() => {
+          if (!cancelado) setCargandoVista(false);
+        });
+    } else {
+      setBlobUrl(null);
+    }
+
+    return () => {
+      cancelado = true;
+      if (urlCreada) URL.revokeObjectURL(urlCreada);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facturaId, archivo?.nombre, archivo?.subidoEn]);
+
+  const handleSeleccionArchivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErrorArchivo("");
+    setSubiendo(true);
+    try {
+      await subirArchivoFactura(facturaId, file);
+    } catch (err: any) {
+      setErrorArchivo(err.message || "Error al subir el archivo.");
+    } finally {
+      setSubiendo(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleEliminar = async () => {
+    if (!confirm("¿Eliminar el documento adjunto de esta factura?")) return;
+    try {
+      await eliminarArchivoFactura(facturaId);
+    } catch (err: any) {
+      alert(err.message || "Error al eliminar el archivo.");
+    }
+  };
+
+  const esImagen = archivo?.mime?.startsWith("image/");
+  const esPdf = archivo?.mime === "application/pdf";
+
+  return (
+    <div className="panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">Documento Digitalizado</h2>
+        {archivo && (
+          <div className="flex items-center gap-1.5">
+            {blobUrl && (
+              <a href={blobUrl} download={archivo.nombre}>
+                <Button type="button" variant="outline" size="xs" className="gap-1.5">
+                  <Download className="h-3.5 w-3.5" /> Descargar
+                </Button>
+              </a>
+            )}
+            {canManage && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="gap-1.5"
+                  disabled={subiendo}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-3.5 w-3.5" /> Reemplazar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="xs"
+                  className="gap-1.5"
+                  onClick={handleEliminar}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={handleSeleccionArchivo}
+      />
+
+      {!archivo && (
+        <div className="mt-4">
+          {canManage ? (
+            <button
+              type="button"
+              disabled={subiendo}
+              onClick={() => fileInputRef.current?.click()}
+              className="grid h-40 w-full place-items-center rounded-lg border border-dashed border-border bg-muted/30 text-center transition-colors hover:bg-muted/50 disabled:opacity-60"
+            >
+              <div>
+                {subiendo ? (
+                  <Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" />
+                ) : (
+                  <Upload className="mx-auto h-7 w-7 text-primary opacity-60" />
+                )}
+                <p className="mt-2 text-sm font-medium">
+                  {subiendo ? "Subiendo archivo..." : "Adjuntar PDF o imagen de la factura"}
+                </p>
+                <p className="text-xs text-muted-foreground">PDF, PNG, JPG o WEBP · máx. 10MB</p>
+              </div>
+            </button>
+          ) : (
+            <div className="grid h-40 place-items-center rounded-lg border border-dashed border-border bg-muted/30 text-center">
+              <div>
+                <FileText className="mx-auto h-8 w-8 text-muted-foreground opacity-50" />
+                <p className="mt-2 text-sm text-muted-foreground">Sin documento adjunto</p>
+              </div>
+            </div>
+          )}
+          {errorArchivo && <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>}
+        </div>
+      )}
+
+      {archivo && (
+        <div className="mt-4">
+          <p className="text-xs font-medium flex items-center gap-1.5">
+            <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+            {archivo.nombre}
+            {archivo.tamano ? (
+              <span className="text-muted-foreground">({formatearTamano(archivo.tamano)})</span>
+            ) : null}
+          </p>
+          {archivo.subidoPor && (
+            <p className="text-[10px] text-muted-foreground">
+              Subido por {archivo.subidoPor}
+              {archivo.subidoEn ? ` · ${new Date(archivo.subidoEn).toLocaleString("es-CO")}` : ""}
+            </p>
+          )}
+
+          <div className="mt-3 overflow-hidden rounded-lg border border-border bg-muted/30">
+            {cargandoVista && (
+              <div className="grid h-52 place-items-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            )}
+            {!cargandoVista && blobUrl && esPdf && (
+              <iframe src={blobUrl} title={archivo.nombre} className="h-[480px] w-full" />
+            )}
+            {!cargandoVista && blobUrl && esImagen && (
+              <img src={blobUrl} alt={archivo.nombre} className="mx-auto max-h-[480px] w-auto" />
+            )}
+            {!cargandoVista && blobUrl && !esPdf && !esImagen && (
+              <div className="grid h-40 place-items-center text-center">
+                <div>
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground opacity-50" />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Vista previa no disponible para este tipo de archivo.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!cargandoVista && !blobUrl && (
+              <div className="grid h-40 place-items-center text-center">
+                <p className="text-xs text-muted-foreground">
+                  No se pudo cargar la vista previa del archivo.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {errorArchivo && <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComentariosFactura({
+  comentarios,
+  onEnviar,
+}: {
+  comentarios: { fecha: string; actor: string; detalle?: string }[];
+  onEnviar: (texto: string) => Promise<void>;
+}) {
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [errorComentario, setErrorComentario] = useState("");
+
+  const handleEnviar = async () => {
+    const valor = texto.trim();
+    if (!valor) return;
+    setErrorComentario("");
+    setEnviando(true);
+    try {
+      await onEnviar(valor);
+      setTexto("");
+    } catch (err: any) {
+      setErrorComentario(err.message || "Error al enviar el comentario.");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="panel p-5">
+      <h2 className="mb-4 flex items-center gap-1.5 text-sm font-semibold">
+        <MessageSquare className="h-4 w-4 text-muted-foreground" /> Comentarios
+      </h2>
+
+      <div className="space-y-3">
+        <textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Escribe un comentario para el equipo..."
+          rows={2}
+          maxLength={2000}
+          className="flex w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs shadow-xs placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-800"
+        />
+        <div className="flex items-center justify-between">
+          {errorComentario ? (
+            <p className="text-xs font-semibold text-slate-900">{errorComentario}</p>
+          ) : (
+            <span />
+          )}
+          <Button
+            type="button"
+            size="xs"
+            disabled={enviando || !texto.trim()}
+            onClick={handleEnviar}
+            className="gap-1.5"
+          >
+            <Send className="h-3.5 w-3.5" /> {enviando ? "Enviando..." : "Comentar"}
+          </Button>
+        </div>
+      </div>
+
+      <ol className="mt-4 space-y-4 border-t border-border pt-4">
+        {comentarios.map((c, i) => (
+          <li key={i} className="text-xs">
+            <p className="font-semibold">{c.actor}</p>
+            <p className="text-[10px] text-muted-foreground">{c.fecha}</p>
+            <p className="mt-1 whitespace-pre-wrap text-slate-700">{c.detalle}</p>
+          </li>
+        ))}
+        {comentarios.length === 0 && (
+          <li className="text-xs text-muted-foreground">Todavía no hay comentarios.</li>
+        )}
+      </ol>
+    </div>
   );
 }

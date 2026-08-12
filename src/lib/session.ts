@@ -1,4 +1,4 @@
-import { fetchApi } from "@/config/api";
+import { fetchApi, fetchApiUpload, fetchApiBlob } from "@/config/api";
 
 export interface SessionUser {
   id: string;
@@ -62,6 +62,28 @@ export async function fetchAuth(endpoint: string, options: RequestInit = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
+  });
+}
+
+/**
+ * Wrapper de fetchApiUpload que adjunta el Bearer token, para subir
+ * archivos (multipart/form-data) a endpoints protegidos.
+ */
+export async function fetchAuthUpload(endpoint: string, formData: FormData) {
+  const token = getToken();
+  return fetchApiUpload(endpoint, formData, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
+/**
+ * Wrapper de fetchApiBlob que adjunta el Bearer token, para descargar
+ * archivos binarios (PDF/imágenes) de endpoints protegidos.
+ */
+export async function fetchAuthBlob(endpoint: string): Promise<Blob> {
+  const token = getToken();
+  return fetchApiBlob(endpoint, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
