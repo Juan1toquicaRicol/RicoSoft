@@ -138,7 +138,7 @@ function RolesConfigPage() {
         </form>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}
 
       <div className="space-y-3">
         {loading && roles.length === 0 && <p className="text-sm text-slate-500">Cargando roles...</p>}
@@ -177,7 +177,7 @@ function RolesConfigPage() {
                       e.stopPropagation();
                       handleEliminar(rol);
                     }}
-                    className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
                     title="Eliminar rol"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

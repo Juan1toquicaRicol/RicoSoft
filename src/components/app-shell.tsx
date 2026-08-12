@@ -24,6 +24,7 @@ import {
   Inbox,
   LogOut,
   Loader2,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ const ICONOS_MODULO: Record<string, LucideIcon> = {
   BarChart3,
   TrendingUp,
   Inbox,
+  History,
 };
 
 interface AppShellProps {
@@ -146,6 +148,24 @@ export function AppShell({ children, title, description, actions }: AppShellProp
               })}
             </div>
           ))}
+
+          {/* ── MI CUENTA (visible para cualquier usuario autenticado) ── */}
+          <div className="pt-4 mt-2 border-t border-slate-800/80">
+            <div className="text-[10px] uppercase font-bold text-slate-500 px-3 pb-2 tracking-wider">
+              Mi cuenta
+            </div>
+            <Link
+              to="/perfil"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                pathname.startsWith("/perfil")
+                  ? "bg-blue-600 text-white font-semibold"
+                  : "hover:bg-slate-800 text-slate-300"
+              }`}
+            >
+              <UserCircle className="h-4 w-4" />
+              <span>Mi Perfil</span>
+            </Link>
+          </div>
 
           {/* ── SECCIÓN ADMINISTRATIVA (Renderizado por Autorización Real) ── */}
           {tieneAccesoAdmin && (
@@ -299,7 +319,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
           <div className="flex items-center gap-3">
             {actions}
             {user.isSuperadmin && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 text-white border border-slate-900">
                 <ShieldAlert className="h-3.5 w-3.5" /> SuperAdmin Mode
               </span>
             )}

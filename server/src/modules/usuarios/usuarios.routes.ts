@@ -6,11 +6,19 @@ import {
   cambiarEstadoUsuario,
   asignarRolUsuario,
   asignarDepartamentoUsuario,
+  actualizarPerfilPropio,
+  cambiarPasswordPropio,
 } from "./usuarios.controller"; // <-- Mismo directorio
 
 const router = Router();
 
 router.use(authenticateJWT);
+
+// Autoservicio: cualquier usuario autenticado puede ver/editar SU PROPIO
+// perfil (el id sale del JWT, nunca de la URL). No requiere permiso
+// administrativo especial ni expone datos de otros usuarios.
+router.patch("/me", actualizarPerfilPropio);
+router.patch("/me/password", cambiarPasswordPropio);
 
 router.get("/", requirePermission("usuarios.ver"), listarUsuarios);
 router.patch("/:id/estado", requirePermission("usuarios.desactivar"), cambiarEstadoUsuario);

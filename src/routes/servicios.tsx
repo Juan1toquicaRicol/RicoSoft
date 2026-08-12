@@ -110,7 +110,7 @@ function ServiciosPage() {
         </div>
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Costo Mensual Recurrente Estimado</p>
-          <p className="text-2xl font-bold mt-1 text-emerald-700 font-mono">
+          <p className="text-2xl font-bold mt-1 text-slate-900 font-mono">
             {money(costoMensualTotal)}
           </p>
         </div>

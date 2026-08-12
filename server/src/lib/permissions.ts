@@ -80,6 +80,7 @@ export interface SessionUser {
   tenantId: string;
   nombre: string;
   email: string;
+  telefono: string | null;
   rol: string | null;
   isSuperadmin: boolean;
   activo: boolean;
@@ -119,6 +120,7 @@ export async function loadSessionUser(userId: string): Promise<SessionUser | nul
     tenantId: user.tenantId,
     nombre: user.nombre,
     email: user.email,
+    telefono: user.telefono,
     rol: user.rolRel?.nombre ?? user.rol,
     isSuperadmin: user.isSuperadmin,
     activo: user.activo,

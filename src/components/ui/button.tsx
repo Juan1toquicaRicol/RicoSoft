@@ -9,9 +9,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Acción primaria: único uso extendido de azul, según la identidad visual negro/blanco/gris.
         default: "bg-blue-800 text-white shadow-2xs hover:bg-blue-900 active:bg-blue-950",
-        destructive: "bg-red-600 text-white shadow-2xs hover:bg-red-700 active:bg-red-800",
-        success: "bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 active:bg-emerald-800",
+        // Acciones negativas/irreversibles (rechazar, eliminar): negro sólido + ícono, sin rojo.
+        destructive: "bg-slate-900 text-white shadow-2xs hover:bg-black active:bg-black",
+        // Acciones afirmativas secundarias (aprobar): contorno negro marcado, sin verde.
+        success:
+          "border-2 border-slate-900 bg-white text-slate-900 shadow-2xs hover:bg-slate-900 hover:text-white",
         outline:
           "border border-slate-300 bg-white text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 hover:border-slate-400",
         secondary: "bg-slate-100 text-slate-900 shadow-2xs hover:bg-slate-200/80",

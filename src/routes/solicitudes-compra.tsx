@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, Plus, ShoppingBag, XCircle } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CheckCircle2, History, Plus, ShoppingBag, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -79,11 +79,18 @@ function SolicitudesCompraPage() {
   return (
     <AppShell
       title="Solicitudes de Compra Internas"
-      description="Requerimientos de insumos, equipos y servicios solicitados por las distintas áreas."
+      description="Solicitudes activas pendientes de gestión. Al aprobar o rechazar, la solicitud pasa a Historia de Compras."
       actions={
-        <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold">
-          <Plus className="h-4 w-4" /> Crear Solicitud de Compra
-        </Button>
+        <>
+          <Link to="/historia-compras">
+            <Button variant="outline" size="sm" className="gap-2">
+              <History className="h-4 w-4" /> Ver Historia de Compras
+            </Button>
+          </Link>
+          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold">
+            <Plus className="h-4 w-4" /> Crear Solicitud de Compra
+          </Button>
+        </>
       }
     >
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
@@ -130,7 +137,7 @@ function SolicitudesCompraPage() {
                     <EstadoBadge estado={sol.estado} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {sol.estado === "Pendiente" && (
+                    {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
                       <div className="flex justify-end gap-1.5">
                         <Button
                           size="xs"
@@ -147,30 +154,17 @@ function SolicitudesCompraPage() {
                         <Button
                           size="xs"
                           variant="destructive"
-                          onClick={() =>
-                            updateEstadoSolicitudCompra(sol.id, "Rechazada").catch((err: any) =>
+                          onClick={() => {
+                            const motivo = window.prompt("Motivo del rechazo (opcional):") ?? undefined;
+                            updateEstadoSolicitudCompra(sol.id, "Rechazada", motivo).catch((err: any) =>
                               alert(err.message || "Error al rechazar."),
-                            )
-                          }
+                            );
+                          }}
                           className="h-7 text-[11px] font-bold"
                         >
                           <XCircle className="h-3 w-3 mr-1" /> Rechazar
                         </Button>
                       </div>
-                    )}
-                    {sol.estado === "Aprobada" && (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() =>
-                          updateEstadoSolicitudCompra(sol.id, "Comprado").catch((err: any) =>
-                            alert(err.message || "Error al marcar como comprado."),
-                          )
-                        }
-                        className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
-                      >
-                        Marcar Comprado
-                      </Button>
                     )}
                   </td>
                 </tr>

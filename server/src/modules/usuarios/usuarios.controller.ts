@@ -1,6 +1,102 @@
 import { Response } from "express";
+import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+
+/**
+ * Actualiza el perfil del usuario autenticado. Solo puede modificar sus
+ * propios datos: el id se toma exclusivamente de req.user (del JWT), nunca
+ * de req.params ni req.body, por lo que no es posible editar a otro usuario
+ * manipulando un identificador en la petición (IDOR). Campos administrativos
+ * (rol, departamento, permisos, estado, email) no se aceptan aquí: solo se
+ * gestionan desde los endpoints administrativos protegidos por permiso.
+ */
+export const actualizarPerfilPropio = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { nombre, telefono } = req.body;
+
+    if (typeof nombre !== "string" || !nombre.trim()) {
+      return res.status(400).json({ message: "El nombre es obligatorio." });
+    }
+    if (telefono !== undefined && telefono !== null && typeof telefono !== "string") {
+      return res.status(400).json({ message: "El teléfono debe ser un texto válido." });
+    }
+    const telefonoLimpio = typeof telefono === "string" ? telefono.trim() : "";
+    if (telefonoLimpio && !/^[0-9+()\-\s]{6,20}$/.test(telefonoLimpio)) {
+      return res.status(400).json({ message: "El teléfono no tiene un formato válido." });
+    }
+
+    const actualizado = await prisma.user.update({
+      where: { id: userId },
+      data: { nombre: nombre.trim(), telefono: telefonoLimpio || null },
+      select: { id: true, nombre: true, email: true, telefono: true },
+    });
+
+    await prisma.auditoria.create({
+      data: {
+        tenantId: req.user!.tenantId,
+        usuarioId: userId,
+        usuarioAfectado: actualizado.email,
+        accion: "PERFIL_ACTUALIZADO",
+        detalle: `${actualizado.nombre} actualizó su información de perfil.`,
+      },
+    });
+
+    return res.json(actualizado);
+  } catch (error) {
+    console.error("Error al actualizar perfil propio:", error);
+    return res.status(500).json({ message: "Error al actualizar el perfil." });
+  }
+};
+
+/**
+ * Cambia la contraseña del usuario autenticado. Requiere confirmar la
+ * contraseña actual (comparada contra el hash existente con bcrypt, el mismo
+ * mecanismo usado en login/registro) antes de aceptar la nueva.
+ */
+export const cambiarPasswordPropio = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { passwordActual, passwordNueva, confirmarPassword } = req.body;
+
+    if (!passwordActual || !passwordNueva || !confirmarPassword) {
+      return res.status(400).json({ message: "Todos los campos de contraseña son obligatorios." });
+    }
+    if (passwordNueva !== confirmarPassword) {
+      return res.status(400).json({ message: "La confirmación no coincide con la nueva contraseña." });
+    }
+    if (typeof passwordNueva !== "string" || passwordNueva.length < 8) {
+      return res.status(400).json({ message: "La nueva contraseña debe tener al menos 8 caracteres." });
+    }
+
+    const usuario = await prisma.user.findUnique({ where: { id: userId } });
+    if (!usuario) return res.status(404).json({ message: "Usuario no encontrado." });
+
+    const esValida = await bcrypt.compare(passwordActual, usuario.passwordHash);
+    if (!esValida) {
+      return res.status(401).json({ message: "La contraseña actual no es correcta." });
+    }
+
+    const nuevoHash = await bcrypt.hash(passwordNueva, 10);
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: nuevoHash } });
+
+    await prisma.auditoria.create({
+      data: {
+        tenantId: usuario.tenantId,
+        usuarioId: userId,
+        usuarioAfectado: usuario.email,
+        accion: "PASSWORD_CAMBIADA",
+        detalle: `${usuario.nombre} cambió su contraseña.`,
+      },
+    });
+
+    return res.json({ message: "Contraseña actualizada correctamente." });
+  } catch (error) {
+    console.error("Error al cambiar contraseña:", error);
+    return res.status(500).json({ message: "Error al cambiar la contraseña." });
+  }
+};
 
 export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) => {
   try {

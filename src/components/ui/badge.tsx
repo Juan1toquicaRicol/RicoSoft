@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { CheckCircle2, Circle, Clock, XCircle, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -29,27 +30,61 @@ function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-// 🟢 AGREGA ESTA FUNCIÓN AQUÍ ABAJO:
-function EstadoBadge({ estado }: { estado: string }) {
-  const mapVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    Aprobada: "default",
-    Aprobado: "default",
-    Activo: "default",
-    "Al día": "default",
-    Pagada: "default",
-    Comprado: "default",
-    Pendiente: "secondary",
-    "En Cotización": "secondary",
-    "Por vencer": "secondary",
-    "Pendiente Renovación": "secondary",
-    Rechazada: "destructive",
-    Rechazado: "destructive",
-    Vencido: "destructive",
-    Inactivo: "destructive",
-  };
+/**
+ * Insignia de estado. La identidad visual del sistema es negro/blanco/gris
+ * con azul solo como acento: los estados NO se diferencian por un semáforo
+ * de colores (verde/rojo/ámbar), sino por ícono + peso visual (relleno vs.
+ * contorno) + texto, y el azul se reserva para el estado "informativo/
+ * resuelto positivamente" (uso permitido de acento explícitamente).
+ */
+type EstadoCategoria = "positivo" | "pendiente" | "negativo" | "neutro";
 
-  return <Badge variant={mapVariants[estado] || "outline"}>{estado}</Badge>;
+const CATEGORIA_POR_ESTADO: Record<string, EstadoCategoria> = {
+  Aprobada: "positivo",
+  Aprobado: "positivo",
+  Activo: "positivo",
+  "Al día": "positivo",
+  Pagada: "positivo",
+  Comprado: "positivo",
+  Pendiente: "pendiente",
+  "En Cotización": "pendiente",
+  "Por vencer": "pendiente",
+  "Pendiente Renovación": "pendiente",
+  Rechazada: "negativo",
+  Rechazado: "negativo",
+  Vencido: "negativo",
+  Inactivo: "negativo",
+};
+
+const ESTILOS_POR_CATEGORIA: Record<EstadoCategoria, string> = {
+  positivo: "border-blue-200 bg-blue-50 text-blue-800",
+  pendiente: "border-slate-300 bg-slate-100 text-slate-700",
+  negativo: "border-transparent bg-slate-900 text-white",
+  neutro: "border-slate-300 bg-white text-slate-600",
+};
+
+const ICONO_POR_CATEGORIA: Record<EstadoCategoria, LucideIcon> = {
+  positivo: CheckCircle2,
+  pendiente: Clock,
+  negativo: XCircle,
+  neutro: Circle,
+};
+
+function EstadoBadge({ estado }: { estado: string }) {
+  const categoria = CATEGORIA_POR_ESTADO[estado] ?? "neutro";
+  const Icon = ICONO_POR_CATEGORIA[categoria];
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap",
+        ESTILOS_POR_CATEGORIA[categoria],
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0" />
+      {estado}
+    </span>
+  );
 }
 
-// 🟢 AGREGA EstadoBadge EN LOS EXPORTS:
 export { Badge, badgeVariants, EstadoBadge };

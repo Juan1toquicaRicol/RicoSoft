@@ -209,7 +209,7 @@ function UsuariosConfigPage() {
                     <div className="font-medium text-slate-800 flex items-center gap-2">
                       {u.nombre}
                       {u.isSuperadmin && (
-                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 gap-1">
+                        <Badge variant="outline" className="border-transparent bg-slate-900 text-white gap-1">
                           <Shield className="h-3 w-3" /> Superadmin
                         </Badge>
                       )}
@@ -266,11 +266,11 @@ function UsuariosConfigPage() {
                   </TableCell>
                   <TableCell>
                     {u.activo ? (
-                      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1" variant="outline">
+                      <Badge className="border-blue-200 bg-blue-50 text-blue-800 gap-1" variant="outline">
                         <UserCheck className="h-3 w-3" /> Activo
                       </Badge>
                     ) : (
-                      <Badge className="border-rose-200 bg-rose-50 text-rose-700 gap-1" variant="outline">
+                      <Badge className="border-transparent bg-slate-900 text-white gap-1" variant="outline">
                         <UserX className="h-3 w-3" /> Inactivo
                       </Badge>
                     )}

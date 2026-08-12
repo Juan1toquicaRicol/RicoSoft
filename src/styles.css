@@ -48,41 +48,46 @@
   --shadow-lift: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 10px 20px -5px rgba(0, 0, 0, 0.04);
 }
 
-/* Forced Permanent Corporate Light Mode Theme */
+/*
+ * Identidad visual: negro + blanco + grises neutros, con azul únicamente
+ * como color de acento (acción primaria, foco, selección, información).
+ * Los estados (aprobado/rechazado/pendiente) NO se codifican por color:
+ * se distinguen por peso visual (relleno vs. contorno), ícono y texto.
+ */
 :root, .dark {
   --radius: 0.5rem;
-  --background: #f8fafc; /* Clean Light Slate 50 */
-  --foreground: #0f172a; /* Slate 900 High Contrast Text */
-  --card: #ffffff;       /* Pure White Card Background */
+  --background: #f8fafc; /* Slate 50 */
+  --foreground: #0f172a; /* Slate 900 - texto de alto contraste */
+  --card: #ffffff;
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #1e40af;    /* Corporate Blue 800 */
+  --primary: #1e40af;    /* Azul acento corporativo */
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;  /* Slate 100 */
   --secondary-foreground: #1e293b;
   --muted: #f1f5f9;      /* Slate 100 */
-  --muted-foreground: #475569; /* Slate 600 High Contrast */
-  --accent: #eff6ff;     /* Blue 50 Active state */
+  --muted-foreground: #475569; /* Slate 600 */
+  --accent: #eff6ff;     /* Azul 50 - estado seleccionado/activo */
   --accent-foreground: #1d4ed8;
-  --destructive: #dc2626; /* Red 600 */
+  --destructive: #0f172a;    /* Negro/slate 900 - acciones y estados negativos, sin rojo */
   --destructive-foreground: #ffffff;
-  --success: #16a34a;    /* Green 600 */
+  --success: #0f172a;        /* Negro/slate 900 - estados positivos, sin verde */
   --success-foreground: #ffffff;
-  --warning: #d97706;    /* Amber 600 */
+  --warning: #475569;        /* Gris neutro - sin ámbar */
   --warning-foreground: #ffffff;
-  --info: #0284c7;       /* Sky 600 */
+  --info: #1e40af;           /* Azul acento - estado informativo */
   --info-foreground: #ffffff;
-  --border: #e2e8f0;     /* Slate 200 Crisp Border */
+  --border: #e2e8f0;     /* Slate 200 */
   --input: #e2e8f0;
   --ring: #2563eb;
-  --sidebar: #ffffff;    /* Pure White Sidebar */
-  --sidebar-foreground: #1e293b;
-  --sidebar-primary: #1e40af;
+  --sidebar: #0f172a;    /* Sidebar negro/slate 900 */
+  --sidebar-foreground: #cbd5e1;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eff6ff;
-  --sidebar-accent-foreground: #1d4ed8;
-  --sidebar-border: #e2e8f0;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1e293b;
   --sidebar-ring: #2563eb;
 }
 

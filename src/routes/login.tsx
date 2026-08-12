@@ -179,15 +179,15 @@ function Login() {
 
           {/* Alertas de Error o Éxito */}
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-600">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+            <div className="mb-4 p-3 rounded-lg bg-slate-900 border border-slate-900 flex items-start gap-2.5 text-xs text-white font-semibold">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5 text-xs text-emerald-700">
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-start gap-2.5 text-xs text-blue-800 font-semibold">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-blue-700" />
               <span>{successMessage}</span>
             </div>
           )}

@@ -5,6 +5,7 @@ export interface SessionUser {
   tenantId: string;
   nombre: string;
   email: string;
+  telefono: string | null;
   rol: string | null;
   isSuperadmin: boolean;
   activo: boolean;

@@ -96,6 +96,10 @@ export interface SolicitudCompra {
   prioridad: Prioridad;
   estado: EstadoSolicitudCompra;
   fechaSolicitud: string;
+  fechaResolucion?: string | null;
+  resueltoPorId?: string | null;
+  resueltoPorNombre?: string | null;
+  comentarioResolucion?: string | null;
 }
 
 export type AreaEmpresa = "Sistemas" | "Comercial" | "Produccion" | "Gestion Humana" | "Contabilidad" | "Mantenimiento" | "Compras" | "Logistica" | "Gerencia";

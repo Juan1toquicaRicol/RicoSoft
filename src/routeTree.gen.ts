@@ -17,6 +17,7 @@ import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ContratosRouteImport } from './routes/contratos'
 import { Route as CreditosRouteImport } from './routes/creditos'
 import { Route as GestionHumanaRouteImport } from './routes/gestion-humana'
+import { Route as HistoriaComprasRouteImport } from './routes/historia-compras'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as ProyeccionRouteImport } from './routes/proyeccion'
@@ -70,6 +71,11 @@ const CreditosRoute = CreditosRouteImport.update({
 const GestionHumanaRoute = GestionHumanaRouteImport.update({
   id: '/gestion-humana',
   path: '/gestion-humana',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoriaComprasRoute = HistoriaComprasRouteImport.update({
+  id: '/historia-compras',
+  path: '/historia-compras',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
+  '/historia-compras': typeof HistoriaComprasRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
+  '/historia-compras': typeof HistoriaComprasRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
+  '/historia-compras': typeof HistoriaComprasRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/contratos'
     | '/creditos'
     | '/gestion-humana'
+    | '/historia-compras'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/contratos'
     | '/creditos'
     | '/gestion-humana'
+    | '/historia-compras'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -274,6 +285,7 @@ export interface FileRouteTypes {
     | '/contratos'
     | '/creditos'
     | '/gestion-humana'
+    | '/historia-compras'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -299,6 +311,7 @@ export interface RootRouteChildren {
   ContratosRoute: typeof ContratosRoute
   CreditosRoute: typeof CreditosRoute
   GestionHumanaRoute: typeof GestionHumanaRoute
+  HistoriaComprasRoute: typeof HistoriaComprasRoute
   LoginRoute: typeof LoginRoute
   PerfilRoute: typeof PerfilRoute
   ProyeccionRoute: typeof ProyeccionRoute
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/gestion-humana'
       fullPath: '/gestion-humana'
       preLoaderRoute: typeof GestionHumanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/historia-compras': {
+      id: '/historia-compras'
+      path: '/historia-compras'
+      fullPath: '/historia-compras'
+      preLoaderRoute: typeof HistoriaComprasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -499,6 +519,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContratosRoute: ContratosRoute,
   CreditosRoute: CreditosRoute,
   GestionHumanaRoute: GestionHumanaRoute,
+  HistoriaComprasRoute: HistoriaComprasRoute,
   LoginRoute: LoginRoute,
   PerfilRoute: PerfilRoute,
   ProyeccionRoute: ProyeccionRoute,

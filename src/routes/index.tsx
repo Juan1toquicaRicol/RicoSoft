@@ -31,7 +31,7 @@ function DashboardExecutive() {
         <Link to="/facturas" className="block">
           <div className="panel p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-500 transition-all cursor-pointer">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-emerald-50 text-emerald-700 rounded-lg">
+              <div className="p-3 bg-slate-100 text-slate-700 rounded-lg">
                 <FileText className="h-6 w-6" />
               </div>
               <div>
@@ -45,7 +45,7 @@ function DashboardExecutive() {
         <Link to="/solicitudes-compra" className="block">
           <div className="panel p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-500 transition-all cursor-pointer">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-50 text-purple-700 rounded-lg">
+              <div className="p-3 bg-slate-900 text-white rounded-lg">
                 <ShoppingCart className="h-6 w-6" />
               </div>
               <div>

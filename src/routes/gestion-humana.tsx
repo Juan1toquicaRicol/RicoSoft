@@ -282,7 +282,7 @@ function GestionHumana() {
               onClick={() => setModalFaltaOpen(true)}
               size="sm"
               variant="destructive"
-              className="gap-2 bg-rose-600 text-white hover:bg-rose-700"
+              className="gap-2"
             >
               <ShieldAlert className="h-4 w-4" /> Registrar Falta / Strike
             </Button>
@@ -381,11 +381,11 @@ function GestionHumana() {
                       <p className="text-[11px] text-slate-500">{emp.area}</p>
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      <p className="text-emerald-700 font-bold">
+                      <p className="text-slate-600 font-bold">
                         Ingreso: {new Date(emp.fechaContratacion).toLocaleDateString("es-CO")}
                       </p>
                       {emp.fechaLiquidacion && (
-                        <p className="text-rose-700 font-bold">
+                        <p className="text-slate-900 font-bold">
                           Retiro: {new Date(emp.fechaLiquidacion).toLocaleDateString("es-CO")}
                         </p>
                       )}
@@ -398,7 +398,7 @@ function GestionHumana() {
                     </td>
                     <td className="px-4 py-3 text-center font-bold">
                       {emp.strikesCount > 0 ? (
-                        <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-xs text-rose-700 font-bold">
+                        <span className="rounded-full bg-slate-900 border border-slate-900 px-2.5 py-0.5 text-xs text-white font-bold">
                           {emp.strikesCount} ⚡
                         </span>
                       ) : (
@@ -433,7 +433,7 @@ function GestionHumana() {
                                 );
                               }
                             }}
-                            className="h-7 text-[11px] text-rose-700 hover:text-rose-800 hover:bg-rose-50 font-semibold"
+                            className="h-7 text-[11px] text-slate-900 hover:bg-slate-100 font-semibold"
                           >
                             Liquidar
                           </Button>
@@ -514,7 +514,7 @@ function GestionHumana() {
                                 alert(err.message || "Error al aprobar."),
                               )
                             }
-                            className="h-7 text-[11px] font-bold border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                            className="h-7 text-[11px] font-bold border-slate-300 text-slate-700 hover:bg-slate-100"
                           >
                             <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
                           </Button>
@@ -526,7 +526,7 @@ function GestionHumana() {
                                 alert(err.message || "Error al rechazar."),
                               )
                             }
-                            className="h-7 text-[11px] font-bold border-rose-300 text-rose-700 hover:bg-rose-50"
+                            className="h-7 text-[11px] font-bold border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
                           >
                             <XCircle className="h-3 w-3 mr-1" /> Rechazar
                           </Button>
@@ -587,10 +587,10 @@ function GestionHumana() {
                       <span
                         className={`rounded-md px-2.5 py-0.5 text-[11px] font-bold border ${
                           f.gravedad === "Muy Grave"
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            ? "bg-slate-900 text-white border-slate-900"
                             : f.gravedad === "Grave"
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-blue-50 text-blue-800 border-blue-200"
+                              ? "bg-slate-200 text-slate-900 border-slate-400"
+                              : "bg-slate-50 text-slate-600 border-slate-200"
                         }`}
                       >
                         {f.gravedad}
@@ -608,7 +608,7 @@ function GestionHumana() {
                 {filteredFaltas.length === 0 && (
                   <tr>
                     <td colSpan={6} className="p-12 text-center text-xs text-slate-500">
-                      <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-40 text-emerald-600" />
+                      <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-40 text-slate-400" />
                       {loading
                         ? "Cargando..."
                         : error || "Excelente. No hay faltas o strikes registrados en esta empresa."}
@@ -635,8 +635,8 @@ function GestionHumana() {
           </div>
 
           {mailSentSuccess && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-4 text-emerald-800 border border-emerald-200 text-xs font-medium">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-4 text-blue-800 border border-blue-200 text-xs font-medium">
+              <CheckCircle2 className="h-4 w-4 text-blue-700" />
               ¡El comunicado ha sido procesado e impartido vía correo electrónico con éxito!
             </div>
           )}
@@ -1103,7 +1103,7 @@ function GestionHumana() {
       <Dialog open={modalFaltaOpen} onOpenChange={setModalFaltaOpen}>
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-rose-700 font-bold flex items-center gap-2">
+            <DialogTitle className="text-slate-900 font-bold flex items-center gap-2">
               <ShieldAlert className="h-5 w-5" /> Registrar Falta / Strike Disciplinario
             </DialogTitle>
           </DialogHeader>
@@ -1188,7 +1188,7 @@ function GestionHumana() {
                 type="submit"
                 size="sm"
                 variant="destructive"
-                className="bg-rose-600 text-white hover:bg-rose-700 font-bold"
+                className="font-bold"
               >
                 Aplicar Sanción
               </Button>

@@ -18,6 +18,12 @@ const CATALOGO_DEFECTO: Array<{ clave: string; nombre: string; ruta: string; ico
     ruta: "/solicitudes-compra",
     icono: "ShoppingCart",
   },
+  {
+    clave: "historia-compras",
+    nombre: "Historia de Compras",
+    ruta: "/historia-compras",
+    icono: "History",
+  },
   { clave: "servicios", nombre: "Servicios y Suscripciones", ruta: "/servicios", icono: "Repeat" },
   { clave: "contratos", nombre: "Contratos", ruta: "/contratos", icono: "FileSignature" },
   { clave: "reglas", nombre: "Motor de Reglas", ruta: "/reglas", icono: "Workflow" },
@@ -28,18 +34,31 @@ const CATALOGO_DEFECTO: Array<{ clave: string; nombre: string; ruta: string; ico
   { clave: "bandeja", nombre: "Bandeja de Entrada", ruta: "/bandeja", icono: "Inbox" },
 ];
 
+/**
+ * Crea los módulos por defecto que aún no existan para el tenant. Se ejecuta
+ * en cada consulta y es idempotente: si el tenant ya tiene todos los módulos
+ * del catálogo no hace nada; si se agrega uno nuevo al catálogo (p. ej.
+ * "Historia de Compras"), lo crea sin tocar ni reordenar los módulos ya
+ * existentes ni la configuración que un admin ya haya hecho sobre ellos.
+ */
 async function asegurarCatalogoDefecto(tenantId: string) {
-  const existentes = await prisma.modulo.count({ where: { tenantId } });
-  if (existentes > 0) return;
+  const existentes = await prisma.modulo.findMany({
+    where: { tenantId },
+    select: { clave: true, orden: true },
+  });
+  const clavesExistentes = new Set(existentes.map((m) => m.clave));
+  const faltantes = CATALOGO_DEFECTO.filter((m) => !clavesExistentes.has(m.clave));
+  if (faltantes.length === 0) return;
 
+  const ordenBase = existentes.reduce((max, m) => Math.max(max, m.orden), -1) + 1;
   await prisma.modulo.createMany({
-    data: CATALOGO_DEFECTO.map((modulo, index) => ({
+    data: faltantes.map((modulo, index) => ({
       tenantId,
       clave: modulo.clave,
       nombre: modulo.nombre,
       ruta: modulo.ruta,
       icono: modulo.icono,
-      orden: index,
+      orden: ordenBase + index,
     })),
   });
 }

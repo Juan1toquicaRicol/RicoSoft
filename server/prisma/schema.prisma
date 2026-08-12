@@ -31,25 +31,27 @@ model Tenant {
 }
 
 model User {
-  id               String           @id @default(uuid()) @db.UniqueIdentifier
-  tenantId         String           @db.UniqueIdentifier
-  email            String           @unique @db.VarChar(255)
-  passwordHash     String           @db.Text
-  nombre           String           @db.VarChar(255)
-  rol              String?          @default("COLABORADOR") @db.VarChar(50)
-  createdAt        DateTime         @default(now())
-  activo           Boolean          @default(true)
-  colaboradorId    String?          @db.UniqueIdentifier
-  departamentoId   String?          @db.UniqueIdentifier
-  isSuperadmin     Boolean          @default(false)
-  lastLoginAt      DateTime?
-  rolId            String?          @db.UniqueIdentifier
-  auditoriasHechas Auditoria[]      @relation("UsuarioOrigen")
-  permisosDirectos PermisoUsuario[]
-  colaborador      Colaborador?     @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  departamento     Departamento?    @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  rolRel           Rol?             @relation(fields: [rolId], references: [id])
-  tenant           Tenant           @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  id                    String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId              String            @db.UniqueIdentifier
+  email                 String            @unique @db.VarChar(255)
+  passwordHash          String            @db.Text
+  nombre                String            @db.VarChar(255)
+  telefono              String?           @db.VarChar(50)
+  rol                   String?           @default("COLABORADOR") @db.VarChar(50)
+  createdAt             DateTime          @default(now())
+  activo                Boolean           @default(true)
+  colaboradorId         String?           @db.UniqueIdentifier
+  departamentoId        String?           @db.UniqueIdentifier
+  isSuperadmin          Boolean           @default(false)
+  lastLoginAt           DateTime?
+  rolId                 String?           @db.UniqueIdentifier
+  auditoriasHechas      Auditoria[]       @relation("UsuarioOrigen")
+  permisosDirectos      PermisoUsuario[]
+  solicitudesResueltas  SolicitudCompra[] @relation("SolicitudResueltaPor")
+  colaborador           Colaborador?      @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departamento          Departamento?     @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rolRel                Rol?              @relation(fields: [rolId], references: [id])
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
 
   @@index([tenantId, activo])
   @@index([tenantId, email])
@@ -181,21 +183,27 @@ model FacturaHistorial {
 }
 
 model SolicitudCompra {
-  id             String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId       String   @db.UniqueIdentifier
-  empresaId      String   @db.VarChar(10)
-  area           String   @db.VarChar(100)
-  solicitante    String   @db.VarChar(255)
-  item           String   @db.VarChar(255)
-  descripcion    String?  @db.Text
-  cantidad       Int
-  valorEstimado  Decimal  @db.Decimal(18, 2)
-  prioridad      String   @default("Media") @db.VarChar(20)
-  estado         String   @default("Pendiente") @db.VarChar(20)
-  fechaSolicitud DateTime @default(now())
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  id                   String    @id @default(uuid()) @db.UniqueIdentifier
+  tenantId             String    @db.UniqueIdentifier
+  empresaId            String    @db.VarChar(10)
+  area                 String    @db.VarChar(100)
+  solicitante          String    @db.VarChar(255)
+  item                 String    @db.VarChar(255)
+  descripcion          String?   @db.Text
+  cantidad             Int
+  valorEstimado        Decimal   @db.Decimal(18, 2)
+  prioridad            String    @default("Media") @db.VarChar(20)
+  estado               String    @default("Pendiente") @db.VarChar(20)
+  fechaSolicitud       DateTime  @default(now())
+  fechaResolucion      DateTime?
+  resueltoPorId        String?   @db.UniqueIdentifier
+  resueltoPorNombre    String?   @db.VarChar(255)
+  comentarioResolucion String?   @db.Text
+  tenant               Tenant    @relation(fields: [tenantId], references: [id])
+  resueltoPor          User?     @relation("SolicitudResueltaPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId])
+  @@index([tenantId, estado])
 }
 
 model ServicioSuscripcion {

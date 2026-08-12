@@ -81,7 +81,7 @@ function ModulosConfigPage() {
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
         <Table>

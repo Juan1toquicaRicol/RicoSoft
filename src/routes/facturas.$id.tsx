@@ -80,7 +80,7 @@ function DetalleFactura() {
                     (err: any) => alert(err.message || "Error al rechazar la factura."),
                   )
                 }
-                className="gap-2 text-rose-600 border-rose-500/30 hover:bg-rose-50"
+                className="gap-2 text-slate-900 border-slate-400 hover:bg-slate-100"
               >
                 <X className="h-4 w-4" /> Rechazar
               </Button>
@@ -91,7 +91,7 @@ function DetalleFactura() {
                     (err: any) => alert(err.message || "Error al aprobar la factura."),
                   )
                 }
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="gap-2 bg-blue-800 hover:bg-blue-900 text-white"
               >
                 <Check className="h-4 w-4" /> Aprobar Factura
               </Button>

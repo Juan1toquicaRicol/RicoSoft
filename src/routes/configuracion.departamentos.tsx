@@ -139,7 +139,7 @@ function DepartamentosConfigPage() {
         </form>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
         <Table>
@@ -178,11 +178,11 @@ function DepartamentosConfigPage() {
                   </TableCell>
                   <TableCell>
                     {d.activo ? (
-                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
                         Activo
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">
+                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
                         Inactivo
                       </Badge>
                     )}
@@ -196,7 +196,7 @@ function DepartamentosConfigPage() {
                     {puedeEliminar && d.usuariosAsignados === 0 && (
                       <button
                         onClick={() => handleEliminar(d)}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors align-middle cursor-pointer"
+                        className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors align-middle cursor-pointer"
                         title="Eliminar departamento"
                       >
                         <Trash2 className="h-3.5 w-3.5 inline" />
