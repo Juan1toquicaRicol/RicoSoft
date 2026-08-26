@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
-import { User, ShieldCheck, Users, Key, Building2, LayoutGrid } from "lucide-react";
+import { ShieldCheck, Users, Key, Building2, LayoutGrid, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -23,7 +23,6 @@ function Configuracion() {
   const { user } = useSession();
 
   const tabs = [
-    { to: "/configuracion", label: "Perfil y Seguridad", icon: User, exact: true, show: true },
     {
       to: "/configuracion/usuarios",
       label: "Usuarios",
@@ -51,6 +50,13 @@ function Configuracion() {
       icon: Building2,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.DEPARTAMENTOS_VER),
+    },
+    {
+      to: "/configuracion/proveedores",
+      label: "Proveedores",
+      icon: Truck,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.PROVEEDORES_VER),
     },
     {
       to: "/configuracion/modulos",

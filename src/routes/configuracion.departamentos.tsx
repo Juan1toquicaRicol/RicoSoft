@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
 import { Building2, Plus, Trash2, ShieldCheck, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export const Route = createFileRoute("/configuracion/departamentos")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.DEPARTAMENTOS_VER),
   component: DepartamentosConfigPage,
 });
 
@@ -66,7 +69,7 @@ function DepartamentosConfigPage() {
       setCreando(false);
       fetchDepartamentos();
     } catch (err: any) {
-      alert(err.message || "Error al crear el departamento.");
+      toast.error(err.message || "Error al crear el departamento.");
     }
   };
 
@@ -78,7 +81,7 @@ function DepartamentosConfigPage() {
       });
       fetchDepartamentos();
     } catch (err: any) {
-      alert(err.message || "Error al actualizar el departamento.");
+      toast.error(err.message || "Error al actualizar el departamento.");
     }
   };
 
@@ -88,7 +91,7 @@ function DepartamentosConfigPage() {
       await fetchAuth(`/departamentos/${departamento.id}`, { method: "DELETE" });
       fetchDepartamentos();
     } catch (err: any) {
-      alert(err.message || "Error al eliminar el departamento.");
+      toast.error(err.message || "Error al eliminar el departamento.");
     }
   };
 

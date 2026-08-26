@@ -1,12 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Eye, History, ShoppingCart, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, Eye, History, Paperclip, ShoppingCart, X } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import { agruparFilas } from "@/lib/agrupar";
 import {
   Select,
   SelectContent,
@@ -22,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTenant } from "@/lib/tenant-context";
-import { useHistorialCompras } from "@/hooks/use-solicitudes";
+import { useHistorialCompras, descargarCotizacionSolicitud } from "@/hooks/use-solicitudes";
 import { money } from "@/lib/data";
 import type { SolicitudCompra } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -67,6 +70,22 @@ function HistoriaComprasPage() {
   const [hasta, setHasta] = useState("");
   const [page, setPage] = useState(1);
   const [detalle, setDetalle] = useState<SolicitudCompra | null>(null);
+  const [descargandoCotizacion, setDescargandoCotizacion] = useState(false);
+  const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
+
+  const handleVerCotizacion = async (id: string) => {
+    setDescargandoCotizacion(true);
+    try {
+      const blob = await descargarCotizacionSolicitud(id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible abrir la cotización.");
+    } finally {
+      setDescargandoCotizacion(false);
+    }
+  };
 
   const { historial, loading, error } = useHistorialCompras({
     empresaId: empresaActiva === "ALL" ? undefined : empresaActiva,
@@ -83,6 +102,21 @@ function HistoriaComprasPage() {
     () => historial.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE),
     [historial, pageClamped],
   );
+
+  const claveDeAgrupacion = useMemo(() => {
+    switch (agrupacion) {
+      case "area":
+        return (s: SolicitudCompra) => s.area;
+      case "proveedor":
+        return (s: SolicitudCompra) => s.proveedor || "Sin proveedor";
+      case "estado":
+        return (s: SolicitudCompra) => s.estado;
+      default:
+        return null;
+    }
+  }, [agrupacion]);
+
+  const gruposHistorial = useMemo(() => agruparFilas(paginado, claveDeAgrupacion), [paginado, claveDeAgrupacion]);
 
   const limpiarFiltros = () => {
     setEstadoSel("Todas");
@@ -108,6 +142,7 @@ function HistoriaComprasPage() {
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
         {/* ── Barra de filtros ── */}
         <div className="border-b border-slate-200 bg-slate-50/80 p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <History className="h-4 w-4 text-slate-400 shrink-0" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-1">
@@ -130,6 +165,17 @@ function HistoriaComprasPage() {
                 {e}
               </button>
             ))}
+          </div>
+            <SelectorAgrupacion
+              value={agrupacion}
+              onChange={setAgrupacion}
+              opciones={[
+                OPCION_SIN_AGRUPAR,
+                { value: "area", label: "Área" },
+                { value: "proveedor", label: "Proveedor" },
+                { value: "estado", label: "Estado" },
+              ]}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,14 +261,21 @@ function HistoriaComprasPage() {
                 <th className="px-4 py-3.5">Empresa</th>
                 <th className="px-4 py-3.5">Solicitante / Área</th>
                 <th className="px-4 py-3.5">Ítem Solicitado</th>
+                <th className="px-4 py-3.5">Proveedor</th>
                 <th className="px-4 py-3.5 text-right">Valor Estimado</th>
                 <th className="px-4 py-3.5">Estado</th>
+                <th className="px-4 py-3.5">Factura</th>
                 <th className="px-4 py-3.5">Resuelto Por</th>
                 <th className="px-4 py-3.5 text-right">Detalle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {paginado.map((sol) => (
+              {gruposHistorial.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={10} />
+                  )}
+                  {grupo.filas.map((sol) => (
                 <tr key={sol.id} className="transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">
                     {sol.fechaResolucion ? new Date(sol.fechaResolucion).toLocaleDateString("es-CO") : "-"}
@@ -242,11 +295,27 @@ function HistoriaComprasPage() {
                       Cant. {sol.cantidad}
                     </p>
                   </td>
-                  <td className="px-4 py-3 text-right font-bold font-mono text-slate-900 text-xs">
+                  <td className="px-4 py-3 text-xs font-semibold text-slate-800">{sol.proveedor || "—"}</td>
+                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
                     {money(sol.valorEstimado)}
                   </td>
                   <td className="px-4 py-3">
                     <EstadoBadge estado={sol.estado} />
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {sol.factura ? (
+                      <Link
+                        to="/facturas/$id"
+                        params={{ id: sol.factura.id }}
+                        className="font-semibold text-blue-800 hover:underline"
+                      >
+                        {sol.factura.numero}
+                      </Link>
+                    ) : sol.estado === "Comprado" ? (
+                      <span className="text-slate-400">Sin factura aún</span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 font-semibold">
                     {sol.resueltoPorNombre || "-"}
@@ -262,10 +331,12 @@ function HistoriaComprasPage() {
                     </Button>
                   </td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
               {paginado.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center text-xs text-slate-500">
+                  <td colSpan={10} className="p-12 text-center text-xs text-slate-500">
                     <History className="h-8 w-8 mx-auto mb-2 opacity-30 text-slate-400" />
                     {loading
                       ? "Cargando historia de compras..."
@@ -330,6 +401,21 @@ function HistoriaComprasPage() {
                 <Campo label="Solicitante" valor={detalle.solicitante} />
                 <Campo label="Área" valor={detalle.area} />
                 <Campo label="Ítem solicitado" valor={detalle.item} span2 />
+                <Campo label="Proveedor" valor={detalle.proveedor || "Sin proveedor asociado"} span2 />
+                {detalle.factura && (
+                  <div className="col-span-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Factura final
+                    </p>
+                    <Link
+                      to="/facturas/$id"
+                      params={{ id: detalle.factura.id }}
+                      className="font-semibold text-blue-800 hover:underline"
+                    >
+                      {detalle.factura.numero} ({detalle.factura.estado})
+                    </Link>
+                  </div>
+                )}
                 <Campo label="Cantidad" valor={String(detalle.cantidad)} />
                 <Campo label="Valor estimado" valor={money(detalle.valorEstimado)} />
                 <Campo label="Prioridad" valor={detalle.prioridad} />
@@ -354,6 +440,25 @@ function HistoriaComprasPage() {
                 {detalle.descripcion && (
                   <Campo label="Justificación de la compra" valor={detalle.descripcion} span2 />
                 )}
+                <div className="col-span-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cotización</p>
+                  {detalle.cotizacion ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      disabled={descargandoCotizacion}
+                      onClick={() => handleVerCotizacion(detalle.id)}
+                      className="mt-1 h-7 gap-1.5 text-[11px] font-bold"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      {descargandoCotizacion ? "Abriendo..." : detalle.cotizacion.nombre}
+                      <Download className="h-3 w-3" />
+                    </Button>
+                  ) : (
+                    <p className="text-slate-500 font-semibold">Sin cotización adjunta.</p>
+                  )}
+                </div>
               </div>
             </>
           )}

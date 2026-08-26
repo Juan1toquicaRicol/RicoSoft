@@ -6,13 +6,14 @@ import {
   DollarSign,
   Plus,
   ShieldAlert,
+  Trash2,
   UserPlus,
   Users,
   XCircle,
   Mail,
-  Send,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
@@ -34,10 +35,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useGestionHumana } from "@/hooks/use-gestion-humana";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
+import { useSession } from "@/lib/session-context";
+import { hasPermission } from "@/lib/session";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { DOMINIOS_PERMITIDOS, esDominioCorporativoValido } from "@/lib/dominios";
 import { money, Empleado, GravedadStrike } from "@/lib/data";
+import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import { agruparFilas } from "@/lib/agrupar";
 
 export const Route = createFileRoute("/gestion-humana")({
   head: () => ({
@@ -60,6 +77,7 @@ function GestionHumana() {
     addEmpleado,
     updateSalarioEmpleado,
     liquidarEmpleado,
+    eliminarEmpleado,
     permisos,
     addPermiso,
     updateEstadoPermiso,
@@ -69,6 +87,8 @@ function GestionHumana() {
     error,
   } = useGestionHumana();
   const { departamentos } = useDepartamentosPublico();
+  const { user } = useSession();
+  const puedeEliminarEmpleado = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_ELIMINAR);
 
   const [activeTab, setActiveTab] = useState<"expediente" | "permisos" | "faltas" | "comunicados">(
     "expediente",
@@ -80,10 +100,29 @@ function GestionHumana() {
   const [modalPermisoOpen, setModalPermisoOpen] = useState(false);
   const [modalFaltaOpen, setModalFaltaOpen] = useState(false);
   const [selectedEmpleado, setSelectedEmpleado] = useState<Empleado | null>(null);
+  const [empleadoAEliminar, setEmpleadoAEliminar] = useState<Empleado | null>(null);
+  const [eliminandoEmpleado, setEliminandoEmpleado] = useState(false);
+  const [agrupacionEmpleados, setAgrupacionEmpleados] = useState(OPCION_SIN_AGRUPAR.value);
+  const [agrupacionPermisos, setAgrupacionPermisos] = useState(OPCION_SIN_AGRUPAR.value);
+  const [agrupacionFaltas, setAgrupacionFaltas] = useState(OPCION_SIN_AGRUPAR.value);
+
+  const handleEliminarEmpleado = async () => {
+    if (!empleadoAEliminar) return;
+    setEliminandoEmpleado(true);
+    try {
+      await eliminarEmpleado(empleadoAEliminar.id);
+      toast.success(`Expediente de ${empleadoAEliminar.nombres} eliminado.`);
+      setEmpleadoAEliminar(null);
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible eliminar el expediente.");
+    } finally {
+      setEliminandoEmpleado(false);
+    }
+  };
 
   // Forms states
   const [empForm, setEmpForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "001" : empresaActiva,
+    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
     documento: "",
     nombres: "",
     apellidos: "",
@@ -122,15 +161,6 @@ function GestionHumana() {
     registradoPor: "Director RRHH",
   });
 
-  // Estado del Formulario de Comunicados
-  const [comunicadoForm, setComunicadoForm] = useState({
-    asunto: "",
-    mensaje: "",
-    destinatarioTipo: "todos", // "todos" | "Sistemas / TI" | "Comercial" | "Operaciones" | "Recursos Humanos" | "Financiera"
-    empleadoId: "",
-  });
-  const [isSendingMail, setIsSendingMail] = useState(false);
-  const [mailSentSuccess, setMailSentSuccess] = useState(false);
 
   // Filtered Lists
   const filteredEmpleados = useMemo(() => {
@@ -148,29 +178,75 @@ function GestionHumana() {
     return faltas.filter((f) => f.empresaId === empresaActiva);
   }, [faltas, empresaActiva]);
 
+  const claveEmpleados = useMemo(() => {
+    switch (agrupacionEmpleados) {
+      case "area":
+        return (e: (typeof filteredEmpleados)[number]) => e.area;
+      case "estado":
+        return (e: (typeof filteredEmpleados)[number]) => e.estado;
+      default:
+        return null;
+    }
+  }, [agrupacionEmpleados]);
+  const gruposEmpleados = useMemo(
+    () => agruparFilas(filteredEmpleados, claveEmpleados),
+    [filteredEmpleados, claveEmpleados],
+  );
+
+  const clavePermisos = useMemo(() => {
+    switch (agrupacionPermisos) {
+      case "tipo":
+        return (p: (typeof filteredPermisos)[number]) => p.tipoPermiso;
+      case "estado":
+        return (p: (typeof filteredPermisos)[number]) => p.estado;
+      default:
+        return null;
+    }
+  }, [agrupacionPermisos]);
+  const gruposPermisos = useMemo(
+    () => agruparFilas(filteredPermisos, clavePermisos),
+    [filteredPermisos, clavePermisos],
+  );
+
+  const claveFaltas = useMemo(() => {
+    switch (agrupacionFaltas) {
+      case "gravedad":
+        return (f: (typeof filteredFaltas)[number]) => f.gravedad;
+      default:
+        return null;
+    }
+  }, [agrupacionFaltas]);
+  const gruposFaltas = useMemo(() => agruparFilas(filteredFaltas, claveFaltas), [filteredFaltas, claveFaltas]);
+
   // Handlers
   const handleSaveEmpleado = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!empForm.nombres || !empForm.documento) return;
+    if (!esDominioCorporativoValido(empForm.correo)) {
+      toast.error(
+        `El correo debe ser corporativo (${DOMINIOS_PERMITIDOS.map((d) => `@${d}`).join(", ")}). No se permiten correos personales.`,
+      );
+      return;
+    }
     try {
       await addEmpleado({
         empresaId: empForm.empresaId,
         documento: empForm.documento,
         nombres: empForm.nombres,
         apellidos: empForm.apellidos,
-        correo: empForm.correo || `${empForm.nombres.toLowerCase()}@empresa.com`,
+        correo: empForm.correo.trim().toLowerCase(),
         cargo: empForm.cargo || "Colaborador",
         area: empForm.area,
         fechaContratacion: empForm.fechaContratacion,
         salarioActual: Number(empForm.salarioActual),
       });
     } catch (err: any) {
-      alert(err.message || "Error al registrar el colaborador.");
+      toast.error(err.message || "Error al registrar el colaborador.");
       return;
     }
     setModalEmpleadoOpen(false);
     setEmpForm({
-      empresaId: empresaActiva === "ALL" ? "001" : empresaActiva,
+      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
       documento: "",
       nombres: "",
       apellidos: "",
@@ -188,7 +264,7 @@ function GestionHumana() {
     try {
       await updateSalarioEmpleado(selectedEmpleado.id, Number(salarioForm.nuevoSalario), salarioForm.motivo);
     } catch (err: any) {
-      alert(err.message || "Error al actualizar el salario.");
+      toast.error(err.message || "Error al actualizar el salario.");
       return;
     }
     setModalSalarioOpen(false);
@@ -207,7 +283,7 @@ function GestionHumana() {
         observaciones: permisoForm.observaciones,
       });
     } catch (err: any) {
-      alert(err.message || "Error al registrar el permiso.");
+      toast.error(err.message || "Error al registrar el permiso.");
       return;
     }
     setModalPermisoOpen(false);
@@ -224,41 +300,10 @@ function GestionHumana() {
         descargos: faltaForm.descargos,
       });
     } catch (err: any) {
-      alert(err.message || "Error al registrar la falta.");
+      toast.error(err.message || "Error al registrar la falta.");
       return;
     }
     setModalFaltaOpen(false);
-  };
-
-  const handleSendComunicado = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!comunicadoForm.asunto || !comunicadoForm.mensaje) return;
-
-    setIsSendingMail(true);
-
-    // Payload listo para cuando envíes al servidor/backend
-    const payload = {
-      empresaId: empresaActiva,
-      asunto: comunicadoForm.asunto,
-      mensaje: comunicadoForm.mensaje,
-      destinatarioTipo: comunicadoForm.destinatarioTipo,
-      empleadoId: comunicadoForm.empleadoId,
-      fecha: new Date().toISOString(),
-    };
-
-    console.log("Enviando comunicado corporativo:", payload);
-
-    setTimeout(() => {
-      setIsSendingMail(false);
-      setMailSentSuccess(true);
-      setComunicadoForm({
-        asunto: "",
-        mensaje: "",
-        destinatarioTipo: "todos",
-        empleadoId: "",
-      });
-      setTimeout(() => setMailSentSuccess(false), 5000);
-    }, 1200);
   };
 
   return (
@@ -353,6 +398,11 @@ function GestionHumana() {
                 Colaboradores registrados y su historial de contratación/salario.
               </p>
             </div>
+            <SelectorAgrupacion
+              value={agrupacionEmpleados}
+              onChange={setAgrupacionEmpleados}
+              opciones={[OPCION_SIN_AGRUPAR, { value: "area", label: "Área" }, { value: "estado", label: "Estado" }]}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -370,7 +420,12 @@ function GestionHumana() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {filteredEmpleados.map((emp) => (
+                {gruposEmpleados.map((grupo) => (
+                  <Fragment key={grupo.clave || "sin-grupo"}>
+                    {grupo.clave && (
+                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                    )}
+                    {grupo.filas.map((emp) => (
                   <tr key={emp.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{emp.documento}</td>
                     <td className="px-4 py-3">
@@ -398,7 +453,7 @@ function GestionHumana() {
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold font-mono text-slate-900">
+                    <td className="num px-4 py-3 text-right font-bold text-slate-900">
                       {money(emp.salarioActual)}
                       <p className="text-[10px] text-slate-400 font-normal">
                         ({emp.historicoSalario.length} cambios)
@@ -437,7 +492,7 @@ function GestionHumana() {
                             onClick={() => {
                               if (confirm(`¿Liquidar al colaborador ${emp.nombres}?`)) {
                                 liquidarEmpleado(emp.id, new Date().toISOString().split("T")[0]).catch(
-                                  (err: any) => alert(err.message || "Error al liquidar el colaborador."),
+                                  (err: any) => toast.error(err.message || "Error al liquidar el colaborador."),
                                 );
                               }
                             }}
@@ -446,9 +501,21 @@ function GestionHumana() {
                             Liquidar
                           </Button>
                         )}
+                        {puedeEliminarEmpleado && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setEmpleadoAEliminar(emp)}
+                            className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
                 {filteredEmpleados.length === 0 && (
                   <tr>
@@ -479,6 +546,11 @@ function GestionHumana() {
                 Gestión de ausencias, licencias y solicitudes del personal.
               </p>
             </div>
+            <SelectorAgrupacion
+              value={agrupacionPermisos}
+              onChange={setAgrupacionPermisos}
+              opciones={[OPCION_SIN_AGRUPAR, { value: "tipo", label: "Tipo de permiso" }, { value: "estado", label: "Estado" }]}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -494,7 +566,12 @@ function GestionHumana() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {filteredPermisos.map((p) => (
+                {gruposPermisos.map((grupo) => (
+                  <Fragment key={grupo.clave || "sin-grupo"}>
+                    {grupo.clave && (
+                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />
+                    )}
+                    {grupo.filas.map((p) => (
                   <tr key={p.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-900">{p.nombreEmpleado}</td>
                     <td className="px-4 py-3 text-xs font-bold text-blue-800">{p.tipoPermiso}</td>
@@ -519,7 +596,7 @@ function GestionHumana() {
                             variant="outline"
                             onClick={() =>
                               updateEstadoPermiso(p.id, "Aprobado").catch((err: any) =>
-                                alert(err.message || "Error al aprobar."),
+                                toast.error(err.message || "Error al aprobar."),
                               )
                             }
                             className="h-7 text-[11px] font-bold border-slate-300 text-slate-700 hover:bg-slate-100"
@@ -531,7 +608,7 @@ function GestionHumana() {
                             variant="outline"
                             onClick={() =>
                               updateEstadoPermiso(p.id, "Rechazado").catch((err: any) =>
-                                alert(err.message || "Error al rechazar."),
+                                toast.error(err.message || "Error al rechazar."),
                               )
                             }
                             className="h-7 text-[11px] font-bold border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
@@ -542,6 +619,8 @@ function GestionHumana() {
                       )}
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
                 {filteredPermisos.length === 0 && (
                   <tr>
@@ -571,6 +650,11 @@ function GestionHumana() {
                 Sanciones disciplinarias con descargos y severidad.
               </p>
             </div>
+            <SelectorAgrupacion
+              value={agrupacionFaltas}
+              onChange={setAgrupacionFaltas}
+              opciones={[OPCION_SIN_AGRUPAR, { value: "gravedad", label: "Gravedad" }]}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -585,7 +669,12 @@ function GestionHumana() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {filteredFaltas.map((f) => (
+                {gruposFaltas.map((grupo) => (
+                  <Fragment key={grupo.clave || "sin-grupo"}>
+                    {grupo.clave && (
+                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />
+                    )}
+                    {grupo.filas.map((f) => (
                   <tr key={f.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">
                       {new Date(f.fecha).toLocaleDateString("es-CO")}
@@ -612,6 +701,8 @@ function GestionHumana() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">{f.registradoPor}</td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
                 {filteredFaltas.length === 0 && (
                   <tr>
@@ -631,121 +722,25 @@ function GestionHumana() {
 
       {/* TAB 4: COMUNICADOS E EMAILS */}
       {activeTab === "comunicados" && (
-        <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs p-6 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Emisión de Comunicados Internos</h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Redacta e imparte anuncios oficiales directamente a las casillas de correo
-                corporativas de la empresa activa.
+        <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs p-6 space-y-4">
+          <div className="border-b border-slate-200 pb-4">
+            <h3 className="text-sm font-bold text-slate-900">Emisión de Comunicados Internos</h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Redacta e imparte anuncios oficiales a las casillas de correo corporativas de la
+              empresa activa.
+            </p>
+          </div>
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <Mail className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="text-xs font-medium">
+              <p className="font-bold">Esta función todavía no está disponible.</p>
+              <p className="mt-1 text-amber-800">
+                El envío de comunicados requiere conectar un proveedor de correo (SMTP o un servicio
+                como Resend/SendGrid) en el backend. Por ahora no hay ningún mecanismo de envío
+                implementado, así que preferimos no mostrar un formulario que aparente funcionar.
               </p>
             </div>
           </div>
-
-          {mailSentSuccess && (
-            <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-4 text-blue-800 border border-blue-200 text-xs font-medium">
-              <CheckCircle2 className="h-4 w-4 text-blue-700" />
-              ¡El comunicado ha sido procesado e impartido vía correo electrónico con éxito!
-            </div>
-          )}
-
-          <form onSubmit={handleSendComunicado} className="space-y-4 max-w-3xl">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Asunto */}
-              <div className="space-y-1.5">
-                <Label htmlFor="asuntoMail" className="text-xs font-semibold text-slate-700">
-                  Asunto del Comunicado *
-                </Label>
-                <Input
-                  required
-                  id="asuntoMail"
-                  placeholder="Ej. Comunicado Oficial: Nuevos horarios y políticas"
-                  value={comunicadoForm.asunto}
-                  onChange={(e) => setComunicadoForm({ ...comunicadoForm, asunto: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-
-              {/* Filtro de Destinatario */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Dirigido a *</Label>
-                <Select
-                  value={comunicadoForm.destinatarioTipo}
-                  onValueChange={(val) =>
-                    setComunicadoForm({ ...comunicadoForm, destinatarioTipo: val, empleadoId: "" })
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="todos" className="text-xs font-bold">
-                      Toda la Empresa Activa ({filteredEmpleados.length} colaboradores)
-                    </SelectItem>
-                    {departamentos.map((d) => (
-                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
-                        Área de {d.nombre}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="individual" className="text-xs text-blue-800 font-bold">
-                      Colaborador Específico...
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Selector Individual si elige persona especifica */}
-            {comunicadoForm.destinatarioTipo === "individual" && (
-              <div className="space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <Label htmlFor="indivEmp" className="text-xs font-semibold text-slate-700">
-                  Seleccionar Colaborador *
-                </Label>
-                <Select
-                  value={comunicadoForm.empleadoId}
-                  onValueChange={(val) => setComunicadoForm({ ...comunicadoForm, empleadoId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue placeholder="Buscar empleado por nombre..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {filteredEmpleados.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                        {emp.nombres} {emp.apellidos} — ({emp.correo})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Mensaje */}
-            <div className="space-y-1.5">
-              <Label htmlFor="mensajeMail" className="text-xs font-semibold text-slate-700">
-                Cuerpo del Mensaje *
-              </Label>
-              <textarea
-                required
-                id="mensajeMail"
-                rows={6}
-                placeholder="Escribe el contenido detallado del correo corporativo..."
-                value={comunicadoForm.mensaje}
-                onChange={(e) => setComunicadoForm({ ...comunicadoForm, mensaje: e.target.value })}
-                className="flex w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs shadow-xs placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-800"
-              />
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                type="submit"
-                disabled={isSendingMail}
-                className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold"
-              >
-                <Send className="h-3.5 w-3.5" />
-                {isSendingMail ? "Enviando Correo..." : "Despachar Comunicado"}
-              </Button>
-            </div>
-          </form>
         </div>
       )}
 
@@ -824,6 +819,24 @@ function GestionHumana() {
                   className="h-9 text-xs border-slate-300"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="correo" className="text-xs font-semibold text-slate-700">
+                Correo Corporativo *
+              </Label>
+              <Input
+                required
+                type="email"
+                id="correo"
+                placeholder="usuario@ricol.com.co"
+                value={empForm.correo}
+                onChange={(e) => setEmpForm({ ...empForm, correo: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+              <p className="text-[11px] text-slate-400">
+                Solo se permiten correos corporativos ({DOMINIOS_PERMITIDOS.map((d) => `@${d}`).join(", ")}).
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1194,6 +1207,30 @@ function GestionHumana() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!empleadoAEliminar} onOpenChange={(open) => !open && setEmpleadoAEliminar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Eliminar el expediente de {empleadoAEliminar?.nombres} {empleadoAEliminar?.apellidos}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción es permanente. El colaborador dejará de aparecer en el listado, pero su
+              historial queda registrado en la auditoría.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminandoEmpleado}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleEliminarEmpleado}
+              disabled={eliminandoEmpleado}
+            >
+              {eliminandoEmpleado ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

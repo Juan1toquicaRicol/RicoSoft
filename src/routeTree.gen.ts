@@ -18,6 +18,7 @@ import { Route as ContratosRouteImport } from './routes/contratos'
 import { Route as CreditosRouteImport } from './routes/creditos'
 import { Route as GestionHumanaRouteImport } from './routes/gestion-humana'
 import { Route as HistoriaComprasRouteImport } from './routes/historia-compras'
+import { Route as ImportacionesRouteImport } from './routes/importaciones'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as ProyeccionRouteImport } from './routes/proyeccion'
@@ -28,10 +29,13 @@ import { Route as ConfiguracionIndexRouteImport } from './routes/configuracion.i
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
 import { Route as ConfiguracionModulosRouteImport } from './routes/configuracion.modulos'
 import { Route as ConfiguracionPermisosRouteImport } from './routes/configuracion.permisos'
+import { Route as ConfiguracionProveedoresRouteImport } from './routes/configuracion.proveedores'
 import { Route as ConfiguracionRolesRouteImport } from './routes/configuracion.roles'
 import { Route as ConfiguracionUsuariosRouteImport } from './routes/configuracion.usuarios'
 import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
 import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
+import { Route as ImportacionesIdRouteImport } from './routes/importaciones.$id'
+import { Route as ServiciosIdRouteImport } from './routes/servicios.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,6 +80,11 @@ const GestionHumanaRoute = GestionHumanaRouteImport.update({
 const HistoriaComprasRoute = HistoriaComprasRouteImport.update({
   id: '/historia-compras',
   path: '/historia-compras',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportacionesRoute = ImportacionesRouteImport.update({
+  id: '/importaciones',
+  path: '/importaciones',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -129,6 +138,12 @@ const ConfiguracionPermisosRoute = ConfiguracionPermisosRouteImport.update({
   path: '/permisos',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
+const ConfiguracionProveedoresRoute =
+  ConfiguracionProveedoresRouteImport.update({
+    id: '/proveedores',
+    path: '/proveedores',
+    getParentRoute: () => ConfiguracionRoute,
+  } as any)
 const ConfiguracionRolesRoute = ConfiguracionRolesRouteImport.update({
   id: '/roles',
   path: '/roles',
@@ -149,6 +164,16 @@ const FacturasIdRoute = FacturasIdRouteImport.update({
   path: '/facturas/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportacionesIdRoute = ImportacionesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ImportacionesRoute,
+} as any)
+const ServiciosIdRoute = ServiciosIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ServiciosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -160,18 +185,22 @@ export interface FileRoutesByFullPath {
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
+  '/importaciones': typeof ImportacionesRouteWithChildren
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
-  '/servicios': typeof ServiciosRoute
+  '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
+  '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/facturas/$id': typeof FacturasIdRoute
+  '/importaciones/$id': typeof ImportacionesIdRoute
+  '/servicios/$id': typeof ServiciosIdRoute
   '/configuracion/': typeof ConfiguracionIndexRoute
   '/facturas/': typeof FacturasIndexRoute
 }
@@ -184,18 +213,22 @@ export interface FileRoutesByTo {
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
+  '/importaciones': typeof ImportacionesRouteWithChildren
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
-  '/servicios': typeof ServiciosRoute
+  '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
+  '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/facturas/$id': typeof FacturasIdRoute
+  '/importaciones/$id': typeof ImportacionesIdRoute
+  '/servicios/$id': typeof ServiciosIdRoute
   '/configuracion': typeof ConfiguracionIndexRoute
   '/facturas': typeof FacturasIndexRoute
 }
@@ -210,18 +243,22 @@ export interface FileRoutesById {
   '/creditos': typeof CreditosRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
+  '/importaciones': typeof ImportacionesRouteWithChildren
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
-  '/servicios': typeof ServiciosRoute
+  '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
+  '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/facturas/$id': typeof FacturasIdRoute
+  '/importaciones/$id': typeof ImportacionesIdRoute
+  '/servicios/$id': typeof ServiciosIdRoute
   '/configuracion/': typeof ConfiguracionIndexRoute
   '/facturas/': typeof FacturasIndexRoute
 }
@@ -237,6 +274,7 @@ export interface FileRouteTypes {
     | '/creditos'
     | '/gestion-humana'
     | '/historia-compras'
+    | '/importaciones'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -246,9 +284,12 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
+    | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/facturas/$id'
+    | '/importaciones/$id'
+    | '/servicios/$id'
     | '/configuracion/'
     | '/facturas/'
   fileRoutesByTo: FileRoutesByTo
@@ -261,6 +302,7 @@ export interface FileRouteTypes {
     | '/creditos'
     | '/gestion-humana'
     | '/historia-compras'
+    | '/importaciones'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -270,9 +312,12 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
+    | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/facturas/$id'
+    | '/importaciones/$id'
+    | '/servicios/$id'
     | '/configuracion'
     | '/facturas'
   id:
@@ -286,6 +331,7 @@ export interface FileRouteTypes {
     | '/creditos'
     | '/gestion-humana'
     | '/historia-compras'
+    | '/importaciones'
     | '/login'
     | '/perfil'
     | '/proyeccion'
@@ -295,9 +341,12 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
+    | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/facturas/$id'
+    | '/importaciones/$id'
+    | '/servicios/$id'
     | '/configuracion/'
     | '/facturas/'
   fileRoutesById: FileRoutesById
@@ -312,11 +361,12 @@ export interface RootRouteChildren {
   CreditosRoute: typeof CreditosRoute
   GestionHumanaRoute: typeof GestionHumanaRoute
   HistoriaComprasRoute: typeof HistoriaComprasRoute
+  ImportacionesRoute: typeof ImportacionesRouteWithChildren
   LoginRoute: typeof LoginRoute
   PerfilRoute: typeof PerfilRoute
   ProyeccionRoute: typeof ProyeccionRoute
   ReglasRoute: typeof ReglasRoute
-  ServiciosRoute: typeof ServiciosRoute
+  ServiciosRoute: typeof ServiciosRouteWithChildren
   SolicitudesCompraRoute: typeof SolicitudesCompraRoute
   FacturasIdRoute: typeof FacturasIdRoute
   FacturasIndexRoute: typeof FacturasIndexRoute
@@ -385,6 +435,13 @@ declare module '@tanstack/react-router' {
       path: '/historia-compras'
       fullPath: '/historia-compras'
       preLoaderRoute: typeof HistoriaComprasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/importaciones': {
+      id: '/importaciones'
+      path: '/importaciones'
+      fullPath: '/importaciones'
+      preLoaderRoute: typeof ImportacionesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -457,6 +514,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionPermisosRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
+    '/configuracion/proveedores': {
+      id: '/configuracion/proveedores'
+      path: '/proveedores'
+      fullPath: '/configuracion/proveedores'
+      preLoaderRoute: typeof ConfiguracionProveedoresRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
     '/configuracion/roles': {
       id: '/configuracion/roles'
       path: '/roles'
@@ -485,6 +549,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FacturasIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/importaciones/$id': {
+      id: '/importaciones/$id'
+      path: '/$id'
+      fullPath: '/importaciones/$id'
+      preLoaderRoute: typeof ImportacionesIdRouteImport
+      parentRoute: typeof ImportacionesRoute
+    }
+    '/servicios/$id': {
+      id: '/servicios/$id'
+      path: '/$id'
+      fullPath: '/servicios/$id'
+      preLoaderRoute: typeof ServiciosIdRouteImport
+      parentRoute: typeof ServiciosRoute
+    }
   }
 }
 
@@ -492,6 +570,7 @@ interface ConfiguracionRouteChildren {
   ConfiguracionDepartamentosRoute: typeof ConfiguracionDepartamentosRoute
   ConfiguracionModulosRoute: typeof ConfiguracionModulosRoute
   ConfiguracionPermisosRoute: typeof ConfiguracionPermisosRoute
+  ConfiguracionProveedoresRoute: typeof ConfiguracionProveedoresRoute
   ConfiguracionRolesRoute: typeof ConfiguracionRolesRoute
   ConfiguracionUsuariosRoute: typeof ConfiguracionUsuariosRoute
   ConfiguracionIndexRoute: typeof ConfiguracionIndexRoute
@@ -501,6 +580,7 @@ const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
   ConfiguracionDepartamentosRoute: ConfiguracionDepartamentosRoute,
   ConfiguracionModulosRoute: ConfiguracionModulosRoute,
   ConfiguracionPermisosRoute: ConfiguracionPermisosRoute,
+  ConfiguracionProveedoresRoute: ConfiguracionProveedoresRoute,
   ConfiguracionRolesRoute: ConfiguracionRolesRoute,
   ConfiguracionUsuariosRoute: ConfiguracionUsuariosRoute,
   ConfiguracionIndexRoute: ConfiguracionIndexRoute,
@@ -508,6 +588,30 @@ const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
 
 const ConfiguracionRouteWithChildren = ConfiguracionRoute._addFileChildren(
   ConfiguracionRouteChildren,
+)
+
+interface ImportacionesRouteChildren {
+  ImportacionesIdRoute: typeof ImportacionesIdRoute
+}
+
+const ImportacionesRouteChildren: ImportacionesRouteChildren = {
+  ImportacionesIdRoute: ImportacionesIdRoute,
+}
+
+const ImportacionesRouteWithChildren = ImportacionesRoute._addFileChildren(
+  ImportacionesRouteChildren,
+)
+
+interface ServiciosRouteChildren {
+  ServiciosIdRoute: typeof ServiciosIdRoute
+}
+
+const ServiciosRouteChildren: ServiciosRouteChildren = {
+  ServiciosIdRoute: ServiciosIdRoute,
+}
+
+const ServiciosRouteWithChildren = ServiciosRoute._addFileChildren(
+  ServiciosRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
@@ -520,11 +624,12 @@ const rootRouteChildren: RootRouteChildren = {
   CreditosRoute: CreditosRoute,
   GestionHumanaRoute: GestionHumanaRoute,
   HistoriaComprasRoute: HistoriaComprasRoute,
+  ImportacionesRoute: ImportacionesRouteWithChildren,
   LoginRoute: LoginRoute,
   PerfilRoute: PerfilRoute,
   ProyeccionRoute: ProyeccionRoute,
   ReglasRoute: ReglasRoute,
-  ServiciosRoute: ServiciosRoute,
+  ServiciosRoute: ServiciosRouteWithChildren,
   SolicitudesCompraRoute: SolicitudesCompraRoute,
   FacturasIdRoute: FacturasIdRoute,
   FacturasIndexRoute: FacturasIndexRoute,

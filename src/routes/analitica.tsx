@@ -19,12 +19,12 @@ import { compact } from "@/lib/data";
 export const Route = createFileRoute("/analitica")({
   head: () => ({
     meta: [
-      { title: "Analítica | Facturaflow" },
+      { title: "Analítica | RicoSoft" },
       {
         name: "description",
         content: "Dashboards interactivos y comparativos por proveedor, área, contrato y empresa.",
       },
-      { property: "og:title", content: "Analítica | Facturaflow" },
+      { property: "og:title", content: "Analítica | RicoSoft" },
       {
         property: "og:description",
         content: "Comparativos mensuales, anuales y por centro de costos.",
@@ -51,9 +51,9 @@ function Analitica() {
   return (
     <AppShell title="Analítica" description="Comparativos interactivos del gasto documental (calculado desde facturas reales)">
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="panel p-5">
-          <h2 className="text-sm font-semibold">Comparativo mensual</h2>
-          <p className="text-xs text-muted-foreground">
+        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+          <h2 className="text-sm font-bold text-slate-900">Comparativo mensual</h2>
+          <p className="text-xs text-slate-500">
             Recibido vs. aprobado vs. pagado (millones COP)
           </p>
           <div className="mt-4 h-[280px]">
@@ -83,9 +83,9 @@ function Analitica() {
           </div>
         </div>
 
-        <div className="panel p-5">
-          <h2 className="text-sm font-semibold">Tendencia de aprobación</h2>
-          <p className="text-xs text-muted-foreground">Evolución del valor aprobado</p>
+        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+          <h2 className="text-sm font-bold text-slate-900">Tendencia de aprobación</h2>
+          <p className="text-xs text-slate-500">Evolución del valor aprobado</p>
           <div className="mt-4 h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={serieMensual}>
@@ -125,15 +125,15 @@ function Analitica() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <div className="panel p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Mapa de calor por área</h2>
-          <p className="text-xs text-muted-foreground">Intensidad del gasto por mes</p>
+        <div className="panel p-5 bg-white border-slate-200 shadow-2xs lg:col-span-2">
+          <h2 className="text-sm font-bold text-slate-900">Mapa de calor por área</h2>
+          <p className="text-xs text-slate-500">Intensidad del gasto por mes</p>
           <div className="mt-5 overflow-x-auto">
             <div className="min-w-[520px]">
               <div className="grid grid-cols-[140px_repeat(5,minmax(0,1fr))] gap-1.5">
                 <div />
                 {meses.map((m) => (
-                  <div key={m} className="pb-1 text-center text-[11px] text-muted-foreground">
+                  <div key={m} className="pb-1 text-center text-[11px] text-slate-500">
                     {m}
                   </div>
                 ))}
@@ -142,7 +142,7 @@ function Analitica() {
                     key={area}
                     className="col-span-6 grid grid-cols-[140px_repeat(5,minmax(0,1fr))] gap-1.5"
                   >
-                    <div className="truncate pr-2 text-xs text-muted-foreground">{area}</div>
+                    <div className="truncate pr-2 text-xs text-slate-500">{area}</div>
                     {meses.map((m, c) => {
                       const intensity = ((r * 7 + c * 11) % 10) / 10;
                       return (
@@ -163,10 +163,10 @@ function Analitica() {
           </div>
         </div>
 
-        <div className="panel p-5">
-          <h2 className="text-sm font-semibold">Top proveedores</h2>
+        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+          <h2 className="text-sm font-bold text-slate-900">Top proveedores</h2>
           {topProveedores.length === 0 && (
-            <p className="mt-4 text-xs text-muted-foreground">
+            <p className="mt-4 text-xs text-slate-500">
               {loading ? "Cargando..." : error || "Aún no hay facturas registradas."}
             </p>
           )}
@@ -174,31 +174,31 @@ function Analitica() {
             {topProveedores.map((p) => (
               <li key={p.nit}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs font-medium">{p.nombre}</span>
-                  <span className="num shrink-0 text-xs text-muted-foreground">
+                  <span className="min-w-0 truncate text-xs font-semibold text-slate-800">{p.nombre}</span>
+                  <span className="num shrink-0 text-xs text-slate-500">
                     {compact(p.valor)}
                   </span>
                 </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="h-full rounded-full bg-primary"
+                    className="h-full rounded-full bg-blue-800"
                     style={{ width: `${(p.valor / (topProveedores[0]?.valor ?? 1)) * 100}%` }}
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">{p.facturas} facturas</p>
+                <p className="mt-1 text-[11px] text-slate-500">{p.facturas} facturas</p>
               </li>
             ))}
           </ul>
         </div>
       </div>
 
-      <div className="panel mt-4 p-5">
-        <h2 className="text-sm font-semibold">Comparativo por centro de costos</h2>
+      <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs">
+        <h2 className="text-sm font-bold text-slate-900">Comparativo por centro de costos</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {porArea.map((a) => (
-            <div key={a.nombre} className="rounded-xl border border-border p-4">
-              <p className="truncate text-xs text-muted-foreground">{a.nombre}</p>
-              <p className="num mt-1 text-lg font-semibold">{a.valor}M</p>
+            <div key={a.nombre} className="rounded-xl border border-slate-200 p-4">
+              <p className="truncate text-xs text-slate-500">{a.nombre}</p>
+              <p className="num mt-1 text-lg font-bold text-slate-900">{a.valor}M</p>
             </div>
           ))}
         </div>

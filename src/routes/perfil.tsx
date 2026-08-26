@@ -6,8 +6,9 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchAuth } from "@/lib/session";
+import { fetchAuth, setToken } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
+import { validarPasswordSegura } from "@/lib/password";
 
 export const Route = createFileRoute("/perfil")({
   head: () => ({
@@ -72,21 +73,26 @@ function PerfilPage() {
       setErrorPassword("Todos los campos de contraseña son obligatorios.");
       return;
     }
-    if (passwordNueva.length < 8) {
-      setErrorPassword("La nueva contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
     if (passwordNueva !== confirmarPassword) {
       setErrorPassword("La confirmación no coincide con la nueva contraseña.");
+      return;
+    }
+    const errorValidacion = validarPasswordSegura(passwordNueva);
+    if (errorValidacion) {
+      setErrorPassword(errorValidacion);
       return;
     }
 
     setCambiandoPassword(true);
     try {
-      await fetchAuth("/usuarios/me/password", {
+      // El backend invalida el token anterior (y cualquier otra sesión
+      // activa) y devuelve uno nuevo, para que esta sesión siga funcionando
+      // sin forzar un relogin.
+      const respuesta = await fetchAuth("/usuarios/me/password", {
         method: "PATCH",
         body: JSON.stringify({ passwordActual, passwordNueva, confirmarPassword }),
       });
+      if (respuesta.token) setToken(respuesta.token);
       setOkPassword(true);
       setPasswordActual("");
       setPasswordNueva("");
@@ -208,7 +214,7 @@ function PerfilPage() {
                 onChange={(e) => setPasswordNueva(e.target.value)}
                 className="h-9 text-sm border-slate-300"
               />
-              <p className="text-[11px] text-slate-400">Mínimo 8 caracteres.</p>
+              <p className="text-[11px] text-slate-400">Mínimo 8 caracteres, con mayúscula, minúscula y número.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirmarPassword" className="text-xs font-semibold text-slate-700">

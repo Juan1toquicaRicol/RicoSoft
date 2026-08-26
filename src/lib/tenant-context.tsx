@@ -8,13 +8,13 @@ export interface Empresa {
 }
 
 export const EMPRESAS: Empresa[] = [
-  { id: "001", nombre: "REPRESENTACION INDUSTRIALES DE COLOMBIA S.A.S", nit: "8050069065", sigla: "RC" },
-  { id: "002", nombre: "FLEXIPACK DE COLOMBIA S.A.S", nit: "900215771", sigla: "FL" },
-  { id: "003", nombre: "GREEN SOLUTIONS COLOMBIA S.A.S BIC", nit: "901411539", sigla: "GR" },
+  { id: "RC", nombre: "REPRESENTACION INDUSTRIALES DE COLOMBIA S.A.S", nit: "8050069065", sigla: "RC" },
+  { id: "FL", nombre: "FLEXIPACK DE COLOMBIA S.A.S", nit: "900215771", sigla: "FL" },
+  { id: "GR", nombre: "GREEN SOLUTIONS COLOMBIA S.A.S BIC", nit: "901411539", sigla: "GR" },
 ];
 
 interface TenantContextType {
-  empresaActiva: string; // '001' | '002' | '003' | 'ALL'
+  empresaActiva: string; // 'RC' | 'FL' | 'GR' | 'ALL'
   setEmpresaActiva: (id: string) => void;
   empresas: Empresa[];
   empresaActualObj: Empresa | undefined;

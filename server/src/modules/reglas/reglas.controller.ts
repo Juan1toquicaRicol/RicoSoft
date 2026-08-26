@@ -35,6 +35,7 @@ export const listarReglas = async (req: AuthenticatedRequest, res: Response) => 
     const reglas = await prisma.reglaEnrutamiento.findMany({
       where: { tenantId },
       orderBy: { prioridad: "asc" },
+      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(reglas.map(serializar));
   } catch (error) {

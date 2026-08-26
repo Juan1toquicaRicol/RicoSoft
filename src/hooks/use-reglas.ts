@@ -57,5 +57,13 @@ export function useReglas() {
     [refresh],
   );
 
-  return { reglas, loading, error, refresh, toggleActiva, addRegla };
+  const eliminarRegla = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/reglas/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { reglas, loading, error, refresh, toggleActiva, addRegla, eliminarRegla };
 }

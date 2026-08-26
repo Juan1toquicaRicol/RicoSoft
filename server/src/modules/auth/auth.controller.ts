@@ -1,16 +1,12 @@
 import { Request, Response } from "express";
-import { registerUserService, loginUserService } from "./auth.service";
+import { registerUserService, loginUserService, selectTenantService } from "./auth.service";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 export const registerController = async (req: Request, res: Response) => {
   try {
+    // La forma del body (campos presentes, tipo string) ya la valida el
+    // middleware validarBody(registerSchema) en la ruta.
     const { nombre, email, password, departamentoId } = req.body;
-
-    if (!email || !password || !nombre || !departamentoId) {
-      return res
-        .status(400)
-        .json({ message: "Todos los campos son obligatorios, incluido el departamento." });
-    }
 
     const nuevoUsuario = await registerUserService({ nombre, email, password, departamentoId });
 
@@ -28,19 +24,45 @@ export const loginController = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "El correo y la contraseña son requeridos." });
-    }
+    const resultado = await loginUserService({ email, password });
 
-    const { token, user } = await loginUserService({ email, password });
+    if (resultado.requiresTenantSelection) {
+      return res.status(200).json({
+        requiresTenantSelection: true,
+        selectionToken: resultado.selectionToken,
+        tenants: resultado.tenants,
+      });
+    }
 
     return res.status(200).json({
       message: "Inicio de sesión exitoso.",
-      token,
-      user,
+      token: resultado.token,
+      user: resultado.user,
     });
   } catch (error: any) {
     return res.status(401).json({ message: error.message || "Error al iniciar sesión." });
+  }
+};
+
+// --- SELECCIÓN DE EMPRESA (paso 2, solo cuando el login pide elegir) ---
+export const selectTenantController = async (req: Request, res: Response) => {
+  try {
+    const { selectionToken, tenantId } = req.body;
+
+    const resultado = await selectTenantService({ selectionToken, tenantId });
+    if (resultado.requiresTenantSelection) {
+      // No debería pasar (selectTenantService siempre emite sesión final),
+      // pero se cubre por completitud del tipo.
+      return res.status(500).json({ message: "No se pudo completar el inicio de sesión." });
+    }
+
+    return res.status(200).json({
+      message: "Inicio de sesión exitoso.",
+      token: resultado.token,
+      user: resultado.user,
+    });
+  } catch (error: any) {
+    return res.status(401).json({ message: error.message || "No se pudo iniciar sesión con esa empresa." });
   }
 };
 

@@ -20,6 +20,34 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+/**
+ * Reemplaza el token de sesión (login, o al cambiar la contraseña propia:
+ * el backend invalida el token anterior e incluye uno nuevo en la respuesta
+ * para que la sesión actual siga viva sin tener que volver a iniciar sesión).
+ */
+export function setToken(token: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+/**
+ * Lee de forma síncrona el último usuario conocido (cacheado en localStorage
+ * tras fetchCurrentUser). Pensado para guards de ruta (beforeLoad), que
+ * corren antes de montar React y no pueden esperar una petición async.
+ * No es la fuente de verdad de permisos: el backend revalida cada endpoint
+ * de todas formas, esto solo evita que el layout de administración se
+ * renderice para alguien sin el permiso correspondiente.
+ */
+export function getCachedUser(): SessionUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as SessionUser) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(TOKEN_KEY);

@@ -1,17 +1,37 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { CreditCard, Plus, Power } from "lucide-react";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CreditCard, Plus, Power, Trash2 } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
+import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import { agruparFilas } from "@/lib/agrupar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useServicios } from "@/hooks/use-servicios";
+import { useProveedores } from "@/hooks/use-proveedores";
+import { useContratos } from "@/hooks/use-contratos";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
+import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
+import { useSession } from "@/lib/session-context";
+import { hasPermission } from "@/lib/session";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money, PeriodicidadServicio } from "@/lib/data";
 
 export const Route = createFileRoute("/servicios")({
@@ -26,27 +46,73 @@ export const Route = createFileRoute("/servicios")({
 
 function ServiciosPage() {
   const { empresaActiva, empresas } = useTenant();
-  const { suscripciones, loading, error, addSuscripcion, toggleEstadoSuscripcion } = useServicios();
+  const { suscripciones, loading, error, addSuscripcion, toggleEstadoSuscripcion, eliminarSuscripcion } = useServicios();
+  const { proveedores } = useProveedores();
+  const proveedoresActivos = proveedores.filter((p) => p.activo);
+  const { contratos } = useContratos();
+  const contratosActivos = contratos.filter((c) => c.estado === "Activo");
   const { departamentos } = useDepartamentosPublico();
+  const { user } = useSession();
+  const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.SERVICIOS_ELIMINAR);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [servicioAEliminar, setServicioAEliminar] = useState<{ id: string; nombre: string } | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
+
+  const handleEliminarServicio = async () => {
+    if (!servicioAEliminar) return;
+    setEliminando(true);
+    try {
+      await eliminarSuscripcion(servicioAEliminar.id);
+      toast.success(`Servicio "${servicioAEliminar.nombre}" eliminado.`);
+      setServicioAEliminar(null);
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible eliminar el servicio.");
+    } finally {
+      setEliminando(false);
+    }
+  };
 
   const [form, setForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "001" : empresaActiva,
+    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
     area: "Sistemas",
     nombreServicio: "",
-    proveedor: "",
+    proveedorId: "",
+    contratoId: "",
     periodicidad: "Mensual" as PeriodicidadServicio,
     costo: 350000,
     moneda: "COP" as const,
     fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    responsableArea: "",
+    responsableId: "",
   });
+
+  const areaDepartamentoId = departamentos.find((d) => d.nombre === form.area)?.id;
+  const { usuarios: usuariosArea, loading: cargandoUsuariosArea } =
+    useUsuariosPorDepartamento(areaDepartamentoId);
 
   const filteredSuscripciones = useMemo(() => {
     if (empresaActiva === "ALL") return suscripciones;
     return suscripciones.filter((s) => s.empresaId === empresaActiva);
   }, [suscripciones, empresaActiva]);
+
+  const claveDeAgrupacion = useMemo(() => {
+    switch (agrupacion) {
+      case "area":
+        return (s: (typeof filteredSuscripciones)[number]) => s.area;
+      case "proveedor":
+        return (s: (typeof filteredSuscripciones)[number]) => s.proveedor;
+      case "estado":
+        return (s: (typeof filteredSuscripciones)[number]) => s.estado;
+      default:
+        return null;
+    }
+  }, [agrupacion]);
+
+  const gruposSuscripciones = useMemo(
+    () => agruparFilas(filteredSuscripciones, claveDeAgrupacion),
+    [filteredSuscripciones, claveDeAgrupacion],
+  );
 
   // Total recurrente acumulado por empresa
   const costoMensualTotal = useMemo(() => {
@@ -61,34 +127,40 @@ function ServiciosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombreServicio || !form.proveedor) return;
+    if (!form.nombreServicio || !form.proveedorId) return;
+    if (!form.responsableId) {
+      toast.error("Selecciona el responsable del área.");
+      return;
+    }
     try {
       await addSuscripcion({
         empresaId: form.empresaId,
         area: form.area,
         nombreServicio: form.nombreServicio,
-        proveedor: form.proveedor,
+        proveedorId: form.proveedorId,
+        contratoId: form.contratoId || undefined,
         periodicidad: form.periodicidad,
         costo: Number(form.costo),
         moneda: form.moneda,
         fechaRenovacion: form.fechaRenovacion,
-        responsableArea: form.responsableArea || "Líder de Área",
+        responsableId: form.responsableId,
       });
     } catch (err: any) {
-      alert(err.message || "Error al registrar el servicio.");
+      toast.error(err.message || "Error al registrar el servicio.");
       return;
     }
     setModalOpen(false);
     setForm({
-      empresaId: empresaActiva === "ALL" ? "001" : empresaActiva,
+      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
       area: "Sistemas",
       nombreServicio: "",
-      proveedor: "",
+      proveedorId: "",
+      contratoId: "",
       periodicidad: "Mensual",
       costo: 350000,
       moneda: "COP",
       fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      responsableArea: "",
+      responsableId: "",
     });
   };
 
@@ -112,7 +184,7 @@ function ServiciosPage() {
         </div>
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Costo Mensual Recurrente Estimado</p>
-          <p className="text-2xl font-bold mt-1 text-slate-900 font-mono">
+          <p className="num text-2xl font-bold mt-1 text-slate-900">
             {money(costoMensualTotal)}
           </p>
         </div>
@@ -130,6 +202,16 @@ function ServiciosPage() {
             <h3 className="text-sm font-bold text-slate-900">Inventario de Servicios Recurrentes</h3>
             <p className="text-xs text-slate-500 font-medium">Software, licencias, conectividad y servicios públicos activos por área.</p>
           </div>
+          <SelectorAgrupacion
+            value={agrupacion}
+            onChange={setAgrupacion}
+            opciones={[
+              OPCION_SIN_AGRUPAR,
+              { value: "area", label: "Área" },
+              { value: "proveedor", label: "Proveedor" },
+              { value: "estado", label: "Estado" },
+            ]}
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
@@ -147,10 +229,17 @@ function ServiciosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {filteredSuscripciones.map((sub) => (
+              {gruposSuscripciones.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                  )}
+                  {grupo.filas.map((sub) => (
                 <tr key={sub.id} className="transition-colors hover:bg-slate-50">
                   <td className="px-4 py-3 font-bold text-xs text-slate-900">
-                    <p>{sub.nombreServicio}</p>
+                    <Link to="/servicios/$id" params={{ id: sub.id }} className="hover:underline hover:text-blue-800">
+                      {sub.nombreServicio}
+                    </Link>
                     <p className="text-[10px] text-slate-400 font-normal">Resp: {sub.responsableArea}</p>
                   </td>
                   <td className="px-4 py-3">
@@ -161,28 +250,47 @@ function ServiciosPage() {
                   </td>
                   <td className="px-4 py-3 text-xs font-semibold text-slate-800">{sub.proveedor}</td>
                   <td className="px-4 py-3 text-xs text-slate-500 font-medium">{sub.periodicidad}</td>
-                  <td className="px-4 py-3 text-right font-bold font-mono text-slate-900 text-xs">
+                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
                     {money(sub.costo, sub.moneda)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{sub.fechaRenovacion}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-mono text-xs text-slate-500">{sub.fechaRenovacion}</p>
+                    {sub.estado === "Activo" && (
+                      <BarraVencimiento fecha={sub.fechaRenovacion} etiquetaVencido="Venció" className="mt-1" />
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <EstadoBadge estado={sub.estado} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
-                        toggleEstadoSuscripcion(sub.id).catch((err: any) =>
-                          alert(err.message || "Error al cambiar el estado."),
-                        )
-                      }
-                      className="h-7 text-[11px] gap-1 font-semibold border-slate-300 hover:bg-slate-100"
-                    >
-                      <Power className="h-3 w-3 text-slate-500" /> {sub.estado === "Activo" ? "Desactivar" : "Activar"}
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() =>
+                          toggleEstadoSuscripcion(sub.id).catch((err: any) =>
+                            toast.error(err.message || "Error al cambiar el estado."),
+                          )
+                        }
+                        className="h-7 text-[11px] gap-1 font-semibold border-slate-300 hover:bg-slate-100"
+                      >
+                        <Power className="h-3 w-3 text-slate-500" /> {sub.estado === "Activo" ? "Desactivar" : "Activar"}
+                      </Button>
+                      {puedeEliminar && (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })}
+                          className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
               {filteredSuscripciones.length === 0 && (
                 <tr>
@@ -221,7 +329,7 @@ function ServiciosPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold text-slate-700">Área Categorizada *</Label>
-                <Select value={form.area} onValueChange={(val) => setForm({ ...form, area: val })}>
+                <Select value={form.area} onValueChange={(val) => setForm({ ...form, area: val, responsableId: "" })}>
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
                     {departamentos.map((d) => (
@@ -248,15 +356,54 @@ function ServiciosPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">Proveedor *</Label>
-                <Input
-                  required
-                  id="proveedor"
-                  placeholder="Ej: TechCloud Colombia S.A.S."
-                  value={form.proveedor}
-                  onChange={(e) => setForm({ ...form, proveedor: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
+                <Select
+                  value={form.proveedorId}
+                  onValueChange={(val) => setForm({ ...form, proveedorId: val })}
+                  disabled={proveedoresActivos.length === 0}
+                >
+                  <SelectTrigger id="proveedor" className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue
+                      placeholder={proveedoresActivos.length === 0 ? "Sin proveedores registrados" : "Selecciona un proveedor"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    {proveedoresActivos.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            {proveedoresActivos.length === 0 && (
+              <p className="-mt-2 text-[11px] text-amber-600">
+                No hay proveedores registrados.{" "}
+                <Link to="/configuracion/proveedores" className="font-semibold underline">
+                  Créalos en Configuración
+                </Link>{" "}
+                antes de registrar un servicio.
+              </p>
+            )}
+
+            <div className="space-y-1">
+              <Label htmlFor="contrato" className="text-xs font-semibold text-slate-700">Contrato vinculado (opcional)</Label>
+              <Select
+                value={form.contratoId || "__none__"}
+                onValueChange={(val) => setForm({ ...form, contratoId: val === "__none__" ? "" : val })}
+              >
+                <SelectTrigger id="contrato" className="h-9 text-xs border-slate-300 bg-white">
+                  <SelectValue placeholder="Sin contrato asociado" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-slate-200">
+                  <SelectItem value="__none__" className="text-xs">Sin contrato asociado</SelectItem>
+                  {contratosActivos.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.proveedor} — {c.area}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -305,16 +452,38 @@ function ServiciosPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">Responsable del Área</Label>
-                <Input
-                  id="responsable"
-                  placeholder="Líder de Sistemas"
-                  value={form.responsableArea}
-                  onChange={(e) => setForm({ ...form, responsableArea: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
+                <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">Responsable del Área *</Label>
+                <Select
+                  value={form.responsableId}
+                  onValueChange={(val) => setForm({ ...form, responsableId: val })}
+                  disabled={!areaDepartamentoId || cargandoUsuariosArea || usuariosArea.length === 0}
+                >
+                  <SelectTrigger id="responsable" className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue
+                      placeholder={
+                        cargandoUsuariosArea
+                          ? "Cargando usuarios..."
+                          : usuariosArea.length === 0
+                            ? "Sin usuarios en esta área"
+                            : "Selecciona un responsable"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    {usuariosArea.map((u) => (
+                      <SelectItem key={u.id} value={u.id} className="text-xs">
+                        {u.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+            {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
+              <p className="-mt-2 text-[11px] text-amber-600">
+                No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt; Usuarios.
+              </p>
+            )}
 
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancelar</Button>
@@ -323,6 +492,28 @@ function ServiciosPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!servicioAEliminar} onOpenChange={(open) => !open && setServicioAEliminar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar el servicio "{servicioAEliminar?.nombre}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción es permanente. El servicio dejará de aparecer en el inventario, pero queda
+              registrado en la auditoría.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleEliminarServicio}
+              disabled={eliminando}
+            >
+              {eliminando ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

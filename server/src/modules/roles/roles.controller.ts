@@ -25,6 +25,7 @@ export const listarRoles = async (req: AuthenticatedRequest, res: Response) => {
         nombre: r.nombre,
         descripcion: r.descripcion,
         esSistema: r.esSistema,
+        activo: r.activo,
         permisos: parseRolPermisos(r.permisos),
         usuariosAsignados: r._count.users,
       })),
@@ -38,11 +39,8 @@ export const listarRoles = async (req: AuthenticatedRequest, res: Response) => {
 export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
+    // Forma del body ya validada por validarBody(crearRolSchema).
     const { nombre, descripcion, permisos } = req.body;
-
-    if (!nombre || typeof nombre !== "string") {
-      return res.status(400).json({ message: "El nombre del rol es obligatorio." });
-    }
 
     const rol = await prisma.rol.create({
       data: {
@@ -60,6 +58,13 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
         usuarioId: req.user!.id,
         accion: "ROL_CREADO",
         detalle: `${req.user!.nombre} creó el rol "${rol.nombre}"`,
+        entidadTipo: "Rol",
+        entidadId: rol.id,
+        datosNuevos: JSON.stringify({
+          nombre: rol.nombre,
+          descripcion: rol.descripcion,
+          permisos: parseRolPermisos(rol.permisos),
+        }),
       },
     });
 
@@ -68,6 +73,7 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
       nombre: rol.nombre,
       descripcion: rol.descripcion,
       esSistema: rol.esSistema,
+      activo: rol.activo,
       permisos: parseRolPermisos(rol.permisos),
       usuariosAsignados: 0,
     });
@@ -81,7 +87,7 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { id } = req.params;
     const tenantId = req.user!.tenantId;
-    const { nombre, descripcion, permisos } = req.body;
+    const { nombre, descripcion, permisos, activo } = req.body;
 
     const rolExistente = await prisma.rol.findFirst({ where: { id, tenantId } });
     if (!rolExistente) {
@@ -92,23 +98,72 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
         message: "Los permisos de un rol de sistema no pueden modificarse.",
       });
     }
+    if (rolExistente.esSistema && typeof activo === "boolean" && !activo) {
+      return res.status(409).json({ message: "Los roles de sistema no pueden desactivarse." });
+    }
+
+    // Cambiar el arreglo de permisos de un rol es más sensible que renombrarlo
+    // o cambiar su descripción: exige el permiso específico "asignar_permisos"
+    // además de "editar", para que "roles.editar" por sí solo no sea suficiente
+    // para inflar un rol con permisos arbitrarios (p. ej. usuarios.eliminar).
+    if (
+      Array.isArray(permisos) &&
+      !req.user!.isSuperadmin &&
+      !req.user!.permisos.includes(PERMISOS_SISTEMA.ROLES_ASIGNAR_PERMISOS)
+    ) {
+      return res.status(403).json({
+        message: "No tienes permiso para modificar los permisos de un rol.",
+      });
+    }
+
+    const permisosSaneados = Array.isArray(permisos) ? sanearPermisos(permisos) : null;
+    const permisosAnteriores = Array.isArray(permisos) ? parseRolPermisos(rolExistente.permisos) : null;
 
     const rol = await prisma.rol.update({
       where: { id },
       data: {
         ...(typeof nombre === "string" && !rolExistente.esSistema ? { nombre } : {}),
         ...(typeof descripcion === "string" ? { descripcion } : {}),
-        ...(Array.isArray(permisos) ? { permisos: JSON.stringify(sanearPermisos(permisos)) } : {}),
+        ...(permisosSaneados !== null ? { permisos: JSON.stringify(permisosSaneados) } : {}),
+        ...(typeof activo === "boolean" ? { activo } : {}),
       },
       include: { _count: { select: { users: true } } },
     });
+
+    let detallePermisos = "";
+    if (permisosSaneados !== null && permisosAnteriores !== null) {
+      const agregados = permisosSaneados.filter((p) => !permisosAnteriores.includes(p));
+      const quitados = permisosAnteriores.filter((p) => !permisosSaneados.includes(p));
+      if (agregados.length || quitados.length) {
+        detallePermisos =
+          ` Permisos agregados: [${agregados.join(", ") || "ninguno"}]. Permisos quitados: [${quitados.join(", ") || "ninguno"}].`;
+      }
+    }
+    const detalleActivo =
+      typeof activo === "boolean" && activo !== rolExistente.activo
+        ? ` Rol ${activo ? "activado" : "desactivado"}.`
+        : "";
 
     await prisma.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
         accion: "ROL_EDITADO",
-        detalle: `${req.user!.nombre} editó el rol "${rol.nombre}"`,
+        detalle: `${req.user!.nombre} editó el rol "${rol.nombre}".${detallePermisos}${detalleActivo}`,
+        entidadTipo: "Rol",
+        entidadId: id,
+        datosAnteriores: JSON.stringify({
+          nombre: rolExistente.nombre,
+          descripcion: rolExistente.descripcion,
+          activo: rolExistente.activo,
+          ...(permisosAnteriores !== null ? { permisos: permisosAnteriores } : {}),
+        }),
+        datosNuevos: JSON.stringify({
+          nombre: rol.nombre,
+          descripcion: rol.descripcion,
+          activo: rol.activo,
+          ...(permisosSaneados !== null ? { permisos: permisosSaneados } : {}),
+        }),
       },
     });
 
@@ -117,6 +172,7 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
       nombre: rol.nombre,
       descripcion: rol.descripcion,
       esSistema: rol.esSistema,
+      activo: rol.activo,
       permisos: parseRolPermisos(rol.permisos),
       usuariosAsignados: rol._count.users,
     });
@@ -155,6 +211,9 @@ export const eliminarRol = async (req: AuthenticatedRequest, res: Response) => {
         usuarioId: req.user!.id,
         accion: "ROL_ELIMINADO",
         detalle: `${req.user!.nombre} eliminó el rol "${rol.nombre}"`,
+        entidadTipo: "Rol",
+        entidadId: id,
+        datosAnteriores: JSON.stringify({ nombre: rol.nombre, permisos: parseRolPermisos(rol.permisos) }),
       },
     });
 

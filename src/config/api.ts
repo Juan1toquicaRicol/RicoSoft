@@ -1,7 +1,12 @@
 // src/config/api.ts
 
-// Detecta la URL del backend desde variables de entorno o usa el puerto 4000 por defecto
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+// Detecta la URL del backend desde variables de entorno. Si no está definida,
+// se construye a partir del host actual (window.location.hostname) para que
+// funcione tanto en localhost como al acceder desde otro equipo por IP de red
+// (ej. http://192.168.0.10:8080 -> backend en http://192.168.0.10:4000/api).
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:4000/api`;
 
 /**
  * Cliente HTTP centralizado para conectar el Frontend con el Backend en Node.js

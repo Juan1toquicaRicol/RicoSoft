@@ -668,3 +668,42 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Backend
+
+El backend (Express + Prisma + SQL Server) vive en `server/` y corre por separado:
+
+```sh
+cd server
+npm i
+cp .env.example .env   # completa DATABASE_URL, JWT_SECRET, etc.
+npx prisma generate
+npm run dev
+```
+
+## Despliegue
+
+Este repo tiene dos piezas que se despliegan por separado:
+
+- **Frontend** (`/`, TanStack Start): el flujo previsto es publicar desde el
+  editor de [Lovable](https://lovable.dev/projects/e63ebc33-6617-4685-a5f7-ab2ee2cabe0d),
+  que ya resuelve el build (Cloudflare vía Nitro, configurado en `vite.config.ts`
+  — no lo edites a mano, rompe el build). Si en algún momento se despliega
+  fuera de Lovable, hay que fijar explícitamente el preset de Nitro y
+  verificar que el comando de arranque sirva ese build (`vite preview` **no**
+  sirve el build de Nitro/Cloudflare).
+- **Backend** (`server/`): es un servidor Node/Express normal, sin plataforma
+  gestionada. Necesita:
+  - Node ≥ 20 (ver `engines` en `server/package.json`).
+  - Variables de entorno de `server/.env.example` (`DATABASE_URL` con TLS
+    real en producción, `JWT_SECRET` único por entorno, `NODE_ENV=production`,
+    `CORS_ORIGIN` con la(s) URL(s) real(es) del frontend).
+  - `npm run build && npm start` (compila con `tsc` a `dist/` y arranca con
+    Node plano), o el `Dockerfile` incluido en `server/`.
+  - Persistencia para `server/uploads/` — en un entorno con más de una
+    instancia o efímero (contenedor) hace falta mover esto a almacenamiento
+    de objetos (S3 o equivalente); hoy es solo disco local.
+
+Antes de exponer esto a un dominio público, revisa la auditoría de
+producción del proyecto (seguridad de borde, backups, monitoreo) — el código
+por sí solo no cubre esas piezas operativas.

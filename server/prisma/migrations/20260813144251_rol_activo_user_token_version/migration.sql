@@ -1,0 +1,23 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- AlterTable
+ALTER TABLE [dbo].[Rol] ADD [activo] BIT NOT NULL CONSTRAINT [Rol_activo_df] DEFAULT 1;
+
+-- AlterTable
+ALTER TABLE [dbo].[User] ADD [tokenVersion] INT NOT NULL CONSTRAINT [User_tokenVersion_df] DEFAULT 0;
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH
+

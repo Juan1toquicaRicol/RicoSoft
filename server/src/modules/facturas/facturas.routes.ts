@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
-import { uploadFacturaArchivo, validarFacturaIdParaArchivo } from "../../middleware/upload.middleware";
+import { validarBody } from "../../middleware/validate.middleware";
+import {
+  uploadFacturaArchivo,
+  validarFacturaIdParaArchivo,
+  uploadComprobantePago,
+  validarPagoIdParaArchivo,
+} from "../../middleware/upload.middleware";
 import {
   listarFacturas,
   obtenerFactura,
@@ -10,7 +16,16 @@ import {
   obtenerArchivoFactura,
   eliminarArchivoFactura,
   agregarComentarioFactura,
+  eliminarFactura,
 } from "./facturas.controller";
+import {
+  listarPagosFactura,
+  registrarPago,
+  anularPago,
+  subirComprobantePago,
+  obtenerComprobantePago,
+} from "./pagos.controller";
+import { registrarPagoSchema } from "./pagos.schemas";
 
 const router = Router();
 
@@ -34,5 +49,32 @@ router.post(
 router.delete("/:id/archivo", requirePermission("facturas.crear"), eliminarArchivoFactura);
 
 router.post("/:id/comentarios", requirePermission("facturas.ver"), agregarComentarioFactura);
+
+// Pagos: ver reutiliza facturas.ver (se consultan siempre en contexto de una
+// factura); registrar/anular reutiliza facturas.pagar (misma capacidad de
+// negocio que ya existía, ahora respaldada por un registro real en vez de
+// solo cambiar el estado).
+router.get("/:facturaId/pagos", requirePermission("facturas.ver"), listarPagosFactura);
+router.post(
+  "/:facturaId/pagos",
+  requirePermission("facturas.pagar"),
+  validarBody(registrarPagoSchema),
+  registrarPago,
+);
+router.patch("/:facturaId/pagos/:id/anular", requirePermission("facturas.pagar"), anularPago);
+router.get(
+  "/:facturaId/pagos/:id/comprobante",
+  requirePermission("facturas.ver"),
+  obtenerComprobantePago,
+);
+router.post(
+  "/:facturaId/pagos/:id/comprobante",
+  requirePermission("facturas.pagar"),
+  validarPagoIdParaArchivo,
+  uploadComprobantePago,
+  subirComprobantePago,
+);
+
+router.delete("/:id", requirePermission("facturas.eliminar"), eliminarFactura);
 
 export default router;

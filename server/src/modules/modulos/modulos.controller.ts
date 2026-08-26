@@ -32,6 +32,7 @@ const CATALOGO_DEFECTO: Array<{ clave: string; nombre: string; ruta: string; ico
   { clave: "analitica", nombre: "Analítica", ruta: "/analitica", icono: "BarChart3" },
   { clave: "proyeccion", nombre: "Proyección Financiera", ruta: "/proyeccion", icono: "TrendingUp" },
   { clave: "bandeja", nombre: "Bandeja de Entrada", ruta: "/bandeja", icono: "Inbox" },
+  { clave: "importaciones", nombre: "Importaciones y Exportaciones", ruta: "/importaciones", icono: "Ship" },
 ];
 
 /**

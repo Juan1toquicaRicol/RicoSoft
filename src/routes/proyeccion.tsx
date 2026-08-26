@@ -59,9 +59,9 @@ function Proyeccion() {
     >
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {indicadores.map((i) => (
-          <div key={i.label} className="panel p-5">
-            <p className="text-xs text-muted-foreground">{i.label}</p>
-            <p className="num mt-2 text-xl font-semibold">{money(i.value)}</p>
+          <div key={i.label} className="panel p-5 bg-white border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{i.label}</p>
+            <p className="num mt-1 text-2xl font-bold text-slate-900">{money(i.value)}</p>
             {i.delta && (
               <p
                 className={`mt-1 inline-flex items-center gap-1 text-[11px] ${i.up ? "text-success" : "text-destructive"}`}
@@ -74,9 +74,9 @@ function Proyeccion() {
         ))}
       </div>
 
-      <div className="panel mt-4 p-5">
-        <h2 className="text-sm font-semibold">Histórico y proyección</h2>
-        <p className="text-xs text-muted-foreground">
+      <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs">
+        <h2 className="text-sm font-bold text-slate-900">Histórico y proyección</h2>
+        <p className="text-xs text-slate-500">
           {loading
             ? "Cargando..."
             : error || "Línea sólida = facturas reales · línea punteada = proyección registrada por Finanzas"}
@@ -123,7 +123,7 @@ function Proyeccion() {
       </div>
 
       {proyeccion.length === 0 && !loading && (
-        <div className="panel mt-4 p-5 text-sm text-muted-foreground">
+        <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
           Finanzas aún no ha registrado proyecciones para los próximos meses.
         </div>
       )}

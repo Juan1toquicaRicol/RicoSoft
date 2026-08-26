@@ -1,12 +1,20 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma";
-import { loadSessionUser } from "../../lib/permissions";
+import { loadSessionUser, listarTenantsAccesibles, TenantAccesible, SessionUser } from "../../lib/permissions";
+import { esDominioCorporativoValido } from "../../lib/dominios";
+import { validarPasswordSegura } from "../../lib/password";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
-// Dominios autorizados por la organización
-const DOMINIOS_PERMITIDOS = ["ricol.com.co", "flexipackdecolombia.com", "greesolutions.com.co"];
+type LoginResult =
+  | { requiresTenantSelection: false; token: string; user: SessionUser }
+  | { requiresTenantSelection: true; selectionToken: string; tenants: TenantAccesible[] };
+
+interface SelectionTokenPayload {
+  sub: string;
+  purpose: "select-tenant";
+}
 
 // --- 1. REGISTRO DE USUARIO ---
 export const registerUserService = async (data: {
@@ -17,11 +25,10 @@ export const registerUserService = async (data: {
 }) => {
   const { nombre, email, password, departamentoId } = data;
 
-  // Extraer y validar el dominio del correo
+  // Validar el dominio del correo
   const emailLimpio = email.trim().toLowerCase();
-  const dominio = emailLimpio.split("@")[1];
 
-  if (!dominio || !DOMINIOS_PERMITIDOS.includes(dominio)) {
+  if (!esDominioCorporativoValido(emailLimpio)) {
     throw new Error(
       "Solo se permiten registros con correos autorizados (@ricol.com.co, @flexipackdecolombia.com, @greesolutions.com.co).",
     );
@@ -29,6 +36,11 @@ export const registerUserService = async (data: {
 
   if (!departamentoId || typeof departamentoId !== "string") {
     throw new Error("Debes indicar a qué departamento perteneces.");
+  }
+
+  const errorPassword = validarPasswordSegura(password);
+  if (errorPassword) {
+    throw new Error(errorPassword);
   }
 
   // Verificar si el usuario ya existe
@@ -81,8 +93,28 @@ export const registerUserService = async (data: {
   return nuevoUsuario;
 };
 
-// --- 2. LOGIN DE USUARIO ---
-export const loginUserService = async (data: { email: string; password: string }) => {
+/** Emite el JWT final de sesión, registra el LOGIN en auditoría y arma la respuesta. */
+async function emitirSesion(userId: string, tokenVersion: number, tenantId: string): Promise<LoginResult> {
+  const sessionUser = await loadSessionUser(userId, tenantId);
+  if (!sessionUser) {
+    throw new Error("No se pudo cargar la sesión para el tenant seleccionado.");
+  }
+
+  await prisma.auditoria.create({
+    data: {
+      tenantId,
+      usuarioId: userId,
+      accion: "LOGIN",
+      detalle: `Inicio de sesión de ${sessionUser.email}`,
+    },
+  });
+
+  const token = jwt.sign({ sub: userId, tv: tokenVersion, tenantId }, JWT_SECRET, { expiresIn: "8h" });
+  return { requiresTenantSelection: false, token, user: sessionUser };
+}
+
+// --- 2. LOGIN DE USUARIO (paso 1: identidad) ---
+export const loginUserService = async (data: { email: string; password: string }): Promise<LoginResult> => {
   const { email, password } = data;
   const emailLimpio = email.trim().toLowerCase();
 
@@ -112,17 +144,50 @@ export const loginUserService = async (data: { email: string; password: string }
     data: { lastLoginAt: new Date() },
   });
 
-  await prisma.auditoria.create({
-    data: {
-      tenantId: usuario.tenantId,
-      usuarioId: usuario.id,
-      accion: "LOGIN",
-      detalle: `Inicio de sesión de ${usuario.email}`,
-    },
-  });
+  const tenants = await listarTenantsAccesibles(usuario.id);
 
-  const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: "8h" });
-  const sessionUser = await loadSessionUser(usuario.id);
+  // Varias empresas accesibles (tenant hogar + membresías activas): no se
+  // emite el JWT final todavía, se pide elegir primero con un token corto de
+  // solo-identidad (no sirve para llamar a ningún endpoint protegido).
+  if (tenants.length > 1) {
+    const selectionToken = jwt.sign(
+      { sub: usuario.id, purpose: "select-tenant" } satisfies SelectionTokenPayload,
+      JWT_SECRET,
+      { expiresIn: "5m" },
+    );
+    return { requiresTenantSelection: true, selectionToken, tenants };
+  }
 
-  return { token, user: sessionUser };
+  // Un solo tenant accesible: se entra directo, como antes.
+  return emitirSesion(usuario.id, usuario.tokenVersion, usuario.tenantId);
+};
+
+// --- 2b. LOGIN DE USUARIO (paso 2: elegir empresa, solo si hay más de una) ---
+export const selectTenantService = async (data: { selectionToken: string; tenantId: string }): Promise<LoginResult> => {
+  const { selectionToken, tenantId } = data;
+
+  let payload: SelectionTokenPayload;
+  try {
+    payload = jwt.verify(selectionToken, JWT_SECRET) as SelectionTokenPayload;
+  } catch {
+    throw new Error("La selección de empresa expiró. Vuelve a iniciar sesión.");
+  }
+  if (payload.purpose !== "select-tenant") {
+    throw new Error("Token de selección inválido.");
+  }
+
+  const usuario = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!usuario || !usuario.activo) {
+    throw new Error("Cuenta inválida o inactiva.");
+  }
+
+  // Nunca confiar en la lista de tenants que mandó el cliente: se recalcula
+  // server-side cuáles son realmente accesibles para este usuario, para que
+  // nadie pueda "elegir" un tenant al que no tiene membresía.
+  const tenantsAccesibles = await listarTenantsAccesibles(usuario.id);
+  if (!tenantsAccesibles.some((t) => t.id === tenantId)) {
+    throw new Error("No tienes acceso a esa empresa.");
+  }
+
+  return emitirSesion(usuario.id, usuario.tokenVersion, tenantId);
 };

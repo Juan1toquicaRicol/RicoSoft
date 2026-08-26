@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
-import { listarEmpleados, crearEmpleado, actualizarSalario, liquidarEmpleado } from "./empleados.controller";
+import {
+  listarEmpleados,
+  crearEmpleado,
+  actualizarSalario,
+  liquidarEmpleado,
+  eliminarEmpleado,
+} from "./empleados.controller";
 import {
   listarPermisosLaborales,
   crearPermisoLaboral,
@@ -17,6 +23,7 @@ router.get("/empleados", requirePermission("empleados.ver"), listarEmpleados);
 router.post("/empleados", requirePermission("empleados.crear"), crearEmpleado);
 router.patch("/empleados/:id/salario", requirePermission("empleados.editar_salario"), actualizarSalario);
 router.patch("/empleados/:id/liquidar", requirePermission("empleados.liquidar"), liquidarEmpleado);
+router.delete("/empleados/:id", requirePermission("empleados.eliminar"), eliminarEmpleado);
 
 // Permisos laborales
 router.get("/permisos", requirePermission("permisos_laborales.ver"), listarPermisosLaborales);

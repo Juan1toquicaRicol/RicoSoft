@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Key } from "lucide-react";
 
-import { LISTA_PERMISOS_DEFINICION } from "@/lib/auth-permissions";
+import { LISTA_PERMISOS_DEFINICION, PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 export const Route = createFileRoute("/configuracion/permisos")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.PERMISOS_VER),
   component: PermisosConfigPage,
 });
 

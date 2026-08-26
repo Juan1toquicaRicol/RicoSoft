@@ -29,12 +29,18 @@ export function useServicios() {
       empresaId: string;
       area: string;
       nombreServicio: string;
-      proveedor: string;
+      descripcion?: string;
+      proveedorId: string;
+      contratoId?: string;
       periodicidad: string;
       costo: number;
       moneda: string;
+      fechaInicio?: string;
+      fechaFin?: string;
+      diaVencimiento?: number;
       fechaRenovacion: string;
-      responsableArea: string;
+      responsableId: string;
+      observaciones?: string;
     }) => {
       await fetchAuth("/servicios", { method: "POST", body: JSON.stringify(data) });
       await refresh();
@@ -50,5 +56,48 @@ export function useServicios() {
     [refresh],
   );
 
-  return { suscripciones, loading, error, refresh, addSuscripcion, toggleEstadoSuscripcion };
+  const eliminarSuscripcion = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/servicios/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return {
+    suscripciones,
+    loading,
+    error,
+    refresh,
+    addSuscripcion,
+    toggleEstadoSuscripcion,
+    eliminarSuscripcion,
+  };
+}
+
+/** Un solo servicio, para su pantalla de detalle. */
+export function useServicio(id: string | undefined) {
+  const [servicio, setServicio] = useState<ServicioSuscripcion | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/servicios/${id}`);
+      setServicio(data);
+    } catch (err: any) {
+      setError(err.message || "Error cargando el servicio.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { servicio, loading, error, refresh };
 }

@@ -15,6 +15,7 @@ export const listarPermisosLaborales = async (req: AuthenticatedRequest, res: Re
       where,
       include: { empleado: { select: { nombres: true, apellidos: true } } },
       orderBy: { fechaSolicitud: "desc" },
+      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(
       permisos.map((p) => ({

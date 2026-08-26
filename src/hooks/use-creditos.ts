@@ -24,5 +24,37 @@ export function useCreditos() {
     refresh();
   }, [refresh]);
 
-  return { creditos, loading, error, refresh };
+  const addCredito = useCallback(
+    async (data: { cliente: string; cupo: number; saldo: number; vence: string }) => {
+      await fetchAuth("/creditos", { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const registrarPago = useCallback(
+    async (id: string, monto: number) => {
+      await fetchAuth(`/creditos/${id}/pago`, { method: "POST", body: JSON.stringify({ monto }) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const marcarPazYSalvo = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/creditos/${id}/paz-y-salvo`, { method: "POST" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarCredito = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/creditos/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { creditos, loading, error, refresh, addCredito, registrarPago, marcarPazYSalvo, eliminarCredito };
 }

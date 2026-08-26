@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { DOMINIOS_PERMITIDOS, esDominioCorporativoValido } from "../../lib/dominios";
 
 function serializarEmpleado(e: any) {
   return {
@@ -20,7 +21,7 @@ export const listarEmpleados = async (req: AuthenticatedRequest, res: Response) 
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId } = req.query;
-    const where: any = { tenantId };
+    const where: any = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
     const empleados = await prisma.empleado.findMany({
@@ -30,6 +31,7 @@ export const listarEmpleados = async (req: AuthenticatedRequest, res: Response) 
         _count: { select: { faltas: true } },
       },
       orderBy: { nombres: "asc" },
+      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(empleados.map(serializarEmpleado));
   } catch (error) {
@@ -44,8 +46,14 @@ export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) =>
     const { empresaId, documento, nombres, apellidos, correo, cargo, area, fechaContratacion, salarioActual } =
       req.body;
 
-    if (!empresaId || !documento || !nombres || !apellidos || !fechaContratacion) {
+    if (!empresaId || !documento || !nombres || !apellidos || !fechaContratacion || !correo) {
       return res.status(400).json({ message: "Faltan campos obligatorios del colaborador." });
+    }
+    const correoLimpio = String(correo).trim().toLowerCase();
+    if (!esDominioCorporativoValido(correoLimpio)) {
+      return res.status(400).json({
+        message: `El correo debe ser corporativo (${DOMINIOS_PERMITIDOS.map((d) => `@${d}`).join(", ")}). No se permiten correos personales.`,
+      });
     }
     const salario = Number(salarioActual);
     if (!Number.isFinite(salario) || salario < 0) {
@@ -59,7 +67,7 @@ export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) =>
         documento,
         nombres,
         apellidos,
-        correo: correo || `${nombres.toLowerCase()}@empresa.com`,
+        correo: correoLimpio,
         cargo: cargo || "Colaborador",
         area: area || "Operaciones",
         fechaContratacion: new Date(fechaContratacion),
@@ -97,7 +105,7 @@ export const actualizarSalario = async (req: AuthenticatedRequest, res: Response
     const { id } = req.params;
     const { nuevoSalario, motivo } = req.body;
 
-    const empleado = await prisma.empleado.findFirst({ where: { id, tenantId } });
+    const empleado = await prisma.empleado.findFirst({ where: { id, tenantId, eliminado: false } });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
 
     const salario = Number(nuevoSalario);
@@ -142,7 +150,7 @@ export const liquidarEmpleado = async (req: AuthenticatedRequest, res: Response)
     const { id } = req.params;
     const { fechaLiquidacion } = req.body;
 
-    const empleado = await prisma.empleado.findFirst({ where: { id, tenantId } });
+    const empleado = await prisma.empleado.findFirst({ where: { id, tenantId, eliminado: false } });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
 
     const actualizado = await prisma.empleado.update({
@@ -167,5 +175,36 @@ export const liquidarEmpleado = async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error("Error al liquidar empleado:", error);
     return res.status(500).json({ message: "Error al liquidar el colaborador." });
+  }
+};
+
+/**
+ * Elimina (soft-delete) el expediente de un colaborador. No se borra de la
+ * base de datos: se marca `eliminado` para conservar historial salarial,
+ * faltas y permisos asociados, y deja de aparecer en el listado.
+ */
+export const eliminarEmpleado = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+
+    const empleado = await prisma.empleado.findFirst({ where: { id, tenantId, eliminado: false } });
+    if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
+
+    await prisma.empleado.update({ where: { id }, data: { eliminado: true } });
+
+    await prisma.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        accion: "EMPLEADO_ELIMINADO",
+        detalle: `${req.user!.nombre} eliminó el expediente de "${empleado.nombres} ${empleado.apellidos}"`,
+      },
+    });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Error al eliminar empleado:", error);
+    return res.status(500).json({ message: "Error al eliminar el colaborador." });
   }
 };

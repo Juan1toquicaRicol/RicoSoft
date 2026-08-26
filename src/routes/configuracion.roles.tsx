@@ -1,16 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
 import { ShieldCheck, Plus, Trash2, Lock, ChevronDown, ChevronRight, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { LISTA_PERMISOS_DEFINICION, PermisoKey, PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/configuracion/roles")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.ROLES_VER),
   component: RolesConfigPage,
 });
 
@@ -19,6 +22,7 @@ interface RolApi {
   nombre: string;
   descripcion: string | null;
   esSistema: boolean;
+  activo: boolean;
   permisos: string[];
   usuariosAsignados: number;
 }
@@ -28,6 +32,7 @@ const MODULOS = Array.from(new Set(LISTA_PERMISOS_DEFINICION.map((p) => p.modulo
 function RolesConfigPage() {
   const { user: sesion } = useSession();
   const puedeCrear = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_CREAR);
+  const puedeEditar = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_EDITAR);
   const puedeAsignarPermisos = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_ASIGNAR_PERMISOS);
   const puedeEliminar = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_ELIMINAR);
 
@@ -69,7 +74,7 @@ function RolesConfigPage() {
       setCreando(false);
       fetchRoles();
     } catch (err: any) {
-      alert(err.message || "Error al crear el rol.");
+      toast.error(err.message || "Error al crear el rol.");
     }
   };
 
@@ -82,8 +87,20 @@ function RolesConfigPage() {
     try {
       await fetchAuth(`/roles/${rol.id}`, { method: "PATCH", body: JSON.stringify({ permisos }) });
     } catch (err: any) {
-      alert(err.message || "Error al actualizar permisos.");
+      toast.error(err.message || "Error al actualizar permisos.");
       fetchRoles();
+    }
+  };
+
+  const handleToggleActivo = async (rol: RolApi) => {
+    try {
+      await fetchAuth(`/roles/${rol.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ activo: !rol.activo }),
+      });
+      fetchRoles();
+    } catch (err: any) {
+      toast.error(err.message || "Error al actualizar el rol.");
     }
   };
 
@@ -93,7 +110,7 @@ function RolesConfigPage() {
       await fetchAuth(`/roles/${rol.id}`, { method: "DELETE" });
       fetchRoles();
     } catch (err: any) {
-      alert(err.message || "Error al eliminar el rol.");
+      toast.error(err.message || "Error al eliminar el rol.");
     }
   };
 
@@ -162,6 +179,15 @@ function RolesConfigPage() {
                         <Lock className="h-3 w-3" /> Rol de sistema
                       </Badge>
                     )}
+                    {rol.activo ? (
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
+                        Activo
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
+                        Inactivo
+                      </Badge>
+                    )}
                   </div>
                   {rol.descripcion && <p className="text-xs text-slate-500 mt-0.5">{rol.descripcion}</p>}
                 </div>
@@ -171,6 +197,19 @@ function RolesConfigPage() {
                   <Users className="h-3.5 w-3.5" /> {rol.usuariosAsignados}
                 </span>
                 <span className="text-xs text-slate-500">{rol.permisos.length} permisos</span>
+                {puedeEditar && !rol.esSistema && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleActivo(rol);
+                    }}
+                    className="h-7 text-[11px] font-bold"
+                  >
+                    {rol.activo ? "Desactivar" : "Activar"}
+                  </Button>
+                )}
                 {puedeEliminar && !rol.esSistema && (
                   <button
                     onClick={(e) => {

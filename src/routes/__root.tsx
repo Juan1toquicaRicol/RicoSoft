@@ -74,6 +74,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 import { TenantProvider } from "../lib/tenant-context";
 import { SessionProvider } from "../lib/session-context";
+import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -105,7 +106,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/icono.ico", type: "image/x-icon" },
     ],
   }),
 
@@ -138,6 +139,7 @@ function RootComponent() {
         <TenantProvider>
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
+          <Toaster position="top-right" richColors closeButton />
         </TenantProvider>
       </SessionProvider>
     </QueryClientProvider>

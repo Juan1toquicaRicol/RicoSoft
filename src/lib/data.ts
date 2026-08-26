@@ -2,7 +2,7 @@
 
 export type EstadoFactura = "Pendiente" | "Aprobada" | "Pagada" | "Rechazada";
 
-export type Prioridad = "Baja" | "Media" | "Alta" | "Crítica";
+export type Prioridad = "Baja" | "Media" | "Alta" | "Crítica" | "Urgente";
 
 export interface Factura {
   id: string;
@@ -10,7 +10,13 @@ export interface Factura {
   numero: string;
   proveedor: string;
   nit: string;
+  servicioId?: string | null;
+  servicio?: { id: string; nombre: string } | null;
+  contratoId?: string | null;
+  contratoRel?: { id: string; proveedor: string } | null;
   contrato?: string;
+  solicitudCompraId?: string | null;
+  solicitudCompraRel?: { id: string; item: string } | null;
   centroCostos?: string;
   area: string;
   responsable: string;
@@ -21,8 +27,14 @@ export interface Factura {
   total: number;
   moneda: "COP" | "USD";
   estado: EstadoFactura;
+  // Derivada en backend: no es un estado nuevo, solo indica que "vence" ya
+  // pasó y la factura sigue sin pagarse/rechazarse.
+  vencida: boolean;
   prioridad: Prioridad;
   origen: "Correo" | "Portal" | "OCR" | "Carga manual";
+  totalPagado: number;
+  saldoPendiente: number;
+  alertaValor: { mensaje: string } | null;
   archivo: {
     nombre: string;
     mime: string | null;
@@ -44,7 +56,7 @@ export interface HistorialSalario {
 
 export interface Empleado {
   id: string;
-  empresaId: string; // '001' | '002' | '003'
+  empresaId: string; // 'RC' | 'FL' | 'GR'
   documento: string;
   nombres: string;
   apellidos: string;
@@ -95,7 +107,10 @@ export interface SolicitudCompra {
   id: string;
   empresaId: string;
   area: string;
+  solicitanteId?: string | null;
   solicitante: string;
+  proveedorId?: string | null;
+  proveedor?: string | null;
   item: string;
   descripcion: string;
   cantidad: number;
@@ -107,6 +122,14 @@ export interface SolicitudCompra {
   resueltoPorId?: string | null;
   resueltoPorNombre?: string | null;
   comentarioResolucion?: string | null;
+  cotizacion?: {
+    nombre: string;
+    mime: string | null;
+    tamano: number | null;
+    subidoPor: string | null;
+    subidoEn: string | null;
+  } | null;
+  factura?: { id: string; numero: string; estado: string } | null;
 }
 
 export type AreaEmpresa = "Sistemas" | "Comercial" | "Produccion" | "Gestion Humana" | "Contabilidad" | "Mantenimiento" | "Compras" | "Logistica" | "Gerencia";
@@ -118,13 +141,22 @@ export interface ServicioSuscripcion {
   empresaId: string;
   area: AreaEmpresa | string;
   nombreServicio: string;
+  descripcion?: string | null;
+  proveedorId?: string | null;
   proveedor: string;
+  contratoId?: string | null;
+  contratoRel?: { id: string; proveedor: string } | null;
   periodicidad: PeriodicidadServicio;
   costo: number;
   moneda: "COP" | "USD";
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
+  diaVencimiento?: number | null;
   fechaRenovacion: string;
   estado: "Activo" | "Inactivo" | "Pendiente Renovación";
+  responsableId?: string | null;
   responsableArea: string;
+  observaciones?: string | null;
 }
 
 // Utility formatting functions
@@ -141,7 +173,7 @@ export function compact(value: number) {
 }
 
 // --- Créditos de clientes ---
-export type EstadoCredito = "Al día" | "Por vencer" | "Vencido";
+export type EstadoCredito = "Al día" | "Por vencer" | "Vencido" | "Paz y Salvo";
 
 export interface CreditoCliente {
   id: string;

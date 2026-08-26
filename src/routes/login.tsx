@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck, Loader2, Eye, EyeOff, User, AlertCircle, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { fetchApi } from "@/config/api"; // Tu cliente de API
+import { esDominioCorporativoValido } from "@/lib/dominios";
+import { validarPasswordSegura } from "@/lib/password";
+import { setToken } from "@/lib/session";
+import { useSession } from "@/lib/session-context";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -27,16 +32,20 @@ export const Route = createFileRoute("/login")({
   component: Login,
 });
 
-// Lista de dominios permitidos para el registro
-const DOMINIOS_PERMITIDOS = ["ricol.com.co", "flexipackdecolombia.com", "greesolutions.com.co"];
-
 interface DepartamentoOpcion {
   id: string;
   nombre: string;
 }
 
+interface TenantAccesible {
+  id: string;
+  nombre: string;
+  subdomain: string;
+}
+
 function Login() {
   const navigate = useNavigate();
+  const { refresh } = useSession();
 
   // Estados del formulario y conmutador
   const [isRegistering, setIsRegistering] = useState(false);
@@ -60,10 +69,50 @@ function Login() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Validar si el dominio es uno de los 3 autorizados
-  const esDominioValido = (correo: string) => {
-    const dominio = correo.split("@")[1]?.toLowerCase();
-    return DOMINIOS_PERMITIDOS.includes(dominio);
+  // Cuando el usuario tiene más de una empresa accesible, el login no entra
+  // directo: guarda el token corto de selección y la lista de empresas, y
+  // muestra la pantalla de "elige tu empresa" en vez del dashboard.
+  const [tenantSelection, setTenantSelection] = useState<{
+    selectionToken: string;
+    tenants: TenantAccesible[];
+  } | null>(null);
+  const [tenantSeleccionando, setTenantSeleccionando] = useState<string | null>(null);
+
+  const finalizarSesion = async (response: { token: string; user: any }) => {
+    setToken(response.token);
+
+    // Se cachea localmente solo para hidratar la UI mientras carga /auth/me;
+    // los permisos reales siempre se revalidan contra el backend.
+    if (response.user) {
+      localStorage.setItem("user", JSON.stringify(response.user));
+    }
+
+    const primerNombre = response.user?.nombre?.split(" ")[0];
+    toast.success(primerNombre ? `¡Bienvenido, ${primerNombre}!` : "¡Bienvenido a RicoSoft!", {
+      description: "Sesión iniciada correctamente.",
+    });
+
+    // Refresca el SessionContext (AppShell depende de él) antes de navegar:
+    // si no, el contexto sigue con user=null de antes del login y AppShell
+    // rebota de inmediato de vuelta a /login.
+    await refresh();
+    navigate({ to: "/" });
+  };
+
+  const handleSeleccionarTenant = async (tenantId: string) => {
+    if (!tenantSelection) return;
+    setTenantSeleccionando(tenantId);
+    setError("");
+    try {
+      const response = await fetchApi("/auth/select-tenant", {
+        method: "POST",
+        body: JSON.stringify({ selectionToken: tenantSelection.selectionToken, tenantId }),
+      });
+      await finalizarSesion(response);
+    } catch (err: any) {
+      setError(err.message || "No se pudo iniciar sesión con esa empresa.");
+      setTenantSeleccionando(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,7 +123,7 @@ function Login() {
 
     if (isRegistering) {
       // 🛑 Validación del dominio en el Frontend
-      if (!esDominioValido(email)) {
+      if (!esDominioCorporativoValido(email)) {
         setError(
           "Solo se permiten correos de @ricol.com.co, @flexipackdecolombia.com o @greesolutions.com.co",
         );
@@ -84,6 +133,13 @@ function Login() {
 
       if (!departamentoId) {
         setError("Selecciona a qué departamento perteneces.");
+        setIsLoading(false);
+        return;
+      }
+
+      const errorPassword = validarPasswordSegura(password);
+      if (errorPassword) {
+        setError(errorPassword);
         setIsLoading(false);
         return;
       }
@@ -113,17 +169,12 @@ function Login() {
           body: JSON.stringify({ email, password }),
         });
 
-        // 1. Guardamos el Token (ya lo tienes así)
-        if (response.token) {
-          localStorage.setItem("token", response.token);
+        if (response.requiresTenantSelection) {
+          setTenantSelection({ selectionToken: response.selectionToken, tenants: response.tenants });
+          return;
         }
 
-        // 2. 🟢 AÑADE ESTA LÍNEA AQUÍ: Guardar la información del usuario
-        if (response.user) {
-          localStorage.setItem("user", JSON.stringify(response.user));
-        }
-
-        navigate({ to: "/" });
+        await finalizarSesion(response);
       } catch (err: any) {
         setError(err.message || "Correo o contraseña incorrectos.");
       } finally {
@@ -133,9 +184,10 @@ function Login() {
   };
 
   const handleForgotPassword = () => {
-    alert(
-      "Para restablecer tu contraseña, contacta al Administrador del Sistema de RicoSoft o al área de IT.",
-    );
+    toast.info("¿Olvidaste tu contraseña?", {
+      description:
+        "Contacta al Administrador del Sistema de RicoSoft o al área de IT para restablecerla.",
+    });
   };
 
   const toggleMode = () => {
@@ -144,25 +196,91 @@ function Login() {
     setSuccessMessage("");
   };
 
+  if (tenantSelection) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex">
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 bg-white">
+          <div className="w-full max-w-[360px]">
+            <div className="mb-8">
+              <img
+                src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
+                alt="Grupo Ricol"
+                className="h-12 w-auto"
+              />
+              <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                RicoSoft · Sistema Multiempresa
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Elige tu empresa</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Tu cuenta tiene acceso a más de una empresa. Selecciona con cuál quieres entrar.
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-lg bg-slate-900 border border-slate-900 flex items-start gap-2.5 text-xs text-white font-semibold">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              {tenantSelection.tenants.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={tenantSeleccionando !== null}
+                  onClick={() => handleSeleccionarTenant(t.id)}
+                  className="w-full flex items-center justify-between h-14 px-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-blue-300 transition-colors text-left disabled:opacity-60"
+                >
+                  <span className="text-sm font-semibold text-slate-900">{t.nombre}</span>
+                  {tenantSeleccionando === t.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  ) : (
+                    <span className="text-xs font-semibold text-blue-700">Entrar →</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTenantSelection(null);
+                setTenantSeleccionando(null);
+                setError("");
+              }}
+              className="mt-6 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline"
+            >
+              ← Volver a iniciar sesión
+            </button>
+          </div>
+        </div>
+
+        <div className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen items-center justify-center bg-slate-50 border-l border-slate-200 overflow-hidden">
+          <img src="/3logos.jpg" alt="Nuestras empresas" className="max-w-full max-h-full object-contain p-12" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* ── Columna Izquierda: Formulario ── */}
       <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 bg-white">
         {/* Logo / Marca */}
         <div className="w-full max-w-[360px]">
-          <div className="flex items-center gap-3 mb-8">
-            <div
-              className="flex h-11 w-11 items-center justify-center rounded-2xl font-black text-white text-xl shadow-lg"
-              style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" }}
-            >
-              R
-            </div>
-            <div>
-              <p className="text-lg font-black tracking-tight text-slate-900">RicoSoft</p>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                Sistema Multiempresa
-              </p>
-            </div>
+          <div className="mb-8">
+            <img
+              src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
+              alt="Grupo Ricol"
+              className="h-12 w-auto"
+            />
+            <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              RicoSoft · Sistema Multiempresa
+            </p>
           </div>
 
           {/* Encabezado Dinámico */}
@@ -298,19 +416,18 @@ function Login() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {isRegistering && (
+                <p className="text-[11px] text-slate-400">
+                  Mínimo 8 caracteres, con mayúscula, minúscula y número.
+                </p>
+              )}
             </div>
 
             {/* Botón Principal */}
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-10 text-sm font-bold rounded-lg shadow-md transition-all mt-2"
-              style={{
-                background: isLoading
-                  ? "#94a3b8"
-                  : "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
-                border: "none",
-              }}
+              className="w-full h-10 text-sm font-bold rounded-lg shadow-md transition-all mt-2 bg-blue-700 hover:bg-blue-800 disabled:bg-slate-400"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -366,11 +483,11 @@ function Login() {
       </div>
 
       {/* ── Columna Derecha: Solo imagen ── */}
-      <div className="hidden lg:flex flex-1 items-center justify-center bg-slate-50 border-l border-slate-200">
+      <div className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen items-center justify-center bg-slate-50 border-l border-slate-200 overflow-hidden">
         <img
           src="/3logos.jpg"
           alt="Nuestras empresas"
-          className="w-full h-full object-contain p-16"
+          className="max-w-full max-h-full object-contain p-12"
         />
       </div>
     </div>

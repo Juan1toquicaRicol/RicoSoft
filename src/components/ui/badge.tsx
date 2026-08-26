@@ -44,6 +44,7 @@ const CATEGORIA_POR_ESTADO: Record<string, EstadoCategoria> = {
   Aprobado: "positivo",
   Activo: "positivo",
   "Al día": "positivo",
+  "Paz y Salvo": "positivo",
   Pagada: "positivo",
   Comprado: "positivo",
   Pendiente: "pendiente",
@@ -54,6 +55,16 @@ const CATEGORIA_POR_ESTADO: Record<string, EstadoCategoria> = {
   Rechazado: "negativo",
   Vencido: "negativo",
   Inactivo: "negativo",
+  Confirmada: "pendiente",
+  "En tránsito": "pendiente",
+  "En puerto": "pendiente",
+  "En inspección": "pendiente",
+  "En trámite": "pendiente",
+  "Liberado pre-compra": "pendiente",
+  "Levante autorizado": "positivo",
+  Nacionalizado: "positivo",
+  Cerrada: "positivo",
+  Anulada: "negativo",
 };
 
 const ESTILOS_POR_CATEGORIA: Record<EstadoCategoria, string> = {

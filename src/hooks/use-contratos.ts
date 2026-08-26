@@ -44,9 +44,9 @@ export function useContratos() {
   const addContrato = useCallback(
     async (data: {
       empresaId: string;
-      proveedor: string;
+      proveedorId: string;
       cliente?: string;
-      responsable: string;
+      responsableId: string;
       supervisor?: string;
       gerente?: string;
       area: string;
@@ -70,5 +70,13 @@ export function useContratos() {
     [refresh],
   );
 
-  return { contratos, loading, error, refresh, addContrato, updateEstadoContrato };
+  const eliminarContrato = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/contratos/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { contratos, loading, error, refresh, addContrato, updateEstadoContrato, eliminarContrato };
 }

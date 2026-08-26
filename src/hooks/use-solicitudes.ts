@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchAuth } from "@/lib/session";
+import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
 import type { SolicitudCompra } from "@/lib/data";
 
 /**
@@ -33,14 +33,29 @@ export function useSolicitudes() {
     async (data: {
       empresaId: string;
       area: string;
-      solicitante: string;
+      solicitanteId: string;
+      proveedorId?: string;
       item: string;
       descripcion: string;
       cantidad: number;
       valorEstimado: number;
       prioridad: string;
     }) => {
-      await fetchAuth("/solicitudes-compra", { method: "POST", body: JSON.stringify(data) });
+      const creada: SolicitudCompra = await fetchAuth("/solicitudes-compra", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      await refresh();
+      return creada;
+    },
+    [refresh],
+  );
+
+  const subirCotizacionSolicitud = useCallback(
+    async (id: string, file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/solicitudes-compra/${id}/archivo`, formData);
       await refresh();
     },
     [refresh],
@@ -57,7 +72,24 @@ export function useSolicitudes() {
     [refresh],
   );
 
-  return { solicitudesCompra: solicitudes, loading, error, refresh, addSolicitudCompra, updateEstadoSolicitudCompra };
+  const eliminarSolicitudCompra = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/solicitudes-compra/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return {
+    solicitudesCompra: solicitudes,
+    loading,
+    error,
+    refresh,
+    addSolicitudCompra,
+    subirCotizacionSolicitud,
+    updateEstadoSolicitudCompra,
+    eliminarSolicitudCompra,
+  };
 }
 
 export interface HistorialFiltros {
@@ -67,6 +99,10 @@ export interface HistorialFiltros {
   solicitante?: string;
   desde?: string;
   hasta?: string;
+}
+
+export async function descargarCotizacionSolicitud(id: string) {
+  return fetchAuthBlob(`/solicitudes-compra/${id}/archivo`);
 }
 
 /**

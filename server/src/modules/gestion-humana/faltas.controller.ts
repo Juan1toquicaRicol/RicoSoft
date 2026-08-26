@@ -15,6 +15,7 @@ export const listarFaltas = async (req: AuthenticatedRequest, res: Response) => 
       where,
       include: { empleado: { select: { nombres: true, apellidos: true } } },
       orderBy: { fecha: "desc" },
+      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(
       faltas.map((f) => ({ ...f, nombreEmpleado: `${f.empleado.nombres} ${f.empleado.apellidos}` })),

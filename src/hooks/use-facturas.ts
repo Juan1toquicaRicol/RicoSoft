@@ -28,10 +28,12 @@ export function useFacturas() {
     async (data: {
       empresaId: string;
       numero: string;
-      proveedor: string;
-      nit: string;
+      proveedorId: string;
+      servicioId?: string;
+      contratoId?: string;
+      solicitudCompraId?: string;
       area: string;
-      responsable: string;
+      responsableId: string;
       vence: string;
       subtotal: number;
       iva: number;
@@ -78,6 +80,14 @@ export function useFacturas() {
     return fetchAuthBlob(`/facturas/${id}/archivo`);
   }, []);
 
+  const eliminarFactura = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/facturas/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
   const agregarComentarioFactura = useCallback(
     async (id: string, texto: string) => {
       await fetchAuth(`/facturas/${id}/comentarios`, {
@@ -89,37 +99,113 @@ export function useFacturas() {
     [refresh],
   );
 
+  /**
+   * Refresca una sola factura por id (usado por el polling del detalle) en
+   * vez de volver a traer todo el listado del tenant cada pocos segundos.
+   */
+  const refreshOne = useCallback(async (id: string) => {
+    try {
+      const data = await fetchAuth(`/facturas/${id}`);
+      setFacturas((prev) => {
+        const existe = prev.some((f) => f.id === data.id);
+        return existe ? prev.map((f) => (f.id === data.id ? data : f)) : [...prev, data];
+      });
+    } catch {
+      // Silencioso: si falla un refresco en segundo plano no interrumpimos al usuario.
+    }
+  }, []);
+
   return {
     facturas,
     loading,
     error,
     refresh,
+    refreshOne,
     addFactura,
     updateEstadoFactura,
     subirArchivoFactura,
     eliminarArchivoFactura,
     descargarArchivoFactura,
     agregarComentarioFactura,
+    eliminarFactura,
   };
 }
 
 /**
- * Refresca los datos de facturas cada `intervaloMs` mientras el componente
- * que la usa esté montado (p. ej. el detalle de una factura), para que
- * comentarios, cambios de estado o el documento adjunto hechos por otro
- * usuario aparezcan sin recargar la página manualmente.
+ * Últimas facturas de UN servicio (para su pantalla de detalle). Pide solo
+ * `limite` registros al backend en vez de las miles de facturas del tenant:
+ * un servicio con años de historial no debe traer todo para mostrar 20.
  */
-export function usePollingFacturas(
-  refresh: (opciones?: { silencioso?: boolean }) => Promise<void>,
-  intervaloMs = 6000,
-) {
+export function useFacturasPorServicio(servicioId: string | undefined, limite = 20) {
+  const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!servicioId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/facturas?servicioId=${servicioId}&limit=${limite}`);
+      setFacturas(data);
+    } catch (err: any) {
+      setError(err.message || "Error cargando las facturas del servicio.");
+    } finally {
+      setLoading(false);
+    }
+  }, [servicioId, limite]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { facturas, loading, error, refresh };
+}
+
+/**
+ * Refresca en segundo plano cada `intervaloMs` mientras el componente que la
+ * usa esté montado (p. ej. el detalle de una factura), para que comentarios,
+ * cambios de estado o el documento adjunto hechos por otro usuario aparezcan
+ * sin recargar la página manualmente. Se pausa cuando la pestaña no está
+ * visible, para no seguir pidiendo datos de fondo indefinidamente.
+ */
+export function usePollingFacturas(refresh: () => void | Promise<void>, intervaloMs = 6000) {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      refreshRef.current({ silencioso: true });
-    }, intervaloMs);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const tick = () => {
+      if (document.visibilityState === "visible") {
+        refreshRef.current();
+      }
+    };
+
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(tick, intervaloMs);
+    };
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        tick();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [intervaloMs]);
 }

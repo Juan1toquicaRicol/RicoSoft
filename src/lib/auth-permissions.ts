@@ -15,6 +15,7 @@ export const PERMISOS_SISTEMA = {
   USUARIOS_CAMBIAR_DEPARTAMENTO: "usuarios.cambiar_departamento",
   USUARIOS_ASIGNAR_PERMISOS: "usuarios.asignar_permisos",
   USUARIOS_RESET_PASSWORD: "usuarios.reset_password",
+  USUARIOS_ELIMINAR: "usuarios.eliminar",
 
   // Módulo Roles
   ROLES_VER: "roles.ver",
@@ -32,6 +33,12 @@ export const PERMISOS_SISTEMA = {
   DEPARTAMENTOS_CREAR: "departamentos.crear",
   DEPARTAMENTOS_EDITAR: "departamentos.editar",
   DEPARTAMENTOS_ELIMINAR: "departamentos.eliminar",
+
+  // Módulo Proveedores
+  PROVEEDORES_VER: "proveedores.ver",
+  PROVEEDORES_CREAR: "proveedores.crear",
+  PROVEEDORES_EDITAR: "proveedores.editar",
+  PROVEEDORES_ELIMINAR: "proveedores.eliminar",
 
   // Módulo Configuración Global
   CONFIGURACION_VER: "configuracion.ver",
@@ -51,6 +58,7 @@ export const PERMISOS_SISTEMA = {
   FACTURAS_APROBAR: "facturas.aprobar",
   FACTURAS_RECHAZAR: "facturas.rechazar",
   FACTURAS_PAGAR: "facturas.pagar",
+  FACTURAS_ELIMINAR: "facturas.eliminar",
 
   // Módulo Solicitudes de Compra
   SOLICITUDES_VER: "solicitudes.ver",
@@ -58,16 +66,19 @@ export const PERMISOS_SISTEMA = {
   SOLICITUDES_APROBAR: "solicitudes.aprobar",
   SOLICITUDES_RECHAZAR: "solicitudes.rechazar",
   SOLICITUDES_COMPRAR: "solicitudes.comprar",
+  SOLICITUDES_ELIMINAR: "solicitudes.eliminar",
 
   // Módulo Servicios y Suscripciones
   SERVICIOS_VER: "servicios.ver",
   SERVICIOS_CREAR: "servicios.crear",
   SERVICIOS_EDITAR: "servicios.editar",
+  SERVICIOS_ELIMINAR: "servicios.eliminar",
 
   // Módulo Contratos
   CONTRATOS_VER: "contratos.ver",
   CONTRATOS_CREAR: "contratos.crear",
   CONTRATOS_EDITAR: "contratos.editar",
+  CONTRATOS_ELIMINAR: "contratos.eliminar",
 
   // Módulo Motor de Reglas
   REGLAS_VER: "reglas.ver",
@@ -78,12 +89,14 @@ export const PERMISOS_SISTEMA = {
   // Módulo Créditos de Clientes
   CREDITOS_VER: "creditos.ver",
   CREDITOS_GESTIONAR: "creditos.gestionar",
+  CREDITOS_ELIMINAR: "creditos.eliminar",
 
   // Módulo Gestión Humana
   EMPLEADOS_VER: "empleados.ver",
   EMPLEADOS_CREAR: "empleados.crear",
   EMPLEADOS_EDITAR_SALARIO: "empleados.editar_salario",
   EMPLEADOS_LIQUIDAR: "empleados.liquidar",
+  EMPLEADOS_ELIMINAR: "empleados.eliminar",
   PERMISOS_LABORALES_VER: "permisos_laborales.ver",
   PERMISOS_LABORALES_CREAR: "permisos_laborales.crear",
   PERMISOS_LABORALES_APROBAR: "permisos_laborales.aprobar",
@@ -93,6 +106,15 @@ export const PERMISOS_SISTEMA = {
   // Módulo Analítica y Proyección
   ANALITICA_VER: "analitica.ver",
   PROYECCION_GESTIONAR: "proyeccion.gestionar",
+
+  // Módulo Importaciones y Exportaciones
+  IMPORTACIONES_VER: "importaciones.ver",
+  IMPORTACIONES_CREAR: "importaciones.crear",
+  IMPORTACIONES_GESTIONAR_TRANSITO: "importaciones.gestionar_transito",
+  IMPORTACIONES_RECIBIR: "importaciones.recibir",
+  IMPORTACIONES_LIQUIDAR: "importaciones.liquidar",
+  IMPORTACIONES_ELIMINAR: "importaciones.eliminar",
+  INTEGRACION_SIESA_SINCRONIZAR: "integracion_siesa.sincronizar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -104,6 +126,7 @@ export interface PermisoDefinicion {
     | "Roles"
     | "Permisos"
     | "Departamentos"
+    | "Proveedores"
     | "Configuración"
     | "Módulos"
     | "Auditoría"
@@ -114,7 +137,9 @@ export interface PermisoDefinicion {
     | "Motor de Reglas"
     | "Créditos"
     | "Gestión Humana"
-    | "Analítica";
+    | "Analítica"
+    | "Importaciones"
+    | "Integraciones";
   nombre: string;
   descripcion: string;
 }
@@ -168,6 +193,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Usuarios",
     nombre: "Restablecer contraseña",
     descripcion: "Permite forzar reseteo de clave de acceso.",
+  },
+  {
+    id: PERMISOS_SISTEMA.USUARIOS_ELIMINAR,
+    modulo: "Usuarios",
+    nombre: "Eliminar usuarios",
+    descripcion: "Permite eliminar permanentemente la cuenta de un usuario.",
   },
 
   // Roles
@@ -240,6 +271,32 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Departamentos",
     nombre: "Eliminar departamentos",
     descripcion: "Permite eliminar departamentos del sistema.",
+  },
+
+  // Proveedores
+  {
+    id: PERMISOS_SISTEMA.PROVEEDORES_VER,
+    modulo: "Proveedores",
+    nombre: "Ver proveedores",
+    descripcion: "Permite consultar el catálogo de proveedores.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROVEEDORES_CREAR,
+    modulo: "Proveedores",
+    nombre: "Crear proveedores",
+    descripcion: "Permite registrar nuevos proveedores en el catálogo.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROVEEDORES_EDITAR,
+    modulo: "Proveedores",
+    nombre: "Editar proveedores",
+    descripcion: "Permite modificar datos o activar/desactivar un proveedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROVEEDORES_ELIMINAR,
+    modulo: "Proveedores",
+    nombre: "Eliminar proveedores",
+    descripcion: "Permite eliminar un proveedor sin facturas ni contratos asociados.",
   },
 
   // Configuración
@@ -315,6 +372,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Registrar pago",
     descripcion: "Permite marcar una factura aprobada como pagada.",
   },
+  {
+    id: PERMISOS_SISTEMA.FACTURAS_ELIMINAR,
+    modulo: "Facturas",
+    nombre: "Eliminar facturas",
+    descripcion: "Permite eliminar una factura registrada.",
+  },
 
   // Solicitudes de Compra
   {
@@ -347,6 +410,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Marcar como comprado",
     descripcion: "Permite cerrar una solicitud aprobada como comprada.",
   },
+  {
+    id: PERMISOS_SISTEMA.SOLICITUDES_ELIMINAR,
+    modulo: "Solicitudes de Compra",
+    nombre: "Eliminar solicitudes",
+    descripcion: "Permite eliminar una solicitud de compra.",
+  },
 
   // Servicios
   {
@@ -367,6 +436,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Activar/desactivar servicios",
     descripcion: "Permite cambiar el estado de un servicio o suscripción.",
   },
+  {
+    id: PERMISOS_SISTEMA.SERVICIOS_ELIMINAR,
+    modulo: "Servicios",
+    nombre: "Eliminar servicios",
+    descripcion: "Permite eliminar un servicio o suscripción registrada.",
+  },
 
   // Contratos
   {
@@ -386,6 +461,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Contratos",
     nombre: "Editar contratos",
     descripcion: "Permite modificar contratos existentes.",
+  },
+  {
+    id: PERMISOS_SISTEMA.CONTRATOS_ELIMINAR,
+    modulo: "Contratos",
+    nombre: "Eliminar contratos",
+    descripcion: "Permite eliminar un contrato registrado.",
   },
 
   // Motor de Reglas
@@ -425,7 +506,13 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.CREDITOS_GESTIONAR,
     modulo: "Créditos",
     nombre: "Gestionar créditos",
-    descripcion: "Permite crear y modificar créditos de clientes.",
+    descripcion: "Permite crear créditos, registrar pagos y marcar paz y salvo.",
+  },
+  {
+    id: PERMISOS_SISTEMA.CREDITOS_ELIMINAR,
+    modulo: "Créditos",
+    nombre: "Eliminar créditos",
+    descripcion: "Permite eliminar un crédito de cliente registrado.",
   },
 
   // Gestión Humana
@@ -452,6 +539,12 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Gestión Humana",
     nombre: "Liquidar empleados",
     descripcion: "Permite liquidar la relación laboral de un colaborador.",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_ELIMINAR,
+    modulo: "Gestión Humana",
+    nombre: "Eliminar empleados",
+    descripcion: "Permite eliminar el expediente de un colaborador.",
   },
   {
     id: PERMISOS_SISTEMA.PERMISOS_LABORALES_VER,
@@ -496,5 +589,49 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Analítica",
     nombre: "Gestionar proyecciones",
     descripcion: "Permite registrar valores de proyección financiera futura.",
+  },
+
+  // Importaciones
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_VER,
+    modulo: "Importaciones",
+    nombre: "Ver importaciones",
+    descripcion: "Permite consultar órdenes de compra internacionales, lotes y expedientes aduaneros.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_CREAR,
+    modulo: "Importaciones",
+    nombre: "Crear órdenes de compra internacionales",
+    descripcion: "Permite registrar nuevas órdenes de compra internacional y sus lotes de embarque.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
+    modulo: "Importaciones",
+    nombre: "Gestionar tránsito y expediente aduanero",
+    descripcion: "Permite actualizar el estado de tránsito de un lote y su documentación DIAN (DIM, vistos buenos).",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_RECIBIR,
+    modulo: "Importaciones",
+    nombre: "Recibir mercancía en planta",
+    descripcion: "Permite registrar el ingreso físico a planta de un lote antes de la liquidación definitiva.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR,
+    modulo: "Importaciones",
+    nombre: "Liquidar costeo de importación",
+    descripcion: "Permite registrar la liquidación definitiva del landed cost (NIC 2) de un lote.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_ELIMINAR,
+    modulo: "Importaciones",
+    nombre: "Anular órdenes de compra internacionales",
+    descripcion: "Permite anular una orden de compra internacional.",
+  },
+  {
+    id: PERMISOS_SISTEMA.INTEGRACION_SIESA_SINCRONIZAR,
+    modulo: "Integraciones",
+    nombre: "Sincronizar datos con Siesa",
+    descripcion: "Permite disparar manualmente la sincronización de datos maestros desde Siesa/UnoEE.",
   },
 ];

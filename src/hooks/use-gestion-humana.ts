@@ -72,6 +72,14 @@ export function useGestionHumana() {
     [refresh],
   );
 
+  const eliminarEmpleado = useCallback(
+    async (id: string) => {
+      await fetchAuth(`/gestion-humana/empleados/${id}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
   const addPermiso = useCallback(
     async (data: {
       empleadoId: string;
@@ -116,6 +124,7 @@ export function useGestionHumana() {
     addEmpleado,
     updateSalarioEmpleado,
     liquidarEmpleado,
+    eliminarEmpleado,
     addPermiso,
     updateEstadoPermiso,
     addFalta,

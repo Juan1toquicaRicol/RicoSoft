@@ -5,6 +5,7 @@ import { LayoutGrid, ArrowUp, ArrowDown, Building2 } from "lucide-react";
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { useModulos } from "@/hooks/use-modulos";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/configuracion/modulos")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.MODULOS_VER),
   component: ModulosConfigPage,
 });
 
