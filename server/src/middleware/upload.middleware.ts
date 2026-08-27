@@ -91,3 +91,21 @@ const comprobantePago = crearUploadArchivo("pagos");
 export const UPLOADS_DIR_COMPROBANTES = comprobantePago.UPLOADS_DIR;
 export const validarPagoIdParaArchivo = comprobantePago.validarIdParaArchivo;
 export const uploadComprobantePago = comprobantePago.uploadArchivo;
+
+// Documentos del expediente aduanero (DIM/factura comercial/certificado de
+// origen): :id en la URL es el loteId, no el id del expediente, para poder
+// subir el primer documento antes de que el expediente exista todavía (el
+// controlador lo crea vía upsert). Los tres documentos de un mismo lote
+// conviven en la misma carpeta sin colisión (multer ya genera un nombre de
+// archivo único por subida).
+const documentoExpediente = crearUploadArchivo("expedientes-aduaneros");
+export const UPLOADS_DIR_EXPEDIENTES = documentoExpediente.UPLOADS_DIR;
+export const validarExpedienteIdParaArchivo = documentoExpediente.validarIdParaArchivo;
+export const uploadDocumentoExpediente = documentoExpediente.uploadArchivo;
+
+// Documento de un visto bueno aduanero (INVIMA/ICA/etc.): :id es el id del
+// propio VistoBuenoAduanero.
+const documentoVistoBueno = crearUploadArchivo("vistos-buenos-aduaneros");
+export const UPLOADS_DIR_VISTOS_BUENOS = documentoVistoBueno.UPLOADS_DIR;
+export const validarVistoBuenoIdParaArchivo = documentoVistoBueno.validarIdParaArchivo;
+export const uploadDocumentoVistoBueno = documentoVistoBueno.uploadArchivo;

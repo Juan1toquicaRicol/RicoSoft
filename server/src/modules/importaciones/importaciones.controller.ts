@@ -1,10 +1,42 @@
+import fs from "fs";
+import path from "path";
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { UPLOADS_DIR_EXPEDIENTES, UPLOADS_DIR_VISTOS_BUENOS } from "../../middleware/upload.middleware";
 
 const INCOTERMS_VALIDOS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
 const MONEDAS_VALIDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
 const ESTADOS_ORDEN_VALIDOS = ["Borrador", "Confirmada", "Cerrada", "Anulada"];
+// Validación de forma en el controlador, mismo patrón que ESTADOS_ORDEN_VALIDOS
+// arriba — no una máquina de estados con transiciones: la regla de negocio de
+// cuándo debe cambiar cada uno no está definida todavía (ver
+// ARCHITECTURAL_DECISIONS_PENDING.md, decisión #10).
+const ESTADOS_EXPEDIENTE_VALIDOS = ["En trámite", "Levantado"];
+const ESTADOS_VISTO_BUENO_VALIDOS = ["Pendiente", "Aprobado", "Rechazado"];
+
+type TipoDocumentoExpediente = "dim" | "factura-comercial" | "certificado-origen";
+
+const TIPOS_DOCUMENTO_EXPEDIENTE: Record<
+  TipoDocumentoExpediente,
+  { nombre: string; ruta: string; mime: string; tamano: string; etiqueta: string }
+> = {
+  dim: { nombre: "dimNombre", ruta: "dimRuta", mime: "dimMime", tamano: "dimTamano", etiqueta: "DIM" },
+  "factura-comercial": {
+    nombre: "facturaComercialNombre",
+    ruta: "facturaComercialRuta",
+    mime: "facturaComercialMime",
+    tamano: "facturaComercialTamano",
+    etiqueta: "factura comercial",
+  },
+  "certificado-origen": {
+    nombre: "certificadoOrigenNombre",
+    ruta: "certificadoOrigenRuta",
+    mime: "certificadoOrigenMime",
+    tamano: "certificadoOrigenTamano",
+    etiqueta: "certificado de origen",
+  },
+};
 // Solo los estados previos a la llegada física se cambian a mano desde
 // actualizarEstadoLote. "Liberado pre-compra" lo asigna recibirPreCompraPlanta
 // y "Nacionalizado" lo asigna liquidarCosteoImportacion: ninguno de los dos
@@ -550,5 +582,367 @@ export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
   } catch (error) {
     console.error("Error al anular orden de compra internacional:", error);
     return res.status(500).json({ message: "Error al anular la orden de compra internacional." });
+  }
+};
+
+// --- Expediente aduanero ---
+// El expediente es 1:1 con el lote (ExpedienteAduanero.loteId es @unique), así
+// que se resuelve siempre por loteId con upsert en vez de exigir un paso
+// separado de "crear expediente" antes de poder cargar datos/documentos.
+
+export const actualizarExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const { numeroDIM, fechaDIM, certificadoOrigenTlc, fechaLevante, estado } = req.body;
+    if (estado !== undefined && estado !== null && !ESTADOS_EXPEDIENTE_VALIDOS.includes(estado)) {
+      return res.status(400).json({
+        message: `Estado de expediente inválido. Usa: ${ESTADOS_EXPEDIENTE_VALIDOS.join(", ")}.`,
+      });
+    }
+
+    const datos = {
+      numeroDIM: numeroDIM ?? null,
+      fechaDIM: fechaDIM ? new Date(fechaDIM) : null,
+      certificadoOrigenTlc: certificadoOrigenTlc ?? null,
+      fechaLevante: fechaLevante ? new Date(fechaLevante) : null,
+      ...(estado ? { estado } : {}),
+    };
+
+    const [expediente] = await prisma.$transaction([
+      prisma.expedienteAduanero.upsert({
+        where: { loteId: lote.id },
+        create: { tenantId, loteId: lote.id, ...datos },
+        update: datos,
+        include: { vistosBuenos: true },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: "Expediente aduanero actualizado",
+          detalle: `Lote ${lote.blAwb}`,
+        },
+      }),
+    ]);
+
+    return res.json(serializarExpediente(expediente));
+  } catch (error) {
+    console.error("Error al actualizar expediente aduanero:", error);
+    return res.status(500).json({ message: "Error al actualizar el expediente aduanero." });
+  }
+};
+
+export const subirDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipo = req.params.tipo as TipoDocumentoExpediente;
+    const campos = TIPOS_DOCUMENTO_EXPEDIENTE[tipo];
+    const archivo = (req as any).file as Express.Multer.File | undefined;
+
+    if (!campos) {
+      if (archivo) fs.unlink(archivo.path, () => {});
+      return res.status(400).json({
+        message: `Tipo de documento inválido. Usa: ${Object.keys(TIPOS_DOCUMENTO_EXPEDIENTE).join(", ")}.`,
+      });
+    }
+    if (!archivo) {
+      return res.status(400).json({ message: "No se recibió ningún archivo." });
+    }
+
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) {
+      fs.unlink(archivo.path, () => {});
+      return res.status(404).json({ message: "Lote de importación no encontrado." });
+    }
+
+    const expedienteActual = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
+    const rutaAnterior = expedienteActual ? (expedienteActual as any)[campos.ruta] : null;
+
+    const datosArchivo = {
+      [campos.nombre]: archivo.originalname,
+      [campos.ruta]: path.join(lote.id, archivo.filename),
+      [campos.mime]: archivo.mimetype,
+      [campos.tamano]: archivo.size,
+    };
+
+    const [expediente] = await prisma.$transaction([
+      prisma.expedienteAduanero.upsert({
+        where: { loteId: lote.id },
+        create: { tenantId, loteId: lote.id, ...datosArchivo },
+        update: datosArchivo,
+        include: { vistosBuenos: true },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: rutaAnterior ? `Documento ${campos.etiqueta} reemplazado` : `Documento ${campos.etiqueta} adjuntado`,
+          detalle: archivo.originalname,
+        },
+      }),
+    ]);
+
+    if (rutaAnterior) {
+      fs.unlink(path.join(UPLOADS_DIR_EXPEDIENTES, rutaAnterior), () => {});
+    }
+
+    return res.status(201).json(serializarExpediente(expediente));
+  } catch (error) {
+    console.error("Error al subir documento del expediente aduanero:", error);
+    return res.status(500).json({ message: "Error al subir el documento." });
+  }
+};
+
+/**
+ * Sirve un documento del expediente. Igual que en Facturas: nunca se expone
+ * un path público, siempre se resuelve primero el lote por tenant y se lee
+ * del disco la ruta guardada en BD (nunca una ruta armada desde input del
+ * cliente).
+ */
+export const obtenerDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipo = req.params.tipo as TipoDocumentoExpediente;
+    const campos = TIPOS_DOCUMENTO_EXPEDIENTE[tipo];
+    if (!campos) return res.status(400).json({ message: "Tipo de documento inválido." });
+
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const expediente = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
+    const ruta = expediente ? (expediente as any)[campos.ruta] : null;
+    if (!expediente || !ruta) {
+      return res.status(404).json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
+    }
+
+    const rutaAbsoluta = path.join(UPLOADS_DIR_EXPEDIENTES, ruta);
+    if (!fs.existsSync(rutaAbsoluta)) {
+      return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
+    }
+
+    const nombre = (expediente as any)[campos.nombre];
+    const mime = (expediente as any)[campos.mime];
+    res.setHeader("Content-Type", mime || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(nombre || "documento")}"`);
+    return res.sendFile(rutaAbsoluta);
+  } catch (error) {
+    console.error("Error al obtener documento del expediente aduanero:", error);
+    return res.status(500).json({ message: "Error al obtener el documento." });
+  }
+};
+
+export const eliminarDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipo = req.params.tipo as TipoDocumentoExpediente;
+    const campos = TIPOS_DOCUMENTO_EXPEDIENTE[tipo];
+    if (!campos) return res.status(400).json({ message: "Tipo de documento inválido." });
+
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const expediente = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
+    const ruta = expediente ? (expediente as any)[campos.ruta] : null;
+    if (!expediente || !ruta) {
+      return res.status(404).json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
+    }
+
+    fs.unlink(path.join(UPLOADS_DIR_EXPEDIENTES, ruta), () => {});
+
+    const datosLimpios = {
+      [campos.nombre]: null,
+      [campos.ruta]: null,
+      [campos.mime]: null,
+      [campos.tamano]: null,
+    };
+
+    const [actualizado] = await prisma.$transaction([
+      prisma.expedienteAduanero.update({
+        where: { loteId: lote.id },
+        data: datosLimpios,
+        include: { vistosBuenos: true },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Documento ${campos.etiqueta} eliminado`,
+        },
+      }),
+    ]);
+
+    return res.json(serializarExpediente(actualizado));
+  } catch (error) {
+    console.error("Error al eliminar documento del expediente aduanero:", error);
+    return res.status(500).json({ message: "Error al eliminar el documento." });
+  }
+};
+
+// --- Vistos buenos ---
+// VistoBuenoAduanero es el único modelo del módulo sin tenantId propio: el
+// aislamiento se verifica siempre vía la relación anidada `expediente:
+// { tenantId }` (expedienteId -> ExpedienteAduanero.tenantId), nunca
+// confiando en el id del visto bueno por sí solo.
+
+export const crearVistoBueno = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const { entidad, numero: numeroVisto, fecha } = req.body;
+
+    // El expediente puede no existir todavía si el primer dato que se
+    // registra del lote es un visto bueno (no el DIM) — mismo criterio de
+    // upsert que en actualizarExpedienteAduanero.
+    const expediente = await prisma.expedienteAduanero.upsert({
+      where: { loteId: lote.id },
+      create: { tenantId, loteId: lote.id },
+      update: {},
+    });
+
+    const [vistoBueno] = await prisma.$transaction([
+      prisma.vistoBuenoAduanero.create({
+        data: {
+          expedienteId: expediente.id,
+          entidad,
+          numero: numeroVisto ?? null,
+          fecha: fecha ? new Date(fecha) : null,
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: "Visto bueno registrado",
+          detalle: entidad,
+        },
+      }),
+    ]);
+
+    return res.status(201).json(serializarVistoBueno(vistoBueno));
+  } catch (error) {
+    console.error("Error al crear visto bueno:", error);
+    return res.status(500).json({ message: "Error al registrar el visto bueno." });
+  }
+};
+
+export const actualizarVistoBueno = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
+      where: { id: req.params.id, expediente: { tenantId } },
+      include: { expediente: { include: { lote: true } } },
+    });
+    if (!vistoBueno) return res.status(404).json({ message: "Visto bueno no encontrado." });
+
+    const { entidad, numero: numeroVisto, estado, fecha } = req.body;
+    if (estado !== undefined && estado !== null && !ESTADOS_VISTO_BUENO_VALIDOS.includes(estado)) {
+      return res.status(400).json({ message: `Estado inválido. Usa: ${ESTADOS_VISTO_BUENO_VALIDOS.join(", ")}.` });
+    }
+
+    const estadoAnterior = vistoBueno.estado;
+
+    const [actualizado] = await prisma.$transaction([
+      prisma.vistoBuenoAduanero.update({
+        where: { id: vistoBueno.id },
+        data: {
+          ...(entidad !== undefined ? { entidad } : {}),
+          ...(numeroVisto !== undefined ? { numero: numeroVisto ?? null } : {}),
+          ...(estado ? { estado } : {}),
+          ...(fecha !== undefined ? { fecha: fecha ? new Date(fecha) : null } : {}),
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: vistoBueno.expediente.lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: "Visto bueno actualizado",
+          detalle:
+            estado && estado !== estadoAnterior ? `${vistoBueno.entidad}: ${estadoAnterior} → ${estado}` : vistoBueno.entidad,
+        },
+      }),
+    ]);
+
+    return res.json(serializarVistoBueno(actualizado));
+  } catch (error) {
+    console.error("Error al actualizar visto bueno:", error);
+    return res.status(500).json({ message: "Error al actualizar el visto bueno." });
+  }
+};
+
+export const subirDocumentoVistoBueno = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const archivo = (req as any).file as Express.Multer.File | undefined;
+    if (!archivo) return res.status(400).json({ message: "No se recibió ningún archivo." });
+
+    const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
+      where: { id: req.params.id, expediente: { tenantId } },
+      include: { expediente: { include: { lote: true } } },
+    });
+    if (!vistoBueno) {
+      fs.unlink(archivo.path, () => {});
+      return res.status(404).json({ message: "Visto bueno no encontrado." });
+    }
+
+    if (vistoBueno.archivoRuta) {
+      fs.unlink(path.join(UPLOADS_DIR_VISTOS_BUENOS, vistoBueno.archivoRuta), () => {});
+    }
+
+    const [actualizado] = await prisma.$transaction([
+      prisma.vistoBuenoAduanero.update({
+        where: { id: vistoBueno.id },
+        data: {
+          archivoNombre: archivo.originalname,
+          archivoRuta: path.join(vistoBueno.id, archivo.filename),
+          archivoMime: archivo.mimetype,
+          archivoTamano: archivo.size,
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: vistoBueno.expediente.lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: vistoBueno.archivoRuta ? "Documento de visto bueno reemplazado" : "Documento de visto bueno adjuntado",
+          detalle: `${vistoBueno.entidad}: ${archivo.originalname}`,
+        },
+      }),
+    ]);
+
+    return res.status(201).json(serializarVistoBueno(actualizado));
+  } catch (error) {
+    console.error("Error al subir documento de visto bueno:", error);
+    return res.status(500).json({ message: "Error al subir el documento." });
+  }
+};
+
+export const obtenerDocumentoVistoBueno = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
+      where: { id: req.params.id, expediente: { tenantId } },
+    });
+    if (!vistoBueno || !vistoBueno.archivoRuta) {
+      return res.status(404).json({ message: "Este visto bueno no tiene un documento adjunto." });
+    }
+
+    const rutaAbsoluta = path.join(UPLOADS_DIR_VISTOS_BUENOS, vistoBueno.archivoRuta);
+    if (!fs.existsSync(rutaAbsoluta)) {
+      return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
+    }
+
+    res.setHeader("Content-Type", vistoBueno.archivoMime || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(vistoBueno.archivoNombre || "documento")}"`,
+    );
+    return res.sendFile(rutaAbsoluta);
+  } catch (error) {
+    console.error("Error al obtener documento de visto bueno:", error);
+    return res.status(500).json({ message: "Error al obtener el documento." });
   }
 };

@@ -48,3 +48,26 @@ export const liquidarCosteoImportacionSchema = z.object({
   agenciamientoCop: numero.nullish(),
   otrosCostosCop: numero.nullish(),
 });
+
+// PUT (reemplazo completo de los campos editables), no PATCH: el frontend
+// siempre envía el formulario completo del expediente.
+export const actualizarExpedienteAduaneroSchema = z.object({
+  numeroDIM: z.string().nullish(),
+  fechaDIM: z.string().nullish(),
+  certificadoOrigenTlc: z.string().nullish(),
+  fechaLevante: z.string().nullish(),
+  estado: z.string().nullish(),
+});
+
+export const crearVistoBuenoSchema = z.object({
+  entidad: z.string(textoObligatorio("La entidad del visto bueno es obligatoria.")),
+  numero: z.string().nullish(),
+  fecha: z.string().nullish(),
+});
+
+export const actualizarVistoBuenoSchema = z.object({
+  entidad: z.string().nullish(),
+  numero: z.string().nullish(),
+  estado: z.string().nullish(),
+  fecha: z.string().nullish(),
+});

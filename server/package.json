@@ -14,7 +14,9 @@
     "sync-siesa": "tsx scripts/sync-siesa.ts",
     "explore-siesa": "tsx scripts/explore-siesa.ts",
     "otorgar-membresia": "tsx scripts/otorgar-membresia.ts",
-    "test": "vitest run"
+    "ci:preparar-db-integracion": "tsx scripts/ci-preparar-db-integracion.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -49,3 +49,47 @@ jobs:
         run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
+
+  # Job independiente y aditivo: no reemplaza ni depende de los jobs
+  # frontend/backend de arriba, y no los bloquea si este falla. Corre la
+  # suite de integración con una base de datos SQL Server REAL (contenedor
+  # de servicio, efímero, destruido junto con el runner al terminar el job)
+  # para probar de verdad el aislamiento multi-tenant de los endpoints de
+  # Importaciones — algo que los tests con el DATABASE_URL placeholder del
+  # job "backend" nunca ejercitan (ver
+  # server/src/modules/importaciones/importaciones.integration.test.ts).
+  backend-integration:
+    name: Backend integration (aislamiento multi-tenant, SQL Server real)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: ${{ secrets.CI_INTEGRATION_MSSQL_PASSWORD || 'Ci_Integration_Test_2026!' }}
+        ports:
+          - 1433:1433
+    env:
+      MSSQL_SA_PASSWORD: ${{ secrets.CI_INTEGRATION_MSSQL_PASSWORD || 'Ci_Integration_Test_2026!' }}
+      MSSQL_INTEGRATION_DB: ricosoft_integration
+      DATABASE_URL: "sqlserver://localhost:1433;database=ricosoft_integration;user=sa;password=${{ secrets.CI_INTEGRATION_MSSQL_PASSWORD || 'Ci_Integration_Test_2026!' }};encrypt=true;trustServerCertificate=true"
+      JWT_SECRET: "ci-integration-secret-solo-para-pruebas-efimeras"
+      RUN_DB_INTEGRATION_TESTS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Preparar base de datos de integración (reintenta hasta que SQL Server esté listo)
+        run: npm run ci:preparar-db-integracion
+      - run: npx prisma generate
+      - name: Aplicar migraciones reales contra la base efímera
+        run: npx prisma migrate deploy
+      - name: Suite de integración (multi-tenant, expediente/vistos buenos)
+        run: npm run test:integration

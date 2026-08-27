@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { fetchAuth } from "@/lib/session";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
 
 export type EstadoOrdenIntl = "Borrador" | "Confirmada" | "Cerrada" | "Anulada";
 export type EstadoLoteImportacion =
@@ -142,6 +142,29 @@ export interface LiquidarCosteoInput {
   otrosCostosCop?: number;
 }
 
+export type TipoDocumentoExpediente = "dim" | "factura-comercial" | "certificado-origen";
+
+export interface ActualizarExpedienteInput {
+  numeroDIM?: string | null;
+  fechaDIM?: string | null;
+  certificadoOrigenTlc?: string | null;
+  fechaLevante?: string | null;
+  estado?: string | null;
+}
+
+export interface CrearVistoBuenoInput {
+  entidad: string;
+  numero?: string;
+  fecha?: string;
+}
+
+export interface ActualizarVistoBuenoInput {
+  entidad?: string;
+  numero?: string | null;
+  estado?: string;
+  fecha?: string | null;
+}
+
 export function useImportaciones() {
   const [ordenes, setOrdenes] = useState<OrdenCompraIntl[]>([]);
   const [loading, setLoading] = useState(true);
@@ -245,6 +268,69 @@ export function useOrdenCompraIntl(id: string | undefined) {
     [refresh],
   );
 
+  const actualizarExpediente = useCallback(
+    async (loteId: string, data: ActualizarExpedienteInput) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/expediente`, { method: "PUT", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const subirDocumentoExpediente = useCallback(
+    async (loteId: string, tipo: TipoDocumentoExpediente, file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`, formData);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarDocumentoExpediente = useCallback(
+    async (loteId: string, tipo: TipoDocumentoExpediente) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const descargarDocumentoExpediente = useCallback(async (loteId: string, tipo: TipoDocumentoExpediente) => {
+    return fetchAuthBlob(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`);
+  }, []);
+
+  const crearVistoBueno = useCallback(
+    async (loteId: string, data: CrearVistoBuenoInput) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/expediente/vistos-buenos`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const actualizarVistoBueno = useCallback(
+    async (vistoId: string, data: ActualizarVistoBuenoInput) => {
+      await fetchAuth(`/importaciones/vistos-buenos/${vistoId}`, { method: "PATCH", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const subirDocumentoVistoBueno = useCallback(
+    async (vistoId: string, file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/importaciones/vistos-buenos/${vistoId}/documento`, formData);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const descargarDocumentoVistoBueno = useCallback(async (vistoId: string) => {
+    return fetchAuthBlob(`/importaciones/vistos-buenos/${vistoId}/documento`);
+  }, []);
+
   return {
     orden,
     loading,
@@ -254,5 +340,59 @@ export function useOrdenCompraIntl(id: string | undefined) {
     actualizarEstadoLote,
     recibirPreCompraPlanta,
     liquidarCosteoImportacion,
+    actualizarExpediente,
+    subirDocumentoExpediente,
+    eliminarDocumentoExpediente,
+    descargarDocumentoExpediente,
+    crearVistoBueno,
+    actualizarVistoBueno,
+    subirDocumentoVistoBueno,
+    descargarDocumentoVistoBueno,
   };
+}
+
+/**
+ * Refresco casi-en-tiempo-real del detalle de una orden mientras está
+ * visible, mismo patrón que usePollingFacturas: varias áreas (compras,
+ * logística, aduanas) pueden tocar el mismo lote a lo largo de días/semanas.
+ */
+export function usePollingOrdenCompraIntl(refresh: () => void | Promise<void>, intervaloMs = 6000) {
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const tick = () => {
+      if (document.visibilityState === "visible") {
+        refreshRef.current();
+      }
+    };
+
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(tick, intervaloMs);
+    };
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        tick();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [intervaloMs]);
 }

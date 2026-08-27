@@ -41,8 +41,10 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money } from "@/lib/data";
+import { requirePermisoGuard } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/importaciones")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.IMPORTACIONES_VER),
   head: () => ({
     meta: [
       { title: "Importaciones y Exportaciones | RicoSoft" },
