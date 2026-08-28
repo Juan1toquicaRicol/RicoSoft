@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, KeyRound, Save, ShieldCheck, UserCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, KeyRound, Save, ShieldCheck, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,10 +119,10 @@ function PerfilPage() {
               <h2 className="text-xl font-bold text-slate-900 truncate">{user.nombre}</h2>
               <p className="text-slate-500 text-sm truncate">{user.email}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-800">
+                <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-800">
                   <ShieldCheck className="h-3 w-3" />
                   {user.isSuperadmin ? "Superadministrador" : (user.rol ?? "Sin rol asignado")}
-                </span>
+                </Badge>
                 <span className="text-[11px] font-semibold text-slate-400">
                   Estado: {user.activo ? "Activo" : "Inactivo"}
                 </span>
@@ -167,11 +169,17 @@ function PerfilPage() {
               <Input value={user.email} disabled className="h-9 text-sm border-slate-200 bg-slate-50 text-slate-500" />
             </div>
 
-            {errorPerfil && <p className="text-sm text-slate-900 font-semibold">{errorPerfil}</p>}
+            {errorPerfil && (
+              <Alert variant="warning">
+                <AlertTriangle />
+                <AlertDescription>{errorPerfil}</AlertDescription>
+              </Alert>
+            )}
             {okPerfil && (
-              <p className="text-sm text-blue-800 font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4" /> Cambios guardados correctamente.
-              </p>
+              <Alert variant="info">
+                <CheckCircle2 />
+                <AlertDescription>Cambios guardados correctamente.</AlertDescription>
+              </Alert>
             )}
 
             <div className="flex justify-end pt-1">
@@ -230,11 +238,17 @@ function PerfilPage() {
               />
             </div>
 
-            {errorPassword && <p className="text-sm text-slate-900 font-semibold">{errorPassword}</p>}
+            {errorPassword && (
+              <Alert variant="warning">
+                <AlertTriangle />
+                <AlertDescription>{errorPassword}</AlertDescription>
+              </Alert>
+            )}
             {okPassword && (
-              <p className="text-sm text-blue-800 font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4" /> Contraseña actualizada correctamente.
-              </p>
+              <Alert variant="info">
+                <CheckCircle2 />
+                <AlertDescription>Contraseña actualizada correctamente.</AlertDescription>
+              </Alert>
             )}
 
             <div className="flex justify-end pt-1">

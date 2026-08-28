@@ -183,7 +183,7 @@ function calcularPermisosEfectivosMembresia(membresia: {
 export async function loadSessionUser(userId: string, tenantId?: string): Promise<SessionUser | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { rolRel: true, permisosDirectos: true, departamento: true },
+    include: { rolRel: true, permisosDirectos: true, departamento: true, tenant: { select: { activo: true } } },
   });
 
   if (!user) return null;
@@ -191,9 +191,12 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
   if (tenantId && tenantId !== user.tenantId) {
     const membresia = await prisma.membresia.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
-      include: { rolRel: true, departamento: true },
+      include: { rolRel: true, departamento: true, tenant: { select: { activo: true } } },
     });
-    if (!membresia) return null;
+    // Sin membresía, o la empresa a la que apunta el token está desactivada:
+    // se trata como sesión inválida en ambos casos, aunque el JWT en sí
+    // siga siendo válido (firma y expiración correctas).
+    if (!membresia || !membresia.tenant.activo) return null;
 
     const permisos = calcularPermisosEfectivosMembresia(membresia);
 
@@ -209,6 +212,10 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
       permisos: Array.from(permisos),
     };
   }
+
+  // El tenant hogar también puede haber sido desactivado después de que se
+  // emitió el JWT — se revalida en cada request, no solo al loguearse.
+  if (!user.tenant.activo) return null;
 
   const permisos = calcularPermisosEfectivos(user);
 
@@ -235,21 +242,24 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
 export async function listarTenantsAccesibles(userId: string): Promise<TenantAccesible[]> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { tenant: { select: { id: true, nombre: true, subdomain: true } } },
+    select: { tenant: { select: { id: true, nombre: true, subdomain: true, activo: true } } },
   });
   if (!user) return [];
 
   const membresias = await prisma.membresia.findMany({
     where: { userId, activo: true },
-    select: { tenant: { select: { id: true, nombre: true, subdomain: true } } },
+    select: { tenant: { select: { id: true, nombre: true, subdomain: true, activo: true } } },
   });
 
-  const vistos = new Set<string>([user.tenant.id]);
-  const tenants: TenantAccesible[] = [user.tenant];
-  for (const m of membresias) {
-    if (vistos.has(m.tenant.id)) continue;
-    vistos.add(m.tenant.id);
-    tenants.push(m.tenant);
+  // Un tenant desactivado nunca es "accesible", ni como hogar ni por
+  // membresía: no aparece para elegir en el login, y select-tenant lo
+  // rechaza igual porque revalida contra esta misma función.
+  const vistos = new Set<string>();
+  const tenants: TenantAccesible[] = [];
+  for (const t of [user.tenant, ...membresias.map((m) => m.tenant)]) {
+    if (!t.activo || vistos.has(t.id)) continue;
+    vistos.add(t.id);
+    tenants.push({ id: t.id, nombre: t.nombre, subdomain: t.subdomain });
   }
   return tenants;
 }

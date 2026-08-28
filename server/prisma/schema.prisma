@@ -12,6 +12,14 @@ model Tenant {
   nombre               String                     @db.VarChar(255)
   subdomain            String                     @unique @db.VarChar(255)
   siesaCiaId           Int?                       @unique
+  /// Dominio de correo corporativo (p. ej. "ricol.com.co") que determina a
+  /// qué tenant pertenece un usuario que se autoregistra. Único: dos tenants
+  /// no pueden compartir el mismo dominio. Null = el tenant no acepta
+  /// autoregistro público por dominio (p. ej. el tenant demo).
+  dominioCorporativo   String?                    @unique @db.VarChar(255)
+  /// Si es false, nadie puede loguearse/registrarse/seleccionar este tenant,
+  /// aunque tenga cuenta o membresía activa ahí.
+  activo               Boolean                    @default(true)
   createdAt            DateTime                   @default(now())
   auditorias           Auditoria[]
   colaboradores        Colaborador[]

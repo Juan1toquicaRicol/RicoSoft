@@ -1,15 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, CheckCircle2, Plus, Trash2, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Trash2, Upload, XCircle } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  FilaGrupo,
+  OPCION_SIN_AGRUPAR,
+  SelectorAgrupacion,
+} from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 import {
   Select,
@@ -47,7 +61,7 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
-import { money, EstadoFactura, Prioridad } from "@/lib/data";
+import { money, EstadoFactura } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/facturas/")({
@@ -78,7 +92,8 @@ const ACCION_LABEL: Record<"Aprobada" | "Rechazada", { verbo: string; titulo: st
 
 function FacturasPage() {
   const { empresaActiva, empresas } = useTenant();
-  const { facturas, loading, error, addFactura, updateEstadoFactura, eliminarFactura } = useFacturas();
+  const { facturas, loading, error, addFactura, updateEstadoFactura, eliminarFactura } =
+    useFacturas();
   const { proveedores } = useProveedores();
   const proveedoresActivos = proveedores.filter((p) => p.activo);
   const { suscripciones } = useServicios();
@@ -106,7 +121,9 @@ function FacturasPage() {
     estado: "Aprobada" | "Rechazada";
   } | null>(null);
   const [aplicandoAccion, setAplicandoAccion] = useState(false);
-  const [facturaAEliminar, setFacturaAEliminar] = useState<{ id: string; numero: string } | null>(null);
+  const [facturaAEliminar, setFacturaAEliminar] = useState<{ id: string; numero: string } | null>(
+    null,
+  );
   const [eliminando, setEliminando] = useState(false);
 
   const handleConfirmarAccion = async () => {
@@ -144,12 +161,12 @@ function FacturasPage() {
     servicioId: "",
     contratoId: "",
     solicitudCompraId: "",
-    area: "Produccion",
+    area: "",
     responsableId: "",
     vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    subtotal: 1000000,
-    iva: 190000,
-    prioridad: "Media" as Prioridad,
+    subtotal: "",
+    iva: "",
+    prioridad: "Media",
     origen: "Carga manual" as const,
   });
 
@@ -241,11 +258,11 @@ function FacturasPage() {
       servicioId: "",
       contratoId: "",
       solicitudCompraId: "",
-      area: "Produccion",
+      area: "",
       responsableId: "",
       vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      subtotal: 1000000,
-      iva: 190000,
+      subtotal: "",
+      iva: "",
       prioridad: "Media",
       origen: "Carga manual",
     });
@@ -256,11 +273,7 @@ function FacturasPage() {
       title="Recepción de Facturas por Estado"
       description="Control del flujo documental y financiero de facturas por estado (Pendiente, Aprobada, Pagada, Rechazada)."
       actions={
-        <Button
-          onClick={() => setModalOpen(true)}
-          size="sm"
-          className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold"
-        >
+        <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
           <Upload className="h-4 w-4" /> Recepcionar Factura
         </Button>
       }
@@ -303,131 +316,184 @@ function FacturasPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5">Factura</th>
-                <th className="px-4 py-3.5">Empresa</th>
-                <th className="px-4 py-3.5">Proveedor / NIT</th>
-                <th className="px-4 py-3.5">Área</th>
-                <th className="px-4 py-3.5">Vencimiento</th>
-                <th className="px-4 py-3.5 text-right">Total</th>
-                <th className="px-4 py-3.5">Prioridad</th>
-                <th className="px-4 py-3.5">Estado</th>
-                <th className="px-4 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {gruposFacturas.map((grupo) => (
-                <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && (
-                    <FilaGrupo key={`grupo-${grupo.clave}`} clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
-                  )}
-                  {grupo.filas.map((f) => (
-                <tr key={f.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-bold text-xs">
-                    <Link
-                      to="/facturas/$id"
-                      params={{ id: f.id }}
-                      className="text-blue-800 hover:underline"
-                    >
-                      {f.numero}
-                    </Link>
-                    <p className="text-[10px] text-slate-400 font-normal">{f.origen}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-800">
-                      {f.empresaId}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-bold text-slate-900 truncate max-w-[200px]">{f.proveedor}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{f.nit}</p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600 font-semibold">{f.area}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-xs font-mono text-slate-500">{f.vence}</p>
-                    {(f.estado === "Pendiente" || f.estado === "Aprobada") && (
-                      <BarraVencimiento fecha={f.vence} etiquetaVencido="Vencida" className="mt-1" />
-                    )}
-                  </td>
-                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                    {money(f.total, f.moneda)}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{f.prioridad}</td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={f.estado} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1.5">
-                      {f.estado === "Pendiente" && (
-                        <>
-                          {puedeAprobar && (
-                            <Button
-                              size="xs"
-                              variant="success"
-                              onClick={() =>
-                                setConfirmAccion({ id: f.id, numero: f.numero, estado: "Aprobada" })
-                              }
-                              className="h-7 text-[11px] font-bold"
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
-                            </Button>
-                          )}
-                          {puedeRechazar && (
-                            <Button
-                              size="xs"
-                              variant="destructive"
-                              onClick={() =>
-                                setConfirmAccion({ id: f.id, numero: f.numero, estado: "Rechazada" })
-                              }
-                              className="h-7 text-[11px] font-bold"
-                            >
-                              <XCircle className="h-3 w-3 mr-1" /> Rechazar
-                            </Button>
-                          )}
-                        </>
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Factura
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Empresa
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Proveedor / NIT
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Área
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Vencimiento
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Total
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Prioridad
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Estado
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Acciones
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {gruposFacturas.map((grupo) => (
+              <Fragment key={grupo.clave || "sin-grupo"}>
+                {grupo.clave && (
+                  <FilaGrupo
+                    key={`grupo-${grupo.clave}`}
+                    clave={grupo.clave}
+                    cantidad={grupo.filas.length}
+                    colSpan={9}
+                  />
+                )}
+                {grupo.filas.map((f) => (
+                  <TableRow key={f.id}>
+                    <TableCell className="px-4 py-3 font-bold text-xs">
+                      <Link
+                        to="/facturas/$id"
+                        params={{ id: f.id }}
+                        className="text-blue-800 hover:underline"
+                      >
+                        {f.numero}
+                      </Link>
+                      <p className="text-[10px] text-slate-400 font-normal">{f.origen}</p>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge
+                        variant="outline"
+                        className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                      >
+                        {f.empresaId}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="font-bold text-slate-900 truncate max-w-[200px]">
+                        {f.proveedor}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-mono">{f.nit}</p>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">
+                      {f.area}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="text-xs font-mono text-slate-500">{f.vence}</p>
+                      {(f.estado === "Pendiente" || f.estado === "Aprobada") && (
+                        <BarraVencimiento
+                          fecha={f.vence}
+                          etiquetaVencido="Vencida"
+                          className="mt-1"
+                        />
                       )}
-                      {f.estado === "Aprobada" && puedePagar && (
-                        <Link to="/facturas/$id" params={{ id: f.id }}>
+                    </TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                      {money(f.total, f.moneda)}
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-500">
+                      {f.prioridad}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={f.estado} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1.5">
+                        {f.estado === "Pendiente" && (
+                          <>
+                            {puedeAprobar && (
+                              <Button
+                                size="xs"
+                                variant="success"
+                                onClick={() =>
+                                  setConfirmAccion({
+                                    id: f.id,
+                                    numero: f.numero,
+                                    estado: "Aprobada",
+                                  })
+                                }
+                                className="h-7 text-[11px]"
+                              >
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
+                              </Button>
+                            )}
+                            {puedeRechazar && (
+                              <Button
+                                size="xs"
+                                variant="destructive"
+                                onClick={() =>
+                                  setConfirmAccion({
+                                    id: f.id,
+                                    numero: f.numero,
+                                    estado: "Rechazada",
+                                  })
+                                }
+                                className="h-7 text-[11px]"
+                              >
+                                <XCircle className="h-3 w-3 mr-1" /> Rechazar
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {f.estado === "Aprobada" && puedePagar && (
+                          <Link to="/facturas/$id" params={{ id: f.id }}>
+                            <Button size="xs" variant="outline" className="h-7 text-[11px]">
+                              Registrar Pago
+                            </Button>
+                          </Link>
+                        )}
+                        {puedeEliminar && (
                           <Button
                             size="xs"
-                            variant="outline"
-                            className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
+                            variant="ghost"
+                            onClick={() => setFacturaAEliminar({ id: f.id, numero: f.numero })}
+                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
                           >
-                            Registrar Pago
+                            <Trash2 className="h-3 w-3" />
                           </Button>
-                        </Link>
-                      )}
-                      {puedeEliminar && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setFacturaAEliminar({ id: f.id, numero: f.numero })}
-                          className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+            {filteredFacturas.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={9} className="p-0">
+                  {loading ? (
+                    <div className="py-12 text-center text-xs text-slate-500">
+                      Cargando facturas...
                     </div>
-                  </td>
-                </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {filteredFacturas.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="p-12 text-center text-xs text-slate-500">
-                    {loading
-                      ? "Cargando facturas..."
-                      : error || 'No hay facturas registradas para el filtro seleccionado. Haz clic en "Recepcionar Factura".'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : error ? (
+                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                  ) : (
+                    <EmptyState
+                      icon={Upload}
+                      title="No hay facturas para el filtro seleccionado"
+                      description='Cambia los filtros de arriba, o haz clic en "Recepcionar Factura" para registrar una nueva.'
+                      action={
+                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                          <Upload className="h-4 w-4" /> Recepcionar Factura
+                        </Button>
+                      }
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       {/* MODAL REGISTRAR FACTURA */}
@@ -490,7 +556,11 @@ function FacturasPage() {
                 >
                   <SelectTrigger id="proveedor" className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue
-                      placeholder={proveedoresActivos.length === 0 ? "Sin proveedores registrados" : "Selecciona un proveedor"}
+                      placeholder={
+                        proveedoresActivos.length === 0
+                          ? "Sin proveedores registrados"
+                          : "Selecciona un proveedor"
+                      }
                     />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
@@ -516,7 +586,7 @@ function FacturasPage() {
               </div>
             </div>
             {proveedoresActivos.length === 0 && (
-              <p className="-mt-2 text-[11px] text-amber-600">
+              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay proveedores registrados.{" "}
                 <Link to="/configuracion/proveedores" className="font-semibold underline">
                   Créalos en Configuración
@@ -532,13 +602,17 @@ function FacturasPage() {
                 </Label>
                 <Select
                   value={form.servicioId || "__none__"}
-                  onValueChange={(val) => setForm({ ...form, servicioId: val === "__none__" ? "" : val })}
+                  onValueChange={(val) =>
+                    setForm({ ...form, servicioId: val === "__none__" ? "" : val })
+                  }
                 >
                   <SelectTrigger id="servicio" className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue placeholder="Sin servicio asociado" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="__none__" className="text-xs">Sin servicio asociado</SelectItem>
+                    <SelectItem value="__none__" className="text-xs">
+                      Sin servicio asociado
+                    </SelectItem>
                     {serviciosDelProveedor.map((s) => (
                       <SelectItem key={s.id} value={s.id} className="text-xs">
                         {s.nombreServicio}
@@ -553,13 +627,17 @@ function FacturasPage() {
                 </Label>
                 <Select
                   value={form.contratoId || "__none__"}
-                  onValueChange={(val) => setForm({ ...form, contratoId: val === "__none__" ? "" : val })}
+                  onValueChange={(val) =>
+                    setForm({ ...form, contratoId: val === "__none__" ? "" : val })
+                  }
                 >
                   <SelectTrigger id="contrato" className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue placeholder="Sin contrato asociado" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="__none__" className="text-xs">Sin contrato asociado</SelectItem>
+                    <SelectItem value="__none__" className="text-xs">
+                      Sin contrato asociado
+                    </SelectItem>
                     {contratosActivos.map((c) => (
                       <SelectItem key={c.id} value={c.id} className="text-xs">
                         {c.proveedor} — {c.area}
@@ -576,13 +654,20 @@ function FacturasPage() {
               </Label>
               <Select
                 value={form.solicitudCompraId || "__none__"}
-                onValueChange={(val) => setForm({ ...form, solicitudCompraId: val === "__none__" ? "" : val })}
+                onValueChange={(val) =>
+                  setForm({ ...form, solicitudCompraId: val === "__none__" ? "" : val })
+                }
               >
-                <SelectTrigger id="solicitudCompra" className="h-9 text-xs border-slate-300 bg-white">
+                <SelectTrigger
+                  id="solicitudCompra"
+                  className="h-9 text-xs border-slate-300 bg-white"
+                >
                   <SelectValue placeholder="Sin solicitud de compra asociada" />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-slate-200">
-                  <SelectItem value="__none__" className="text-xs">Sin solicitud de compra asociada</SelectItem>
+                  <SelectItem value="__none__" className="text-xs">
+                    Sin solicitud de compra asociada
+                  </SelectItem>
                   {solicitudesCompradas.map((s) => (
                     <SelectItem key={s.id} value={s.id} className="text-xs">
                       {s.item} — {s.proveedor || s.solicitante}
@@ -591,7 +676,8 @@ function FacturasPage() {
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-slate-500">
-                Solo aparecen solicitudes ya marcadas "Comprado": esta es la factura final que las cierra.
+                Solo aparecen solicitudes ya marcadas "Comprado": esta es la factura final que las
+                cierra.
               </p>
             </div>
 
@@ -623,10 +709,10 @@ function FacturasPage() {
             </div>
 
             {alertaValorPreview && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-[11px] text-amber-800">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>{alertaValorPreview}</span>
-              </div>
+              <Alert variant="warning" className="py-2.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <AlertDescription className="text-[11px]">{alertaValorPreview}</AlertDescription>
+              </Alert>
             )}
 
             <div className="grid grid-cols-2 gap-3">
@@ -693,8 +779,9 @@ function FacturasPage() {
                 </SelectContent>
               </Select>
               {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
-                <p className="text-[11px] text-amber-600">
-                  No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt; Usuarios.
+                <p className="text-[11px] font-semibold text-slate-600">
+                  No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt;
+                  Usuarios.
                 </p>
               )}
             </div>
@@ -723,8 +810,8 @@ function FacturasPage() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Vas a {confirmAccion ? ACCION_LABEL[confirmAccion.estado].verbo : ""} la factura{" "}
-              <strong>{confirmAccion?.numero}</strong>. Esta acción queda registrada con tu usuario y
-              la hora actual.
+              <strong>{confirmAccion?.numero}</strong>. Esta acción queda registrada con tu usuario
+              y la hora actual.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -736,7 +823,10 @@ function FacturasPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!facturaAEliminar} onOpenChange={(open) => !open && setFacturaAEliminar(null)}>
+      <AlertDialog
+        open={!!facturaAEliminar}
+        onOpenChange={(open) => !open && setFacturaAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar la factura {facturaAEliminar?.numero}?</AlertDialogTitle>
@@ -748,7 +838,7 @@ function FacturasPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarFactura}
               disabled={eliminando}
             >

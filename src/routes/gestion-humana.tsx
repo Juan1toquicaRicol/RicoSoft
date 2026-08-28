@@ -16,10 +16,13 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -313,20 +316,12 @@ function GestionHumana() {
       actions={
         <div className="flex gap-2">
           {activeTab === "expediente" && (
-            <Button
-              onClick={() => setModalEmpleadoOpen(true)}
-              size="sm"
-              className="gap-2 bg-blue-800 text-white hover:bg-blue-900"
-            >
+            <Button onClick={() => setModalEmpleadoOpen(true)} size="sm" className="gap-2">
               <UserPlus className="h-4 w-4" /> Registrar Colaborador
             </Button>
           )}
           {activeTab === "permisos" && (
-            <Button
-              onClick={() => setModalPermisoOpen(true)}
-              size="sm"
-              className="gap-2 bg-blue-800 text-white hover:bg-blue-900"
-            >
+            <Button onClick={() => setModalPermisoOpen(true)} size="sm" className="gap-2">
               <Plus className="h-4 w-4" /> Solicitar Permiso
             </Button>
           )}
@@ -404,133 +399,136 @@ function GestionHumana() {
               opciones={[OPCION_SIN_AGRUPAR, { value: "area", label: "Área" }, { value: "estado", label: "Estado" }]}
             />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                <tr>
-                  <th className="px-4 py-3.5">Documento</th>
-                  <th className="px-4 py-3.5">Colaborador</th>
-                  <th className="px-4 py-3.5">Empresa</th>
-                  <th className="px-4 py-3.5">Cargo / Área</th>
-                  <th className="px-4 py-3.5">Fechas Contratación</th>
-                  <th className="px-4 py-3.5 text-right">Salario Actual</th>
-                  <th className="px-4 py-3.5 text-center">Strikes</th>
-                  <th className="px-4 py-3.5">Estado</th>
-                  <th className="px-4 py-3.5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {gruposEmpleados.map((grupo) => (
-                  <Fragment key={grupo.clave || "sin-grupo"}>
-                    {grupo.clave && (
-                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
-                    )}
-                    {grupo.filas.map((emp) => (
-                  <tr key={emp.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{emp.documento}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-slate-900">
-                        {emp.nombres} {emp.apellidos}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-normal">{emp.correo}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-800">
-                        {emp.empresaId}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-900">{emp.cargo}</p>
-                      <p className="text-[11px] text-slate-500">{emp.area}</p>
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      <p className="text-slate-600 font-bold">
-                        Ingreso: {new Date(emp.fechaContratacion).toLocaleDateString("es-CO")}
-                      </p>
-                      {emp.fechaLiquidacion && (
-                        <p className="text-slate-900 font-bold">
-                          Retiro: {new Date(emp.fechaLiquidacion).toLocaleDateString("es-CO")}
+          <Table>
+            <TableHeader className="bg-slate-100/80">
+              <TableRow className="hover:bg-slate-100/80">
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Documento</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cargo / Área</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fechas Contratación</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Salario Actual</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">Strikes</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="text-slate-800 font-medium">
+              {gruposEmpleados.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />}
+                  {grupo.filas.map((emp) => (
+                    <TableRow key={emp.id}>
+                      <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">{emp.documento}</TableCell>
+                      <TableCell className="px-4 py-3">
+                        <p className="font-bold text-slate-900">
+                          {emp.nombres} {emp.apellidos}
                         </p>
-                      )}
-                    </td>
-                    <td className="num px-4 py-3 text-right font-bold text-slate-900">
-                      {money(emp.salarioActual)}
-                      <p className="text-[10px] text-slate-400 font-normal">
-                        ({emp.historicoSalario.length} cambios)
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold">
-                      {emp.strikesCount > 0 ? (
-                        <span className="rounded-full bg-slate-900 border border-slate-900 px-2.5 py-0.5 text-xs text-white font-bold">
-                          {emp.strikesCount} ⚡
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-400 font-normal">0</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <EstadoBadge estado={emp.estado} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedEmpleado(emp);
-                            setSalarioForm({ nuevoSalario: emp.salarioActual, motivo: "" });
-                            setModalSalarioOpen(true);
-                          }}
-                          className="h-7 text-[11px] font-semibold border-slate-300 hover:bg-slate-100"
-                        >
-                          <DollarSign className="h-3 w-3 mr-1 text-slate-500" /> Salario
-                        </Button>
-                        {emp.estado !== "Liquidado" && (
+                        <p className="text-[11px] text-slate-500 font-normal">{emp.correo}</p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                          {emp.empresaId}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">{emp.cargo}</p>
+                        <p className="text-[11px] text-slate-500">{emp.area}</p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs">
+                        <p className="text-slate-600 font-bold">
+                          Ingreso: {new Date(emp.fechaContratacion).toLocaleDateString("es-CO")}
+                        </p>
+                        {emp.fechaLiquidacion && (
+                          <p className="text-slate-900 font-bold">
+                            Retiro: {new Date(emp.fechaLiquidacion).toLocaleDateString("es-CO")}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="num px-4 py-3 text-right font-bold text-slate-900">
+                        {money(emp.salarioActual)}
+                        <p className="text-[10px] text-slate-400 font-normal">({emp.historicoSalario.length} cambios)</p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-center font-bold">
+                        {emp.strikesCount > 0 ? (
+                          <Badge className="rounded-full border-transparent bg-slate-900 text-white">{emp.strikesCount} ⚡</Badge>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-normal">0</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <EstadoBadge estado={emp.estado} />
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1.5">
                           <Button
                             size="xs"
-                            variant="ghost"
+                            variant="outline"
                             onClick={() => {
-                              if (confirm(`¿Liquidar al colaborador ${emp.nombres}?`)) {
-                                liquidarEmpleado(emp.id, new Date().toISOString().split("T")[0]).catch(
-                                  (err: any) => toast.error(err.message || "Error al liquidar el colaborador."),
-                                );
-                              }
+                              setSelectedEmpleado(emp);
+                              setSalarioForm({ nuevoSalario: emp.salarioActual, motivo: "" });
+                              setModalSalarioOpen(true);
                             }}
-                            className="h-7 text-[11px] text-slate-900 hover:bg-slate-100 font-semibold"
+                            className="h-7 text-[11px]"
                           >
-                            Liquidar
+                            <DollarSign className="h-3 w-3 mr-1" /> Salario
                           </Button>
-                        )}
-                        {puedeEliminarEmpleado && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => setEmpleadoAEliminar(emp)}
-                            className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
-                          >
-                            <Trash2 className="h-3 w-3" />
+                          {emp.estado !== "Liquidado" && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm(`¿Liquidar al colaborador ${emp.nombres}?`)) {
+                                  liquidarEmpleado(emp.id, new Date().toISOString().split("T")[0]).catch(
+                                    (err: any) => toast.error(err.message || "Error al liquidar el colaborador."),
+                                  );
+                                }
+                              }}
+                              className="h-7 text-[11px] text-slate-900 hover:bg-slate-100"
+                            >
+                              Liquidar
+                            </Button>
+                          )}
+                          {puedeEliminarEmpleado && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => setEmpleadoAEliminar(emp)}
+                              className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+              {filteredEmpleados.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9} className="p-0">
+                    {loading ? (
+                      <div className="py-12 text-center text-xs text-slate-500">Cargando colaboradores...</div>
+                    ) : error ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : (
+                      <EmptyState
+                        icon={Users}
+                        title="No hay colaboradores registrados para esta empresa"
+                        description='Haz clic en "Registrar Colaborador" para crear el primer expediente.'
+                        action={
+                          <Button size="sm" onClick={() => setModalEmpleadoOpen(true)} className="gap-2">
+                            <UserPlus className="h-4 w-4" /> Registrar Colaborador
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                    ))}
-                  </Fragment>
-                ))}
-                {filteredEmpleados.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="p-12 text-center text-xs text-slate-500">
-                      <Users className="h-8 w-8 mx-auto mb-2 opacity-30 text-slate-400" />
-                      {loading
-                        ? "Cargando colaboradores..."
-                        : error ||
-                          'No hay colaboradores registrados para esta empresa. Haz clic en "Registrar Colaborador".'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                        }
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -552,89 +550,93 @@ function GestionHumana() {
               opciones={[OPCION_SIN_AGRUPAR, { value: "tipo", label: "Tipo de permiso" }, { value: "estado", label: "Estado" }]}
             />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                <tr>
-                  <th className="px-4 py-3.5">Colaborador</th>
-                  <th className="px-4 py-3.5">Tipo Permiso</th>
-                  <th className="px-4 py-3.5">Fechas (Inicio / Fin)</th>
-                  <th className="px-4 py-3.5 text-center">Días</th>
-                  <th className="px-4 py-3.5">Observaciones</th>
-                  <th className="px-4 py-3.5">Estado</th>
-                  <th className="px-4 py-3.5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {gruposPermisos.map((grupo) => (
-                  <Fragment key={grupo.clave || "sin-grupo"}>
-                    {grupo.clave && (
-                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />
+          <Table>
+            <TableHeader className="bg-slate-100/80">
+              <TableRow className="hover:bg-slate-100/80">
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Tipo Permiso</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fechas (Inicio / Fin)</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">Días</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Observaciones</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="text-slate-800 font-medium">
+              {gruposPermisos.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />}
+                  {grupo.filas.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="px-4 py-3 font-bold text-slate-900">{p.nombreEmpleado}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-bold text-blue-800">{p.tipoPermiso}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-mono text-slate-600">
+                        {new Date(p.fechaInicio).toLocaleDateString("es-CO")} al{" "}
+                        {new Date(p.fechaFin).toLocaleDateString("es-CO")}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-center font-bold text-xs text-slate-900">{p.dias} días</TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500 max-w-[250px] truncate">{p.observaciones || "-"}</TableCell>
+                      <TableCell className="px-4 py-3">
+                        <EstadoBadge estado={p.estado} />
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        {p.estado === "Pendiente" && (
+                          <div className="flex justify-end gap-1.5">
+                            <Button
+                              size="xs"
+                              variant="success"
+                              onClick={() =>
+                                updateEstadoPermiso(p.id, "Aprobado").catch((err: any) =>
+                                  toast.error(err.message || "Error al aprobar."),
+                                )
+                              }
+                              className="h-7 text-[11px]"
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="destructive"
+                              onClick={() =>
+                                updateEstadoPermiso(p.id, "Rechazado").catch((err: any) =>
+                                  toast.error(err.message || "Error al rechazar."),
+                                )
+                              }
+                              className="h-7 text-[11px]"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" /> Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+              {filteredPermisos.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="p-0">
+                    {loading ? (
+                      <div className="py-12 text-center text-xs text-slate-500">Cargando permisos...</div>
+                    ) : error ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : (
+                      <EmptyState
+                        icon={Calendar}
+                        title="No hay solicitudes de permiso registradas"
+                        description='Haz clic en "Solicitar Permiso" para crear la primera.'
+                        action={
+                          <Button size="sm" onClick={() => setModalPermisoOpen(true)} className="gap-2">
+                            <Plus className="h-4 w-4" /> Solicitar Permiso
+                          </Button>
+                        }
+                      />
                     )}
-                    {grupo.filas.map((p) => (
-                  <tr key={p.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-bold text-slate-900">{p.nombreEmpleado}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-blue-800">{p.tipoPermiso}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-slate-600">
-                      {new Date(p.fechaInicio).toLocaleDateString("es-CO")} al{" "}
-                      {new Date(p.fechaFin).toLocaleDateString("es-CO")}
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold text-xs text-slate-900">
-                      {p.dias} días
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 max-w-[250px] truncate">
-                      {p.observaciones || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <EstadoBadge estado={p.estado} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {p.estado === "Pendiente" && (
-                        <div className="flex justify-end gap-1.5">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                              updateEstadoPermiso(p.id, "Aprobado").catch((err: any) =>
-                                toast.error(err.message || "Error al aprobar."),
-                              )
-                            }
-                            className="h-7 text-[11px] font-bold border-slate-300 text-slate-700 hover:bg-slate-100"
-                          >
-                            <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                              updateEstadoPermiso(p.id, "Rechazado").catch((err: any) =>
-                                toast.error(err.message || "Error al rechazar."),
-                              )
-                            }
-                            className="h-7 text-[11px] font-bold border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white"
-                          >
-                            <XCircle className="h-3 w-3 mr-1" /> Rechazar
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                    ))}
-                  </Fragment>
-                ))}
-                {filteredPermisos.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-12 text-center text-xs text-slate-500">
-                      <Calendar className="h-8 w-8 mx-auto mb-2 opacity-30 text-slate-400" />
-                      {loading
-                        ? "Cargando permisos..."
-                        : error || 'No hay solicitudes de permiso registradas. Haz clic en "Solicitar Permiso".'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -656,67 +658,69 @@ function GestionHumana() {
               opciones={[OPCION_SIN_AGRUPAR, { value: "gravedad", label: "Gravedad" }]}
             />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                <tr>
-                  <th className="px-4 py-3.5">Fecha</th>
-                  <th className="px-4 py-3.5">Colaborador</th>
-                  <th className="px-4 py-3.5">Gravedad</th>
-                  <th className="px-4 py-3.5">Motivo de la Falta</th>
-                  <th className="px-4 py-3.5">Descargos presentados</th>
-                  <th className="px-4 py-3.5">Registrado Por</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                {gruposFaltas.map((grupo) => (
-                  <Fragment key={grupo.clave || "sin-grupo"}>
-                    {grupo.clave && (
-                      <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />
+          <Table>
+            <TableHeader className="bg-slate-100/80">
+              <TableRow className="hover:bg-slate-100/80">
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fecha</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Gravedad</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Motivo de la Falta</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Descargos presentados</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Registrado Por</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="text-slate-800 font-medium">
+              {gruposFaltas.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />}
+                  {grupo.filas.map((f) => (
+                    <TableRow key={f.id}>
+                      <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">
+                        {new Date(f.fecha).toLocaleDateString("es-CO")}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 font-bold text-slate-900">{f.nombreEmpleado}</TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className={
+                            f.gravedad === "Muy Grave"
+                              ? "border-transparent bg-slate-900 text-white"
+                              : f.gravedad === "Grave"
+                                ? "border-slate-400 bg-slate-200 text-slate-900"
+                                : "border-slate-200 bg-slate-50 text-slate-600"
+                          }
+                        >
+                          {f.gravedad}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800 max-w-[280px]">{f.motivo}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500 max-w-[250px] italic">
+                        {f.descargos || "Sin descargos registrados"}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500">{f.registradoPor}</TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+              {filteredFaltas.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6} className="p-0">
+                    {loading ? (
+                      <div className="py-12 text-center text-xs text-slate-500">Cargando...</div>
+                    ) : error ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : (
+                      <EmptyState
+                        icon={AlertTriangle}
+                        title="No hay faltas o strikes registrados en esta empresa"
+                        description="Excelente historial disciplinario."
+                      />
                     )}
-                    {grupo.filas.map((f) => (
-                  <tr key={f.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {new Date(f.fecha).toLocaleDateString("es-CO")}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900">{f.nombreEmpleado}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-md px-2.5 py-0.5 text-[11px] font-bold border ${
-                          f.gravedad === "Muy Grave"
-                            ? "bg-slate-900 text-white border-slate-900"
-                            : f.gravedad === "Grave"
-                              ? "bg-slate-200 text-slate-900 border-slate-400"
-                              : "bg-slate-50 text-slate-600 border-slate-200"
-                        }`}
-                      >
-                        {f.gravedad}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-800 max-w-[280px]">
-                      {f.motivo}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 max-w-[250px] italic">
-                      {f.descargos || "Sin descargos registrados"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{f.registradoPor}</td>
-                  </tr>
-                    ))}
-                  </Fragment>
-                ))}
-                {filteredFaltas.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-12 text-center text-xs text-slate-500">
-                      <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-40 text-slate-400" />
-                      {loading
-                        ? "Cargando..."
-                        : error || "Excelente. No hay faltas o strikes registrados en esta empresa."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -730,17 +734,17 @@ function GestionHumana() {
               empresa activa.
             </p>
           </div>
-          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
-            <Mail className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="text-xs font-medium">
+          <Alert variant="warning">
+            <Mail className="h-4 w-4" />
+            <AlertDescription className="text-xs">
               <p className="font-bold">Esta función todavía no está disponible.</p>
-              <p className="mt-1 text-amber-800">
+              <p className="mt-1">
                 El envío de comunicados requiere conectar un proveedor de correo (SMTP o un servicio
                 como Resend/SendGrid) en el backend. Por ahora no hay ningún mecanismo de envío
                 implementado, así que preferimos no mostrar un formulario que aparente funcionar.
               </p>
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
@@ -912,11 +916,7 @@ function GestionHumana() {
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
-              >
+              <Button type="submit" size="sm">
                 Guardar Colaborador
               </Button>
             </DialogFooter>
@@ -973,11 +973,7 @@ function GestionHumana() {
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
-              >
+              <Button type="submit" size="sm">
                 Actualizar Salario
               </Button>
             </DialogFooter>
@@ -1098,11 +1094,7 @@ function GestionHumana() {
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
-              >
+              <Button type="submit" size="sm">
                 Crear Solicitud
               </Button>
             </DialogFooter>
@@ -1222,7 +1214,7 @@ function GestionHumana() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminandoEmpleado}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarEmpleado}
               disabled={eliminandoEmpleado}
             >

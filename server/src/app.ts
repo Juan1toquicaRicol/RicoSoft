@@ -46,6 +46,19 @@ export function createApp() {
 
   const app = express();
 
+  // Sin esto, detrás de un reverse proxy/load balancer (nginx, ALB, etc.)
+  // req.ip siempre resuelve a la IP del proxy, no la del cliente real: el
+  // rate-limit anti fuerza-bruta de /login (por IP) terminaría tratando a
+  // TODOS los usuarios como una sola IP, bloqueando la app entera tras pocos
+  // intentos fallidos de cualquiera. "1" = confiar solo en el primer salto
+  // (el proxy que hace terminación TLS delante de este proceso), no en
+  // cualquier X-Forwarded-For que mande el cliente directamente.
+  // Solo en producción: en desarrollo no hay proxy y confiar en XFF sin uno
+  // permitiría a cualquiera falsificar su IP aparente y evadir el rate-limit.
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
+
   app.use(helmet());
   app.use(
     cors(

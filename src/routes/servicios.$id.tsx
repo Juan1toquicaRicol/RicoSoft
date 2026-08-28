@@ -15,7 +15,8 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/data";
 import { useServicio, useServicios } from "@/hooks/use-servicios";
@@ -140,9 +141,9 @@ function DetalleServicio() {
 
             {servicio.contratoRel && (
               <div className="mb-4">
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1">
                   <FileSignature className="h-3.5 w-3.5" /> Contrato con {servicio.contratoRel.proveedor}
-                </span>
+                </Badge>
               </div>
             )}
 
@@ -183,40 +184,38 @@ function DetalleServicio() {
                 Este servicio todavía no tiene facturas asociadas.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                    <tr>
-                      <th className="py-2.5 pr-3">Factura</th>
-                      <th className="py-2.5 pr-3">Emisión</th>
-                      <th className="py-2.5 pr-3">Vencimiento</th>
-                      <th className="py-2.5 pr-3 text-right">Valor</th>
-                      <th className="py-2.5 pr-3">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-                    {facturas.map((f) => (
-                      <tr key={f.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 pr-3">
-                          <Link to="/facturas/$id" params={{ id: f.id }} className="font-bold text-blue-800 hover:underline">
-                            {f.numero}
-                          </Link>
-                        </td>
-                        <td className="py-2.5 pr-3 font-mono text-slate-500">
-                          {new Date(f.fecha).toLocaleDateString("es-CO")}
-                        </td>
-                        <td className="py-2.5 pr-3 font-mono text-slate-500">
-                          {new Date(f.vence).toLocaleDateString("es-CO")}
-                        </td>
-                        <td className="num py-2.5 pr-3 text-right font-bold text-slate-900">{money(f.total, f.moneda)}</td>
-                        <td className="py-2.5 pr-3">
-                          <EstadoBadge estado={f.estado} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table>
+                <TableHeader className="bg-slate-100/80">
+                  <TableRow className="hover:bg-slate-100/80">
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Factura</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Emisión</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Vencimiento</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3 text-right">Valor</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Estado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="text-slate-800 font-medium">
+                  {facturas.map((f) => (
+                    <TableRow key={f.id}>
+                      <TableCell className="py-2.5 pr-3">
+                        <Link to="/facturas/$id" params={{ id: f.id }} className="font-bold text-blue-800 hover:underline">
+                          {f.numero}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
+                        {new Date(f.fecha).toLocaleDateString("es-CO")}
+                      </TableCell>
+                      <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
+                        {new Date(f.vence).toLocaleDateString("es-CO")}
+                      </TableCell>
+                      <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">{money(f.total, f.moneda)}</TableCell>
+                      <TableCell className="py-2.5 pr-3">
+                        <EstadoBadge estado={f.estado} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>
@@ -236,12 +235,12 @@ function DetalleServicio() {
                     <span className="flex items-center gap-1.5 font-semibold">
                       {money(m.total)}
                       {m.variacion > 0 && (
-                        <span className="flex items-center text-amber-600" title={`Subió ${money(m.variacion)} vs. el mes anterior`}>
+                        <span className="flex items-center text-slate-900" title={`Subió ${money(m.variacion)} vs. el mes anterior`}>
                           <ArrowUp className="h-3 w-3" />
                         </span>
                       )}
                       {m.variacion < 0 && (
-                        <span className="flex items-center text-emerald-600" title={`Bajó ${money(-m.variacion)} vs. el mes anterior`}>
+                        <span className="flex items-center text-slate-400" title={`Bajó ${money(-m.variacion)} vs. el mes anterior`}>
                           <ArrowDown className="h-3 w-3" />
                         </span>
                       )}

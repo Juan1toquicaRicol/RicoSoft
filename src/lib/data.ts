@@ -2,7 +2,15 @@
 
 export type EstadoFactura = "Pendiente" | "Aprobada" | "Pagada" | "Rechazada";
 
-export type Prioridad = "Baja" | "Media" | "Alta" | "Crítica" | "Urgente";
+export const PrioridadOptions = {
+  Baja: "Baja",
+  Media: "Media",
+  Alta: "Alta",
+  Crítica: "Crítica",
+  Urgente: "Urgente",
+} as const;
+
+export type Prioridad = (typeof PrioridadOptions)[keyof typeof PrioridadOptions];
 
 export interface Factura {
   id: string;
@@ -101,7 +109,8 @@ export interface FaltaStrike {
   registradoPor: string;
 }
 
-export type EstadoSolicitudCompra = "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado";
+export type EstadoSolicitudCompra =
+  "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado";
 
 export interface SolicitudCompra {
   id: string;
@@ -132,7 +141,16 @@ export interface SolicitudCompra {
   factura?: { id: string; numero: string; estado: string } | null;
 }
 
-export type AreaEmpresa = "Sistemas" | "Comercial" | "Produccion" | "Gestion Humana" | "Contabilidad" | "Mantenimiento" | "Compras" | "Logistica" | "Gerencia";
+export type AreaEmpresa =
+  | "Sistemas"
+  | "Comercial"
+  | "Produccion"
+  | "Gestion Humana"
+  | "Contabilidad"
+  | "Mantenimiento"
+  | "Compras"
+  | "Logistica"
+  | "Gerencia";
 
 export type PeriodicidadServicio = "Mensual" | "Anual" | "Trimestral";
 
@@ -169,7 +187,9 @@ export function money(value: number, moneda = "COP") {
 }
 
 export function compact(value: number) {
-  return new Intl.NumberFormat("es-CO", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat("es-CO", { notation: "compact", maximumFractionDigits: 1 }).format(
+    value,
+  );
 }
 
 // --- Créditos de clientes ---
@@ -183,4 +203,3 @@ export interface CreditoCliente {
   vence: string;
   estado: EstadoCredito;
 }
-

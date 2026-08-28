@@ -4,9 +4,11 @@ import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
@@ -169,7 +171,7 @@ function ServiciosPage() {
       title="Servicios y Suscripciones Activas"
       description="Inventario de licencias SaaS, infraestructura y servicios recurrentes categorizados por área."
       actions={
-        <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold">
+        <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" /> Registrar Servicio / Suscripción
         </Button>
       }
@@ -213,98 +215,110 @@ function ServiciosPage() {
             ]}
           />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5">Servicio / Licencia</th>
-                <th className="px-4 py-3.5">Empresa</th>
-                <th className="px-4 py-3.5">Área Categorizada</th>
-                <th className="px-4 py-3.5">Proveedor</th>
-                <th className="px-4 py-3.5">Periodicidad</th>
-                <th className="px-4 py-3.5 text-right">Costo</th>
-                <th className="px-4 py-3.5">Próxima Renovación</th>
-                <th className="px-4 py-3.5">Estado</th>
-                <th className="px-4 py-3.5 text-right">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {gruposSuscripciones.map((grupo) => (
-                <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && (
-                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
-                  )}
-                  {grupo.filas.map((sub) => (
-                <tr key={sub.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-bold text-xs text-slate-900">
-                    <Link to="/servicios/$id" params={{ id: sub.id }} className="hover:underline hover:text-blue-800">
-                      {sub.nombreServicio}
-                    </Link>
-                    <p className="text-[10px] text-slate-400 font-normal">Resp: {sub.responsableArea}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-800">{sub.empresaId}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{sub.area}</span>
-                  </td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-800">{sub.proveedor}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500 font-medium">{sub.periodicidad}</td>
-                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                    {money(sub.costo, sub.moneda)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-mono text-xs text-slate-500">{sub.fechaRenovacion}</p>
-                    {sub.estado === "Activo" && (
-                      <BarraVencimiento fecha={sub.fechaRenovacion} etiquetaVencido="Venció" className="mt-1" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={sub.estado} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1.5">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() =>
-                          toggleEstadoSuscripcion(sub.id).catch((err: any) =>
-                            toast.error(err.message || "Error al cambiar el estado."),
-                          )
-                        }
-                        className="h-7 text-[11px] gap-1 font-semibold border-slate-300 hover:bg-slate-100"
-                      >
-                        <Power className="h-3 w-3 text-slate-500" /> {sub.estado === "Activo" ? "Desactivar" : "Activar"}
-                      </Button>
-                      {puedeEliminar && (
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Servicio / Licencia</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Área Categorizada</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Proveedor</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Periodicidad</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Costo</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Próxima Renovación</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acción</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {gruposSuscripciones.map((grupo) => (
+              <Fragment key={grupo.clave || "sin-grupo"}>
+                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />}
+                {grupo.filas.map((sub) => (
+                  <TableRow key={sub.id}>
+                    <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
+                      <Link to="/servicios/$id" params={{ id: sub.id }} className="hover:underline hover:text-blue-800">
+                        {sub.nombreServicio}
+                      </Link>
+                      <p className="text-[10px] text-slate-400 font-normal">Resp: {sub.responsableArea}</p>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                        {sub.empresaId}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-700">
+                        {sub.area}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">{sub.proveedor}</TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-500 font-medium">{sub.periodicidad}</TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                      {money(sub.costo, sub.moneda)}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="font-mono text-xs text-slate-500">{sub.fechaRenovacion}</p>
+                      {sub.estado === "Activo" && (
+                        <BarraVencimiento fecha={sub.fechaRenovacion} etiquetaVencido="Venció" className="mt-1" />
+                      )}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={sub.estado} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1.5">
                         <Button
                           size="xs"
-                          variant="ghost"
-                          onClick={() => setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })}
-                          className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
+                          variant="outline"
+                          onClick={() =>
+                            toggleEstadoSuscripcion(sub.id).catch((err: any) =>
+                              toast.error(err.message || "Error al cambiar el estado."),
+                            )
+                          }
+                          className="h-7 text-[11px] gap-1"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Power className="h-3 w-3" /> {sub.estado === "Activo" ? "Desactivar" : "Activar"}
                         </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {filteredSuscripciones.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="p-12 text-center text-xs text-slate-500">
-                    <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-30 text-slate-400" />
-                    {loading
-                      ? "Cargando servicios..."
-                      : error || 'No hay servicios o suscripciones registradas en esta empresa. Haz clic en "Registrar Servicio / Suscripción".'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        {puedeEliminar && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })}
+                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+            {filteredSuscripciones.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={9} className="p-0">
+                  {loading ? (
+                    <div className="py-12 text-center text-xs text-slate-500">Cargando servicios...</div>
+                  ) : error ? (
+                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                  ) : (
+                    <EmptyState
+                      icon={CreditCard}
+                      title="No hay servicios o suscripciones registradas en esta empresa"
+                      description='Haz clic en "Registrar Servicio / Suscripción" para agregar el primero.'
+                      action={
+                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                          <Plus className="h-4 w-4" /> Registrar Servicio / Suscripción
+                        </Button>
+                      }
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       {/* MODAL REGISTRAR SUSCRIPCION */}
@@ -377,7 +391,7 @@ function ServiciosPage() {
               </div>
             </div>
             {proveedoresActivos.length === 0 && (
-              <p className="-mt-2 text-[11px] text-amber-600">
+              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay proveedores registrados.{" "}
                 <Link to="/configuracion/proveedores" className="font-semibold underline">
                   Créalos en Configuración
@@ -480,7 +494,7 @@ function ServiciosPage() {
               </div>
             </div>
             {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
-              <p className="-mt-2 text-[11px] text-amber-600">
+              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt; Usuarios.
               </p>
             )}
@@ -505,7 +519,7 @@ function ServiciosPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarServicio}
               disabled={eliminando}
             >

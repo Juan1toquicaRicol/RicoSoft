@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
-  Building2,
   Clock,
   FileText,
   ShoppingCart,
@@ -11,7 +10,8 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { StatCard, StatCardSkeleton } from "@/components/ui/stat-card";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { money } from "@/lib/data";
 
@@ -19,44 +19,30 @@ export const Route = createFileRoute("/")({
   component: DashboardExecutive,
 });
 
-interface StatCardProps {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tone?: "default" | "warning" | "success";
-}
-
-function StatCard({ label, value, hint, icon: Icon, tone = "default" }: StatCardProps) {
-  const toneClasses =
-    tone === "warning"
-      ? "bg-amber-50 text-amber-700 border-amber-200"
-      : tone === "success"
-        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-        : "bg-blue-50 text-blue-700 border-blue-200";
-
+/** Barra de distribución simple (sin librería de gráficos) para "N por estado". */
+function DistribucionEstados({ datos }: { datos: { etiqueta: string; valor: number }[] }) {
+  const total = datos.reduce((acc, d) => acc + d.valor, 0);
+  if (total === 0) return null;
   return (
-    <div className="panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
-          {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-        </div>
-        <div className={`shrink-0 rounded-lg border p-2.5 ${toneClasses}`}>
-          <Icon className="h-4 w-4" />
-        </div>
+    <div className="space-y-2.5">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+        {datos.map((d, i) => (
+          <div
+            key={d.etiqueta}
+            className={i % 2 === 0 ? "bg-blue-800" : "bg-slate-400"}
+            style={{ width: `${(d.valor / total) * 100}%` }}
+            title={`${d.etiqueta}: ${d.valor}`}
+          />
+        ))}
       </div>
-    </div>
-  );
-}
-
-function StatCardSkeleton() {
-  return (
-    <div className="panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
-      <Skeleton className="h-3 w-24" />
-      <Skeleton className="h-7 w-20" />
-      <Skeleton className="h-3 w-32" />
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+        {datos.map((d, i) => (
+          <span key={d.etiqueta} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+            <span className={`h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-blue-800" : "bg-slate-400"}`} />
+            {d.etiqueta} <span className="font-bold text-slate-900">{d.valor}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -74,9 +60,10 @@ function DashboardExecutive() {
     >
       <div className="space-y-6">
         {error && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
-            No fue posible cargar todos los indicadores: {error}
-          </div>
+          <Alert variant="warning">
+            <AlertTriangle />
+            <AlertDescription>No fue posible cargar todos los indicadores: {error}</AlertDescription>
+          </Alert>
         )}
 
         {loading && (
@@ -104,7 +91,6 @@ function DashboardExecutive() {
                 value={String(facturas.porEstado["Aprobada"] ?? 0)}
                 hint={money(facturas.valorAprobado)}
                 icon={TrendingUp}
-                tone="success"
               />
               <StatCard
                 label="Pagadas"
@@ -117,7 +103,7 @@ function DashboardExecutive() {
                 value={String(facturas.vencidas)}
                 hint="Pendientes o aprobadas con fecha de vencimiento superada"
                 icon={AlertTriangle}
-                tone={facturas.vencidas > 0 ? "warning" : "default"}
+                enfasis={facturas.vencidas > 0 ? "atencion" : "default"}
               />
             </div>
 
@@ -149,8 +135,14 @@ function DashboardExecutive() {
             <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
               <ShoppingCart className="h-4 w-4 text-slate-400" /> Solicitudes de compra
             </h2>
-            <div className="panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <div className="panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+              <DistribucionEstados
+                datos={["Pendiente", "En Cotización", "Aprobada", "Rechazada", "Comprado"].map((etiqueta) => ({
+                  etiqueta,
+                  valor: solicitudes.porEstado[etiqueta] ?? 0,
+                }))}
+              />
+              <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-slate-100 pt-4">
                 {["Pendiente", "En Cotización", "Aprobada", "Rechazada", "Comprado"].map(
                   (estado) => (
                     <div key={estado}>
@@ -184,7 +176,7 @@ function DashboardExecutive() {
                 label="Créditos por vencer / vencidos"
                 value={String(creditos.pendientes)}
                 icon={AlertTriangle}
-                tone={creditos.pendientes > 0 ? "warning" : "default"}
+                enfasis={creditos.pendientes > 0 ? "atencion" : "default"}
               />
             </div>
             {creditos.topDeudores.length > 0 && (
@@ -237,7 +229,7 @@ function DashboardExecutive() {
             <Link to="/facturas" className="block">
               <div className="panel p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-500 transition-all cursor-pointer">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-slate-100 text-slate-700 rounded-lg">
+                  <div className="p-3 bg-blue-50 text-blue-700 rounded-lg">
                     <FileText className="h-6 w-6" />
                   </div>
                   <div>
@@ -251,7 +243,7 @@ function DashboardExecutive() {
             <Link to="/solicitudes-compra" className="block">
               <div className="panel p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-500 transition-all cursor-pointer">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-slate-900 text-white rounded-lg">
+                  <div className="p-3 bg-blue-50 text-blue-700 rounded-lg">
                     <ShoppingCart className="h-6 w-6" />
                   </div>
                   <div>

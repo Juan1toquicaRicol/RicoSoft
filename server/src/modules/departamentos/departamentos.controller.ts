@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { obtenerTenantPorDominio } from "../../lib/dominios";
 
 export const listarDepartamentos = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -30,11 +31,26 @@ export const listarDepartamentos = async (req: AuthenticatedRequest, res: Respon
  * Listado público sin autenticación: usado por el formulario de registro para
  * que un usuario nuevo pueda elegir su departamento antes de tener sesión.
  * Solo expone id/nombre de departamentos activos, nada sensible.
+ *
+ * El tenant se resuelve EXCLUSIVAMENTE por el dominio de correo (query
+ * ?dominio=), nunca por tenant.findFirst() ni ningún otro criterio
+ * arbitrario: cada dominio corporativo solo puede ver los departamentos de
+ * SU propia empresa (departamento.tenantId === tenant identificado por
+ * dominio), nunca los de otra. Si el dominio no está mapeado a ningún tenant
+ * (o ese tenant está desactivado) se devuelve una lista vacía en vez de un
+ * error, para no revelar qué dominios sí están configurados en el sistema.
  */
-export const listarDepartamentosPublico = async (_req: Request, res: Response) => {
+export const listarDepartamentosPublico = async (req: Request, res: Response) => {
   try {
-    const tenant = await prisma.tenant.findFirst();
-    if (!tenant) return res.json([]);
+    const dominio = typeof req.query.dominio === "string" ? req.query.dominio.trim().toLowerCase() : "";
+    if (!dominio) {
+      return res.status(400).json({ message: "Falta indicar el dominio de correo (?dominio=)." });
+    }
+
+    const tenant = await obtenerTenantPorDominio(dominio);
+    if (!tenant || !tenant.activo) {
+      return res.json([]);
+    }
 
     const departamentos = await prisma.departamento.findMany({
       where: { tenantId: tenant.id, activo: true },
@@ -45,6 +61,30 @@ export const listarDepartamentosPublico = async (_req: Request, res: Response) =
     return res.json(departamentos);
   } catch (error) {
     console.error("Error al listar departamentos públicos:", error);
+    return res.status(500).json({ message: "Error al obtener departamentos." });
+  }
+};
+
+/**
+ * Departamentos activos (id + nombre) del tenant del usuario autenticado, sin
+ * exigir el permiso administrativo "departamentos.ver" — para poblar el
+ * select de "Área" en formularios operativos (Facturas, Solicitudes de
+ * Compra, Servicios, Gestión Humana) que cualquier usuario logueado puede
+ * llenar. A diferencia de /departamentos/publico (sin sesión, resuelto por
+ * dominio de correo), acá el tenant sale de req.user!.tenantId — nunca del
+ * body ni de query params.
+ */
+export const listarDepartamentosPropios = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const departamentos = await prisma.departamento.findMany({
+      where: { tenantId, activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+    return res.json(departamentos);
+  } catch (error) {
+    console.error("Error al listar departamentos propios:", error);
     return res.status(500).json({ message: "Error al obtener departamentos." });
   }
 };

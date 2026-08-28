@@ -4,7 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -89,7 +90,7 @@ function Reglas() {
       title="Motor de reglas"
       description="Distribución automática de facturas según condiciones de negocio"
       actions={
-        <Button size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold" onClick={() => setModalOpen(true)}>
+        <Button size="sm" className="gap-2" onClick={() => setModalOpen(true)}>
           <Plus className="h-4 w-4" /> Nueva regla
         </Button>
       }
@@ -122,7 +123,7 @@ function Reglas() {
                     size="xs"
                     variant="ghost"
                     onClick={() => setReglaAEliminar({ id: r.id, nombre: r.nombre })}
-                    className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
+                    className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -158,8 +159,23 @@ function Reglas() {
           </div>
         ))}
         {reglas.length === 0 && (
-          <div className="panel p-12 text-center text-xs text-slate-500 bg-white border-slate-200">
-            {loading ? "Cargando reglas..." : error || 'No hay reglas configuradas. Haz clic en "Nueva regla".'}
+          <div className="panel bg-white border-slate-200">
+            {loading ? (
+              <p className="p-12 text-center text-xs text-slate-500">Cargando reglas...</p>
+            ) : error ? (
+              <p className="p-12 text-center text-xs text-slate-500">{error}</p>
+            ) : (
+              <EmptyState
+                icon={ArrowRight}
+                title="No hay reglas configuradas"
+                description='Haz clic en "Nueva regla" para automatizar la distribución de facturas.'
+                action={
+                  <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                    <Plus className="h-4 w-4" /> Nueva regla
+                  </Button>
+                }
+              />
+            )}
           </div>
         )}
       </div>
@@ -227,7 +243,7 @@ function Reglas() {
               <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold">
+              <Button type="submit" size="sm">
                 Crear regla
               </Button>
             </DialogFooter>
@@ -246,7 +262,7 @@ function Reglas() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarRegla}
               disabled={eliminando}
             >

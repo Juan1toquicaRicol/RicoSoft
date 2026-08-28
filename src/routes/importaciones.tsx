@@ -4,10 +4,12 @@ import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -178,7 +180,7 @@ function ImportacionesPage() {
       description="Órdenes de compra internacional, trazabilidad de lotes por BL/AWB y costeo landed bajo NIC 2/21."
       actions={
         puedeCrear && (
-          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold">
+          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
             <Plus className="h-4 w-4" /> Nueva Orden de Compra Internacional
           </Button>
         )
@@ -221,86 +223,95 @@ function ImportacionesPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5">Orden</th>
-                <th className="px-4 py-3.5">Proveedor / País</th>
-                <th className="px-4 py-3.5">Incoterm</th>
-                <th className="px-4 py-3.5 text-right">FOB estimado</th>
-                <th className="px-4 py-3.5">Estado orden</th>
-                <th className="px-4 py-3.5">Estado mercancía</th>
-                <th className="px-4 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {gruposOrdenes.map((grupo) => (
-                <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && (
-                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />
-                  )}
-                  {grupo.filas.map((o) => (
-                <tr key={o.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-bold text-xs">
-                    <Link to="/importaciones/$id" params={{ id: o.id }} className="text-blue-800 hover:underline">
-                      {o.numeroOrden}
-                    </Link>
-                    <p className="text-[10px] text-slate-400 font-normal">{o.lotes.length} lote(s)</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-bold text-slate-900 truncate max-w-[220px]">{o.proveedorExtranjero}</p>
-                    <p className="text-[10px] text-slate-500">{o.paisOrigen}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-800">
-                      {o.incoterm}
-                    </span>
-                  </td>
-                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                    {money(o.valorEstimadoTotal, "COP")}
-                  </td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={o.estado} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={estadoResumenLotes(o)} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1.5">
-                      <Link to="/importaciones/$id" params={{ id: o.id }}>
-                        <Button size="xs" variant="outline" className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50">
-                          Ver detalle
-                        </Button>
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Orden</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Proveedor / País</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Incoterm</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">FOB estimado</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado orden</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado mercancía</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {gruposOrdenes.map((grupo) => (
+              <Fragment key={grupo.clave || "sin-grupo"}>
+                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />}
+                {grupo.filas.map((o) => (
+                  <TableRow key={o.id}>
+                    <TableCell className="px-4 py-3 font-bold text-xs">
+                      <Link to="/importaciones/$id" params={{ id: o.id }} className="text-blue-800 hover:underline">
+                        {o.numeroOrden}
                       </Link>
-                      {puedeEliminar && o.estado !== "Anulada" && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setOrdenAAnular({ id: o.id, numeroOrden: o.numeroOrden })}
-                          className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
-                        >
-                          <Trash2 className="h-3 w-3" />
+                      <p className="text-[10px] text-slate-400 font-normal">{o.lotes.length} lote(s)</p>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="font-bold text-slate-900 truncate max-w-[220px]">{o.proveedorExtranjero}</p>
+                      <p className="text-[10px] text-slate-500">{o.paisOrigen}</p>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                        {o.incoterm}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                      {money(o.valorEstimadoTotal, "COP")}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={o.estado} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={estadoResumenLotes(o)} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1.5">
+                        <Link to="/importaciones/$id" params={{ id: o.id }}>
+                          <Button size="xs" variant="outline" className="h-7 text-[11px]">
+                            Ver detalle
+                          </Button>
+                        </Link>
+                        {puedeEliminar && o.estado !== "Anulada" && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setOrdenAAnular({ id: o.id, numeroOrden: o.numeroOrden })}
+                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+            {filteredOrdenes.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={7} className="p-0">
+                  {loading ? (
+                    <div className="py-12 text-center text-xs text-slate-500">Cargando órdenes de compra internacionales...</div>
+                  ) : error ? (
+                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                  ) : (
+                    <EmptyState
+                      icon={Ship}
+                      title="No hay órdenes registradas para el filtro seleccionado"
+                      description='Haz clic en "Nueva Orden de Compra Internacional" para crear la primera.'
+                      action={
+                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                          <Plus className="h-4 w-4" /> Nueva Orden de Compra Internacional
                         </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {filteredOrdenes.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-12 text-center text-xs text-slate-500">
-                    {loading
-                      ? "Cargando órdenes de compra internacionales..."
-                      : error || 'No hay órdenes registradas para el filtro seleccionado. Haz clic en "Nueva Orden de Compra Internacional".'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                      }
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       {/* MODAL NUEVA ORDEN */}
@@ -402,20 +413,20 @@ function ImportacionesPage() {
                   <Plus className="h-3 w-3 mr-1" /> Agregar ítem
                 </Button>
               </div>
-              <div className="overflow-x-auto rounded-md border border-slate-200">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead className="bg-slate-50 text-slate-600 font-bold">
-                    <tr>
-                      <th className="px-2 py-2">Descripción</th>
-                      <th className="px-2 py-2 w-24">Cantidad</th>
-                      <th className="px-2 py-2 w-28">Valor FOB unit.</th>
-                      <th className="px-2 py-2 w-8" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow className="hover:bg-slate-50">
+                      <TableHead className="text-slate-600 font-bold px-2 py-2">Descripción</TableHead>
+                      <TableHead className="text-slate-600 font-bold px-2 py-2 w-24">Cantidad</TableHead>
+                      <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">Valor FOB unit.</TableHead>
+                      <TableHead className="w-8" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-2 py-1.5">
+                      <TableRow key={idx}>
+                        <TableCell className="px-2 py-1.5">
                           <Input
                             required
                             value={item.descripcion}
@@ -426,8 +437,8 @@ function ImportacionesPage() {
                             }}
                             className="h-8 text-[11px] border-slate-300"
                           />
-                        </td>
-                        <td className="px-2 py-1.5">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5">
                           <Input
                             type="number"
                             step="0.01"
@@ -440,8 +451,8 @@ function ImportacionesPage() {
                             }}
                             className="h-8 text-[11px] border-slate-300"
                           />
-                        </td>
-                        <td className="px-2 py-1.5">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5">
                           <Input
                             type="number"
                             step="0.01"
@@ -454,22 +465,22 @@ function ImportacionesPage() {
                             }}
                             className="h-8 text-[11px] border-slate-300"
                           />
-                        </td>
-                        <td className="px-2 py-1.5 text-right">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5 text-right">
                           {items.length > 1 && (
                             <button
                               type="button"
                               onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                              className="text-red-600 hover:text-red-800"
+                              className="text-slate-400 hover:text-slate-900"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
               <p className="text-[11px] text-slate-500">
                 FOB total: <strong>{money(fobTotal, form.moneda)}</strong> · Estimado en COP (FOB × TRM, sin arancel/flete aún): <strong>{money(estimadoCop, "COP")}</strong>
@@ -490,7 +501,7 @@ function ImportacionesPage() {
               <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)} disabled={guardando}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold" disabled={guardando}>
+              <Button type="submit" size="sm" disabled={guardando}>
                 {guardando ? "Guardando..." : "Registrar Orden"}
               </Button>
             </DialogFooter>
@@ -508,7 +519,7 @@ function ImportacionesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={anulando}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleAnular} disabled={anulando}>
+            <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={handleAnular} disabled={anulando}>
               {anulando ? "Anulando..." : "Anular"}
             </AlertDialogAction>
           </AlertDialogFooter>

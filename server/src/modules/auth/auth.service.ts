@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma";
 import { loadSessionUser, listarTenantsAccesibles, TenantAccesible, SessionUser } from "../../lib/permissions";
-import { esDominioCorporativoValido } from "../../lib/dominios";
+import { esDominioCorporativoValido, obtenerTenantPorCorreo } from "../../lib/dominios";
 import { validarPasswordSegura } from "../../lib/password";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -25,7 +25,11 @@ export const registerUserService = async (data: {
 }) => {
   const { nombre, email, password, departamentoId } = data;
 
-  // Validar el dominio del correo
+  // Validar el dominio del correo. esDominioCorporativoValido es solo un
+  // filtro rápido de formato ("¿es un dominio corporativo reconocido en
+  // general?"); a qué EMPRESA pertenece ese dominio se resuelve después,
+  // contra Tenant.dominioCorporativo en la base de datos — nunca con
+  // tenant.findFirst() ni ningún otro criterio arbitrario.
   const emailLimpio = email.trim().toLowerCase();
 
   if (!esDominioCorporativoValido(emailLimpio)) {
@@ -55,11 +59,19 @@ export const registerUserService = async (data: {
   // Encriptar la contraseña
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Buscar el Tenant por defecto
-  const tenant = await prisma.tenant.findFirst();
-
+  // El tenant SIEMPRE sale del dominio del correo, resuelto en la base de
+  // datos (Tenant.dominioCorporativo). Si el dominio pasó el filtro de
+  // formato de arriba pero ningún tenant lo tiene configurado todavía (o el
+  // tenant está desactivado), se rechaza el registro explícitamente — nunca
+  // se cae a "el primer tenant que exista" ni a un tenant por defecto.
+  const tenant = await obtenerTenantPorCorreo(emailLimpio);
   if (!tenant) {
-    throw new Error("No existe ningún Tenant/Empresa registrado en la base de datos.");
+    throw new Error(
+      "Tu dominio de correo no tiene una empresa asociada en el sistema todavía. Contacta al administrador.",
+    );
+  }
+  if (!tenant.activo) {
+    throw new Error("La empresa asociada a tu correo no está activa actualmente. Contacta al administrador.");
   }
 
   // El departamento debe existir y pertenecer al mismo tenant y estar activo
@@ -70,7 +82,10 @@ export const registerUserService = async (data: {
     throw new Error("El departamento seleccionado no es válido.");
   }
 
-  // Crear el usuario en SQL Server
+  // Crear el usuario en SQL Server. rol/isSuperadmin/rolId NUNCA se toman del
+  // body de la petición (ni siquiera están en la firma de esta función): un
+  // autoregistro siempre entra como colaborador sin rol asignado, con cero
+  // permisos hasta que un administrador se lo dé explícitamente.
   const nuevoUsuario = await prisma.user.create({
     data: {
       nombre,
@@ -87,6 +102,18 @@ export const registerUserService = async (data: {
       email: true,
       tenantId: true,
       createdAt: true,
+    },
+  });
+
+  await prisma.auditoria.create({
+    data: {
+      tenantId: tenant.id,
+      usuarioId: nuevoUsuario.id,
+      usuarioAfectado: nuevoUsuario.email,
+      accion: "USUARIO_AUTOREGISTRADO",
+      detalle: `${nuevoUsuario.nombre} se autoregistró en ${tenant.nombre} (dominio de correo).`,
+      entidadTipo: "User",
+      entidadId: nuevoUsuario.id,
     },
   });
 
@@ -136,6 +163,19 @@ export const loginUserService = async (data: { email: string; password: string }
   const esPasswordValida = await bcrypt.compare(password, usuario.passwordHash);
 
   if (!esPasswordValida) {
+    // Solo se audita el intento fallido cuando ya sabemos a qué usuario/
+    // tenant reales corresponde (Auditoria exige usuarioId y tenantId no
+    // nulos) — un intento contra un correo que no existe no puede auditarse
+    // en esta tabla; ver nota en el reporte de seguridad sobre esa limitación.
+    await prisma.auditoria.create({
+      data: {
+        tenantId: usuario.tenantId,
+        usuarioId: usuario.id,
+        usuarioAfectado: usuario.email,
+        accion: "LOGIN_FALLIDO",
+        detalle: `Intento de inicio de sesión con contraseña incorrecta para ${usuario.email}.`,
+      },
+    });
     throw new Error("Credenciales inválidas. Correo o contraseña incorrectos.");
   }
 

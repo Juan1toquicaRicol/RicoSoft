@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Users, Search, RefreshCw, UserCheck, UserX, Shield, Eye, Trash2, UserPlus, Building2, X } from "lucide-react";
+import { Users, Search, RefreshCw, UserCheck, UserX, Shield, Eye, Trash2, UserPlus, Building2, X, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
@@ -10,7 +10,8 @@ import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { validarPasswordSegura } from "@/lib/password";
 import { esDominioCorporativoValido } from "@/lib/dominios";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -664,8 +665,18 @@ function UsuariosConfigPage() {
           </DialogHeader>
 
           <div className="space-y-5">
-            {errorModal && <p className="text-sm text-red-600">{errorModal}</p>}
-            {okModal && <p className="text-sm text-emerald-600">{okModal}</p>}
+            {errorModal && (
+              <Alert variant="warning">
+                <AlertTriangle />
+                <AlertDescription>{errorModal}</AlertDescription>
+              </Alert>
+            )}
+            {okModal && (
+              <Alert variant="info">
+                <CheckCircle2 />
+                <AlertDescription>{okModal}</AlertDescription>
+              </Alert>
+            )}
 
             {puedeEditar && (
               <div className="space-y-2">
@@ -754,7 +765,7 @@ function UsuariosConfigPage() {
                             disabled={eliminandoMembresiaId === m.id}
                             onClick={() => handleEliminarMembresia(m)}
                           >
-                            <X className="h-3.5 w-3.5 text-red-600" />
+                            <X className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                         </div>
                       </div>
@@ -849,7 +860,7 @@ function UsuariosConfigPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarUsuario}
               disabled={eliminando}
             >
@@ -870,7 +881,12 @@ function UsuariosConfigPage() {
           </DialogHeader>
 
           <form onSubmit={handleCrearUsuario} className="space-y-4">
-            {errorNuevoUsuario && <p className="text-sm text-red-600">{errorNuevoUsuario}</p>}
+            {errorNuevoUsuario && (
+              <Alert variant="warning">
+                <AlertTriangle />
+                <AlertDescription>{errorNuevoUsuario}</AlertDescription>
+              </Alert>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="nuevo-usuario-nombre">Nombre completo *</Label>

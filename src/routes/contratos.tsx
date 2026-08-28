@@ -4,11 +4,13 @@ import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 import {
@@ -146,7 +148,7 @@ function Contratos() {
       title="Contratos de Proveedores"
       description="Supervisión de vigencias, centros de costo y montos contractuales por empresa."
       actions={
-        <Button size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold" onClick={() => setModalOpen(true)}>
+        <Button size="sm" className="gap-2" onClick={() => setModalOpen(true)}>
           <Plus className="h-4 w-4" /> Nuevo Contrato
         </Button>
       }
@@ -164,78 +166,86 @@ function Contratos() {
             ]}
           />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5">Proveedor</th>
-                <th className="px-4 py-3.5">Empresa</th>
-                <th className="px-4 py-3.5">Responsable</th>
-                <th className="px-4 py-3.5">Área</th>
-                <th className="px-4 py-3.5 text-right">Valor</th>
-                <th className="px-4 py-3.5">Vigencia</th>
-                <th className="px-4 py-3.5">Estado</th>
-                <th className="px-4 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {gruposContratos.map((grupo) => (
-                <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && (
-                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={8} />
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Proveedor</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Responsable</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Área</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Valor</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Vigencia</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {gruposContratos.map((grupo) => (
+              <Fragment key={grupo.clave || "sin-grupo"}>
+                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={8} />}
+                {grupo.filas.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">{c.proveedor}</TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                        {c.empresaId}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">{c.responsable}</TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">{c.area}</TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">{money(c.valorContratado)}</TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-500">
+                      <p className="font-mono">
+                        {new Date(c.fechaInicio).toLocaleDateString("es-CO")} –{" "}
+                        {new Date(c.fechaFin).toLocaleDateString("es-CO")}
+                      </p>
+                      {c.estado === "Activo" && (
+                        <BarraVencimiento fecha={c.fechaFin} etiquetaVencido="Venció" ventanaDias={60} className="mt-1" />
+                      )}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={c.estado} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      {puedeEliminar && (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setContratoAEliminar({ id: c.id, proveedor: c.proveedor })}
+                          className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+            {filteredContratos.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="p-0">
+                  {loading ? (
+                    <div className="py-12 text-center text-xs text-slate-500">Cargando contratos...</div>
+                  ) : error ? (
+                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                  ) : (
+                    <EmptyState
+                      icon={FileSignature}
+                      title="No hay contratos registrados"
+                      description='Haz clic en "Nuevo Contrato" para registrar el primero.'
+                      action={
+                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                          <Plus className="h-4 w-4" /> Nuevo Contrato
+                        </Button>
+                      }
+                    />
                   )}
-                  {grupo.filas.map((c) => (
-                <tr key={c.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-bold text-xs text-slate-900">{c.proveedor}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-800">
-                      {c.empresaId}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600 font-semibold">{c.responsable}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 font-semibold">{c.area}</td>
-                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">{money(c.valorContratado)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
-                    <p className="font-mono">
-                      {new Date(c.fechaInicio).toLocaleDateString("es-CO")} –{" "}
-                      {new Date(c.fechaFin).toLocaleDateString("es-CO")}
-                    </p>
-                    {c.estado === "Activo" && (
-                      <BarraVencimiento fecha={c.fechaFin} etiquetaVencido="Venció" ventanaDias={60} className="mt-1" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={c.estado} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {puedeEliminar && (
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => setContratoAEliminar({ id: c.id, proveedor: c.proveedor })}
-                        className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {filteredContratos.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="p-12 text-center text-xs text-slate-500">
-                    <FileSignature className="mx-auto h-8 w-8 text-slate-400 opacity-30 mb-2" />
-                    {loading
-                      ? "Cargando contratos..."
-                      : error || 'No hay contratos registrados. Haz clic en "Nuevo Contrato".'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -288,7 +298,7 @@ function Contratos() {
               </div>
             </div>
             {proveedoresActivos.length === 0 && (
-              <p className="-mt-2 text-[11px] text-amber-600">
+              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay proveedores registrados.{" "}
                 <Link to="/configuracion/proveedores" className="font-semibold underline">
                   Créalos en Configuración
@@ -349,7 +359,7 @@ function Contratos() {
               </div>
             </div>
             {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
-              <p className="-mt-2 text-[11px] text-amber-600">
+              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt; Usuarios.
               </p>
             )}
@@ -398,7 +408,7 @@ function Contratos() {
               <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold">
+              <Button type="submit" size="sm">
                 Registrar Contrato
               </Button>
             </DialogFooter>
@@ -418,7 +428,7 @@ function Contratos() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminarContrato}
               disabled={eliminando}
             >

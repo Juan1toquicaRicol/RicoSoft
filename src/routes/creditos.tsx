@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 import {
@@ -175,7 +177,7 @@ function Creditos() {
       description="Cupos otorgados y saldos vigentes"
       actions={
         puedeGestionar && (
-          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2 bg-blue-800 text-white hover:bg-blue-900 font-bold">
+          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
             <Plus className="h-4 w-4" /> Nuevo Crédito
           </Button>
         )
@@ -204,86 +206,83 @@ function Creditos() {
             opciones={[OPCION_SIN_AGRUPAR, { value: "estado", label: "Estado" }]}
           />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5">Cliente</th>
-                <th className="px-4 py-3.5 text-right">Cupo</th>
-                <th className="px-4 py-3.5 text-right">Saldo</th>
-                <th className="px-4 py-3.5">Vence</th>
-                <th className="px-4 py-3.5">Estado</th>
-                <th className="px-4 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {gruposCreditos.map((grupo) => (
-                <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && (
-                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cliente</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Cupo</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Saldo</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Vence</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {gruposCreditos.map((grupo) => (
+              <Fragment key={grupo.clave || "sin-grupo"}>
+                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />}
+                {grupo.filas.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">{c.cliente}</TableCell>
+                    <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">{money(c.cupo)}</TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">{money(c.saldo)}</TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-500">
+                      <p className="font-mono">{new Date(c.vence).toLocaleDateString("es-CO")}</p>
+                      {c.estado !== "Paz y Salvo" && (
+                        <BarraVencimiento fecha={c.vence} etiquetaVencido="Vencido" className="mt-1" />
+                      )}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={c.estado} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1.5">
+                        {puedeGestionar && c.estado !== "Paz y Salvo" && c.saldo > 0 && (
+                          <Button size="xs" variant="outline" onClick={() => abrirPago(c)} className="h-7 gap-1 text-[11px]">
+                            <DollarSign className="h-3 w-3" /> Registrar Pago
+                          </Button>
+                        )}
+                        {puedeGestionar && c.estado !== "Paz y Salvo" && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => setCreditoAPazYSalvo(c)}
+                            className="h-7 gap-1 text-[11px] border-blue-300 text-blue-800 hover:bg-blue-50"
+                          >
+                            <ShieldCheck className="h-3 w-3" /> Paz y Salvo
+                          </Button>
+                        )}
+                        {puedeEliminar && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setCreditoAEliminar(c)}
+                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+            {creditos.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="p-0">
+                  {loading ? (
+                    <div className="py-12 text-center text-xs text-slate-500">Cargando créditos...</div>
+                  ) : error ? (
+                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                  ) : (
+                    <EmptyState icon={DollarSign} title="No hay créditos registrados" description='Haz clic en "Nuevo Crédito" para registrar el primero.' />
                   )}
-                  {grupo.filas.map((c) => (
-                <tr key={c.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-4 py-3 font-bold text-xs text-slate-900">{c.cliente}</td>
-                  <td className="num px-4 py-3 text-right text-xs text-slate-600">{money(c.cupo)}</td>
-                  <td className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">{money(c.saldo)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
-                    <p className="font-mono">{new Date(c.vence).toLocaleDateString("es-CO")}</p>
-                    {c.estado !== "Paz y Salvo" && (
-                      <BarraVencimiento fecha={c.vence} etiquetaVencido="Vencido" className="mt-1" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <EstadoBadge estado={c.estado} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1.5">
-                      {puedeGestionar && c.estado !== "Paz y Salvo" && c.saldo > 0 && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => abrirPago(c)}
-                          className="h-7 gap-1 text-[11px] font-bold"
-                        >
-                          <DollarSign className="h-3 w-3" /> Registrar Pago
-                        </Button>
-                      )}
-                      {puedeGestionar && c.estado !== "Paz y Salvo" && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => setCreditoAPazYSalvo(c)}
-                          className="h-7 gap-1 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
-                        >
-                          <ShieldCheck className="h-3 w-3" /> Paz y Salvo
-                        </Button>
-                      )}
-                      {puedeEliminar && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setCreditoAEliminar(c)}
-                          className="h-7 text-[11px] font-bold text-red-700 hover:bg-red-50 hover:text-red-800"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {creditos.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-12 text-center text-xs text-slate-500">
-                    {loading ? "Cargando créditos..." : error || "No hay créditos registrados."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       {/* MODAL NUEVO CRÉDITO */}
@@ -349,7 +348,7 @@ function Creditos() {
               <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold">
+              <Button type="submit" size="sm">
                 Registrar Crédito
               </Button>
             </DialogFooter>
@@ -383,7 +382,7 @@ function Creditos() {
             <Button type="button" variant="outline" size="sm" onClick={() => setCreditoAPagar(null)} disabled={aplicandoPago}>
               Cancelar
             </Button>
-            <Button size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold" onClick={handleRegistrarPago} disabled={aplicandoPago}>
+            <Button size="sm" onClick={handleRegistrarPago} disabled={aplicandoPago}>
               {aplicandoPago ? "Registrando..." : "Registrar Pago"}
             </Button>
           </DialogFooter>
@@ -422,7 +421,7 @@ function Creditos() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={handleEliminar}
               disabled={eliminando}
             >

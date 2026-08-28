@@ -95,9 +95,16 @@ export const cambiarPasswordPropio = async (req: AuthenticatedRequest, res: Resp
       },
     });
 
-    const nuevoToken = jwt.sign({ sub: actualizado.id, tv: actualizado.tokenVersion }, JWT_SECRET, {
-      expiresIn: "8h",
-    });
+    // req.user!.tenantId (no usuario.tenantId) a propósito: preserva el
+    // tenant de la sesión ACTIVA. usuario.tenantId es siempre el tenant
+    // "hogar" — si se usara aquí, alguien que cambia su contraseña estando
+    // logueado en una empresa por membresía sería devuelto en silencio a su
+    // empresa hogar, sin haberlo pedido.
+    const nuevoToken = jwt.sign(
+      { sub: actualizado.id, tv: actualizado.tokenVersion, tenantId: req.user!.tenantId },
+      JWT_SECRET,
+      { expiresIn: "8h" },
+    );
 
     return res.json({ message: "Contraseña actualizada correctamente.", token: nuevoToken });
   } catch (error) {

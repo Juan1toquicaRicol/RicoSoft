@@ -22,7 +22,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -241,7 +242,7 @@ function DetalleFactura() {
               <h2 className="text-sm font-semibold">Datos Generales de la Factura</h2>
               <div className="flex items-center gap-2">
                 {factura.vencida && (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                  <span className="inline-flex items-center gap-1 rounded-md border border-transparent bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">
                     <AlertTriangle className="h-3 w-3" /> Vencida
                   </span>
                 )}
@@ -252,35 +253,32 @@ function DetalleFactura() {
             {(factura.servicio || factura.contratoRel || factura.solicitudCompraRel) && (
               <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
                 {factura.servicio && (
-                  <Link
-                    to="/servicios/$id"
-                    params={{ id: factura.servicio.id }}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 font-semibold text-blue-800 hover:bg-blue-100"
-                  >
-                    <Receipt className="h-3.5 w-3.5" /> {factura.servicio.nombre}
+                  <Link to="/servicios/$id" params={{ id: factura.servicio.id }}>
+                    <Badge variant="outline" className="gap-1.5 border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 py-1">
+                      <Receipt className="h-3.5 w-3.5" /> {factura.servicio.nombre}
+                    </Badge>
                   </Link>
                 )}
                 {factura.contratoRel && (
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">
+                  <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1">
                     <FileSignature className="h-3.5 w-3.5" /> Contrato con {factura.contratoRel.proveedor}
-                  </span>
+                  </Badge>
                 )}
                 {factura.solicitudCompraRel && (
-                  <Link
-                    to="/historia-compras"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    <ShoppingCart className="h-3.5 w-3.5" /> Solicitud: {factura.solicitudCompraRel.item}
+                  <Link to="/historia-compras">
+                    <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 py-1">
+                      <ShoppingCart className="h-3.5 w-3.5" /> Solicitud: {factura.solicitudCompraRel.item}
+                    </Badge>
                   </Link>
                 )}
               </div>
             )}
 
             {factura.alertaValor && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>{factura.alertaValor.mensaje}</span>
-              </div>
+              <Alert variant="warning" className="mb-4">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <AlertDescription className="text-xs">{factura.alertaValor.mensaje}</AlertDescription>
+              </Alert>
             )}
 
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -318,7 +316,7 @@ function DetalleFactura() {
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">
                   Total Pagado
                 </p>
-                <p className="num text-base font-semibold text-emerald-700">
+                <p className="num text-base font-semibold text-slate-900">
                   {money(totalPagado, factura.moneda)}
                 </p>
               </div>
@@ -682,7 +680,7 @@ function PagosFactura({ pagos, puedePagar, moneda, onAnular, onSubirComprobante,
                     type="button"
                     size="xs"
                     variant="ghost"
-                    className="gap-1 text-red-700 hover:bg-red-50 hover:text-red-800"
+                    className="gap-1 text-slate-500 hover:text-slate-900"
                     disabled={anulandoId === p.id}
                     onClick={() => handleAnular(p)}
                   >

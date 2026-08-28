@@ -14,6 +14,7 @@
     "sync-siesa": "tsx scripts/sync-siesa.ts",
     "explore-siesa": "tsx scripts/explore-siesa.ts",
     "otorgar-membresia": "tsx scripts/otorgar-membresia.ts",
+    "asignar-dominio-tenant": "tsx scripts/asignar-dominio-tenant.ts",
     "ci:preparar-db-integracion": "tsx scripts/ci-preparar-db-integracion.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.mts"

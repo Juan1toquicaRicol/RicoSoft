@@ -3,14 +3,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// Identidad visual monocromática: "warning"/"info" NO usan ámbar/azul-claro
+// genéricos, sino la misma paleta negro/blanco/gris + azul de acento del
+// resto del sistema (ver EstadoBadge en ui/badge.tsx). "warning" se
+// distingue por el ícono (típicamente AlertTriangle), no por color de fondo.
 const alertVariants = cva(
   "relative w-full rounded-lg border px-4 py-3 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>svg~*]:pl-7",
   {
     variants: {
       variant: {
         default: "bg-background text-foreground",
-        destructive:
-          "border-destructive/50 text-destructive [&>svg]:text-destructive",
+        destructive: "border-destructive/50 text-destructive [&>svg]:text-destructive",
+        warning: "border-slate-300 bg-slate-50 text-slate-800 [&>svg]:text-slate-500",
+        info: "border-blue-200 bg-blue-50 text-blue-900 [&>svg]:text-blue-700",
       },
     },
     defaultVariants: {

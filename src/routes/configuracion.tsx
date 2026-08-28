@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck, Users, Key, Building2, LayoutGrid, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
@@ -20,7 +21,9 @@ export const Route = createFileRoute("/configuracion")({
 });
 
 function Configuracion() {
-  const { user } = useSession();
+  const { user, loading } = useSession();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
 
   const tabs = [
     {
@@ -66,6 +69,23 @@ function Configuracion() {
       show: hasPermission(user, PERMISOS_SISTEMA.MODULOS_VER),
     },
   ] as const;
+
+  // Enforcement real de permiso por sub-ruta, contra la sesión ya verificada
+  // por el backend (useSession, no localStorage cacheado): el guard SSR de
+  // `beforeLoad` (requirePermisoGuard) no puede proteger un hard-refresh
+  // porque el servidor no tiene acceso al token guardado en localStorage.
+  // Este efecto es lo que de verdad cierra ese hueco una vez el cliente
+  // hidrata y resuelve /auth/me. No actúa mientras la sesión está cargando,
+  // y deja el caso "no autenticado en absoluto" en manos de AppShell (que ya
+  // redirige a /login) para no competir con esa redirección.
+  useEffect(() => {
+    if (loading || !user) return;
+    const tabActual = tabs.find((t) => pathname.startsWith(t.to));
+    if (tabActual && !tabActual.show) {
+      navigate({ to: "/" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user, pathname]);
 
   return (
     <AppShell

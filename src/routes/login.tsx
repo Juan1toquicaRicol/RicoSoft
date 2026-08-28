@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck, Loader2, Eye, EyeOff, User, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -57,13 +57,36 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Carga el catálogo de departamentos al entrar en modo registro
+  // Dominio del correo que se está escribiendo (derivado, no un estado
+  // propio): solo cambia de valor cuando la PARTE DEL DOMINIO del email
+  // cambia, no en cada tecla del nombre de usuario antes de la arroba.
+  const dominioEmail = useMemo(() => {
+    const d = email.trim().toLowerCase().split("@")[1];
+    return d && d.includes(".") ? d : "";
+  }, [email]);
+
+  // Carga el catálogo de departamentos de la empresa que corresponde a ese
+  // dominio (backend resuelve el tenant por Tenant.dominioCorporativo —
+  // nunca se manda un tenantId desde acá). Con debounce, y se limpia la
+  // selección previa si el dominio cambia: un departamento elegido para
+  // @ricol.com.co ya no es válido si el correo pasa a ser @flexipackdecolombia.com.
   useEffect(() => {
-    if (!isRegistering || departamentos.length > 0) return;
-    fetchApi("/departamentos/publico")
-      .then((data) => setDepartamentos(Array.isArray(data) ? data : []))
-      .catch(() => setDepartamentos([]));
-  }, [isRegistering, departamentos.length]);
+    if (!isRegistering) return;
+
+    setDepartamentoId("");
+    if (!dominioEmail) {
+      setDepartamentos([]);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      fetchApi(`/departamentos/publico?dominio=${encodeURIComponent(dominioEmail)}`)
+        .then((data) => setDepartamentos(Array.isArray(data) ? data : []))
+        .catch(() => setDepartamentos([]));
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [isRegistering, dominioEmail]);
 
   // Estados de mensajes
   const [error, setError] = useState("");

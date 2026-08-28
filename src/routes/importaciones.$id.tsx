@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -232,30 +233,28 @@ function DetalleOrdenIntl() {
         <div className="border-b border-slate-200 p-4 bg-slate-50/80">
           <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Ítems de la Orden</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-              <tr>
-                <th className="px-4 py-3">Descripción</th>
-                <th className="px-4 py-3 text-right">Cantidad</th>
-                <th className="px-4 py-3 text-right">Valor FOB unit.</th>
-                <th className="px-4 py-3 text-right">Subtotal FOB</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
-              {orden.items.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-4 py-2.5">{item.descripcion}</td>
-                  <td className="px-4 py-2.5 text-right font-mono">{item.cantidad}</td>
-                  <td className="num px-4 py-2.5 text-right">{money(item.valorUnitarioFob, orden.moneda)}</td>
-                  <td className="num px-4 py-2.5 text-right font-bold">
-                    {money(item.cantidad * item.valorUnitarioFob, orden.moneda)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">Descripción</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Cantidad</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Valor FOB unit.</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Subtotal FOB</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {orden.items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="px-4 py-2.5">{item.descripcion}</TableCell>
+                <TableCell className="px-4 py-2.5 text-right font-mono">{item.cantidad}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right">{money(item.valorUnitarioFob, orden.moneda)}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right font-bold">
+                  {money(item.cantidad * item.valorUnitarioFob, orden.moneda)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
 
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
@@ -264,7 +263,7 @@ function DetalleOrdenIntl() {
             <Ship className="h-3.5 w-3.5" /> Lotes de Embarque
           </h3>
           {puedeCrear && orden.estado !== "Anulada" && orden.estado !== "Cerrada" && (
-            <Button size="xs" onClick={() => setModalLoteOpen(true)} className="h-7 text-[11px] font-bold bg-blue-800 text-white hover:bg-blue-900">
+            <Button size="xs" onClick={() => setModalLoteOpen(true)} className="h-7 text-[11px]">
               <Plus className="h-3 w-3 mr-1" /> Registrar Lote
             </Button>
           )}
@@ -314,9 +313,10 @@ function DetalleOrdenIntl() {
                   {puedeRecibir && ESTADOS_TRANSITO_MANUAL.includes(lote.estado) && (
                     <Button
                       size="xs"
+                      variant="destructive"
                       disabled={accionEnCurso === lote.id}
                       onClick={() => handleRecibirPlanta(lote)}
-                      className="h-7 text-[11px] font-bold bg-slate-900 text-white hover:bg-slate-800"
+                      className="h-7 text-[11px]"
                     >
                       <Package className="h-3 w-3 mr-1" /> Recibir en planta (pre-compra)
                     </Button>
@@ -337,31 +337,31 @@ function DetalleOrdenIntl() {
                 </div>
 
                 {lote.costeos.length > 0 && (
-                  <div className="overflow-x-auto rounded-md border border-slate-200">
-                    <table className="w-full text-left text-[11px] border-collapse">
-                      <thead className="bg-slate-50 text-slate-600 font-bold">
-                        <tr>
-                          <th className="px-3 py-2">Ítem</th>
-                          <th className="px-3 py-2 text-right">Costo total COP</th>
-                          <th className="px-3 py-2 text-right">Costo unitario COP</th>
-                          <th className="px-3 py-2 text-right">Dif. cambio COP</th>
-                          <th className="px-3 py-2">Tipo</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
+                  <div className="rounded-md border border-slate-200 overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow className="hover:bg-slate-50">
+                          <TableHead className="text-slate-600 font-bold px-3 py-2">Ítem</TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Costo total COP</TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Costo unitario COP</TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Dif. cambio COP</TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2">Tipo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {lote.costeos.map((c) => (
-                          <tr key={c.id}>
-                            <td className="px-3 py-2">{descripcionItem(c.itemId)}</td>
-                            <td className="num px-3 py-2 text-right font-bold">{money(c.costoTotalCop, "COP")}</td>
-                            <td className="num px-3 py-2 text-right">{money(c.costoUnitarioCop, "COP")}</td>
-                            <td className="num px-3 py-2 text-right">{money(c.diferenciaCambioCop, "COP")}</td>
-                            <td className="px-3 py-2">
+                          <TableRow key={c.id}>
+                            <TableCell className="px-3 py-2">{descripcionItem(c.itemId)}</TableCell>
+                            <TableCell className="num px-3 py-2 text-right font-bold">{money(c.costoTotalCop, "COP")}</TableCell>
+                            <TableCell className="num px-3 py-2 text-right">{money(c.costoUnitarioCop, "COP")}</TableCell>
+                            <TableCell className="num px-3 py-2 text-right">{money(c.diferenciaCambioCop, "COP")}</TableCell>
+                            <TableCell className="px-3 py-2">
                               <EstadoBadge estado={c.esProvisional ? "Pendiente" : "Aprobada"} />
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
 
@@ -448,7 +448,7 @@ function DetalleOrdenIntl() {
               <Button type="button" variant="outline" size="sm" onClick={() => setModalLoteOpen(false)} disabled={guardandoLote}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold" disabled={guardandoLote}>
+              <Button type="submit" size="sm" disabled={guardandoLote}>
                 {guardandoLote ? "Guardando..." : "Registrar Lote"}
               </Button>
             </DialogFooter>
@@ -509,7 +509,7 @@ function DetalleOrdenIntl() {
               <Button type="button" variant="outline" size="sm" onClick={() => setLoteLiquidando(null)} disabled={liquidando}>
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold" disabled={liquidando}>
+              <Button type="submit" size="sm" disabled={liquidando}>
                 {liquidando ? "Liquidando..." : "Liquidar Costeo"}
               </Button>
             </DialogFooter>
@@ -519,6 +519,7 @@ function DetalleOrdenIntl() {
     </AppShell>
   );
 }
+
 interface DocumentoExpedienteSlotProps {
   loteId: string;
   tipo: TipoDocumentoExpediente;
@@ -1014,4 +1015,3 @@ function VistosBuenosPanel({
     </div>
   );
 }
-
