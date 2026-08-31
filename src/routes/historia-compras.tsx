@@ -66,7 +66,7 @@ export const Route = createFileRoute("/historia-compras")({
   component: HistoriaComprasPage,
 });
 
-const ESTADOS_FILTRO = ["Todas", "Aprobada", "Rechazada", "Comprado"] as const;
+const ESTADOS_FILTRO = ["Todas", "Aprobada", "Rechazada", "Comprado", "Facturada"] as const;
 type EstadoFiltro = (typeof ESTADOS_FILTRO)[number];
 
 const AREAS = [

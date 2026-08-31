@@ -5,6 +5,7 @@ function usuario(overrides: Partial<SessionUser> = {}): SessionUser {
   return {
     id: "1",
     tenantId: "t1",
+    tenantNombre: "Tenant de Prueba",
     nombre: "Prueba",
     email: "prueba@ricol.com.co",
     telefono: null,
@@ -22,13 +23,15 @@ describe("hasPermission", () => {
   });
 
   it("devuelve false si el usuario está inactivo, aunque tenga el permiso", () => {
-    expect(hasPermission(usuario({ activo: false, permisos: ["facturas.ver"] }), "facturas.ver")).toBe(
-      false,
-    );
+    expect(
+      hasPermission(usuario({ activo: false, permisos: ["facturas.ver"] }), "facturas.ver"),
+    ).toBe(false);
   });
 
   it("un superadmin tiene cualquier permiso, esté o no en su lista", () => {
-    expect(hasPermission(usuario({ isSuperadmin: true, permisos: [] }), "facturas.eliminar")).toBe(true);
+    expect(hasPermission(usuario({ isSuperadmin: true, permisos: [] }), "facturas.eliminar")).toBe(
+      true,
+    );
   });
 
   it("un usuario normal solo tiene los permisos que están en su lista", () => {

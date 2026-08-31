@@ -29,14 +29,25 @@ import {
   X,
   Truck,
   Ship,
+  Check,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { useSession } from "@/lib/session-context";
 import { hasPermission, canAccessAdmin } from "@/lib/session";
 import { useModulosMenu } from "@/hooks/use-modulos";
+import { useTenantsAccesibles } from "@/hooks/use-tenants-accesibles";
 import { NotificationBell } from "@/components/notification-bell";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Traduce el nombre de ícono guardado en Modulo.icono al componente lucide correspondiente.
 const ICONOS_MODULO: Record<string, LucideIcon> = {
@@ -65,10 +76,30 @@ interface AppShellProps {
 export function AppShell({ children, title, description, actions }: AppShellProps) {
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
-  const { user, loading, logout } = useSession();
+  const { user, loading, logout, switchTenant } = useSession();
   const [adminMenuAbierto, setAdminMenuAbierto] = useState(pathname.startsWith("/configuracion"));
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const { modulos: modulosMenu } = useModulosMenu();
+  const {
+    tenants: tenantsAccesibles,
+    tenantActualId,
+    loading: cargandoTenants,
+  } = useTenantsAccesibles();
+  const [cambiandoTenant, setCambiandoTenant] = useState(false);
+
+  const handleCambiarEmpresa = async (tenantId: string) => {
+    if (tenantId === tenantActualId || cambiandoTenant) return;
+    setCambiandoTenant(true);
+    try {
+      await switchTenant(tenantId);
+      toast.success("Empresa cambiada correctamente.");
+      navigate({ to: "/" });
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible cambiar de empresa.");
+    } finally {
+      setCambiandoTenant(false);
+    }
+  };
 
   // Cierra el sidebar móvil automáticamente al navegar a otra ruta.
   useEffect(() => {
@@ -391,10 +422,45 @@ export function AppShell({ children, title, description, actions }: AppShellProp
 
           <div className="flex items-center gap-3">
             {actions}
+            {tenantsAccesibles.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={cambiandoTenant}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    {cambiandoTenant ? "Cambiando..." : `Estás en: ${user.tenantNombre}`}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Cambiar de empresa</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {tenantsAccesibles.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onClick={() => handleCambiarEmpresa(t.id)}
+                      className="flex items-center justify-between gap-2 text-xs font-semibold"
+                    >
+                      {t.nombre}
+                      {t.id === tenantActualId && <Check className="h-3.5 w-3.5 text-blue-700" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              !cargandoTenants && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  <Building2 className="h-3.5 w-3.5" /> Estás en: {user.tenantNombre}
+                </span>
+              )
+            )}
             <NotificationBell />
             {user.isSuperadmin && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 text-white border border-slate-900">
-                <ShieldAlert className="h-3.5 w-3.5" /> SuperAdmin Mode
+                <ShieldAlert className="h-3.5 w-3.5" /> SuperAdmin
               </span>
             )}
           </div>

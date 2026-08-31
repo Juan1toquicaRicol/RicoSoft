@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CheckCircle2,
+  FileSpreadsheet,
   History,
   Package,
   Paperclip,
   Plus,
   ShoppingBag,
   Trash2,
+  Trophy,
   XCircle,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -59,7 +61,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTenant } from "@/lib/tenant-context";
-import { useSolicitudes, descargarCotizacionSolicitud } from "@/hooks/use-solicitudes";
+import {
+  useSolicitudes,
+  useCotizacionesProveedor,
+  descargarCotizacionSolicitud,
+  descargarCotizacionProveedor,
+} from "@/hooks/use-solicitudes";
 import { useProveedores } from "@/hooks/use-proveedores";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
@@ -69,6 +76,7 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money, Prioridad } from "@/lib/data";
 
 const PRIORIDADES_SOLICITUD: Prioridad[] = ["Baja", "Media", "Alta", "Urgente"];
+const PROVEEDOR_MANUAL = "__manual__";
 
 export const Route = createFileRoute("/solicitudes-compra")({
   head: () => ({
@@ -99,6 +107,7 @@ function SolicitudesCompraPage() {
   const proveedoresActivos = proveedores.filter((p) => p.activo);
   const { user } = useSession();
 
+  const puedeCrear = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_CREAR);
   const puedeAprobar = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_APROBAR);
   const puedeRechazar = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_RECHAZAR);
   const puedeComprar = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_COMPRAR);
@@ -119,6 +128,40 @@ function SolicitudesCompraPage() {
   const [descargandoCotizacion, setDescargandoCotizacion] = useState(false);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
+  // Cuadro comparativo de cotizaciones de proveedor (regla de las 3 cotizaciones).
+  const [cotizacionesModal, setCotizacionesModal] = useState<{
+    id: string;
+    item: string;
+    area: string;
+  } | null>(null);
+  const {
+    cotizaciones,
+    loading: cargandoCotizaciones,
+    error: errorCotizaciones,
+    agregarCotizacion,
+    eliminarCotizacion,
+    seleccionarGanadora,
+  } = useCotizacionesProveedor(cotizacionesModal?.id ?? null);
+  // Mismo filtro por departamento que el formulario de la solicitud: cada
+  // área solo cotiza con sus proveedores asignados + los generales.
+  const areaCotizacionDepartamentoId = departamentos.find(
+    (d) => d.nombre === cotizacionesModal?.area,
+  )?.id;
+  const proveedoresDelAreaCotizacion = proveedoresActivos.filter(
+    (p) => !p.departamentoId || p.departamentoId === areaCotizacionDepartamentoId,
+  );
+  const [formCotizacion, setFormCotizacion] = useState({
+    proveedorId: "",
+    proveedorNombre: "",
+    proveedorNit: "",
+    valorTotalCOP: 0,
+    tiempoEntregaDias: 0,
+  });
+  const [archivoCotizacion, setArchivoCotizacion] = useState<File | null>(null);
+  const [guardandoCotizacion, setGuardandoCotizacion] = useState(false);
+  const [accionCotizacionId, setAccionCotizacionId] = useState<string | null>(null);
+  const archivoCotizacionRef = useRef<HTMLInputElement>(null);
+
   const handleVerCotizacion = async (id: string) => {
     setDescargandoCotizacion(true);
     try {
@@ -130,6 +173,99 @@ function SolicitudesCompraPage() {
       toast.error(err.message || "No fue posible abrir la cotización.");
     } finally {
       setDescargandoCotizacion(false);
+    }
+  };
+
+  const cotizacionFormInicial = {
+    proveedorId: "",
+    proveedorNombre: "",
+    proveedorNit: "",
+    valorTotalCOP: 0,
+    tiempoEntregaDias: 0,
+  };
+
+  const abrirCotizaciones = (id: string, item: string, area: string) => {
+    setFormCotizacion(cotizacionFormInicial);
+    setArchivoCotizacion(null);
+    setCotizacionesModal({ id, item, area });
+  };
+
+  const handleAgregarCotizacion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!archivoCotizacion) {
+      toast.error("Adjunta el documento de la cotización.");
+      return;
+    }
+    if (!formCotizacion.proveedorId) {
+      toast.error("Selecciona un proveedor del catálogo o elige registrarlo manualmente.");
+      return;
+    }
+    if (
+      formCotizacion.proveedorId === PROVEEDOR_MANUAL &&
+      (!formCotizacion.proveedorNombre || !formCotizacion.proveedorNit)
+    ) {
+      toast.error("Escribe el nombre y el NIT del proveedor.");
+      return;
+    }
+    setGuardandoCotizacion(true);
+    try {
+      await agregarCotizacion({
+        proveedorId:
+          formCotizacion.proveedorId === PROVEEDOR_MANUAL ? undefined : formCotizacion.proveedorId,
+        proveedorNombre:
+          formCotizacion.proveedorId === PROVEEDOR_MANUAL
+            ? formCotizacion.proveedorNombre
+            : undefined,
+        proveedorNit:
+          formCotizacion.proveedorId === PROVEEDOR_MANUAL ? formCotizacion.proveedorNit : undefined,
+        valorTotalCOP: formCotizacion.valorTotalCOP,
+        tiempoEntregaDias: formCotizacion.tiempoEntregaDias,
+        archivo: archivoCotizacion,
+      });
+      toast.success("Cotización agregada.");
+      setFormCotizacion(cotizacionFormInicial);
+      setArchivoCotizacion(null);
+      if (archivoCotizacionRef.current) archivoCotizacionRef.current.value = "";
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible agregar la cotización.");
+    } finally {
+      setGuardandoCotizacion(false);
+    }
+  };
+
+  const handleEliminarCotizacion = async (cotizacionId: string) => {
+    setAccionCotizacionId(cotizacionId);
+    try {
+      await eliminarCotizacion(cotizacionId);
+      toast.success("Cotización eliminada.");
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible eliminar la cotización.");
+    } finally {
+      setAccionCotizacionId(null);
+    }
+  };
+
+  const handleSeleccionarGanadora = async (cotizacionId: string) => {
+    setAccionCotizacionId(cotizacionId);
+    try {
+      await seleccionarGanadora(cotizacionId);
+      toast.success("Cotización ganadora seleccionada.");
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible seleccionar la cotización ganadora.");
+    } finally {
+      setAccionCotizacionId(null);
+    }
+  };
+
+  const handleVerCotizacionProveedor = async (cotizacionId: string) => {
+    if (!cotizacionesModal) return;
+    try {
+      const blob = await descargarCotizacionProveedor(cotizacionesModal.id, cotizacionId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible abrir el documento.");
     }
   };
 
@@ -192,6 +328,13 @@ function SolicitudesCompraPage() {
   const areaDepartamentoId = departamentos.find((d) => d.nombre === form.area)?.id;
   const { usuarios: usuariosArea, loading: cargandoUsuariosArea } =
     useUsuariosPorDepartamento(areaDepartamentoId);
+  // Cada departamento puede tener proveedores propios (p. ej. los de
+  // Producción no deberían ofrecerse al crear una SC de Comercial): un
+  // proveedor sin departamento asignado ("general") sigue apareciendo para
+  // cualquier área, para no romper el catálogo compartido ya existente.
+  const proveedoresDelArea = proveedoresActivos.filter(
+    (p) => !p.departamentoId || p.departamentoId === areaDepartamentoId,
+  );
 
   const filteredSolicitudes = useMemo(() => {
     if (empresaActiva === "ALL") return solicitudesCompra;
@@ -398,15 +541,44 @@ function SolicitudesCompraPage() {
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <EstadoBadge estado={sol.estado} />
+                      {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
+                        <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                          {sol.cotizacionesResumen.total}/{sol.cotizacionesResumen.requeridas}{" "}
+                          cotizaciones
+                          {sol.cotizacionesResumen.tieneGanadora ? " · ganadora elegida" : ""}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1.5">
                         {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
                           <>
+                            {(puedeCrear || puedeAprobar) && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => abrirCotizaciones(sol.id, sol.item, sol.area)}
+                                className="h-7 text-[11px]"
+                              >
+                                <FileSpreadsheet className="h-3 w-3 mr-1" /> Cotizaciones
+                              </Button>
+                            )}
                             {puedeAprobar && (
                               <Button
                                 size="xs"
                                 variant="success"
+                                disabled={
+                                  sol.cotizacionesResumen.total <
+                                    sol.cotizacionesResumen.requeridas ||
+                                  !sol.cotizacionesResumen.tieneGanadora
+                                }
+                                title={
+                                  sol.cotizacionesResumen.total <
+                                    sol.cotizacionesResumen.requeridas ||
+                                  !sol.cotizacionesResumen.tieneGanadora
+                                    ? `Se requieren ${sol.cotizacionesResumen.requeridas} cotizaciones y una ganadora elegida.`
+                                    : undefined
+                                }
                                 onClick={() => abrirConfirmacion(sol.id, sol.item, "Aprobada")}
                                 className="h-7 text-[11px]"
                               >
@@ -518,7 +690,9 @@ function SolicitudesCompraPage() {
                 </Label>
                 <Select
                   value={form.area}
-                  onValueChange={(val) => setForm({ ...form, area: val, solicitanteId: "" })}
+                  onValueChange={(val) =>
+                    setForm({ ...form, area: val, solicitanteId: "", proveedorId: "" })
+                  }
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />
@@ -598,16 +772,18 @@ function SolicitudesCompraPage() {
                   <SelectItem value="__none__" className="text-xs">
                     Sin proveedor asociado
                   </SelectItem>
-                  {proveedoresActivos.map((p) => (
+                  {proveedoresDelArea.map((p) => (
                     <SelectItem key={p.id} value={p.id} className="text-xs">
                       {p.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {proveedoresActivos.length === 0 && (
+              {proveedoresDelArea.length === 0 && (
                 <p className="text-[11px] font-semibold text-slate-600">
-                  No hay proveedores registrados.{" "}
+                  {proveedoresActivos.length === 0
+                    ? "No hay proveedores registrados."
+                    : `No hay proveedores asignados al área "${form.area}".`}{" "}
                   <Link to="/configuracion/proveedores" className="font-semibold underline">
                     Créalos en Configuración
                   </Link>{" "}
@@ -713,6 +889,282 @@ function SolicitudesCompraPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* CUADRO COMPARATIVO DE COTIZACIONES DE PROVEEDOR */}
+      <Dialog
+        open={!!cotizacionesModal}
+        onOpenChange={(open) => !open && setCotizacionesModal(null)}
+      >
+        <DialogContent className="sm:max-w-2xl bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">
+              Cotizaciones de proveedor — {cotizacionesModal?.item}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Se requieren exactamente 3 cotizaciones completas y una elegida como ganadora para
+              poder aprobar la solicitud.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <Table>
+              <TableHeader className="bg-slate-100/80">
+                <TableRow className="hover:bg-slate-100/80">
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
+                    Proveedor
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
+                    NIT
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                    Valor COP
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                    Entrega (días)
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                    Documento
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="text-slate-800 font-medium">
+                {cotizaciones.map((c) => (
+                  <TableRow key={c.id} className={c.esGanadora ? "bg-blue-50/60" : undefined}>
+                    <TableCell className="px-3 py-2 text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1.5">
+                        {c.esGanadora && <Trophy className="h-3.5 w-3.5 text-blue-700" />}
+                        {c.proveedorNombre}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-xs">{c.proveedorNit}</TableCell>
+                    <TableCell className="num px-3 py-2 text-right text-xs font-bold">
+                      {money(c.valorTotalCOP)}
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center text-xs">
+                      {c.tiempoEntregaDias}
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <button
+                        type="button"
+                        title={`Ver documento: ${c.archivo.nombre}`}
+                        onClick={() => handleVerCotizacionProveedor(c.id)}
+                        className="text-slate-400 hover:text-blue-700"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                      </button>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-1">
+                        {puedeAprobar && !c.esGanadora && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={cotizaciones.length < 3 || accionCotizacionId === c.id}
+                            onClick={() => handleSeleccionarGanadora(c.id)}
+                            className="h-6 text-[10px]"
+                          >
+                            Elegir ganadora
+                          </Button>
+                        )}
+                        {puedeCrear && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            disabled={accionCotizacionId === c.id}
+                            onClick={() => handleEliminarCotizacion(c.id)}
+                            className="h-6 text-[10px] text-slate-500 hover:text-slate-900"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {cotizaciones.length === 0 && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={6} className="px-3 py-6 text-center text-xs text-slate-500">
+                      {cargandoCotizaciones
+                        ? "Cargando cotizaciones..."
+                        : errorCotizaciones || "Todavía no hay cotizaciones registradas."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {puedeCrear && cotizaciones.length < 3 && (
+              <form
+                onSubmit={handleAgregarCotizacion}
+                className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3"
+              >
+                <p className="text-xs font-bold text-slate-700">
+                  Agregar cotización ({cotizaciones.length}/3)
+                </p>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Proveedor *</Label>
+                  <Select
+                    value={formCotizacion.proveedorId}
+                    onValueChange={(val) =>
+                      setFormCotizacion({
+                        ...formCotizacion,
+                        proveedorId: val,
+                        proveedorNombre: "",
+                        proveedorNit: "",
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {proveedoresDelAreaCotizacion.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          {p.nombre}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={PROVEEDOR_MANUAL} className="text-xs">
+                        Otro proveedor (no está en el catálogo)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {proveedoresDelAreaCotizacion.length === 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      No hay proveedores asignados a "{cotizacionesModal?.area}" en el catálogo.
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {formCotizacion.proveedorId === PROVEEDOR_MANUAL ? (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-slate-700">
+                          Nombre del proveedor *
+                        </Label>
+                        <Input
+                          required
+                          value={formCotizacion.proveedorNombre}
+                          onChange={(e) =>
+                            setFormCotizacion({
+                              ...formCotizacion,
+                              proveedorNombre: e.target.value,
+                            })
+                          }
+                          className="h-9 text-xs border-slate-300 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-slate-700">NIT *</Label>
+                        <Input
+                          required
+                          value={formCotizacion.proveedorNit}
+                          onChange={(e) =>
+                            setFormCotizacion({ ...formCotizacion, proveedorNit: e.target.value })
+                          }
+                          className="h-9 text-xs border-slate-300 bg-white"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    formCotizacion.proveedorId && (
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-slate-700">NIT</Label>
+                        <Input
+                          disabled
+                          value={
+                            proveedoresDelAreaCotizacion.find(
+                              (p) => p.id === formCotizacion.proveedorId,
+                            )?.nit ?? ""
+                          }
+                          className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
+                        />
+                      </div>
+                    )
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Valor total (COP) *
+                    </Label>
+                    <Input
+                      required
+                      type="number"
+                      min={1}
+                      value={formCotizacion.valorTotalCOP}
+                      onChange={(e) =>
+                        setFormCotizacion({
+                          ...formCotizacion,
+                          valorTotalCOP: Number(e.target.value),
+                        })
+                      }
+                      className="h-9 text-xs border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Tiempo de entrega (días) *
+                    </Label>
+                    <Input
+                      required
+                      type="number"
+                      min={0}
+                      value={formCotizacion.tiempoEntregaDias}
+                      onChange={(e) =>
+                        setFormCotizacion({
+                          ...formCotizacion,
+                          tiempoEntregaDias: Number(e.target.value),
+                        })
+                      }
+                      className="h-9 text-xs border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Documento de la cotización *
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Input
+                      ref={archivoCotizacionRef}
+                      required
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) => setArchivoCotizacion(e.target.files?.[0] || null)}
+                      className="h-9 text-xs border-slate-300 bg-white file:mr-2 file:text-xs file:font-semibold"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={guardandoCotizacion}
+                    className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
+                  >
+                    {guardandoCotizacion ? "Guardando..." : "Agregar Cotización"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCotizacionesModal(null)}
+            >
+              Cerrar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

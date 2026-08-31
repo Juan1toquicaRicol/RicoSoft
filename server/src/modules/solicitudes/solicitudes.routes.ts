@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
-import { validarSolicitudIdParaArchivo, uploadCotizacionSolicitud } from "../../middleware/upload.middleware";
+import {
+  validarSolicitudIdParaArchivo,
+  uploadCotizacionSolicitud,
+  validarSolicitudIdParaCotizacionProveedor,
+  uploadCotizacionProveedor,
+} from "../../middleware/upload.middleware";
 import {
   listarSolicitudes,
   listarHistorialCompras,
@@ -10,6 +15,13 @@ import {
   subirCotizacionSolicitud,
   obtenerCotizacionSolicitud,
 } from "./solicitudes.controller";
+import {
+  listarCotizacionesSolicitud,
+  crearCotizacionSolicitud,
+  eliminarCotizacionSolicitud,
+  seleccionarCotizacionGanadora,
+  obtenerArchivoCotizacionSolicitud,
+} from "./cotizaciones.controller";
 
 const router = Router();
 
@@ -28,6 +40,31 @@ router.post(
   validarSolicitudIdParaArchivo,
   uploadCotizacionSolicitud,
   subirCotizacionSolicitud,
+);
+
+// Cuadro comparativo de cotizaciones de proveedor (regla de las 3 cotizaciones).
+router.get("/:id/cotizaciones", requirePermission("solicitudes.ver"), listarCotizacionesSolicitud);
+router.post(
+  "/:id/cotizaciones",
+  requirePermission("solicitudes.crear"),
+  validarSolicitudIdParaCotizacionProveedor,
+  uploadCotizacionProveedor,
+  crearCotizacionSolicitud,
+);
+router.delete(
+  "/:id/cotizaciones/:cotizacionId",
+  requirePermission("solicitudes.crear"),
+  eliminarCotizacionSolicitud,
+);
+router.post(
+  "/:id/cotizaciones/:cotizacionId/seleccionar",
+  requirePermission("solicitudes.aprobar"),
+  seleccionarCotizacionGanadora,
+);
+router.get(
+  "/:id/cotizaciones/:cotizacionId/archivo",
+  requirePermission("solicitudes.ver"),
+  obtenerArchivoCotizacionSolicitud,
 );
 
 router.delete("/:id", requirePermission("solicitudes.eliminar"), eliminarSolicitud);

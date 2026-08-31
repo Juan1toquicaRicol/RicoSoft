@@ -3,6 +3,7 @@ import { fetchApi, fetchApiUpload, fetchApiBlob } from "@/config/api";
 export interface SessionUser {
   id: string;
   tenantId: string;
+  tenantNombre: string;
   nombre: string;
   email: string;
   telefono: string | null;

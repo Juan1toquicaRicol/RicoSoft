@@ -8,43 +8,44 @@ datasource db {
 }
 
 model Tenant {
-  id                   String                     @id @default(uuid()) @db.UniqueIdentifier
-  nombre               String                     @db.VarChar(255)
-  subdomain            String                     @unique @db.VarChar(255)
-  siesaCiaId           Int?                       @unique
+  id                    String                     @id @default(uuid()) @db.UniqueIdentifier
+  nombre                String                     @db.VarChar(255)
+  subdomain             String                     @unique @db.VarChar(255)
+  siesaCiaId            Int?                       @unique
   /// Dominio de correo corporativo (p. ej. "ricol.com.co") que determina a
   /// qué tenant pertenece un usuario que se autoregistra. Único: dos tenants
   /// no pueden compartir el mismo dominio. Null = el tenant no acepta
   /// autoregistro público por dominio (p. ej. el tenant demo).
-  dominioCorporativo   String?                    @unique @db.VarChar(255)
+  dominioCorporativo    String?                    @unique @db.VarChar(255)
   /// Si es false, nadie puede loguearse/registrarse/seleccionar este tenant,
   /// aunque tenga cuenta o membresía activa ahí.
-  activo               Boolean                    @default(true)
-  createdAt            DateTime                   @default(now())
-  auditorias           Auditoria[]
-  colaboradores        Colaborador[]
-  contratos            Contrato[]
-  creditos             CreditoCliente[]
-  departamentos        Departamento[]
-  empleados            Empleado[]
-  facturas             Factura[]
-  faltas               FaltaStrike[]
-  modulos              Modulo[]
-  notificaciones       Notificacion[]
-  pagos                Pago[]
-  permisosLaborales    PermisoLaboral[]
-  proveedores          Proveedor[]
-  proyecciones         ProyeccionMensual[]
-  reglas               ReglaEnrutamiento[]
-  roles                Rol[]
-  servicios            ServicioSuscripcion[]
-  solicitudesCompra    SolicitudCompra[]
-  users                User[]
-  membresias           Membresia[]
-  ordenesCompraIntl    OrdenCompraIntl[]
-  lotesImportacion     LoteImportacion[]
-  expedientesAduaneros ExpedienteAduanero[]
-  costeosImportacion   CosteoImportacionDetalle[]
+  activo                Boolean                    @default(true)
+  createdAt             DateTime                   @default(now())
+  auditorias            Auditoria[]
+  colaboradores         Colaborador[]
+  contratos             Contrato[]
+  creditos              CreditoCliente[]
+  departamentos         Departamento[]
+  empleados             Empleado[]
+  facturas              Factura[]
+  faltas                FaltaStrike[]
+  modulos               Modulo[]
+  notificaciones        Notificacion[]
+  pagos                 Pago[]
+  permisosLaborales     PermisoLaboral[]
+  proveedores           Proveedor[]
+  proyecciones          ProyeccionMensual[]
+  reglas                ReglaEnrutamiento[]
+  roles                 Rol[]
+  servicios             ServicioSuscripcion[]
+  solicitudesCompra     SolicitudCompra[]
+  users                 User[]
+  membresias            Membresia[]
+  ordenesCompraIntl     OrdenCompraIntl[]
+  lotesImportacion      LoteImportacion[]
+  expedientesAduaneros  ExpedienteAduanero[]
+  costeosImportacion    CosteoImportacionDetalle[]
+  cotizacionesProveedor CotizacionProveedor[]
 }
 
 model User {
@@ -78,6 +79,7 @@ model User {
   pagosRegistrados                 Pago[]                     @relation("PagoRegistradoPor")
   ordenesCompraIntlComoResponsable OrdenCompraIntl[]          @relation("OrdenCompraIntlResponsable")
   costeosImportacionLiquidados     CosteoImportacionDetalle[] @relation("CosteoLiquidadoPor")
+  cotizacionesProveedorSubidas     CotizacionProveedor[]      @relation("CotizacionProveedorSubidaPor")
   colaborador                      Colaborador?               @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   departamento                     Departamento?              @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rolRel                           Rol?                       @relation(fields: [rolId], references: [id])
@@ -88,14 +90,14 @@ model User {
 }
 
 model Rol {
-  id          String  @id @default(uuid()) @db.UniqueIdentifier
-  tenantId    String  @db.UniqueIdentifier
-  nombre      String  @db.VarChar(100)
-  descripcion String? @db.VarChar(255)
-  esSistema   Boolean @default(false)
-  activo      Boolean @default(true)
-  permisos    String  @default("[]") @db.Text
-  tenant      Tenant  @relation(fields: [tenantId], references: [id])
+  id          String      @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String      @db.UniqueIdentifier
+  nombre      String      @db.VarChar(100)
+  descripcion String?     @db.VarChar(255)
+  esSistema   Boolean     @default(false)
+  activo      Boolean     @default(true)
+  permisos    String      @default("[]") @db.Text
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
   users       User[]
   membresias  Membresia[]
 
@@ -191,6 +193,7 @@ model Departamento {
   modulos       Modulo[]
   usuarios      User[]
   membresias    Membresia[]
+  proveedores   Proveedor[]
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -229,16 +232,25 @@ model Proveedor {
   contacto          String?               @db.VarChar(255)
   telefono          String?               @db.VarChar(50)
   email             String?               @db.VarChar(255)
+  /// Departamento dueño de este proveedor (p. ej. un proveedor de insumos de
+  /// Producción no debería ofrecerse al crear una SC de Comercial). Null =
+  /// proveedor "general", visible para cualquier departamento — así todos los
+  /// proveedores existentes antes de este campo siguen apareciendo en todas
+  /// partes sin necesidad de migrarlos uno por uno.
+  departamentoId    String?               @db.UniqueIdentifier
   activo            Boolean               @default(true)
   createdAt         DateTime              @default(now())
   tenant            Tenant                @relation(fields: [tenantId], references: [id])
+  departamento      Departamento?         @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   facturas          Factura[]
   contratos         Contrato[]
   servicios         ServicioSuscripcion[]
   solicitudesCompra SolicitudCompra[]
+  cotizaciones      CotizacionProveedor[]
 
   @@unique([tenantId, nit])
   @@index([tenantId])
+  @@index([tenantId, departamentoId])
 }
 
 model Colaborador {
@@ -358,40 +370,77 @@ model Pago {
 }
 
 model SolicitudCompra {
-  id                        String     @id @default(uuid()) @db.UniqueIdentifier
-  tenantId                  String     @db.UniqueIdentifier
-  empresaId                 String     @db.VarChar(10)
-  area                      String     @db.VarChar(100)
-  solicitanteId             String?    @db.UniqueIdentifier
-  solicitante               String     @db.VarChar(255)
-  proveedorId               String?    @db.UniqueIdentifier
-  proveedor                 String?    @db.VarChar(255)
-  item                      String     @db.VarChar(255)
-  descripcion               String?    @db.Text
+  id                        String                @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                  String                @db.UniqueIdentifier
+  empresaId                 String                @db.VarChar(10)
+  area                      String                @db.VarChar(100)
+  solicitanteId             String?               @db.UniqueIdentifier
+  solicitante               String                @db.VarChar(255)
+  proveedorId               String?               @db.UniqueIdentifier
+  proveedor                 String?               @db.VarChar(255)
+  item                      String                @db.VarChar(255)
+  descripcion               String?               @db.Text
   cantidad                  Int
-  valorEstimado             Decimal    @db.Decimal(18, 2)
-  prioridad                 String     @default("Media") @db.VarChar(20)
-  estado                    String     @default("Pendiente") @db.VarChar(20)
-  fechaSolicitud            DateTime   @default(now())
+  valorEstimado             Decimal               @db.Decimal(18, 2)
+  prioridad                 String                @default("Media") @db.VarChar(20)
+  estado                    String                @default("Pendiente") @db.VarChar(20)
+  fechaSolicitud            DateTime              @default(now())
   fechaResolucion           DateTime?
-  resueltoPorId             String?    @db.UniqueIdentifier
-  resueltoPorNombre         String?    @db.VarChar(255)
-  comentarioResolucion      String?    @db.Text
-  cotizacionNombre          String?    @db.VarChar(255)
-  cotizacionRuta            String?    @db.VarChar(500)
-  cotizacionMime            String?    @db.VarChar(100)
+  resueltoPorId             String?               @db.UniqueIdentifier
+  resueltoPorNombre         String?               @db.VarChar(255)
+  comentarioResolucion      String?               @db.Text
+  cotizacionNombre          String?               @db.VarChar(255)
+  cotizacionRuta            String?               @db.VarChar(500)
+  cotizacionMime            String?               @db.VarChar(100)
   cotizacionTamano          Int?
-  cotizacionSubidoPorNombre String?    @db.VarChar(255)
+  cotizacionSubidoPorNombre String?               @db.VarChar(255)
   cotizacionSubidoEn        DateTime?
-  eliminado                 Boolean    @default(false)
-  tenant                    Tenant     @relation(fields: [tenantId], references: [id])
-  solicitanteUsuario        User?      @relation("SolicitudSolicitante", fields: [solicitanteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resueltoPor               User?      @relation("SolicitudResueltaPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  proveedorRel              Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eliminado                 Boolean               @default(false)
+  tenant                    Tenant                @relation(fields: [tenantId], references: [id])
+  solicitanteUsuario        User?                 @relation("SolicitudSolicitante", fields: [solicitanteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resueltoPor               User?                 @relation("SolicitudResueltaPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proveedorRel              Proveedor?            @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   facturas                  Factura[]
+  cotizacionesProveedor     CotizacionProveedor[]
 
   @@index([tenantId])
   @@index([tenantId, estado])
+}
+
+/// Una de las (exactamente 3) cotizaciones de proveedor recogidas para una
+/// SolicitudCompra antes de poder aprobarla. Gerencia compara las 3 en el
+/// cuadro comparativo y marca una como ganadora (esGanadora); esa selección
+/// es la que desbloquea el paso a "Aprobada" (ver cambiarEstadoSolicitud).
+model CotizacionProveedor {
+  id                String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String          @db.UniqueIdentifier
+  solicitudCompraId String          @db.UniqueIdentifier
+  /// Proveedor del catálogo, cuando la cotización se registra eligiendo uno
+  /// ya creado en Configuración > Proveedores (preferido: nombre y NIT se
+  /// toman de ahí, nunca del texto que mande el cliente). Null si se cargó
+  /// manualmente (proveedor todavía no catalogado) — mismo patrón que
+  /// Factura.proveedorId / SolicitudCompra.proveedorId.
+  proveedorId       String?         @db.UniqueIdentifier
+  proveedorNombre   String          @db.VarChar(255)
+  proveedorNit      String          @db.VarChar(50)
+  valorTotalCOP     Decimal         @db.Decimal(18, 2)
+  tiempoEntregaDias Int
+  esGanadora        Boolean         @default(false)
+  archivoNombre     String          @db.VarChar(255)
+  archivoRuta       String          @db.VarChar(500)
+  archivoMime       String          @db.VarChar(100)
+  archivoTamano     Int
+  subidoPorId       String          @db.UniqueIdentifier
+  subidoPorNombre   String          @db.VarChar(255)
+  createdAt         DateTime        @default(now())
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  solicitudCompra   SolicitudCompra @relation(fields: [solicitudCompraId], references: [id], onDelete: Cascade)
+  proveedorRel      Proveedor?      @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subidoPor         User            @relation("CotizacionProveedorSubidaPor", fields: [subidoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@index([solicitudCompraId])
+  @@index([proveedorId])
 }
 
 model ServicioSuscripcion {

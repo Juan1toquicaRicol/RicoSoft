@@ -1,7 +1,12 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma";
-import { loadSessionUser, listarTenantsAccesibles, TenantAccesible, SessionUser } from "../../lib/permissions";
+import {
+  loadSessionUser,
+  listarTenantsAccesibles,
+  TenantAccesible,
+  SessionUser,
+} from "../../lib/permissions";
 import { esDominioCorporativoValido, obtenerTenantPorCorreo } from "../../lib/dominios";
 import { validarPasswordSegura } from "../../lib/password";
 
@@ -71,7 +76,9 @@ export const registerUserService = async (data: {
     );
   }
   if (!tenant.activo) {
-    throw new Error("La empresa asociada a tu correo no está activa actualmente. Contacta al administrador.");
+    throw new Error(
+      "La empresa asociada a tu correo no está activa actualmente. Contacta al administrador.",
+    );
   }
 
   // El departamento debe existir y pertenecer al mismo tenant y estar activo
@@ -120,8 +127,19 @@ export const registerUserService = async (data: {
   return nuevoUsuario;
 };
 
-/** Emite el JWT final de sesión, registra el LOGIN en auditoría y arma la respuesta. */
-async function emitirSesion(userId: string, tokenVersion: number, tenantId: string): Promise<LoginResult> {
+/**
+ * Emite el JWT final de sesión y registra en auditoría. `accion`/`detalle`
+ * distinguen un login normal de un cambio de empresa dentro de la app (mismo
+ * mecanismo de emisión de token, pero es un evento distinto a efectos de
+ * trazabilidad — ver switchTenantService).
+ */
+async function emitirSesion(
+  userId: string,
+  tokenVersion: number,
+  tenantId: string,
+  accion: string = "LOGIN",
+  detalle?: string,
+): Promise<LoginResult> {
   const sessionUser = await loadSessionUser(userId, tenantId);
   if (!sessionUser) {
     throw new Error("No se pudo cargar la sesión para el tenant seleccionado.");
@@ -131,17 +149,22 @@ async function emitirSesion(userId: string, tokenVersion: number, tenantId: stri
     data: {
       tenantId,
       usuarioId: userId,
-      accion: "LOGIN",
-      detalle: `Inicio de sesión de ${sessionUser.email}`,
+      accion,
+      detalle: detalle ?? `Inicio de sesión de ${sessionUser.email}`,
     },
   });
 
-  const token = jwt.sign({ sub: userId, tv: tokenVersion, tenantId }, JWT_SECRET, { expiresIn: "8h" });
+  const token = jwt.sign({ sub: userId, tv: tokenVersion, tenantId }, JWT_SECRET, {
+    expiresIn: "8h",
+  });
   return { requiresTenantSelection: false, token, user: sessionUser };
 }
 
 // --- 2. LOGIN DE USUARIO (paso 1: identidad) ---
-export const loginUserService = async (data: { email: string; password: string }): Promise<LoginResult> => {
+export const loginUserService = async (data: {
+  email: string;
+  password: string;
+}): Promise<LoginResult> => {
   const { email, password } = data;
   const emailLimpio = email.trim().toLowerCase();
 
@@ -203,7 +226,10 @@ export const loginUserService = async (data: { email: string; password: string }
 };
 
 // --- 2b. LOGIN DE USUARIO (paso 2: elegir empresa, solo si hay más de una) ---
-export const selectTenantService = async (data: { selectionToken: string; tenantId: string }): Promise<LoginResult> => {
+export const selectTenantService = async (data: {
+  selectionToken: string;
+  tenantId: string;
+}): Promise<LoginResult> => {
   const { selectionToken, tenantId } = data;
 
   let payload: SelectionTokenPayload;
@@ -230,4 +256,38 @@ export const selectTenantService = async (data: { selectionToken: string; tenant
   }
 
   return emitirSesion(usuario.id, usuario.tokenVersion, tenantId);
+};
+
+/**
+ * Cambio de empresa DENTRO de la app, ya con sesión activa (a diferencia de
+ * selectTenantService, que es el paso 2 del login antes de tener un JWT
+ * completo). El usuario debe llegar autenticado (requireAuth en la ruta); el
+ * único dato que manda es a qué tenant quiere cambiar, y el backend siempre
+ * recalcula server-side si ese tenant es realmente accesible — nunca se
+ * confía en localStorage/estado del frontend para decidir el tenant.
+ */
+export const switchTenantService = async (data: {
+  userId: string;
+  tenantId: string;
+}): Promise<LoginResult> => {
+  const { userId, tenantId } = data;
+
+  const usuario = await prisma.user.findUnique({ where: { id: userId } });
+  if (!usuario || !usuario.activo) {
+    throw new Error("Cuenta inválida o inactiva.");
+  }
+
+  const tenantsAccesibles = await listarTenantsAccesibles(userId);
+  const tenantDestino = tenantsAccesibles.find((t) => t.id === tenantId);
+  if (!tenantDestino) {
+    throw new Error("No tienes acceso a esa empresa.");
+  }
+
+  return emitirSesion(
+    usuario.id,
+    usuario.tokenVersion,
+    tenantId,
+    "CAMBIO_EMPRESA",
+    `${usuario.email} cambió de empresa activa a "${tenantDestino.nombre}".`,
+  );
 };

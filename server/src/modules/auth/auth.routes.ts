@@ -1,9 +1,21 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { registerController, loginController, selectTenantController, meController } from "./auth.controller";
+import {
+  registerController,
+  loginController,
+  selectTenantController,
+  meController,
+  tenantsAccesiblesController,
+  switchTenantController,
+} from "./auth.controller";
 import { authenticateJWT } from "../../middleware/auth.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
-import { registerSchema, loginSchema, selectTenantSchema } from "./auth.schemas";
+import {
+  registerSchema,
+  loginSchema,
+  selectTenantSchema,
+  switchTenantSchema,
+} from "./auth.schemas";
 
 const router = Router();
 
@@ -32,5 +44,19 @@ router.post("/select-tenant", authLimiter, validarBody(selectTenantSchema), sele
 
 // Endpoint de sesión actual: GET /api/auth/me
 router.get("/me", authenticateJWT, meController);
+
+// Empresas a las que el usuario autenticado puede cambiarse (para el
+// selector de empresa del menú principal): GET /api/auth/tenants-accesibles
+router.get("/tenants-accesibles", authenticateJWT, tenantsAccesiblesController);
+
+// Cambio de empresa dentro de la app, ya con sesión activa:
+// POST /api/auth/switch-tenant
+router.post(
+  "/switch-tenant",
+  authLimiter,
+  authenticateJWT,
+  validarBody(switchTenantSchema),
+  switchTenantController,
+);
 
 export default router;

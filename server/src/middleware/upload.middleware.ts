@@ -92,6 +92,15 @@ export const UPLOADS_DIR_COMPROBANTES = comprobantePago.UPLOADS_DIR;
 export const validarPagoIdParaArchivo = comprobantePago.validarIdParaArchivo;
 export const uploadComprobantePago = comprobantePago.uploadArchivo;
 
+// Documento de una cotización de proveedor (una de las 3 recogidas para una
+// solicitud de compra antes de aprobarla): :id en la URL es el id de la
+// propia SolicitudCompra, no el de la cotización (que todavía no existe
+// cuando se sube el archivo; el controlador la crea junto con los metadatos).
+const cotizacionProveedor = crearUploadArchivo("cotizaciones-proveedor");
+export const UPLOADS_DIR_COTIZACIONES_PROVEEDOR = cotizacionProveedor.UPLOADS_DIR;
+export const validarSolicitudIdParaCotizacionProveedor = cotizacionProveedor.validarIdParaArchivo;
+export const uploadCotizacionProveedor = cotizacionProveedor.uploadArchivo;
+
 // Documentos del expediente aduanero (DIM/factura comercial/certificado de
 // origen): :id en la URL es el loteId, no el id del expediente, para poder
 // subir el primer documento antes de que el expediente exista todavía (el

@@ -9,6 +9,10 @@ export interface Proveedor {
   telefono: string | null;
   email: string | null;
   activo: boolean;
+  // Departamento dueño del proveedor; null = proveedor general, disponible
+  // para cualquier departamento (ver comentario en schema.prisma).
+  departamentoId: string | null;
+  departamento: { id: string; nombre: string } | null;
   facturasAsociadas: number;
   contratosAsociados: number;
   solicitudesAsociadas: number;
@@ -20,6 +24,7 @@ export interface DatosProveedor {
   contacto?: string;
   telefono?: string;
   email?: string;
+  departamentoId?: string | null;
 }
 
 /**
@@ -37,7 +42,9 @@ export function useProveedores() {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchAuth(`/proveedores${search ? `?search=${encodeURIComponent(search)}` : ""}`);
+      const data = await fetchAuth(
+        `/proveedores${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+      );
       setProveedores(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || "Error cargando proveedores.");
@@ -52,7 +59,10 @@ export function useProveedores() {
 
   const crearProveedor = useCallback(
     async (data: DatosProveedor) => {
-      const creado: Proveedor = await fetchAuth("/proveedores", { method: "POST", body: JSON.stringify(data) });
+      const creado: Proveedor = await fetchAuth("/proveedores", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       await refresh();
       return creado;
     },
@@ -75,5 +85,13 @@ export function useProveedores() {
     [refresh],
   );
 
-  return { proveedores, loading, error, refresh, crearProveedor, actualizarProveedor, eliminarProveedor };
+  return {
+    proveedores,
+    loading,
+    error,
+    refresh,
+    crearProveedor,
+    actualizarProveedor,
+    eliminarProveedor,
+  };
 }

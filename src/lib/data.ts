@@ -110,7 +110,7 @@ export interface FaltaStrike {
 }
 
 export type EstadoSolicitudCompra =
-  "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado";
+  "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado" | "Facturada";
 
 export interface SolicitudCompra {
   id: string;
@@ -138,7 +138,31 @@ export interface SolicitudCompra {
     subidoPor: string | null;
     subidoEn: string | null;
   } | null;
+  // Resumen del cuadro comparativo de cotizaciones de proveedor: cuántas hay
+  // registradas (máx. 3) y si ya hay una elegida como ganadora. Se requieren
+  // las 3 completas + ganadora antes de poder aprobar la solicitud.
+  cotizacionesResumen: {
+    total: number;
+    requeridas: number;
+    tieneGanadora: boolean;
+  };
   factura?: { id: string; numero: string; estado: string } | null;
+}
+
+/** Una de las (hasta 3) cotizaciones de proveedor del cuadro comparativo de
+ * una solicitud de compra. */
+export interface CotizacionProveedor {
+  id: string;
+  solicitudCompraId: string;
+  proveedorId: string | null;
+  proveedorNombre: string;
+  proveedorNit: string;
+  valorTotalCOP: number;
+  tiempoEntregaDias: number;
+  esGanadora: boolean;
+  archivo: { nombre: string; mime: string; tamano: number };
+  subidoPor: string;
+  createdAt: string;
 }
 
 export type AreaEmpresa =

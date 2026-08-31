@@ -1,5 +1,11 @@
 import { Request, Response } from "express";
-import { registerUserService, loginUserService, selectTenantService } from "./auth.service";
+import {
+  registerUserService,
+  loginUserService,
+  selectTenantService,
+  switchTenantService,
+} from "./auth.service";
+import { listarTenantsAccesibles } from "../../lib/permissions";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 export const registerController = async (req: Request, res: Response) => {
@@ -62,11 +68,44 @@ export const selectTenantController = async (req: Request, res: Response) => {
       user: resultado.user,
     });
   } catch (error: any) {
-    return res.status(401).json({ message: error.message || "No se pudo iniciar sesión con esa empresa." });
+    return res
+      .status(401)
+      .json({ message: error.message || "No se pudo iniciar sesión con esa empresa." });
   }
 };
 
 // --- 3. SESIÓN ACTUAL (usada por el frontend para hidratar la sesión) ---
 export const meController = async (req: AuthenticatedRequest, res: Response) => {
   return res.status(200).json({ user: req.user });
+};
+
+/**
+ * Empresas a las que el usuario autenticado puede cambiarse (tenant hogar +
+ * membresías activas), para poblar el selector de empresa del menú principal.
+ * Recalculado siempre server-side; nunca se sirve desde algo que mandó el
+ * cliente.
+ */
+export const tenantsAccesiblesController = async (req: AuthenticatedRequest, res: Response) => {
+  const tenants = await listarTenantsAccesibles(req.user!.id);
+  return res.status(200).json({ tenantActualId: req.user!.tenantId, tenants });
+};
+
+// --- CAMBIO DE EMPRESA DENTRO DE LA APP (ya con sesión activa) ---
+export const switchTenantController = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { tenantId } = req.body;
+
+    const resultado = await switchTenantService({ userId: req.user!.id, tenantId });
+    if (resultado.requiresTenantSelection) {
+      return res.status(500).json({ message: "No se pudo completar el cambio de empresa." });
+    }
+
+    return res.status(200).json({
+      message: "Empresa cambiada correctamente.",
+      token: resultado.token,
+      user: resultado.user,
+    });
+  } catch (error: any) {
+    return res.status(403).json({ message: error.message || "No se pudo cambiar de empresa." });
+  }
 };

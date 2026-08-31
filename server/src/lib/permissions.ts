@@ -96,6 +96,9 @@ export function parseRolPermisos(permisos: string | null | undefined): string[] 
 export interface SessionUser {
   id: string;
   tenantId: string;
+  /** Nombre de la empresa (tenant) activa en esta sesión — para mostrar
+   * "Estás en: X" en el menú principal, ver switchTenantService. */
+  tenantNombre: string;
   nombre: string;
   email: string;
   telefono: string | null;
@@ -180,10 +183,18 @@ function calcularPermisosEfectivosMembresia(membresia: {
  * tenant en vez de los datos del usuario — así una persona con acceso a
  * varias empresas del grupo tiene rol/permisos independientes en cada una.
  */
-export async function loadSessionUser(userId: string, tenantId?: string): Promise<SessionUser | null> {
+export async function loadSessionUser(
+  userId: string,
+  tenantId?: string,
+): Promise<SessionUser | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { rolRel: true, permisosDirectos: true, departamento: true, tenant: { select: { activo: true } } },
+    include: {
+      rolRel: true,
+      permisosDirectos: true,
+      departamento: true,
+      tenant: { select: { activo: true, nombre: true } },
+    },
   });
 
   if (!user) return null;
@@ -191,7 +202,11 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
   if (tenantId && tenantId !== user.tenantId) {
     const membresia = await prisma.membresia.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
-      include: { rolRel: true, departamento: true, tenant: { select: { activo: true } } },
+      include: {
+        rolRel: true,
+        departamento: true,
+        tenant: { select: { activo: true, nombre: true } },
+      },
     });
     // Sin membresía, o la empresa a la que apunta el token está desactivada:
     // se trata como sesión inválida en ambos casos, aunque el JWT en sí
@@ -203,6 +218,7 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
     return {
       id: user.id,
       tenantId,
+      tenantNombre: membresia.tenant.nombre,
       nombre: user.nombre,
       email: user.email,
       telefono: user.telefono,
@@ -222,6 +238,7 @@ export async function loadSessionUser(userId: string, tenantId?: string): Promis
   return {
     id: user.id,
     tenantId: user.tenantId,
+    tenantNombre: user.tenant.nombre,
     nombre: user.nombre,
     email: user.email,
     telefono: user.telefono,
@@ -274,7 +291,10 @@ export async function listarTenantsAccesibles(userId: string): Promise<TenantAcc
  * más fácil de mantener en sincronía con loadSessionUser que replicar la
  * lógica en SQL.
  */
-export async function listarUsuariosConPermiso(tenantId: string, permiso: string): Promise<string[]> {
+export async function listarUsuariosConPermiso(
+  tenantId: string,
+  permiso: string,
+): Promise<string[]> {
   const usuarios = await prisma.user.findMany({
     where: { tenantId, activo: true },
     include: { rolRel: true, permisosDirectos: true, departamento: true },
@@ -291,6 +311,9 @@ export async function listarUsuariosConPermiso(tenantId: string, permiso: string
  * este cambio) también se rechaza, porque nunca coincide con un entero real.
  */
 export async function verificarTokenVersion(userId: string, tv: unknown): Promise<boolean> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { tokenVersion: true } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { tokenVersion: true },
+  });
   return !!user && user.tokenVersion === tv;
 }

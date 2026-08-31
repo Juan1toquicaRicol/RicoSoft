@@ -8,12 +8,29 @@ import { hasPermission } from "@/lib/session";
 import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { useProveedores, type Proveedor } from "@/hooks/use-proveedores";
+import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
+
+const SIN_DEPARTAMENTO = "__general__";
 
 export const Route = createFileRoute("/configuracion/proveedores")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.PROVEEDORES_VER),
@@ -26,13 +43,28 @@ function ProveedoresConfigPage() {
   const puedeEditar = hasPermission(sesion, PERMISOS_SISTEMA.PROVEEDORES_EDITAR);
   const puedeEliminar = hasPermission(sesion, PERMISOS_SISTEMA.PROVEEDORES_ELIMINAR);
 
-  const { proveedores, loading, error, refresh, crearProveedor, actualizarProveedor, eliminarProveedor } =
-    useProveedores();
+  const {
+    proveedores,
+    loading,
+    error,
+    refresh,
+    crearProveedor,
+    actualizarProveedor,
+    eliminarProveedor,
+  } = useProveedores();
+  const { departamentos } = useDepartamentosPublico();
 
   const [search, setSearch] = useState("");
   const [creando, setCreando] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [nuevo, setNuevo] = useState({ nombre: "", nit: "", contacto: "", telefono: "", email: "" });
+  const [nuevo, setNuevo] = useState({
+    nombre: "",
+    nit: "",
+    contacto: "",
+    telefono: "",
+    email: "",
+    departamentoId: SIN_DEPARTAMENTO,
+  });
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
   const claveDeAgrupacion = useMemo(() => {
@@ -59,9 +91,19 @@ function ProveedoresConfigPage() {
     if (!nuevo.nombre.trim() || !nuevo.nit.trim()) return;
     setGuardando(true);
     try {
-      await crearProveedor(nuevo);
+      await crearProveedor({
+        ...nuevo,
+        departamentoId: nuevo.departamentoId === SIN_DEPARTAMENTO ? null : nuevo.departamentoId,
+      });
       toast.success(`Proveedor "${nuevo.nombre}" registrado.`);
-      setNuevo({ nombre: "", nit: "", contacto: "", telefono: "", email: "" });
+      setNuevo({
+        nombre: "",
+        nit: "",
+        contacto: "",
+        telefono: "",
+        email: "",
+        departamentoId: SIN_DEPARTAMENTO,
+      });
       setCreando(false);
     } catch (err: any) {
       toast.error(err.message || "Error al registrar el proveedor.");
@@ -75,6 +117,16 @@ function ProveedoresConfigPage() {
       await actualizarProveedor(p.id, { activo: !p.activo });
     } catch (err: any) {
       toast.error(err.message || "Error al actualizar el proveedor.");
+    }
+  };
+
+  const handleCambiarDepartamento = async (p: Proveedor, departamentoId: string) => {
+    try {
+      await actualizarProveedor(p.id, {
+        departamentoId: departamentoId === SIN_DEPARTAMENTO ? null : departamentoId,
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Error al actualizar el departamento del proveedor.");
     }
   };
 
@@ -153,8 +205,30 @@ function ProveedoresConfigPage() {
             placeholder="Correo (opcional)"
             value={nuevo.email}
             onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })}
-            className="sm:col-span-2"
           />
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500">Departamento (opcional)</label>
+            <Select
+              value={nuevo.departamentoId}
+              onValueChange={(val) => setNuevo({ ...nuevo, departamentoId: val })}
+            >
+              <SelectTrigger className="bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200">
+                <SelectItem value={SIN_DEPARTAMENTO}>General (todos los departamentos)</SelectItem>
+                {departamentos.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-slate-500">
+              Si eliges un departamento, este proveedor solo se ofrecerá al crear solicitudes de
+              compra de esa área.
+            </p>
+          </div>
           <div className="sm:col-span-2 flex justify-end">
             <Button type="submit" variant="success" disabled={guardando}>
               {guardando ? "Guardando..." : "Crear proveedor"}
@@ -172,6 +246,7 @@ function ProveedoresConfigPage() {
               <TableHead>Proveedor</TableHead>
               <TableHead>NIT</TableHead>
               <TableHead>Contacto</TableHead>
+              <TableHead>Departamento</TableHead>
               <TableHead>Usado en</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -180,8 +255,10 @@ function ProveedoresConfigPage() {
           <TableBody>
             {proveedores.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-6">
-                  {loading ? "Cargando proveedores..." : error || 'No hay proveedores registrados. Haz clic en "Nuevo proveedor".'}
+                <TableCell colSpan={7} className="text-center text-slate-500 py-6">
+                  {loading
+                    ? "Cargando proveedores..."
+                    : error || 'No hay proveedores registrados. Haz clic en "Nuevo proveedor".'}
                 </TableCell>
               </TableRow>
             ) : (
@@ -189,65 +266,100 @@ function ProveedoresConfigPage() {
                 <Fragment key={grupo.clave || "sin-grupo"}>
                   {grupo.clave && (
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                      <TableCell colSpan={6} className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        {grupo.clave} <span className="font-normal text-slate-400">({grupo.filas.length})</span>
+                      <TableCell
+                        colSpan={7}
+                        className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                      >
+                        {grupo.clave}{" "}
+                        <span className="font-normal text-slate-400">({grupo.filas.length})</span>
                       </TableCell>
                     </TableRow>
                   )}
                   {grupo.filas.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <div className="font-medium text-slate-800">{p.nombre}</div>
-                    {(p.contacto || p.telefono || p.email) && (
-                      <div className="text-xs text-slate-500">{p.email || p.telefono}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">{p.nit}</TableCell>
-                  <TableCell className="text-slate-600">{p.contacto || "—"}</TableCell>
-                  <TableCell className="text-slate-600">
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1" title="Facturas">
-                        <FileText className="h-3.5 w-3.5 text-slate-400" /> {p.facturasAsociadas}
-                      </span>
-                      <span className="flex items-center gap-1" title="Contratos">
-                        <FileSignature className="h-3.5 w-3.5 text-slate-400" /> {p.contratosAsociados}
-                      </span>
-                      <span className="flex items-center gap-1" title="Solicitudes de compra">
-                        <ShoppingCart className="h-3.5 w-3.5 text-slate-400" /> {p.solicitudesAsociadas}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {p.activo ? (
-                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
-                        Activo
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
-                        Inactivo
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    {puedeEditar && (
-                      <Button size="sm" variant="outline" onClick={() => handleToggleActivo(p)}>
-                        {p.activo ? "Desactivar" : "Activar"}
-                      </Button>
-                    )}
-                    {puedeEliminar &&
-                      p.facturasAsociadas === 0 &&
-                      p.contratosAsociados === 0 &&
-                      p.solicitudesAsociadas === 0 && (
-                      <button
-                        onClick={() => handleEliminar(p)}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors align-middle cursor-pointer"
-                        title="Eliminar proveedor"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 inline" />
-                      </button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                    <TableRow key={p.id}>
+                      <TableCell>
+                        <div className="font-medium text-slate-800">{p.nombre}</div>
+                        {(p.contacto || p.telefono || p.email) && (
+                          <div className="text-xs text-slate-500">{p.email || p.telefono}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-slate-600">{p.nit}</TableCell>
+                      <TableCell className="text-slate-600">{p.contacto || "—"}</TableCell>
+                      <TableCell className="text-slate-600">
+                        {puedeEditar ? (
+                          <Select
+                            value={p.departamentoId || SIN_DEPARTAMENTO}
+                            onValueChange={(val) => handleCambiarDepartamento(p, val)}
+                          >
+                            <SelectTrigger className="h-8 w-40 bg-white text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white border-slate-200">
+                              <SelectItem value={SIN_DEPARTAMENTO}>General</SelectItem>
+                              {departamentos.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          p.departamento?.nombre || "General"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="flex items-center gap-1" title="Facturas">
+                            <FileText className="h-3.5 w-3.5 text-slate-400" />{" "}
+                            {p.facturasAsociadas}
+                          </span>
+                          <span className="flex items-center gap-1" title="Contratos">
+                            <FileSignature className="h-3.5 w-3.5 text-slate-400" />{" "}
+                            {p.contratosAsociados}
+                          </span>
+                          <span className="flex items-center gap-1" title="Solicitudes de compra">
+                            <ShoppingCart className="h-3.5 w-3.5 text-slate-400" />{" "}
+                            {p.solicitudesAsociadas}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {p.activo ? (
+                          <Badge
+                            variant="outline"
+                            className="border-blue-200 bg-blue-50 text-blue-800"
+                          >
+                            Activo
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-transparent bg-slate-900 text-white"
+                          >
+                            Inactivo
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        {puedeEditar && (
+                          <Button size="sm" variant="outline" onClick={() => handleToggleActivo(p)}>
+                            {p.activo ? "Desactivar" : "Activar"}
+                          </Button>
+                        )}
+                        {puedeEliminar &&
+                          p.facturasAsociadas === 0 &&
+                          p.contratosAsociados === 0 &&
+                          p.solicitudesAsociadas === 0 && (
+                            <button
+                              onClick={() => handleEliminar(p)}
+                              className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors align-middle cursor-pointer"
+                              title="Eliminar proveedor"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 inline" />
+                            </button>
+                          )}
+                      </TableCell>
+                    </TableRow>
                   ))}
                 </Fragment>
               ))

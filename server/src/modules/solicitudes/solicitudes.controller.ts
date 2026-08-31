@@ -7,19 +7,40 @@ import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { UPLOADS_DIR_COTIZACIONES } from "../../middleware/upload.middleware";
 import { crearNotificacion, notificarPorPermiso } from "../../lib/notificaciones";
 
-const ESTADOS_VALIDOS = ["Pendiente", "En Cotización", "Aprobada", "Rechazada", "Comprado"];
+// "Facturada" no se alcanza a través de PATCH /:id/estado (no tiene entrada
+// en TRANSICIONES): la establece internamente facturas.controller.ts cuando
+// se vincula una factura a una solicitud ya Aprobada/Comprada, de forma
+// atómica junto con la aprobación automática de esa factura.
+const ESTADOS_VALIDOS = [
+  "Pendiente",
+  "En Cotización",
+  "Aprobada",
+  "Rechazada",
+  "Comprado",
+  "Facturada",
+];
 const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Urgente"];
+
+// Número exacto de cotizaciones de proveedor requeridas antes de poder
+// aprobar una solicitud (ver cotizaciones.controller.ts).
+const NUM_COTIZACIONES_REQUERIDAS = 3;
 
 // Estados que aún requieren gestión: se muestran en "Solicitudes de compra".
 const ESTADOS_ACTIVOS = ["Pendiente", "En Cotización"];
 // Estados ya resueltos: se muestran en "Historia de compras" y ya no aparecen
 // en el listado de solicitudes activas. Ninguna solicitud se elimina de la
 // base de datos; solo cambia su campo `estado`.
-const ESTADOS_HISTORICOS = ["Aprobada", "Rechazada", "Comprado"];
+const ESTADOS_HISTORICOS = ["Aprobada", "Rechazada", "Comprado", "Facturada"];
 
 const TRANSICIONES: Record<string, { desde: string[]; permiso: string }> = {
-  Aprobada: { desde: ["Pendiente", "En Cotización"], permiso: PERMISOS_SISTEMA.SOLICITUDES_APROBAR },
-  Rechazada: { desde: ["Pendiente", "En Cotización"], permiso: PERMISOS_SISTEMA.SOLICITUDES_RECHAZAR },
+  Aprobada: {
+    desde: ["Pendiente", "En Cotización"],
+    permiso: PERMISOS_SISTEMA.SOLICITUDES_APROBAR,
+  },
+  Rechazada: {
+    desde: ["Pendiente", "En Cotización"],
+    permiso: PERMISOS_SISTEMA.SOLICITUDES_RECHAZAR,
+  },
   Comprado: { desde: ["Aprobada"], permiso: PERMISOS_SISTEMA.SOLICITUDES_COMPRAR },
 };
 
@@ -37,8 +58,10 @@ function serializar(s: any) {
     cotizacionSubidoPorNombre,
     cotizacionSubidoEn,
     facturas,
+    cotizacionesProveedor,
     ...resto
   } = s;
+  const cotizacionesProv = Array.isArray(cotizacionesProveedor) ? cotizacionesProveedor : [];
   return {
     ...resto,
     valorEstimado: Number(s.valorEstimado),
@@ -51,11 +74,21 @@ function serializar(s: any) {
           subidoEn: cotizacionSubidoEn,
         }
       : null,
+    // Resumen del cuadro comparativo: cuántas cotizaciones de proveedor hay
+    // registradas y si ya hay una ganadora elegida — lo que necesita el
+    // frontend para habilitar/deshabilitar el botón "Aprobar" sin tener que
+    // pedir el detalle completo de cada cotización.
+    cotizacionesResumen: {
+      total: cotizacionesProv.length,
+      requeridas: NUM_COTIZACIONES_REQUERIDAS,
+      tieneGanadora: cotizacionesProv.some((c: any) => c.esGanadora),
+    },
     // Factura final que se paga, si ya se registró (una solicitud "Comprado"
     // puede seguir sin factura hasta que llegue la factura del proveedor).
-    factura: Array.isArray(facturas) && facturas.length > 0
-      ? { id: facturas[0].id, numero: facturas[0].numero, estado: facturas[0].estado }
-      : null,
+    factura:
+      Array.isArray(facturas) && facturas.length > 0
+        ? { id: facturas[0].id, numero: facturas[0].numero, estado: facturas[0].estado }
+        : null,
   };
 }
 
@@ -65,6 +98,9 @@ const INCLUDE_FACTURA_VINCULADA = {
     select: { id: true, numero: true, estado: true },
     orderBy: { createdAt: "desc" as const },
     take: 1,
+  },
+  cotizacionesProveedor: {
+    select: { id: true, esGanadora: true },
   },
 };
 
@@ -108,7 +144,8 @@ export const listarHistorialCompras = async (req: AuthenticatedRequest, res: Res
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && ESTADOS_HISTORICOS.includes(estado)) where.estado = estado;
     if (typeof area === "string" && area) where.area = { contains: area };
-    if (typeof solicitante === "string" && solicitante) where.solicitante = { contains: solicitante };
+    if (typeof solicitante === "string" && solicitante)
+      where.solicitante = { contains: solicitante };
     if (typeof desde === "string" && desde) {
       where.fechaResolucion = { ...(where.fechaResolucion || {}), gte: new Date(desde) };
     }
@@ -134,8 +171,17 @@ export const listarHistorialCompras = async (req: AuthenticatedRequest, res: Res
 export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId, area, solicitanteId, proveedorId, item, descripcion, cantidad, valorEstimado, prioridad } =
-      req.body;
+    const {
+      empresaId,
+      area,
+      solicitanteId,
+      proveedorId,
+      item,
+      descripcion,
+      cantidad,
+      valorEstimado,
+      prioridad,
+    } = req.body;
 
     if (!empresaId || !area || !solicitanteId || !item) {
       return res.status(400).json({ message: "Faltan campos obligatorios de la solicitud." });
@@ -143,7 +189,9 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
     const cant = Number(cantidad);
     const valor = Number(valorEstimado);
     if (!Number.isFinite(cant) || cant <= 0 || !Number.isFinite(valor) || valor < 0) {
-      return res.status(400).json({ message: "Cantidad y valor estimado deben ser números válidos." });
+      return res
+        .status(400)
+        .json({ message: "Cantidad y valor estimado deben ser números válidos." });
     }
 
     // El solicitante se elige en el formulario, pero nunca se confía en el
@@ -167,7 +215,9 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
-        return res.status(404).json({ message: "El proveedor seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El proveedor seleccionado no existe o está inactivo." });
       }
       proveedorNombre = proveedorDb.nombre;
     }
@@ -228,14 +278,20 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
     }
     const transicion = TRANSICIONES[nuevoEstado];
     if (!transicion) {
-      return res.status(400).json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
+      return res
+        .status(400)
+        .json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
     }
 
-    const solicitud = await prisma.solicitudCompra.findFirst({ where: { id, tenantId, eliminado: false } });
+    const solicitud = await prisma.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
 
     if (!transicion.desde.includes(solicitud.estado)) {
-      return res.status(409).json({ message: `No se puede pasar de "${solicitud.estado}" a "${nuevoEstado}".` });
+      return res
+        .status(409)
+        .json({ message: `No se puede pasar de "${solicitud.estado}" a "${nuevoEstado}".` });
     }
 
     const tienePermiso = req.user!.isSuperadmin || req.user!.permisos.includes(transicion.permiso);
@@ -243,12 +299,34 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ message: "No tienes permiso para realizar esta acción." });
     }
 
+    // Regla de las 3 cotizaciones: una solicitud no puede aprobarse sin
+    // exactamente 3 cotizaciones de proveedor completas y una elegida como
+    // ganadora en el cuadro comparativo. Se valida en el backend (aquí)
+    // independientemente de que el frontend ya bloquee el botón por UX.
+    if (nuevoEstado === "Aprobada") {
+      const cotizaciones = await prisma.cotizacionProveedor.findMany({
+        where: { solicitudCompraId: id, tenantId },
+      });
+      if (cotizaciones.length !== 3) {
+        return res.status(409).json({
+          message: `Se requieren exactamente 3 cotizaciones de proveedor para aprobar esta solicitud (hay ${cotizaciones.length}).`,
+        });
+      }
+      if (!cotizaciones.some((c) => c.esGanadora)) {
+        return res.status(409).json({
+          message:
+            "Selecciona la cotización ganadora en el cuadro comparativo antes de aprobar la solicitud.",
+        });
+      }
+    }
+
     const data: any = { estado: nuevoEstado };
     if (TRANSICIONES_DE_RESOLUCION.has(nuevoEstado)) {
       data.fechaResolucion = new Date();
       data.resueltoPorId = req.user!.id;
       data.resueltoPorNombre = req.user!.nombre;
-      data.comentarioResolucion = typeof comentario === "string" && comentario.trim() ? comentario.trim() : null;
+      data.comentarioResolucion =
+        typeof comentario === "string" && comentario.trim() ? comentario.trim() : null;
     }
 
     const actualizada = await prisma.solicitudCompra.update({
@@ -296,7 +374,9 @@ export const eliminarSolicitud = async (req: AuthenticatedRequest, res: Response
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({ where: { id, tenantId, eliminado: false } });
+    const solicitud = await prisma.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
 
     await prisma.solicitudCompra.update({ where: { id }, data: { eliminado: true } });
@@ -334,7 +414,9 @@ export const subirCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
       return res.status(400).json({ message: "No se recibió ningún archivo." });
     }
 
-    const solicitud = await prisma.solicitudCompra.findFirst({ where: { id, tenantId, eliminado: false } });
+    const solicitud = await prisma.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!solicitud) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Solicitud no encontrada." });
@@ -382,7 +464,9 @@ export const obtenerCotizacionSolicitud = async (req: AuthenticatedRequest, res:
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({ where: { id, tenantId, eliminado: false } });
+    const solicitud = await prisma.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!solicitud || !solicitud.cotizacionRuta) {
       return res.status(404).json({ message: "Esta solicitud no tiene una cotización adjunta." });
     }

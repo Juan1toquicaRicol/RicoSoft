@@ -5,11 +5,18 @@ import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { UPLOADS_DIR } from "../../middleware/upload.middleware";
-import { notificarPorPermiso } from "../../lib/notificaciones";
+import { notificarPorPermiso, crearNotificacion } from "../../lib/notificaciones";
 
 const ESTADOS_VALIDOS = ["Pendiente", "Aprobada", "Pagada", "Rechazada"];
 const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Crítica"];
 const MONEDAS_VALIDAS = ["COP", "USD"];
+
+// Una solicitud de compra solo puede vincularse a una factura final desde
+// estos dos estados (Aprobada, o ya marcada Comprado tras la aprobación):
+// vincular la factura la mueve atómicamente a "Facturada" y aprueba la
+// factura automáticamente (ver crearFactura). Ver solicitudes.controller.ts
+// para la máquina de estados completa de SolicitudCompra.
+const ESTADOS_SC_VINCULABLES_A_FACTURA = ["Aprobada", "Comprado"];
 
 // Transiciones de estado permitidas y el permiso requerido para ejecutarlas.
 // "Pagada" NO está aquí a propósito: ya no se alcanza cambiando el estado a
@@ -52,10 +59,14 @@ function serializar(f: any) {
     servicioId: f.servicioId,
     servicio: f.servicioRel ? { id: f.servicioRel.id, nombre: f.servicioRel.nombreServicio } : null,
     contratoId: f.contratoId,
-    contratoRel: f.contratoRel ? { id: f.contratoRel.id, proveedor: f.contratoRel.proveedor } : null,
+    contratoRel: f.contratoRel
+      ? { id: f.contratoRel.id, proveedor: f.contratoRel.proveedor }
+      : null,
     contrato: f.contrato,
     solicitudCompraId: f.solicitudCompraId,
-    solicitudCompraRel: f.solicitudCompraRel ? { id: f.solicitudCompraRel.id, item: f.solicitudCompraRel.item } : null,
+    solicitudCompraRel: f.solicitudCompraRel
+      ? { id: f.solicitudCompraRel.id, item: f.solicitudCompraRel.item }
+      : null,
     centroCostos: f.centroCostos,
     area: f.area,
     responsable: f.responsable,
@@ -68,7 +79,8 @@ function serializar(f: any) {
     estado: f.estado,
     // Derivada, no almacenada: evita duplicar la máquina de estados con un
     // campo "Vencida" que habría que mantener sincronizado aparte.
-    vencida: (f.estado === "Pendiente" || f.estado === "Aprobada") && new Date(f.vence) < new Date(),
+    vencida:
+      (f.estado === "Pendiente" || f.estado === "Aprobada") && new Date(f.vence) < new Date(),
     prioridad: f.prioridad,
     origen: f.origen,
     totalPagado,
@@ -201,13 +213,20 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       }
     }
     // Solicitud de compra que dio origen a esta factura: cierra el ciclo
-    // solicitud (Comprado) -> factura final que se paga. Opcional.
+    // solicitud (Aprobada/Comprado) -> factura final que se paga, y la
+    // factura queda aprobada automáticamente (ver más abajo). Opcional.
+    let solicitudDb: Awaited<ReturnType<typeof prisma.solicitudCompra.findFirst>> = null;
     if (solicitudCompraId) {
-      const solicitudDb = await prisma.solicitudCompra.findFirst({
+      solicitudDb = await prisma.solicitudCompra.findFirst({
         where: { id: solicitudCompraId, tenantId, eliminado: false },
       });
       if (!solicitudDb) {
         return res.status(404).json({ message: "La solicitud de compra seleccionada no existe." });
+      }
+      if (!ESTADOS_SC_VINCULABLES_A_FACTURA.includes(solicitudDb.estado)) {
+        return res.status(409).json({
+          message: `La solicitud de compra debe estar Aprobada para vincular una factura (estado actual: "${solicitudDb.estado}").`,
+        });
       }
     }
 
@@ -222,7 +241,9 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
-        return res.status(404).json({ message: "El proveedor seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El proveedor seleccionado no existe o está inactivo." });
       }
       proveedorNombre = proveedorDb.nombre;
       proveedorNit = proveedorDb.nit;
@@ -237,12 +258,22 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
         where: { id: responsableId, tenantId, activo: true },
       });
       if (!responsableDb) {
-        return res.status(404).json({ message: "El responsable seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El responsable seleccionado no existe o está inactivo." });
       }
       responsableNombre = responsableDb.nombre;
     }
 
-    if (!empresaId || !numero || !proveedorNombre || !proveedorNit || !area || !responsableNombre || !vence) {
+    if (
+      !empresaId ||
+      !numero ||
+      !proveedorNombre ||
+      !proveedorNit ||
+      !area ||
+      !responsableNombre ||
+      !vence
+    ) {
       return res.status(400).json({ message: "Faltan campos obligatorios de la factura." });
     }
     const sub = Number(subtotal);
@@ -256,67 +287,113 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // Solo las facturas activas cuentan para la unicidad del número: una
     // factura eliminada (soft-delete) no debe bloquear para siempre volver a
     // usar ese número.
-    const existente = await prisma.factura.findFirst({ where: { tenantId, empresaId, numero, eliminado: false } });
+    const existente = await prisma.factura.findFirst({
+      where: { tenantId, empresaId, numero, eliminado: false },
+    });
     if (existente) {
       return res.status(409).json({
         message: `Ya existe una factura activa con el número "${numero}" para esta empresa.`,
       });
     }
 
-    const factura = await prisma.factura.create({
-      data: {
-        tenantId,
-        empresaId,
-        numero,
-        proveedorId: proveedorId || null,
-        proveedor: proveedorNombre,
-        nit: proveedorNit,
-        servicioId: servicioId || null,
-        contratoId: contratoId || null,
-        contrato: contrato || null,
-        solicitudCompraId: solicitudCompraId || null,
-        centroCostos: centroCostos || null,
-        area,
-        responsableId: responsableId || null,
-        responsable: responsableNombre,
-        vence: new Date(vence),
-        subtotal: sub,
-        iva: ivaNum,
-        total: sub + ivaNum,
-        moneda: monedaFinal,
-        prioridad: prioridadFinal,
-        origen: typeof origen === "string" ? origen : "Carga manual",
-        historial: {
-          create: {
-            actor: req.user!.nombre,
-            accion: "Factura recibida",
-            detalle: "Ingreso al sistema",
+    // Vincular a una SC ya Aprobada/Comprada aprueba la factura de una vez
+    // (la decisión de fondo ya se tomó al aprobar la solicitud de compra con
+    // su cotización ganadora) y cierra el ciclo de la solicitud a
+    // "Facturada". Ambos cambios quedan en una sola transacción: nunca debe
+    // quedar una factura aprobada con su solicitud todavía "Aprobada", ni
+    // viceversa.
+    const historialInicial = solicitudDb
+      ? [
+          { actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" },
+          {
+            actor: "Sistema",
+            accion: "Factura aprobada automáticamente",
+            detalle: `Vinculada a la solicitud de compra "${solicitudDb.item}", ya aprobada con cotización ganadora.`,
           },
+        ]
+      : [{ actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" }];
+
+    const factura = await prisma.$transaction(async (tx) => {
+      const creada = await tx.factura.create({
+        data: {
+          tenantId,
+          empresaId,
+          numero,
+          proveedorId: proveedorId || null,
+          proveedor: proveedorNombre,
+          nit: proveedorNit,
+          servicioId: servicioId || null,
+          contratoId: contratoId || null,
+          contrato: contrato || null,
+          solicitudCompraId: solicitudCompraId || null,
+          centroCostos: centroCostos || null,
+          area,
+          responsableId: responsableId || null,
+          responsable: responsableNombre,
+          vence: new Date(vence),
+          subtotal: sub,
+          iva: ivaNum,
+          total: sub + ivaNum,
+          moneda: monedaFinal,
+          estado: solicitudDb ? "Aprobada" : "Pendiente",
+          prioridad: prioridadFinal,
+          origen: typeof origen === "string" ? origen : "Carga manual",
+          historial: { create: historialInicial },
         },
-      },
-      include: INCLUDE_FACTURA,
+        include: INCLUDE_FACTURA,
+      });
+
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "FACTURA_CREADA",
+          detalle: `${req.user!.nombre} registró la factura "${creada.numero}" (${creada.proveedor})`,
+        },
+      });
+
+      if (solicitudDb) {
+        await tx.solicitudCompra.update({
+          where: { id: solicitudDb.id },
+          data: { estado: "Facturada" },
+        });
+        await tx.auditoria.create({
+          data: {
+            tenantId,
+            usuarioId: req.user!.id,
+            accion: "SOLICITUD_COMPRA_FACTURADA",
+            detalle: `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}"; quedó aprobada automáticamente y la solicitud pasó a "Facturada".`,
+          },
+        });
+      }
+
+      return creada;
     });
 
-    await prisma.auditoria.create({
-      data: {
+    if (solicitudDb) {
+      if (solicitudDb.solicitanteId) {
+        await crearNotificacion({
+          tenantId,
+          usuarioId: solicitudDb.solicitanteId,
+          tipo: "SOLICITUD_COMPRA_FACTURADA",
+          titulo: "Tu solicitud de compra fue facturada",
+          mensaje: `"${solicitudDb.item}" quedó facturada con la factura "${factura.numero}".`,
+          enlace: "/historia-compras",
+        });
+      }
+    } else {
+      await notificarPorPermiso(
         tenantId,
-        usuarioId: req.user!.id,
-        accion: "FACTURA_CREADA",
-        detalle: `${req.user!.nombre} registró la factura "${factura.numero}" (${factura.proveedor})`,
-      },
-    });
-
-    await notificarPorPermiso(
-      tenantId,
-      PERMISOS_SISTEMA.FACTURAS_APROBAR,
-      {
-        tipo: "FACTURA_PENDIENTE",
-        titulo: "Nueva factura pendiente de aprobación",
-        mensaje: `Factura "${factura.numero}" de ${factura.proveedor} (${factura.empresaId}).`,
-        enlace: "/facturas",
-      },
-      { excluirUsuarioId: req.user!.id },
-    );
+        PERMISOS_SISTEMA.FACTURAS_APROBAR,
+        {
+          tipo: "FACTURA_PENDIENTE",
+          titulo: "Nueva factura pendiente de aprobación",
+          mensaje: `Factura "${factura.numero}" de ${factura.proveedor} (${factura.empresaId}).`,
+          enlace: "/facturas",
+        },
+        { excluirUsuarioId: req.user!.id },
+      );
+    }
 
     return res.status(201).json(serializar(factura));
   } catch (error) {
@@ -337,7 +414,9 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
 
     const transicion = TRANSICIONES[nuevoEstado];
     if (!transicion) {
-      return res.status(400).json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
+      return res
+        .status(400)
+        .json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
     }
 
     const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
@@ -355,7 +434,11 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
     }
 
     const accionLabel =
-      nuevoEstado === "Aprobada" ? "Factura aprobada" : nuevoEstado === "Rechazada" ? "Factura rechazada" : "Pago registrado";
+      nuevoEstado === "Aprobada"
+        ? "Factura aprobada"
+        : nuevoEstado === "Rechazada"
+          ? "Factura rechazada"
+          : "Pago registrado";
 
     const actualizada = await prisma.factura.update({
       where: { id },
@@ -549,7 +632,9 @@ export const agregarComentarioFactura = async (req: AuthenticatedRequest, res: R
       return res.status(400).json({ message: "El comentario no puede estar vacío." });
     }
     if (texto.length > 2000) {
-      return res.status(400).json({ message: "El comentario es demasiado largo (máx. 2000 caracteres)." });
+      return res
+        .status(400)
+        .json({ message: "El comentario es demasiado largo (máx. 2000 caracteres)." });
     }
 
     const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });

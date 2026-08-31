@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
-import type { SolicitudCompra } from "@/lib/data";
+import type { CotizacionProveedor, SolicitudCompra } from "@/lib/data";
 
 /**
  * Solicitudes de compra ACTIVAS (Pendiente / En Cotización). En cuanto una
@@ -106,6 +106,99 @@ export async function descargarCotizacionSolicitud(id: string) {
 }
 
 /**
+ * Cuadro comparativo de cotizaciones de proveedor de una solicitud de
+ * compra: listar, agregar (hasta 3), eliminar y elegir la ganadora.
+ */
+export function useCotizacionesProveedor(solicitudId: string | null) {
+  const [cotizaciones, setCotizaciones] = useState<CotizacionProveedor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!solicitudId) {
+      setCotizaciones([]);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/solicitudes-compra/${solicitudId}/cotizaciones`);
+      setCotizaciones(data);
+    } catch (err: any) {
+      setError(err.message || "Error cargando las cotizaciones.");
+    } finally {
+      setLoading(false);
+    }
+  }, [solicitudId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const agregarCotizacion = useCallback(
+    async (data: {
+      proveedorId?: string;
+      proveedorNombre?: string;
+      proveedorNit?: string;
+      valorTotalCOP: number;
+      tiempoEntregaDias: number;
+      archivo: File;
+    }) => {
+      if (!solicitudId) return;
+      const formData = new FormData();
+      if (data.proveedorId) formData.append("proveedorId", data.proveedorId);
+      if (data.proveedorNombre) formData.append("proveedorNombre", data.proveedorNombre);
+      if (data.proveedorNit) formData.append("proveedorNit", data.proveedorNit);
+      formData.append("valorTotalCOP", String(data.valorTotalCOP));
+      formData.append("tiempoEntregaDias", String(data.tiempoEntregaDias));
+      formData.append("archivo", data.archivo);
+      await fetchAuthUpload(`/solicitudes-compra/${solicitudId}/cotizaciones`, formData);
+      await refresh();
+    },
+    [solicitudId, refresh],
+  );
+
+  const eliminarCotizacion = useCallback(
+    async (cotizacionId: string) => {
+      if (!solicitudId) return;
+      await fetchAuth(`/solicitudes-compra/${solicitudId}/cotizaciones/${cotizacionId}`, {
+        method: "DELETE",
+      });
+      await refresh();
+    },
+    [solicitudId, refresh],
+  );
+
+  const seleccionarGanadora = useCallback(
+    async (cotizacionId: string) => {
+      if (!solicitudId) return;
+      await fetchAuth(
+        `/solicitudes-compra/${solicitudId}/cotizaciones/${cotizacionId}/seleccionar`,
+        {
+          method: "POST",
+        },
+      );
+      await refresh();
+    },
+    [solicitudId, refresh],
+  );
+
+  return {
+    cotizaciones,
+    loading,
+    error,
+    refresh,
+    agregarCotizacion,
+    eliminarCotizacion,
+    seleccionarGanadora,
+  };
+}
+
+export async function descargarCotizacionProveedor(solicitudId: string, cotizacionId: string) {
+  return fetchAuthBlob(`/solicitudes-compra/${solicitudId}/cotizaciones/${cotizacionId}/archivo`);
+}
+
+/**
  * Historia de compras: consulta de solo lectura sobre solicitudes ya
  * resueltas (Aprobada / Rechazada / Comprado). Reutiliza la misma tabla de
  * SolicitudCompra vía el endpoint /solicitudes-compra/historial.
@@ -134,8 +227,14 @@ export function useHistorialCompras(filtros: HistorialFiltros) {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtros.empresaId, filtros.estado, filtros.area, filtros.solicitante, filtros.desde, filtros.hasta]);
+  }, [
+    filtros.empresaId,
+    filtros.estado,
+    filtros.area,
+    filtros.solicitante,
+    filtros.desde,
+    filtros.hasta,
+  ]);
 
   useEffect(() => {
     refresh();

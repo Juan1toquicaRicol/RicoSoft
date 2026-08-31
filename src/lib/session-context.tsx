@@ -1,12 +1,16 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import { clearSession, fetchCurrentUser, SessionUser } from "./session";
+import { clearSession, fetchCurrentUser, fetchAuth, setToken, SessionUser } from "./session";
 
 interface SessionContextType {
   user: SessionUser | null;
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => void;
+  /** Cambia de empresa activa (tenant) sin tener que volver a loguearse:
+   * pide un JWT nuevo escogido para ese tenant (el backend valida de nuevo
+   * que el usuario tenga membresía) y refresca la sesión. */
+  switchTenant: (tenantId: string) => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -31,8 +35,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const switchTenant = useCallback(
+    async (tenantId: string) => {
+      const response = await fetchAuth("/auth/switch-tenant", {
+        method: "POST",
+        body: JSON.stringify({ tenantId }),
+      });
+      setToken(response.token);
+      await refresh();
+    },
+    [refresh],
+  );
+
   return (
-    <SessionContext.Provider value={{ user, loading, refresh, logout }}>
+    <SessionContext.Provider value={{ user, loading, refresh, logout, switchTenant }}>
       {children}
     </SessionContext.Provider>
   );

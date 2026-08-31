@@ -14,7 +14,10 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
           ? { OR: [{ nombre: { contains: search } }, { nit: { contains: search } }] }
           : {}),
       },
-      include: { _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } } },
+      include: {
+        departamento: { select: { id: true, nombre: true } },
+        _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } },
+      },
       orderBy: { nombre: "asc" },
     });
 
@@ -27,6 +30,8 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
         telefono: p.telefono,
         email: p.email,
         activo: p.activo,
+        departamentoId: p.departamentoId,
+        departamento: p.departamento ? { id: p.departamento.id, nombre: p.departamento.nombre } : null,
         facturasAsociadas: p._count.facturas,
         contratosAsociados: p._count.contratos,
         solicitudesAsociadas: p._count.solicitudesCompra,
@@ -42,12 +47,25 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
   try {
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(crearProveedorSchema).
-    const { nombre, nit, contacto, telefono, email } = req.body;
+    const { nombre, nit, contacto, telefono, email, departamentoId } = req.body;
 
     const nitLimpio = nit.trim();
     const existente = await prisma.proveedor.findFirst({ where: { tenantId, nit: nitLimpio } });
     if (existente) {
       return res.status(409).json({ message: `Ya existe un proveedor registrado con el NIT "${nitLimpio}".` });
+    }
+
+    // Si se indica un departamento, debe existir en el mismo tenant (IDOR) —
+    // igual que el resto de referencias por id en este módulo.
+    let departamentoIdFinal: string | null = null;
+    if (typeof departamentoId === "string" && departamentoId.trim()) {
+      const departamentoDb = await prisma.departamento.findFirst({
+        where: { id: departamentoId, tenantId },
+      });
+      if (!departamentoDb) {
+        return res.status(404).json({ message: "El departamento seleccionado no existe." });
+      }
+      departamentoIdFinal = departamentoDb.id;
     }
 
     const proveedor = await prisma.proveedor.create({
@@ -58,7 +76,9 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
         contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null,
         telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
         email: typeof email === "string" && email.trim() ? email.trim() : null,
+        departamentoId: departamentoIdFinal,
       },
+      include: { departamento: { select: { id: true, nombre: true } } },
     });
 
     await prisma.auditoria.create({
@@ -81,6 +101,10 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
       telefono: proveedor.telefono,
       email: proveedor.email,
       activo: proveedor.activo,
+      departamentoId: proveedor.departamentoId,
+      departamento: proveedor.departamento
+        ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
+        : null,
       facturasAsociadas: 0,
       contratosAsociados: 0,
       solicitudesAsociadas: 0,
@@ -96,7 +120,7 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
     const { id } = req.params;
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(actualizarProveedorSchema).
-    const { nombre, nit, contacto, telefono, email, activo } = req.body;
+    const { nombre, nit, contacto, telefono, email, activo, departamentoId } = req.body;
 
     const existente = await prisma.proveedor.findFirst({ where: { id, tenantId } });
     if (!existente) {
@@ -110,6 +134,24 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
+    // departamentoId !== undefined permite tanto asignar uno nuevo como
+    // limpiarlo explícitamente (enviando null) para volver a un proveedor
+    // "general"; si no viene en el body, el departamento actual no cambia.
+    let departamentoIdFinal: string | null | undefined;
+    if (departamentoId !== undefined) {
+      if (typeof departamentoId === "string" && departamentoId.trim()) {
+        const departamentoDb = await prisma.departamento.findFirst({
+          where: { id: departamentoId, tenantId },
+        });
+        if (!departamentoDb) {
+          return res.status(404).json({ message: "El departamento seleccionado no existe." });
+        }
+        departamentoIdFinal = departamentoDb.id;
+      } else {
+        departamentoIdFinal = null;
+      }
+    }
+
     const proveedor = await prisma.proveedor.update({
       where: { id },
       data: {
@@ -119,8 +161,12 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
         ...(telefono !== undefined ? { telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null } : {}),
         ...(email !== undefined ? { email: typeof email === "string" && email.trim() ? email.trim() : null } : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
+        ...(departamentoIdFinal !== undefined ? { departamentoId: departamentoIdFinal } : {}),
       },
-      include: { _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } } },
+      include: {
+        departamento: { select: { id: true, nombre: true } },
+        _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } },
+      },
     });
 
     await prisma.auditoria.create({
@@ -152,6 +198,10 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       telefono: proveedor.telefono,
       email: proveedor.email,
       activo: proveedor.activo,
+      departamentoId: proveedor.departamentoId,
+      departamento: proveedor.departamento
+        ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
+        : null,
       facturasAsociadas: proveedor._count.facturas,
       contratosAsociados: proveedor._count.contratos,
       solicitudesAsociadas: proveedor._count.solicitudesCompra,
