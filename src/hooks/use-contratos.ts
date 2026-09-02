@@ -19,8 +19,22 @@ export interface Contrato {
   createdAt: string;
 }
 
-export function useContratos() {
+export interface ContratosFiltros {
+  empresaId?: string;
+  estado?: string;
+  search?: string;
+  // Opcionales: con `page`, el backend responde el envelope paginado real
+  // ({items,page,pageSize,total,totalPages}). Sin él, array plano de
+  // siempre (compatibilidad con quien necesita el catálogo completo, p. ej.
+  // el select de "contrato relacionado" en Facturas/Servicios).
+  page?: number;
+  pageSize?: number;
+}
+
+export function useContratos(filtros: ContratosFiltros = {}) {
   const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -28,14 +42,31 @@ export function useContratos() {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchAuth("/contratos");
-      setContratos(data);
+      const params = new URLSearchParams();
+      if (filtros.empresaId) params.set("empresaId", filtros.empresaId);
+      if (filtros.estado) params.set("estado", filtros.estado);
+      if (filtros.search) params.set("search", filtros.search);
+      if (filtros.page) {
+        params.set("page", String(filtros.page));
+        params.set("pageSize", String(filtros.pageSize ?? 25));
+      }
+      const qs = params.toString();
+      const data = await fetchAuth(`/contratos${qs ? `?${qs}` : ""}`);
+      if (Array.isArray(data)) {
+        setContratos(data);
+        setTotal(data.length);
+        setTotalPages(1);
+      } else {
+        setContratos(data.items ?? []);
+        setTotal(data.total ?? 0);
+        setTotalPages(data.totalPages ?? 1);
+      }
     } catch (err: any) {
       setError(err.message || "Error cargando contratos.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filtros.empresaId, filtros.estado, filtros.search, filtros.page, filtros.pageSize]);
 
   useEffect(() => {
     refresh();
@@ -78,5 +109,15 @@ export function useContratos() {
     [refresh],
   );
 
-  return { contratos, loading, error, refresh, addContrato, updateEstadoContrato, eliminarContrato };
+  return {
+    contratos,
+    total,
+    totalPages,
+    loading,
+    error,
+    refresh,
+    addContrato,
+    updateEstadoContrato,
+    eliminarContrato,
+  };
 }

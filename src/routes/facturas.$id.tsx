@@ -91,10 +91,16 @@ function DetalleFactura() {
   } = useFacturas();
   const { user } = useSession();
 
-  // Refresca en segundo plano cada pocos segundos SOLO esta factura (no todo
-  // el listado del tenant): si otro usuario aprueba, adjunta un documento o
-  // comenta la factura, se ve reflejado sin recargar. Se pausa si la pestaña
-  // no está visible.
+  // Trae esta factura directamente por id (nunca depende de que esté en la
+  // página que useFacturas haya cargado por defecto — el listado ahora pagina
+  // server-side, así que una factura antigua podría no estar en la primera
+  // página). Luego el polling la mantiene fresca en segundo plano: si otro
+  // usuario aprueba, adjunta un documento o comenta, se ve reflejado sin
+  // recargar. Se pausa si la pestaña no está visible.
+  useEffect(() => {
+    refreshOne(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
   usePollingFacturas(useCallback(() => refreshOne(id), [refreshOne, id]));
 
   const factura = facturas.find((f) => f.id === id);
@@ -139,7 +145,9 @@ function DetalleFactura() {
   if (loading && !factura) {
     return (
       <AppShell title="Cargando factura..." description="RicoSoft Contabilidad">
-        <div className="panel p-12 text-center text-xs text-slate-500 bg-white border-slate-200 shadow-2xs">Cargando...</div>
+        <div className="panel p-12 text-center text-xs text-slate-500 bg-white border-slate-200 shadow-2xs">
+          Cargando...
+        </div>
       </AppShell>
     );
   }
@@ -254,20 +262,31 @@ function DetalleFactura() {
               <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
                 {factura.servicio && (
                   <Link to="/servicios/$id" params={{ id: factura.servicio.id }}>
-                    <Badge variant="outline" className="gap-1.5 border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 py-1">
+                    <Badge
+                      variant="outline"
+                      className="gap-1.5 border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 py-1"
+                    >
                       <Receipt className="h-3.5 w-3.5" /> {factura.servicio.nombre}
                     </Badge>
                   </Link>
                 )}
                 {factura.contratoRel && (
-                  <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1">
-                    <FileSignature className="h-3.5 w-3.5" /> Contrato con {factura.contratoRel.proveedor}
+                  <Badge
+                    variant="outline"
+                    className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1"
+                  >
+                    <FileSignature className="h-3.5 w-3.5" /> Contrato con{" "}
+                    {factura.contratoRel.proveedor}
                   </Badge>
                 )}
                 {factura.solicitudCompraRel && (
                   <Link to="/historia-compras">
-                    <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 py-1">
-                      <ShoppingCart className="h-3.5 w-3.5" /> Solicitud: {factura.solicitudCompraRel.item}
+                    <Badge
+                      variant="outline"
+                      className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 py-1"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" /> Solicitud:{" "}
+                      {factura.solicitudCompraRel.item}
                     </Badge>
                   </Link>
                 )}
@@ -277,25 +296,23 @@ function DetalleFactura() {
             {factura.alertaValor && (
               <Alert variant="warning" className="mb-4">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                <AlertDescription className="text-xs">{factura.alertaValor.mensaje}</AlertDescription>
+                <AlertDescription className="text-xs">
+                  {factura.alertaValor.mensaje}
+                </AlertDescription>
               </Alert>
             )}
 
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               {campos.map(([label, value]) => (
                 <div key={label} className="min-w-0">
-                  <dt className="text-[11px] uppercase tracking-wide text-slate-500">
-                    {label}
-                  </dt>
+                  <dt className="text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
                   <dd className="mt-0.5 truncate text-sm font-medium">{value}</dd>
                 </div>
               ))}
             </dl>
             <div className="mt-6 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-3 lg:grid-cols-5">
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Subtotal
-                </p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Subtotal</p>
                 <p className="num text-base font-semibold">
                   {money(factura.subtotal, factura.moneda)}
                 </p>
@@ -305,17 +322,13 @@ function DetalleFactura() {
                 <p className="num text-base font-semibold">{money(factura.iva, factura.moneda)}</p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Total a Pagar
-                </p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Total a Pagar</p>
                 <p className="num text-lg font-bold text-blue-800">
                   {money(factura.total, factura.moneda)}
                 </p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Total Pagado
-                </p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Total Pagado</p>
                 <p className="num text-base font-semibold text-slate-900">
                   {money(totalPagado, factura.moneda)}
                 </p>
@@ -356,6 +369,60 @@ function DetalleFactura() {
         </div>
 
         <div className="space-y-4">
+          {factura.solicitudCompraRel && (
+            <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+              <h2 className="text-sm font-semibold mb-4">Origen de la Compra</h2>
+              <dl className="space-y-2 text-xs">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Solicitud de compra</dt>
+                  <dd className="font-semibold text-right">{factura.solicitudCompraRel.item}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Aprobada por</dt>
+                  <dd className="font-semibold text-right">
+                    {factura.solicitudCompraRel.aprobadaPor || "—"}
+                    {factura.solicitudCompraRel.aprobadaEn && (
+                      <span className="block text-[10px] font-normal text-slate-400">
+                        {new Date(factura.solicitudCompraRel.aprobadaEn).toLocaleDateString(
+                          "es-CO",
+                        )}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                {factura.solicitudCompraRel.cotizacionGanadora ? (
+                  <>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Proveedor ganador</dt>
+                      <dd className="font-semibold text-right">
+                        {factura.solicitudCompraRel.cotizacionGanadora.proveedorNombre}
+                        <span className="block text-[10px] font-normal text-slate-400">
+                          NIT {factura.solicitudCompraRel.cotizacionGanadora.proveedorNit}
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Valor cotizado</dt>
+                      <dd className="font-semibold text-right">
+                        {money(factura.solicitudCompraRel.cotizacionGanadora.valorTotalCOP)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Tiempo de entrega</dt>
+                      <dd className="font-semibold text-right">
+                        {factura.solicitudCompraRel.cotizacionGanadora.tiempoEntregaDias} días
+                      </dd>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-slate-400 italic">
+                    Esta solicitud no tuvo cuadro comparativo de cotizaciones.
+                  </p>
+                )}
+              </dl>
+            </div>
+          )}
+
           <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
             <h2 className="text-sm font-semibold mb-4">Trazabilidad y Auditoría</h2>
             <ol className="space-y-4">
@@ -369,9 +436,7 @@ function DetalleFactura() {
                   <p className="text-[10px] text-slate-500">
                     {new Date(h.fecha).toLocaleString("es-CO")} · {h.actor}
                   </p>
-                  {h.detalle && (
-                    <p className="mt-1 text-xs text-slate-500 italic">{h.detalle}</p>
-                  )}
+                  {h.detalle && <p className="mt-1 text-xs text-slate-500 italic">{h.detalle}</p>}
                 </li>
               ))}
               {eventosSistema.length === 0 && (
@@ -425,7 +490,13 @@ interface RegistrarPagoModalProps {
   }) => Promise<unknown>;
 }
 
-function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegistrar }: RegistrarPagoModalProps) {
+function RegistrarPagoModal({
+  open,
+  onOpenChange,
+  saldoPendiente,
+  moneda,
+  onRegistrar,
+}: RegistrarPagoModalProps) {
   const [form, setForm] = useState({
     fecha: new Date().toISOString().split("T")[0],
     valor: saldoPendiente,
@@ -484,14 +555,16 @@ function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegi
         <DialogHeader>
           <DialogTitle className="text-slate-900 font-bold">Registrar pago</DialogTitle>
           <DialogDescription className="text-slate-500">
-            Saldo pendiente: <strong>{money(saldoPendiente, moneda)}</strong>. Puedes registrar el pago
-            completo o un abono parcial.
+            Saldo pendiente: <strong>{money(saldoPendiente, moneda)}</strong>. Puedes registrar el
+            pago completo o un abono parcial.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="pago-fecha" className="text-xs font-semibold">Fecha del pago</Label>
+              <Label htmlFor="pago-fecha" className="text-xs font-semibold">
+                Fecha del pago
+              </Label>
               <Input
                 type="date"
                 id="pago-fecha"
@@ -501,7 +574,9 @@ function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegi
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="pago-valor" className="text-xs font-semibold">Valor *</Label>
+              <Label htmlFor="pago-valor" className="text-xs font-semibold">
+                Valor *
+              </Label>
               <Input
                 type="number"
                 id="pago-valor"
@@ -515,20 +590,29 @@ function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegi
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="pago-metodo" className="text-xs font-semibold">Método de pago</Label>
-              <Select value={form.metodoPago} onValueChange={(val) => setForm({ ...form, metodoPago: val })}>
+              <Label htmlFor="pago-metodo" className="text-xs font-semibold">
+                Método de pago
+              </Label>
+              <Select
+                value={form.metodoPago}
+                onValueChange={(val) => setForm({ ...form, metodoPago: val })}
+              >
                 <SelectTrigger id="pago-metodo" className="h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {METODOS_PAGO.map((m) => (
-                    <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+                    <SelectItem key={m} value={m} className="text-xs">
+                      {m}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="pago-referencia" className="text-xs font-semibold">Referencia</Label>
+              <Label htmlFor="pago-referencia" className="text-xs font-semibold">
+                Referencia
+              </Label>
               <Input
                 id="pago-referencia"
                 placeholder="Nº de transacción, cheque, etc."
@@ -539,7 +623,9 @@ function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegi
             </div>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="pago-observaciones" className="text-xs font-semibold">Observaciones</Label>
+            <Label htmlFor="pago-observaciones" className="text-xs font-semibold">
+              Observaciones
+            </Label>
             <Input
               id="pago-observaciones"
               value={form.observaciones}
@@ -551,10 +637,21 @@ function RegistrarPagoModal({ open, onOpenChange, saldoPendiente, moneda, onRegi
             El comprobante se puede adjuntar después de registrar el pago, desde la lista de pagos.
           </p>
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={guardando}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={guardando}
+            >
               Cancelar
             </Button>
-            <Button type="submit" size="sm" disabled={guardando} className="bg-blue-800 hover:bg-blue-900 text-white font-bold">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={guardando}
+              className="bg-blue-800 hover:bg-blue-900 text-white font-bold"
+            >
               {guardando ? "Registrando..." : "Registrar pago"}
             </Button>
           </DialogFooter>
@@ -573,13 +670,25 @@ interface PagosFacturaProps {
   onDescargarComprobante: (pagoId: string) => Promise<Blob>;
 }
 
-function PagosFactura({ pagos, puedePagar, moneda, onAnular, onSubirComprobante, onDescargarComprobante }: PagosFacturaProps) {
+function PagosFactura({
+  pagos,
+  puedePagar,
+  moneda,
+  onAnular,
+  onSubirComprobante,
+  onDescargarComprobante,
+}: PagosFacturaProps) {
   const [anulandoId, setAnulandoId] = useState<string | null>(null);
   const [subiendoId, setSubiendoId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const handleAnular = async (pago: Pago) => {
-    if (!confirm(`¿Anular el pago de ${money(pago.valor, moneda)}? La factura volverá a "Aprobada" si queda saldo pendiente.`)) return;
+    if (
+      !confirm(
+        `¿Anular el pago de ${money(pago.valor, moneda)}? La factura volverá a "Aprobada" si queda saldo pendiente.`,
+      )
+    )
+      return;
     setAnulandoId(pago.id);
     try {
       await onAnular(pago.id);
@@ -624,25 +733,38 @@ function PagosFactura({ pagos, puedePagar, moneda, onAnular, onSubirComprobante,
             <div
               key={p.id}
               className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-xs ${
-                p.estado === "Anulado" ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200"
+                p.estado === "Anulado"
+                  ? "border-slate-200 bg-slate-50 opacity-60"
+                  : "border-slate-200"
               }`}
             >
               <div className="min-w-0">
                 <p className="font-semibold text-sm">
                   {money(p.valor, moneda)}{" "}
                   {p.estado === "Anulado" && (
-                    <span className="ml-1 text-[10px] font-bold uppercase text-slate-500">Anulado</span>
+                    <span className="ml-1 text-[10px] font-bold uppercase text-slate-500">
+                      Anulado
+                    </span>
                   )}
                 </p>
                 <p className="text-[11px] text-slate-500">
                   {new Date(p.fecha).toLocaleDateString("es-CO")} · {p.metodoPago}
-                  {p.referencia ? ` · Ref: ${p.referencia}` : ""} · Registrado por {p.registradoPorNombre}
+                  {p.referencia ? ` · Ref: ${p.referencia}` : ""} · Registrado por{" "}
+                  {p.registradoPorNombre}
                 </p>
-                {p.observaciones && <p className="mt-1 text-[11px] italic text-slate-500">{p.observaciones}</p>}
+                {p.observaciones && (
+                  <p className="mt-1 text-[11px] italic text-slate-500">{p.observaciones}</p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {p.comprobante ? (
-                  <Button type="button" size="xs" variant="outline" className="gap-1" onClick={() => handleVerComprobante(p)}>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    className="gap-1"
+                    onClick={() => handleVerComprobante(p)}
+                  >
                     <Paperclip className="h-3 w-3" /> Ver comprobante
                   </Button>
                 ) : (
@@ -670,7 +792,8 @@ function PagosFactura({ pagos, puedePagar, moneda, onAnular, onSubirComprobante,
                         disabled={subiendoId === p.id}
                         onClick={() => fileInputRefs.current[p.id]?.click()}
                       >
-                        <Upload className="h-3 w-3" /> {subiendoId === p.id ? "Subiendo..." : "Adjuntar comprobante"}
+                        <Upload className="h-3 w-3" />{" "}
+                        {subiendoId === p.id ? "Subiendo..." : "Adjuntar comprobante"}
                       </Button>
                     </>
                   )
@@ -858,7 +981,9 @@ function DocumentoFactura({
               </div>
             </div>
           )}
-          {errorArchivo && <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>}
+          {errorArchivo && (
+            <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>
+          )}
         </div>
       )}
 
@@ -909,7 +1034,9 @@ function DocumentoFactura({
             )}
           </div>
 
-          {errorArchivo && <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>}
+          {errorArchivo && (
+            <p className="mt-2 text-xs font-semibold text-slate-900">{errorArchivo}</p>
+          )}
         </div>
       )}
     </div>
@@ -979,7 +1106,9 @@ function ComentariosFactura({
         {comentarios.map((c, i) => (
           <li key={i} className="text-xs">
             <p className="font-semibold">{c.actor}</p>
-            <p className="text-[10px] text-slate-500">{new Date(c.fecha).toLocaleString("es-CO")}</p>
+            <p className="text-[10px] text-slate-500">
+              {new Date(c.fecha).toLocaleString("es-CO")}
+            </p>
             <p className="mt-1 whitespace-pre-wrap text-slate-700">{c.detalle}</p>
           </li>
         ))}

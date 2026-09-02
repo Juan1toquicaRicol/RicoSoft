@@ -13,6 +13,8 @@
     "purgar-auditoria": "tsx scripts/purgar-auditoria.ts",
     "sync-siesa": "tsx scripts/sync-siesa.ts",
     "explore-siesa": "tsx scripts/explore-siesa.ts",
+    "backfill-siesa-terceros": "tsx scripts/backfill-siesa-terceros.ts",
+    "reporte-proveedores-duplicados": "tsx scripts/reporte-proveedores-duplicados.ts",
     "otorgar-membresia": "tsx scripts/otorgar-membresia.ts",
     "asignar-dominio-tenant": "tsx scripts/asignar-dominio-tenant.ts",
     "ci:preparar-db-integracion": "tsx scripts/ci-preparar-db-integracion.ts",

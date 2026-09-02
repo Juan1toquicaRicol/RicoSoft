@@ -8,13 +8,38 @@ import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import {
+  FilaGrupo,
+  OPCION_SIN_AGRUPAR,
+  SelectorAgrupacion,
+} from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +52,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useServicios } from "@/hooks/use-servicios";
-import { useProveedores } from "@/hooks/use-proveedores";
+import { useProveedorBusqueda } from "@/hooks/use-proveedores";
 import { useContratos } from "@/hooks/use-contratos";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
@@ -40,7 +65,11 @@ export const Route = createFileRoute("/servicios")({
   head: () => ({
     meta: [
       { title: "Servicios y Suscripciones | RicoSoft" },
-      { name: "description", content: "Inventario y control de suscripciones y servicios activos categorizados por área y empresa." },
+      {
+        name: "description",
+        content:
+          "Inventario y control de suscripciones y servicios activos categorizados por área y empresa.",
+      },
     ],
   }),
   component: ServiciosPage,
@@ -48,9 +77,22 @@ export const Route = createFileRoute("/servicios")({
 
 function ServiciosPage() {
   const { empresaActiva, empresas } = useTenant();
-  const { suscripciones, loading, error, addSuscripcion, toggleEstadoSuscripcion, eliminarSuscripcion } = useServicios();
-  const { proveedores } = useProveedores();
-  const proveedoresActivos = proveedores.filter((p) => p.activo);
+  const {
+    suscripciones,
+    loading,
+    error,
+    addSuscripcion,
+    toggleEstadoSuscripcion,
+    eliminarSuscripcion,
+  } = useServicios();
+  const {
+    opciones: proveedorOpciones,
+    loading: buscandoProveedores,
+    buscar: buscarProveedores,
+  } = useProveedorBusqueda();
+  const [proveedorSeleccionadoNombre, setProveedorSeleccionadoNombre] = useState<
+    string | undefined
+  >();
   const { contratos } = useContratos();
   const contratosActivos = contratos.filter((c) => c.estado === "Activo");
   const { departamentos } = useDepartamentosPublico();
@@ -58,7 +100,9 @@ function ServiciosPage() {
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.SERVICIOS_ELIMINAR);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [servicioAEliminar, setServicioAEliminar] = useState<{ id: string; nombre: string } | null>(null);
+  const [servicioAEliminar, setServicioAEliminar] = useState<{ id: string; nombre: string } | null>(
+    null,
+  );
   const [eliminando, setEliminando] = useState(false);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
@@ -152,6 +196,7 @@ function ServiciosPage() {
       return;
     }
     setModalOpen(false);
+    setProveedorSeleccionadoNombre(undefined);
     setForm({
       empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
       area: "Sistemas",
@@ -179,19 +224,24 @@ function ServiciosPage() {
       {/* KPI Resumen */}
       <div className="grid gap-4 sm:grid-cols-3 mb-6">
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Servicios Activos</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Servicios Activos
+          </p>
           <p className="text-2xl font-bold mt-1 text-blue-900">
-            {filteredSuscripciones.filter((s) => s.estado === "Activo").length} / {filteredSuscripciones.length}
+            {filteredSuscripciones.filter((s) => s.estado === "Activo").length} /{" "}
+            {filteredSuscripciones.length}
           </p>
         </div>
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Costo Mensual Recurrente Estimado</p>
-          <p className="num text-2xl font-bold mt-1 text-slate-900">
-            {money(costoMensualTotal)}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Costo Mensual Recurrente Estimado
           </p>
+          <p className="num text-2xl font-bold mt-1 text-slate-900">{money(costoMensualTotal)}</p>
         </div>
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Empresa Activa</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Empresa Activa
+          </p>
           <p className="text-sm font-bold text-slate-900 mt-2">
             {empresaActiva === "ALL" ? "Todas las empresas (Consolidado)" : empresaActiva}
           </p>
@@ -201,8 +251,12 @@ function ServiciosPage() {
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
         <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/80">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Inventario de Servicios Recurrentes</h3>
-            <p className="text-xs text-slate-500 font-medium">Software, licencias, conectividad y servicios públicos activos por área.</p>
+            <h3 className="text-sm font-bold text-slate-900">
+              Inventario de Servicios Recurrentes
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Software, licencias, conectividad y servicios públicos activos por área.
+            </p>
           </div>
           <SelectorAgrupacion
             value={agrupacion}
@@ -218,48 +272,88 @@ function ServiciosPage() {
         <Table>
           <TableHeader className="bg-slate-100/80">
             <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Servicio / Licencia</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Área Categorizada</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Proveedor</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Periodicidad</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Costo</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Próxima Renovación</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acción</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Servicio / Licencia
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Empresa
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Área Categorizada
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Proveedor
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Periodicidad
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Costo
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Próxima Renovación
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Estado
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Acción
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
             {gruposSuscripciones.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />}
+                {grupo.clave && (
+                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                )}
                 {grupo.filas.map((sub) => (
                   <TableRow key={sub.id}>
                     <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
-                      <Link to="/servicios/$id" params={{ id: sub.id }} className="hover:underline hover:text-blue-800">
+                      <Link
+                        to="/servicios/$id"
+                        params={{ id: sub.id }}
+                        className="hover:underline hover:text-blue-800"
+                      >
                         {sub.nombreServicio}
                       </Link>
-                      <p className="text-[10px] text-slate-400 font-normal">Resp: {sub.responsableArea}</p>
+                      <p className="text-[10px] text-slate-400 font-normal">
+                        Resp: {sub.responsableArea}
+                      </p>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                      <Badge
+                        variant="outline"
+                        className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                      >
                         {sub.empresaId}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-700">
+                      <Badge
+                        variant="outline"
+                        className="border-slate-200 bg-slate-100 text-slate-700"
+                      >
                         {sub.area}
                       </Badge>
                     </TableCell>
-                    <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">{sub.proveedor}</TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-500 font-medium">{sub.periodicidad}</TableCell>
+                    <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">
+                      {sub.proveedor}
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-500 font-medium">
+                      {sub.periodicidad}
+                    </TableCell>
                     <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
                       {money(sub.costo, sub.moneda)}
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <p className="font-mono text-xs text-slate-500">{sub.fechaRenovacion}</p>
                       {sub.estado === "Activo" && (
-                        <BarraVencimiento fecha={sub.fechaRenovacion} etiquetaVencido="Venció" className="mt-1" />
+                        <BarraVencimiento
+                          fecha={sub.fechaRenovacion}
+                          etiquetaVencido="Venció"
+                          className="mt-1"
+                        />
                       )}
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -277,13 +371,16 @@ function ServiciosPage() {
                           }
                           className="h-7 text-[11px] gap-1"
                         >
-                          <Power className="h-3 w-3" /> {sub.estado === "Activo" ? "Desactivar" : "Activar"}
+                          <Power className="h-3 w-3" />{" "}
+                          {sub.estado === "Activo" ? "Desactivar" : "Activar"}
                         </Button>
                         {puedeEliminar && (
                           <Button
                             size="xs"
                             variant="ghost"
-                            onClick={() => setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })}
+                            onClick={() =>
+                              setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })
+                            }
                             className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -299,7 +396,9 @@ function ServiciosPage() {
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={9} className="p-0">
                   {loading ? (
-                    <div className="py-12 text-center text-xs text-slate-500">Cargando servicios...</div>
+                    <div className="py-12 text-center text-xs text-slate-500">
+                      Cargando servicios...
+                    </div>
                   ) : error ? (
                     <div className="py-12 text-center text-xs text-slate-500">{error}</div>
                   ) : (
@@ -325,26 +424,46 @@ function ServiciosPage() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Registrar Servicio o Suscripción Activa</DialogTitle>
-            <DialogDescription className="text-slate-500">Control de costos recurrentes y licencias por área.</DialogDescription>
+            <DialogTitle className="text-slate-900 font-bold">
+              Registrar Servicio o Suscripción Activa
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Control de costos recurrentes y licencias por área.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">Empresa</Label>
-                <Select value={form.empresaId} onValueChange={(val) => setForm({ ...form, empresaId: val })}>
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
+                <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
+                  Empresa
+                </Label>
+                <Select
+                  value={form.empresaId}
+                  onValueChange={(val) => setForm({ ...form, empresaId: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
                     {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id} className="text-xs">{e.nombre}</SelectItem>
+                      <SelectItem key={e.id} value={e.id} className="text-xs">
+                        {e.nombre}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="area" className="text-xs font-semibold text-slate-700">Área Categorizada *</Label>
-                <Select value={form.area} onValueChange={(val) => setForm({ ...form, area: val, responsableId: "" })}>
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
+                <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
+                  Área Categorizada *
+                </Label>
+                <Select
+                  value={form.area}
+                  onValueChange={(val) => setForm({ ...form, area: val, responsableId: "" })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
                     {departamentos.map((d) => (
                       <SelectItem key={d.id} value={d.nombre} className="text-xs">
@@ -358,7 +477,9 @@ function ServiciosPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="nombreServicio" className="text-xs font-semibold text-slate-700">Nombre del Servicio / SaaS *</Label>
+                <Label htmlFor="nombreServicio" className="text-xs font-semibold text-slate-700">
+                  Nombre del Servicio / SaaS *
+                </Label>
                 <Input
                   required
                   id="nombreServicio"
@@ -369,28 +490,28 @@ function ServiciosPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">Proveedor *</Label>
-                <Select
+                <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">
+                  Proveedor *
+                </Label>
+                <Combobox
                   value={form.proveedorId}
-                  onValueChange={(val) => setForm({ ...form, proveedorId: val })}
-                  disabled={proveedoresActivos.length === 0}
-                >
-                  <SelectTrigger id="proveedor" className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue
-                      placeholder={proveedoresActivos.length === 0 ? "Sin proveedores registrados" : "Selecciona un proveedor"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {proveedoresActivos.map((p) => (
-                      <SelectItem key={p.id} value={p.id} className="text-xs">
-                        {p.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(val) => {
+                    setForm({ ...form, proveedorId: val });
+                    const elegido = proveedorOpciones.find((p) => p.id === val);
+                    if (elegido) setProveedorSeleccionadoNombre(elegido.nombre);
+                  }}
+                  placeholder="Escribe para buscar un proveedor..."
+                  searchPlaceholder="Buscar por nombre o NIT..."
+                  emptyText="Ningún proveedor coincide."
+                  clearable={false}
+                  onSearchChange={buscarProveedores}
+                  loadingOptions={buscandoProveedores}
+                  selectedLabel={proveedorSeleccionadoNombre}
+                  options={proveedorOpciones.map((p) => ({ value: p.id, label: p.nombre }))}
+                />
               </div>
             </div>
-            {proveedoresActivos.length === 0 && (
+            {form.proveedorId === "" && proveedorOpciones.length === 0 && !buscandoProveedores && (
               <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay proveedores registrados.{" "}
                 <Link to="/configuracion/proveedores" className="font-semibold underline">
@@ -401,16 +522,22 @@ function ServiciosPage() {
             )}
 
             <div className="space-y-1">
-              <Label htmlFor="contrato" className="text-xs font-semibold text-slate-700">Contrato vinculado (opcional)</Label>
+              <Label htmlFor="contrato" className="text-xs font-semibold text-slate-700">
+                Contrato vinculado (opcional)
+              </Label>
               <Select
                 value={form.contratoId || "__none__"}
-                onValueChange={(val) => setForm({ ...form, contratoId: val === "__none__" ? "" : val })}
+                onValueChange={(val) =>
+                  setForm({ ...form, contratoId: val === "__none__" ? "" : val })
+                }
               >
                 <SelectTrigger id="contrato" className="h-9 text-xs border-slate-300 bg-white">
                   <SelectValue placeholder="Sin contrato asociado" />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-slate-200">
-                  <SelectItem value="__none__" className="text-xs">Sin contrato asociado</SelectItem>
+                  <SelectItem value="__none__" className="text-xs">
+                    Sin contrato asociado
+                  </SelectItem>
                   {contratosActivos.map((c) => (
                     <SelectItem key={c.id} value={c.id} className="text-xs">
                       {c.proveedor} — {c.area}
@@ -422,7 +549,9 @@ function ServiciosPage() {
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="costo" className="text-xs font-semibold text-slate-700">Costo (Monto)</Label>
+                <Label htmlFor="costo" className="text-xs font-semibold text-slate-700">
+                  Costo (Monto)
+                </Label>
                 <Input
                   type="number"
                   id="costo"
@@ -432,9 +561,16 @@ function ServiciosPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="moneda" className="text-xs font-semibold text-slate-700">Moneda</Label>
-                <Select value={form.moneda} onValueChange={(val: any) => setForm({ ...form, moneda: val })}>
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
+                <Label htmlFor="moneda" className="text-xs font-semibold text-slate-700">
+                  Moneda
+                </Label>
+                <Select
+                  value={form.moneda}
+                  onValueChange={(val: any) => setForm({ ...form, moneda: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
                     <SelectItem value="COP">COP ($)</SelectItem>
                     <SelectItem value="USD">USD ($)</SelectItem>
@@ -442,9 +578,16 @@ function ServiciosPage() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="periodicidad" className="text-xs font-semibold text-slate-700">Periodicidad</Label>
-                <Select value={form.periodicidad} onValueChange={(val: any) => setForm({ ...form, periodicidad: val })}>
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
+                <Label htmlFor="periodicidad" className="text-xs font-semibold text-slate-700">
+                  Periodicidad
+                </Label>
+                <Select
+                  value={form.periodicidad}
+                  onValueChange={(val: any) => setForm({ ...form, periodicidad: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
                     <SelectItem value="Mensual">Mensual</SelectItem>
                     <SelectItem value="Anual">Anual</SelectItem>
@@ -456,7 +599,9 @@ function ServiciosPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="fechaRenovacion" className="text-xs font-semibold text-slate-700">Próxima Fecha de Pago</Label>
+                <Label htmlFor="fechaRenovacion" className="text-xs font-semibold text-slate-700">
+                  Próxima Fecha de Pago
+                </Label>
                 <Input
                   type="date"
                   id="fechaRenovacion"
@@ -466,11 +611,15 @@ function ServiciosPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">Responsable del Área *</Label>
+                <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">
+                  Responsable del Área *
+                </Label>
                 <Select
                   value={form.responsableId}
                   onValueChange={(val) => setForm({ ...form, responsableId: val })}
-                  disabled={!areaDepartamentoId || cargandoUsuariosArea || usuariosArea.length === 0}
+                  disabled={
+                    !areaDepartamentoId || cargandoUsuariosArea || usuariosArea.length === 0
+                  }
                 >
                   <SelectTrigger id="responsable" className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue
@@ -500,17 +649,30 @@ function ServiciosPage() {
             )}
 
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancelar</Button>
-              <Button type="submit" size="sm" className="bg-blue-800 text-white hover:bg-blue-900 font-bold">Guardar Servicio</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
+              >
+                Guardar Servicio
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!servicioAEliminar} onOpenChange={(open) => !open && setServicioAEliminar(null)}>
+      <AlertDialog
+        open={!!servicioAEliminar}
+        onOpenChange={(open) => !open && setServicioAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar el servicio "{servicioAEliminar?.nombre}"?</AlertDialogTitle>
+            <AlertDialogTitle>
+              ¿Eliminar el servicio "{servicioAEliminar?.nombre}"?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción es permanente. El servicio dejará de aparecer en el inventario, pero queda
               registrado en la auditoría.

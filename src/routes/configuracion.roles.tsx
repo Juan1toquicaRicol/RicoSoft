@@ -1,13 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
-import { ShieldCheck, Plus, Trash2, Lock, ChevronDown, ChevronRight, Users } from "lucide-react";
+import {
+  ShieldCheck,
+  Plus,
+  Trash2,
+  Lock,
+  ChevronDown,
+  ChevronRight,
+  Users,
+  Globe2,
+  Building2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { requirePermisoGuard } from "@/lib/route-guards";
-import { LISTA_PERMISOS_DEFINICION, PermisoKey, PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { usePermisosCatalogo } from "@/hooks/use-permisos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,11 +34,10 @@ interface RolApi {
   descripcion: string | null;
   esSistema: boolean;
   activo: boolean;
+  alcance: "GENERAL" | "TENANT";
   permisos: string[];
   usuariosAsignados: number;
 }
-
-const MODULOS = Array.from(new Set(LISTA_PERMISOS_DEFINICION.map((p) => p.modulo)));
 
 function RolesConfigPage() {
   const { user: sesion } = useSession();
@@ -36,6 +46,13 @@ function RolesConfigPage() {
   const puedeAsignarPermisos = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_ASIGNAR_PERMISOS);
   const puedeEliminar = hasPermission(sesion, PERMISOS_SISTEMA.ROLES_ELIMINAR);
 
+  // Catálogo real (backend, Permiso), no la lista hardcodeada: así un
+  // permiso creado en Configuración > Permisos aparece aquí para asignar sin
+  // necesidad de un deploy. Solo se ofrecen los activos.
+  const { permisos: catalogoPermisos } = usePermisosCatalogo();
+  const permisosAsignables = catalogoPermisos.filter((p) => p.activo);
+  const MODULOS = Array.from(new Set(permisosAsignables.map((p) => p.modulo)));
+
   const [roles, setRoles] = useState<RolApi[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -43,6 +60,7 @@ function RolesConfigPage() {
   const [creando, setCreando] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaDescripcion, setNuevaDescripcion] = useState("");
+  const [nuevoAlcance, setNuevoAlcance] = useState<"GENERAL" | "TENANT">("TENANT");
 
   const fetchRoles = async () => {
     setLoading(true);
@@ -67,10 +85,16 @@ function RolesConfigPage() {
     try {
       await fetchAuth("/roles", {
         method: "POST",
-        body: JSON.stringify({ nombre: nuevoNombre.trim(), descripcion: nuevaDescripcion.trim(), permisos: [] }),
+        body: JSON.stringify({
+          nombre: nuevoNombre.trim(),
+          descripcion: nuevaDescripcion.trim(),
+          permisos: [],
+          alcance: nuevoAlcance,
+        }),
       });
       setNuevoNombre("");
       setNuevaDescripcion("");
+      setNuevoAlcance("TENANT");
       setCreando(false);
       fetchRoles();
     } catch (err: any) {
@@ -78,7 +102,7 @@ function RolesConfigPage() {
     }
   };
 
-  const handleTogglePermiso = async (rol: RolApi, permiso: PermisoKey) => {
+  const handleTogglePermiso = async (rol: RolApi, permiso: string) => {
     const permisos = rol.permisos.includes(permiso)
       ? rol.permisos.filter((p) => p !== permiso)
       : [...rol.permisos, permiso];
@@ -104,6 +128,24 @@ function RolesConfigPage() {
     }
   };
 
+  const handleCambiarAlcance = async (rol: RolApi) => {
+    const nuevo = rol.alcance === "GENERAL" ? "TENANT" : "GENERAL";
+    const mensaje =
+      nuevo === "GENERAL"
+        ? `¿Convertir "${rol.nombre}" en GENERAL? Quedará disponible para asignar en todas las empresas.`
+        : `¿Convertir "${rol.nombre}" en exclusivo de esta empresa? Se bloqueará si ya está asignado en otra empresa.`;
+    if (!confirm(mensaje)) return;
+    try {
+      await fetchAuth(`/roles/${rol.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ alcance: nuevo }),
+      });
+      fetchRoles();
+    } catch (err: any) {
+      toast.error(err.message || "Error al cambiar el alcance del rol.");
+    }
+  };
+
   const handleEliminar = async (rol: RolApi) => {
     if (!confirm(`¿Eliminar el rol "${rol.nombre}"?`)) return;
     try {
@@ -122,7 +164,9 @@ function RolesConfigPage() {
             <ShieldCheck className="h-6 w-6 text-blue-600" />
             Roles y Permisos
           </h1>
-          <p className="text-sm text-slate-500">Define qué puede hacer cada rol dentro de RicoSoft.</p>
+          <p className="text-sm text-slate-500">
+            Define qué puede hacer cada rol dentro de RicoSoft.
+          </p>
         </div>
         {puedeCrear && (
           <Button size="sm" onClick={() => setCreando((c) => !c)} className="gap-1.5">
@@ -149,6 +193,28 @@ function RolesConfigPage() {
             onChange={(e) => setNuevaDescripcion(e.target.value)}
             className="flex-1"
           />
+          <div className="flex items-center gap-3 text-xs text-slate-600 shrink-0">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="alcance-rol"
+                checked={nuevoAlcance === "TENANT"}
+                onChange={() => setNuevoAlcance("TENANT")}
+                className="accent-blue-600"
+              />
+              Solo esta empresa
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="alcance-rol"
+                checked={nuevoAlcance === "GENERAL"}
+                onChange={() => setNuevoAlcance("GENERAL")}
+                className="accent-blue-600"
+              />
+              General
+            </label>
+          </div>
           <Button type="submit" variant="success">
             Crear
           </Button>
@@ -158,9 +224,14 @@ function RolesConfigPage() {
       {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}
 
       <div className="space-y-3">
-        {loading && roles.length === 0 && <p className="text-sm text-slate-500">Cargando roles...</p>}
+        {loading && roles.length === 0 && (
+          <p className="text-sm text-slate-500">Cargando roles...</p>
+        )}
         {roles.map((rol) => (
-          <div key={rol.id} className="border border-slate-200 rounded-lg bg-white shadow-2xs overflow-hidden">
+          <div
+            key={rol.id}
+            className="border border-slate-200 rounded-lg bg-white shadow-2xs overflow-hidden"
+          >
             <button
               onClick={() => setExpandido(expandido === rol.id ? null : rol.id)}
               className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left cursor-pointer"
@@ -179,17 +250,37 @@ function RolesConfigPage() {
                         <Lock className="h-3 w-3" /> Rol de sistema
                       </Badge>
                     )}
+                    {rol.alcance === "GENERAL" ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1"
+                      >
+                        <Globe2 className="h-3 w-3" /> General
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-slate-200 bg-slate-50 text-slate-600 gap-1"
+                      >
+                        <Building2 className="h-3 w-3" /> Esta empresa
+                      </Badge>
+                    )}
                     {rol.activo ? (
                       <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
                         Activo
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-slate-900 text-white"
+                      >
                         Inactivo
                       </Badge>
                     )}
                   </div>
-                  {rol.descripcion && <p className="text-xs text-slate-500 mt-0.5">{rol.descripcion}</p>}
+                  {rol.descripcion && (
+                    <p className="text-xs text-slate-500 mt-0.5">{rol.descripcion}</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-4 shrink-0">
@@ -208,6 +299,19 @@ function RolesConfigPage() {
                     className="h-7 text-[11px] font-bold"
                   >
                     {rol.activo ? "Desactivar" : "Activar"}
+                  </Button>
+                )}
+                {puedeEditar && !rol.esSistema && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCambiarAlcance(rol);
+                    }}
+                    className="h-7 text-[11px] font-bold"
+                  >
+                    {rol.alcance === "GENERAL" ? "Hacer exclusivo" : "Hacer general"}
                   </Button>
                 )}
                 {puedeEliminar && !rol.esSistema && (
@@ -238,25 +342,29 @@ function RolesConfigPage() {
                 ) : (
                   MODULOS.map((modulo) => (
                     <div key={modulo}>
-                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">{modulo}</p>
+                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">
+                        {modulo}
+                      </p>
                       <div className="grid sm:grid-cols-2 gap-2">
-                        {LISTA_PERMISOS_DEFINICION.filter((p) => p.modulo === modulo).map((p) => (
-                          <label
-                            key={p.id}
-                            className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={rol.permisos.includes(p.id)}
-                              onChange={() => handleTogglePermiso(rol, p.id)}
-                              className="mt-0.5 accent-blue-600"
-                            />
-                            <span>
-                              <span className="font-medium text-slate-800">{p.nombre}</span>
-                              <span className="block text-slate-500">{p.descripcion}</span>
-                            </span>
-                          </label>
-                        ))}
+                        {permisosAsignables
+                          .filter((p) => p.modulo === modulo)
+                          .map((p) => (
+                            <label
+                              key={p.id}
+                              className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={rol.permisos.includes(p.codigo)}
+                                onChange={() => handleTogglePermiso(rol, p.codigo)}
+                                className="mt-0.5 accent-blue-600"
+                              />
+                              <span>
+                                <span className="font-medium text-slate-800">{p.nombre}</span>
+                                <span className="block text-slate-500">{p.descripcion}</span>
+                              </span>
+                            </label>
+                          ))}
                       </div>
                     </div>
                   ))

@@ -1,0 +1,159 @@
+import { prisma } from "../config/prisma";
+
+/**
+ * Modelos donde se aplica enforcement automático de tenantId — lista
+ * CURADA, no "todo modelo que tenga una columna tenantId". Quedan fuera a
+ * propósito:
+ *
+ *  - Departamento / Rol / Modulo: su tenantId es NULLABLE con semántica
+ *    GENERAL (visible para todos los tenants). Forzar {tenantId: x} en el
+ *    where rompería silenciosamente la visibilidad de los registros
+ *    GENERAL, que necesitan OR:[{tenantId:null},{tenantId:x}] — ya tienen
+ *    su propio patrón (whereAlcance en lib/alcance.ts), no tocar.
+ *  - User / Membresia: tienen lecturas cross-tenant legítimas por diseño
+ *    (p. ej. otorgar membresía a un usuario de OTRO tenant, comparando
+ *    tenantId explícitamente en el controller). Forzar el filtro rompería
+ *    ese flujo real.
+ *  - Tenant: es la entidad tenant en sí, no un recurso tenant-scoped.
+ *  - VistoBuenoAduanero / PermisoUsuario: no tienen columna tenantId
+ *    propia — se aíslan vía relación anidada (expediente/user), ya
+ *    verificado en auditorías previas. Un desarrollador que agregue un
+ *    modelo nuevo con aislamiento vía relación (en vez de tenantId
+ *    directo) debe seguir haciéndolo manualmente; esta extensión no lo
+ *    cubre por diseño.
+ *
+ * LIMITACIÓN CONOCIDA — escrituras anidadas: esta extensión solo
+ * intercepta la operación de nivel superior (p. ej. el create de
+ * SolicitudCompra). Un `create` anidado dentro de esa misma llamada
+ * (p. ej. `cotizaciones: { create: [...] }`) NO pasa por este interceptor
+ * — Prisma no lo expone como una operación separada. Cualquier controller
+ * que se migre a tenantPrisma y haga escrituras anidadas en un modelo
+ * tenant-scoped debe seguir asignando tenantId a mano en esos hijos.
+ */
+const MODELOS_TENANT_SCOPED = new Set([
+  "Auditoria",
+  "Colaborador",
+  "Contrato",
+  "CosteoImportacionDetalle",
+  "CotizacionProveedor",
+  "CreditoCliente",
+  "Empleado",
+  "ExpedienteAduanero",
+  "Factura",
+  "FaltaStrike",
+  "LoteImportacion",
+  "Notificacion",
+  "OrdenCompraIntl",
+  "Pago",
+  "Permiso",
+  "PermisoLaboral",
+  "Proveedor",
+  "ProyeccionMensual",
+  "ReglaEnrutamiento",
+  "ServicioSuscripcion",
+  "SincronizacionSiesaLog",
+  "SolicitudCompra",
+  "TomaFisica",
+  "PlanProduccion",
+  "GestionLiquidacion",
+  "Despacho",
+]);
+
+/** Convención de Prisma: el accessor del cliente es el nombre del modelo
+ * con la primera letra en minúscula (SolicitudCompra -> solicitudCompra). */
+function nombreAccessor(model: string): string {
+  return model[0].toLowerCase() + model.slice(1);
+}
+
+const OPERACIONES_LECTURA_MASIVA = new Set([
+  "findMany",
+  "findFirst",
+  "findFirstOrThrow",
+  "count",
+  "aggregate",
+  "groupBy",
+]);
+const OPERACIONES_ESCRITURA_MASIVA = new Set(["updateMany", "deleteMany"]);
+const OPERACIONES_UNICAS_MUTANTES = new Set(["update", "delete"]);
+
+/**
+ * Devuelve un cliente Prisma "envuelto" que aplica automáticamente el
+ * filtro/inyección de tenantId para los modelos de MODELOS_TENANT_SCOPED.
+ * El cliente Prisma global (`config/prisma.ts`) sigue existiendo y
+ * funcionando exactamente igual que hoy — este wrapper es opt-in, no
+ * reemplaza nada todavía. Ver server/src/middleware/tenant-prisma.middleware.ts
+ * para cómo se cuelga en req.tenantPrisma.
+ */
+export function getTenantPrisma(tenantId: string) {
+  return prisma.$extends({
+    name: "tenant-scope",
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          if (!model || !MODELOS_TENANT_SCOPED.has(model)) {
+            return query(args);
+          }
+
+          const a = args as Record<string, unknown>;
+
+          if (
+            OPERACIONES_LECTURA_MASIVA.has(operation) ||
+            OPERACIONES_ESCRITURA_MASIVA.has(operation)
+          ) {
+            a.where = { ...(a.where as object | undefined), tenantId };
+            return query(args);
+          }
+
+          if (operation === "create") {
+            a.data = { ...(a.data as object), tenantId };
+            return query(args);
+          }
+
+          if (operation === "createMany") {
+            const data = a.data;
+            const lista = Array.isArray(data) ? data : [data];
+            a.data = lista.map((item) => ({ ...(item as object), tenantId }));
+            return query(args);
+          }
+
+          if (operation === "findUnique" || operation === "findUniqueOrThrow") {
+            const resultado = await query(args);
+            if (resultado && (resultado as { tenantId?: string }).tenantId !== tenantId) {
+              return null;
+            }
+            return resultado;
+          }
+
+          if (OPERACIONES_UNICAS_MUTANTES.has(operation) || operation === "upsert") {
+            // Pre-chequeo ANTES de la escritura real: si el registro no
+            // pertenece a este tenant, se redirige el where a una clave
+            // imposible para que Prisma lance su propio error nativo
+            // (P2025 "Record to update/delete not found") en vez de
+            // ejecutar la mutación contra la fila de otro tenant.
+            const accessor = (
+              prisma as unknown as Record<
+                string,
+                { findFirst: (args: unknown) => Promise<unknown> }
+              >
+            )[nombreAccessor(model)];
+            const existente = await accessor.findFirst({
+              where: { ...(a.where as object), tenantId },
+              select: { id: true },
+            });
+            if (operation === "upsert") {
+              a.create = { ...(a.create as object), tenantId };
+            }
+            if (!existente) {
+              a.where = { ...(a.where as object), id: "__tenant_mismatch__" };
+            }
+            return query(args);
+          }
+
+          return query(args);
+        },
+      },
+    },
+  });
+}
+
+export type TenantPrisma = ReturnType<typeof getTenantPrisma>;

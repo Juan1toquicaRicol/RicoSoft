@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { whereAlcance } from "../../lib/alcance";
 
 /**
  * Todas las empresas del sistema, para el selector de "dar acceso a otra
@@ -25,7 +26,7 @@ export const listarRolesDeTenant = async (req: AuthenticatedRequest, res: Respon
   try {
     const { tenantId } = req.params;
     const roles = await prisma.rol.findMany({
-      where: { tenantId, activo: true },
+      where: { ...whereAlcance(tenantId), activo: true },
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
@@ -43,7 +44,13 @@ export const listarMembresiasUsuario = async (req: AuthenticatedRequest, res: Re
 
     const usuario = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, nombre: true, email: true, tenantId: true, tenant: { select: { id: true, nombre: true } } },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        tenantId: true,
+        tenant: { select: { id: true, nombre: true } },
+      },
     });
     if (!usuario) {
       return res.status(404).json({ message: "Usuario no encontrado." });
@@ -54,7 +61,9 @@ export const listarMembresiasUsuario = async (req: AuthenticatedRequest, res: Re
     // sistema por id (evita que un superadmin de Ricol curiosee a quién
     // tiene acceso un empleado de Flexipack que no conoce).
     if (usuario.tenantId !== req.user!.tenantId) {
-      return res.status(403).json({ message: "Solo puedes ver las membresías de usuarios de tu propia empresa." });
+      return res
+        .status(403)
+        .json({ message: "Solo puedes ver las membresías de usuarios de tu propia empresa." });
     }
 
     const membresias = await prisma.membresia.findMany({
@@ -95,7 +104,9 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
     // otro tenant del sistema, incluyendo isSuperadmin=true — una escalación
     // de privilegios cross-tenant completa.
     if (usuario.tenantId !== req.user!.tenantId) {
-      return res.status(403).json({ message: "Solo puedes otorgar acceso a usuarios de tu propia empresa." });
+      return res
+        .status(403)
+        .json({ message: "Solo puedes otorgar acceso a usuarios de tu propia empresa." });
     }
 
     if (usuario.tenantId === tenantId) {
@@ -114,9 +125,13 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
 
     let rolIdFinal: string | null = null;
     if (rolId) {
-      const rol = await prisma.rol.findFirst({ where: { id: rolId, tenantId, activo: true } });
+      const rol = await prisma.rol.findFirst({
+        where: { id: rolId, ...whereAlcance(tenantId), activo: true },
+      });
       if (!rol) {
-        return res.status(404).json({ message: "El rol seleccionado no existe o no pertenece a esa empresa." });
+        return res
+          .status(404)
+          .json({ message: "El rol seleccionado no existe o no pertenece a esa empresa." });
       }
       rolIdFinal = rol.id;
     }
@@ -141,7 +156,11 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
         usuarioAfectado: usuario.email,
         accion: "MEMBRESIA_OTORGADA",
         detalle: `${req.user!.nombre} le dio a ${usuario.email} acceso a ${tenant.nombre}${
-          isSuperadmin ? " (superadmin)" : membresia.rolRel ? ` con el rol "${membresia.rolRel.nombre}"` : ""
+          isSuperadmin
+            ? " (superadmin)"
+            : membresia.rolRel
+              ? ` con el rol "${membresia.rolRel.nombre}"`
+              : ""
         }.`,
         entidadTipo: "Membresia",
         entidadId: membresia.id,
@@ -172,13 +191,19 @@ export const actualizarMembresia = async (req: AuthenticatedRequest, res: Respon
     // Mismo límite que en crearMembresia: solo se administran membresías de
     // usuarios nativos de la empresa actual del superadmin que llama.
     if (membresia.user.tenantId !== req.user!.tenantId) {
-      return res.status(403).json({ message: "Solo puedes administrar el acceso de usuarios de tu propia empresa." });
+      return res
+        .status(403)
+        .json({ message: "Solo puedes administrar el acceso de usuarios de tu propia empresa." });
     }
 
     if (rolId !== undefined && rolId !== null) {
-      const rol = await prisma.rol.findFirst({ where: { id: rolId, tenantId: membresia.tenantId, activo: true } });
+      const rol = await prisma.rol.findFirst({
+        where: { id: rolId, ...whereAlcance(membresia.tenantId), activo: true },
+      });
       if (!rol) {
-        return res.status(404).json({ message: "El rol seleccionado no existe o no pertenece a esa empresa." });
+        return res
+          .status(404)
+          .json({ message: "El rol seleccionado no existe o no pertenece a esa empresa." });
       }
     }
 
@@ -230,7 +255,9 @@ export const eliminarMembresia = async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ message: "Membresía no encontrada." });
     }
     if (membresia.user.tenantId !== req.user!.tenantId) {
-      return res.status(403).json({ message: "Solo puedes administrar el acceso de usuarios de tu propia empresa." });
+      return res
+        .status(403)
+        .json({ message: "Solo puedes administrar el acceso de usuarios de tu propia empresa." });
     }
 
     await prisma.membresia.delete({ where: { id } });

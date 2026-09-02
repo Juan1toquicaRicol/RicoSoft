@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const textoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
+const textoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
+
+const alcance = z.enum(["GENERAL", "TENANT"]).nullish();
 
 export const crearRolSchema = z.object({
   nombre: z
@@ -9,6 +14,7 @@ export const crearRolSchema = z.object({
     .min(1, "El nombre del rol es obligatorio."),
   descripcion: z.string().nullish(),
   permisos: z.array(z.unknown()).nullish(),
+  alcance,
 });
 
 export const actualizarRolSchema = z.object({
@@ -16,4 +22,5 @@ export const actualizarRolSchema = z.object({
   descripcion: z.string().nullish(),
   permisos: z.array(z.unknown()).nullish(),
   activo: z.boolean().nullish(),
+  alcance,
 });

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
 import {
   uploadFacturaArchivo,
@@ -30,6 +31,9 @@ import { registrarPagoSchema } from "./pagos.schemas";
 const router = Router();
 
 router.use(authenticateJWT);
+// Fase 4: Facturas + Pagos usan req.tenantPrisma — el resto del sistema
+// sigue con el cliente Prisma global (ver tenant-prisma.ts).
+router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("facturas.ver"), listarFacturas);
 router.get("/:id", requirePermission("facturas.ver"), obtenerFactura);

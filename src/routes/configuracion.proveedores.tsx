@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { Fragment, useMemo, useState } from "react";
-import { Truck, Plus, Trash2, FileText, FileSignature, ShoppingCart } from "lucide-react";
+import {
+  Truck,
+  Plus,
+  Trash2,
+  FileText,
+  FileSignature,
+  ShoppingCart,
+  Cloud,
+  User,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { useSession } from "@/lib/session-context";
@@ -45,6 +56,9 @@ function ProveedoresConfigPage() {
 
   const {
     proveedores,
+    total,
+    page,
+    totalPages,
     loading,
     error,
     refresh,
@@ -81,9 +95,15 @@ function ProveedoresConfigPage() {
     [proveedores, claveDeAgrupacion],
   );
 
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleBuscar = (valor: string) => {
     setSearch(valor);
-    refresh(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => refresh({ search: valor, page: 1 }), 300);
+  };
+
+  const handleCambiarPagina = (nuevaPagina: number) => {
+    refresh({ search, page: nuevaPagina });
   };
 
   const handleCrear = async (e: React.FormEvent) => {
@@ -246,6 +266,7 @@ function ProveedoresConfigPage() {
               <TableHead>Proveedor</TableHead>
               <TableHead>NIT</TableHead>
               <TableHead>Contacto</TableHead>
+              <TableHead>Origen</TableHead>
               <TableHead>Departamento</TableHead>
               <TableHead>Usado en</TableHead>
               <TableHead>Estado</TableHead>
@@ -255,7 +276,7 @@ function ProveedoresConfigPage() {
           <TableBody>
             {proveedores.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-slate-500 py-6">
+                <TableCell colSpan={8} className="text-center text-slate-500 py-6">
                   {loading
                     ? "Cargando proveedores..."
                     : error || 'No hay proveedores registrados. Haz clic en "Nuevo proveedor".'}
@@ -267,7 +288,7 @@ function ProveedoresConfigPage() {
                   {grupo.clave && (
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
                       >
                         {grupo.clave}{" "}
@@ -285,6 +306,28 @@ function ProveedoresConfigPage() {
                       </TableCell>
                       <TableCell className="font-mono text-xs text-slate-600">{p.nit}</TableCell>
                       <TableCell className="text-slate-600">{p.contacto || "—"}</TableCell>
+                      <TableCell>
+                        {p.origen === "SIESA" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-blue-200 bg-blue-50 text-blue-800 gap-1"
+                            title={
+                              p.ultimaSincronizacion
+                                ? `Última sincronización: ${new Date(p.ultimaSincronizacion).toLocaleString("es-CO")}`
+                                : undefined
+                            }
+                          >
+                            <Cloud className="h-3 w-3" /> Siesa
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-slate-200 bg-slate-50 text-slate-600 gap-1"
+                          >
+                            <User className="h-3 w-3" /> Manual
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-slate-600">
                         {puedeEditar ? (
                           <Select
@@ -367,6 +410,34 @@ function ProveedoresConfigPage() {
           </TableBody>
         </Table>
       </div>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <p>
+            {proveedores.length} de {total} proveedores — página {page} de {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page <= 1 || loading}
+              onClick={() => handleCambiarPagina(page - 1)}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= totalPages || loading}
+              onClick={() => handleCambiarPagina(page + 1)}
+              className="gap-1"
+            >
+              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

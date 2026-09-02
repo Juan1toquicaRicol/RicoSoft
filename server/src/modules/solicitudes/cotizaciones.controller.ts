@@ -1,9 +1,11 @@
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
-import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { UPLOADS_DIR_COTIZACIONES_PROVEEDOR } from "../../middleware/upload.middleware";
+import {
+  UPLOADS_DIR_COTIZACIONES_PROVEEDOR,
+  moverArchivoDefinitivo,
+} from "../../middleware/upload.middleware";
 
 // Una SolicitudCompra solo admite cotizaciones mientras sigue en un estado
 // "abierto" (todavía no fue aprobada/rechazada/facturada). Una vez resuelta,
@@ -36,12 +38,12 @@ export const listarCotizacionesSolicitud = async (req: AuthenticatedRequest, res
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
 
-    const cotizaciones = await prisma.cotizacionProveedor.findMany({
+    const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
       where: { solicitudCompraId: id, tenantId },
       orderBy: { createdAt: "asc" },
     });
@@ -79,7 +81,7 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
     let proveedorNombreFinal = typeof proveedorNombre === "string" ? proveedorNombre.trim() : "";
     let proveedorNitFinal = typeof proveedorNit === "string" ? proveedorNit.trim() : "";
     if (proveedorId) {
-      const proveedorDb = await prisma.proveedor.findFirst({
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
@@ -104,7 +106,7 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
         .json({ message: "Valor y tiempo de entrega deben ser números válidos." });
     }
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) {
@@ -118,7 +120,7 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
       });
     }
 
-    const totalActuales = await prisma.cotizacionProveedor.count({
+    const totalActuales = await req.tenantPrisma!.cotizacionProveedor.count({
       where: { solicitudCompraId: id, tenantId },
     });
     if (totalActuales >= MAX_COTIZACIONES) {
@@ -128,8 +130,12 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
         .json({ message: `Ya se registraron las ${MAX_COTIZACIONES} cotizaciones permitidas.` });
     }
 
-    const [cotizacion] = await prisma.$transaction([
-      prisma.cotizacionProveedor.create({
+    // Tenant/solicitud ya confirmados: recién acá se mueve el archivo de la
+    // carpeta temporal a la carpeta real de esta solicitud.
+    const archivoRuta = moverArchivoDefinitivo(UPLOADS_DIR_COTIZACIONES_PROVEEDOR, archivo, id);
+
+    const [cotizacion] = await req.tenantPrisma!.$transaction([
+      req.tenantPrisma!.cotizacionProveedor.create({
         data: {
           tenantId,
           solicitudCompraId: id,
@@ -139,7 +145,7 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
           valorTotalCOP: valor,
           tiempoEntregaDias: dias,
           archivoNombre: archivo.originalname,
-          archivoRuta: path.join(id, archivo.filename),
+          archivoRuta,
           archivoMime: archivo.mimetype,
           archivoTamano: archivo.size,
           subidoPorId: req.user!.id,
@@ -147,11 +153,16 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
         },
       }),
       ...(solicitud.estado === "Pendiente"
-        ? [prisma.solicitudCompra.update({ where: { id }, data: { estado: "En Cotización" } })]
+        ? [
+            req.tenantPrisma!.solicitudCompra.update({
+              where: { id },
+              data: { estado: "En Cotización" },
+            }),
+          ]
         : []),
     ]);
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -177,7 +188,7 @@ export const eliminarCotizacionSolicitud = async (req: AuthenticatedRequest, res
     const tenantId = req.user!.tenantId;
     const { id, cotizacionId } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
@@ -187,15 +198,15 @@ export const eliminarCotizacionSolicitud = async (req: AuthenticatedRequest, res
       });
     }
 
-    const cotizacion = await prisma.cotizacionProveedor.findFirst({
+    const cotizacion = await req.tenantPrisma!.cotizacionProveedor.findFirst({
       where: { id: cotizacionId, solicitudCompraId: id, tenantId },
     });
     if (!cotizacion) return res.status(404).json({ message: "Cotización no encontrada." });
 
-    await prisma.cotizacionProveedor.delete({ where: { id: cotizacionId } });
+    await req.tenantPrisma!.cotizacionProveedor.delete({ where: { id: cotizacionId } });
     fs.unlink(path.join(UPLOADS_DIR_COTIZACIONES_PROVEEDOR, cotizacion.archivoRuta), () => {});
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -222,7 +233,7 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
     const tenantId = req.user!.tenantId;
     const { id, cotizacionId } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
@@ -232,7 +243,7 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
       });
     }
 
-    const cotizaciones = await prisma.cotizacionProveedor.findMany({
+    const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
       where: { solicitudCompraId: id, tenantId },
     });
     if (cotizaciones.length !== MAX_COTIZACIONES) {
@@ -243,18 +254,18 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
     const objetivo = cotizaciones.find((c) => c.id === cotizacionId);
     if (!objetivo) return res.status(404).json({ message: "Cotización no encontrada." });
 
-    await prisma.$transaction([
-      prisma.cotizacionProveedor.updateMany({
+    await req.tenantPrisma!.$transaction([
+      req.tenantPrisma!.cotizacionProveedor.updateMany({
         where: { solicitudCompraId: id, tenantId, esGanadora: true },
         data: { esGanadora: false },
       }),
-      prisma.cotizacionProveedor.update({
+      req.tenantPrisma!.cotizacionProveedor.update({
         where: { id: cotizacionId },
         data: { esGanadora: true },
       }),
     ]);
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -263,7 +274,7 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
       },
     });
 
-    const actualizadas = await prisma.cotizacionProveedor.findMany({
+    const actualizadas = await req.tenantPrisma!.cotizacionProveedor.findMany({
       where: { solicitudCompraId: id, tenantId },
       orderBy: { createdAt: "asc" },
     });
@@ -282,7 +293,7 @@ export const obtenerArchivoCotizacionSolicitud = async (
     const tenantId = req.user!.tenantId;
     const { id, cotizacionId } = req.params;
 
-    const cotizacion = await prisma.cotizacionProveedor.findFirst({
+    const cotizacion = await req.tenantPrisma!.cotizacionProveedor.findFirst({
       where: { id: cotizacionId, solicitudCompraId: id, tenantId },
     });
     if (!cotizacion) return res.status(404).json({ message: "Cotización no encontrada." });

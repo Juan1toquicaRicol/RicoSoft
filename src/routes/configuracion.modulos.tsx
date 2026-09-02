@@ -61,6 +61,10 @@ function ModulosConfigPage() {
     await actualizarModulo(id, { activo });
   };
 
+  const handleCambiarPermiso = async (id: string, permisoClave: string) => {
+    await actualizarModulo(id, { permisoClave: permisoClave.trim() || null });
+  };
+
   const handleMover = async (index: number, direccion: -1 | 1) => {
     const destino = index + direccion;
     if (destino < 0 || destino >= modulos.length) return;
@@ -91,6 +95,7 @@ function ModulosConfigPage() {
             <TableRow>
               <TableHead className="w-20">Orden</TableHead>
               <TableHead>Módulo</TableHead>
+              <TableHead>Permiso requerido</TableHead>
               <TableHead>Departamento</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
@@ -98,7 +103,7 @@ function ModulosConfigPage() {
           <TableBody>
             {modulos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-slate-500 py-6">
+                <TableCell colSpan={5} className="text-center text-slate-500 py-6">
                   {loading ? "Cargando módulos..." : "No hay módulos registrados."}
                 </TableCell>
               </TableRow>
@@ -126,8 +131,40 @@ function ModulosConfigPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium text-slate-800">{m.nombre}</div>
+                    <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                      {m.nombre}
+                      {m.alcance === "GENERAL" ? (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]"
+                        >
+                          General
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-slate-50 text-slate-600 text-[10px]"
+                        >
+                          Esta empresa
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-400">{m.ruta}</div>
+                  </TableCell>
+                  <TableCell>
+                    {puedeGestionar ? (
+                      <input
+                        defaultValue={m.permisoClave ?? ""}
+                        placeholder="Sin restricción"
+                        onBlur={(e) => handleCambiarPermiso(m.id, e.target.value)}
+                        className="h-8 w-40 rounded-md border border-slate-300 bg-white px-2 text-xs font-mono"
+                        title="Código de permiso (p. ej. facturas.ver). Vacío = visible para cualquier usuario autenticado."
+                      />
+                    ) : m.permisoClave ? (
+                      <span className="font-mono text-xs text-slate-600">{m.permisoClave}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin restricción</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {puedeGestionar ? (

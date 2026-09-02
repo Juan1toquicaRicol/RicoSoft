@@ -9,7 +9,7 @@ import {
   ShoppingCart,
   X,
 } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -110,21 +110,27 @@ function HistoriaComprasPage() {
     }
   };
 
-  const { historial, loading, error } = useHistorialCompras({
+  // Página real server-side: el backend ya no devuelve el historial completo
+  // (podía crecer indefinidamente con la antigüedad del tenant) — solo la
+  // página pedida, filtrada y contada en el servidor.
+  const { historial, total, totalPages, loading, error } = useHistorialCompras({
     empresaId: empresaActiva === "ALL" ? undefined : empresaActiva,
     estado: estadoSel === "Todas" ? undefined : estadoSel,
     area: area === "__todas__" ? undefined : area,
     solicitante: solicitante.trim() || undefined,
     desde: desde || undefined,
     hasta: hasta || undefined,
+    page,
+    pageSize: PAGE_SIZE,
   });
 
-  const totalPages = Math.max(1, Math.ceil(historial.length / PAGE_SIZE));
+  // Al cambiar de empresa activa, la página anterior puede ya no existir
+  // para el nuevo tenant/empresa — siempre se vuelve a la primera.
+  useEffect(() => {
+    setPage(1);
+  }, [empresaActiva]);
+
   const pageClamped = Math.min(page, totalPages);
-  const paginado = useMemo(
-    () => historial.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE),
-    [historial, pageClamped],
-  );
 
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
@@ -145,8 +151,8 @@ function HistoriaComprasPage() {
   }, [agrupacion, empresas]);
 
   const gruposHistorial = useMemo(
-    () => agruparFilas(paginado, claveDeAgrupacion),
-    [paginado, claveDeAgrupacion],
+    () => agruparFilas(historial, claveDeAgrupacion),
+    [historial, claveDeAgrupacion],
   );
 
   const limpiarFiltros = () => {
@@ -396,7 +402,7 @@ function HistoriaComprasPage() {
                 ))}
               </Fragment>
             ))}
-            {paginado.length === 0 && (
+            {historial.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={10} className="p-0">
                   {loading ? (
@@ -419,11 +425,11 @@ function HistoriaComprasPage() {
         </Table>
 
         {/* ── Paginación ── */}
-        {historial.length > 0 && (
+        {total > 0 && (
           <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3">
             <p className="text-[11px] font-semibold text-slate-500">
               Mostrando {(pageClamped - 1) * PAGE_SIZE + 1}–
-              {Math.min(pageClamped * PAGE_SIZE, historial.length)} de {historial.length} registros
+              {Math.min(pageClamped * PAGE_SIZE, total)} de {total} registros
             </p>
             <div className="flex items-center gap-2">
               <Button

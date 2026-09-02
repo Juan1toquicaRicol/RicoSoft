@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import {
   listarServicios,
   obtenerServicio,
@@ -11,6 +12,7 @@ import {
 const router = Router();
 
 router.use(authenticateJWT);
+router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("servicios.ver"), listarServicios);
 router.get("/:id", requirePermission("servicios.ver"), obtenerServicio);

@@ -23,9 +23,14 @@ model Tenant {
   createdAt             DateTime                   @default(now())
   auditorias            Auditoria[]
   colaboradores         Colaborador[]
+  configuracionInventario ConfiguracionInventario?
   contratos             Contrato[]
   creditos              CreditoCliente[]
   departamentos         Departamento[]
+  tomasFisicas          TomaFisica[]
+  planesProduccion      PlanProduccion[]
+  gestionesLiquidacion  GestionLiquidacion[]
+  despachos             Despacho[]
   empleados             Empleado[]
   facturas              Factura[]
   faltas                FaltaStrike[]
@@ -46,6 +51,8 @@ model Tenant {
   expedientesAduaneros  ExpedienteAduanero[]
   costeosImportacion    CosteoImportacionDetalle[]
   cotizacionesProveedor CotizacionProveedor[]
+  permisosCatalogo      Permiso[]
+  sincronizacionesSiesa SincronizacionSiesaLog[]
 }
 
 model User {
@@ -80,6 +87,7 @@ model User {
   ordenesCompraIntlComoResponsable OrdenCompraIntl[]          @relation("OrdenCompraIntlResponsable")
   costeosImportacionLiquidados     CosteoImportacionDetalle[] @relation("CosteoLiquidadoPor")
   cotizacionesProveedorSubidas     CotizacionProveedor[]      @relation("CotizacionProveedorSubidaPor")
+  sincronizacionesSiesaIniciadas   SincronizacionSiesaLog[]
   colaborador                      Colaborador?               @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   departamento                     Departamento?              @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rolRel                           Rol?                       @relation(fields: [rolId], references: [id])
@@ -89,18 +97,47 @@ model User {
   @@index([tenantId, email])
 }
 
+/// tenantId = NULL significa alcance GENERAL (disponible para asignar en
+/// cualquier tenant); con valor = exclusivo de esa empresa. Ver comentario
+/// equivalente en Departamento.
 model Rol {
   id          String      @id @default(uuid()) @db.UniqueIdentifier
-  tenantId    String      @db.UniqueIdentifier
+  tenantId    String?     @db.UniqueIdentifier
   nombre      String      @db.VarChar(100)
   descripcion String?     @db.VarChar(255)
   esSistema   Boolean     @default(false)
   activo      Boolean     @default(true)
   permisos    String      @default("[]") @db.Text
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id])
   users       User[]
   membresias  Membresia[]
 
+  @@index([tenantId])
+}
+
+/// Catálogo de permisos administrable desde Administración Global. Los ~70
+/// permisos base del sistema (esSistema=true) se siembran automáticamente la
+/// primera vez que un tenant consulta el catálogo, a partir de
+/// PERMISOS_SISTEMA (server/src/lib/permissions.ts) — su código nunca se
+/// puede editar ni el registro eliminarse, solo nombre/descripción/
+/// módulo/activo. Un permiso creado aquí por un tenant (esSistema=false)
+/// queda disponible para asignar a Roles igual que los del sistema, PERO
+/// nada lo hace cumplir automáticamente: un permiso solo tiene efecto real
+/// una vez que algún endpoint llama requirePermission("ese.codigo") — este
+/// catálogo es el registro/asignación, no un motor de autorización genérico.
+model Permiso {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String   @db.UniqueIdentifier
+  codigo      String   @db.VarChar(150)
+  nombre      String   @db.VarChar(255)
+  descripcion String?  @db.Text
+  modulo      String   @db.VarChar(100)
+  esSistema   Boolean  @default(false)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenantId, codigo])
   @@index([tenantId])
 }
 
@@ -183,9 +220,13 @@ model Notificacion {
   @@index([usuarioId, createdAt])
 }
 
+/// tenantId = NULL significa alcance GENERAL: visible/usable por todos los
+/// tenants, un único registro (no se duplica por empresa). tenantId con
+/// valor = exclusivo de esa empresa. Mismo mecanismo que Rol y Modulo, para
+/// no tener tres formas distintas de expresar lo mismo.
 model Departamento {
   id            String        @id @default(uuid()) @db.UniqueIdentifier
-  tenantId      String        @db.UniqueIdentifier
+  tenantId      String?       @db.UniqueIdentifier
   nombre        String        @db.VarChar(255)
   activo        Boolean       @default(true)
   esSistemas    Boolean       @default(false)
@@ -194,7 +235,7 @@ model Departamento {
   usuarios      User[]
   membresias    Membresia[]
   proveedores   Proveedor[]
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  tenant        Tenant?       @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -202,17 +243,31 @@ model Departamento {
 /// Módulos principales de la aplicación (Facturas, Contratos, etc.), agrupables
 /// por Departamento desde Configuración. clave identifica el módulo de forma
 /// estable independientemente del departamento al que esté asignado.
+/// tenantId = NULL significa alcance GENERAL (visible para todos los
+/// tenants); con valor = exclusivo de esa empresa. Ver comentario
+/// equivalente en Departamento. El @@unique([tenantId, clave]) ya se
+/// comporta correctamente con NULL sin cambios: SQL Server compara la tupla
+/// completa en un índice compuesto, así que solo permite UN módulo general
+/// por clave (NULL, "compras") a la vez que sigue permitiendo esa misma
+/// clave una vez por cada tenant específico — no hace falta un índice
+/// filtrado adicional aquí.
 model Modulo {
   id             String        @id @default(uuid()) @db.UniqueIdentifier
-  tenantId       String        @db.UniqueIdentifier
+  tenantId       String?       @db.UniqueIdentifier
   clave          String        @db.VarChar(100)
   nombre         String        @db.VarChar(255)
   ruta           String        @db.VarChar(255)
   icono          String        @db.VarChar(50)
+  /// Código de PERMISOS_SISTEMA (p. ej. "facturas.ver") requerido para que
+  /// este módulo aparezca en el sidebar de un usuario y sea considerado
+  /// "accesible". NULL = visible para cualquier usuario autenticado del
+  /// tenant (Dashboard, Bandeja). No es un sistema de permisos paralelo: es
+  /// un puntero de texto al mismo catálogo que ya usa Rol.permisos.
+  permisoClave   String?       @db.VarChar(150)
   departamentoId String?       @db.UniqueIdentifier
   activo         Boolean       @default(true)
   orden          Int           @default(0)
-  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id])
   departamento   Departamento? @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenantId, clave])
@@ -225,32 +280,84 @@ model Modulo {
 /// libre, duplicado e inconsistente). El nit es único por tenant para evitar
 /// registrar el mismo proveedor dos veces con nombres ligeramente distintos.
 model Proveedor {
-  id                String                @id @default(uuid()) @db.UniqueIdentifier
-  tenantId          String                @db.UniqueIdentifier
-  nombre            String                @db.VarChar(255)
-  nit               String                @db.VarChar(50)
-  contacto          String?               @db.VarChar(255)
-  telefono          String?               @db.VarChar(50)
-  email             String?               @db.VarChar(255)
+  id                       String                @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                 String                @db.UniqueIdentifier
+  nombre                   String                @db.VarChar(255)
+  nit                      String                @db.VarChar(50)
+  contacto                 String?               @db.VarChar(255)
+  telefono                 String?               @db.VarChar(50)
+  email                    String?               @db.VarChar(255)
   /// Departamento dueño de este proveedor (p. ej. un proveedor de insumos de
   /// Producción no debería ofrecerse al crear una SC de Comercial). Null =
   /// proveedor "general", visible para cualquier departamento — así todos los
   /// proveedores existentes antes de este campo siguen apareciendo en todas
   /// partes sin necesidad de migrarlos uno por uno.
-  departamentoId    String?               @db.UniqueIdentifier
-  activo            Boolean               @default(true)
-  createdAt         DateTime              @default(now())
-  tenant            Tenant                @relation(fields: [tenantId], references: [id])
-  departamento      Departamento?         @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  facturas          Factura[]
-  contratos         Contrato[]
-  servicios         ServicioSuscripcion[]
-  solicitudesCompra SolicitudCompra[]
-  cotizaciones      CotizacionProveedor[]
+  departamentoId           String?               @db.UniqueIdentifier
+  /// Identidad técnica estable del tercero en Siesa (t200_mm_terceros.f200_rowid),
+  /// independiente del NIT — el NIT es un dato de negocio que puede
+  /// corregirse en Siesa; este campo es lo que evita crear un proveedor
+  /// duplicado cuando eso pasa. Null para proveedores creados manualmente en
+  /// RicoSoft, o para proveedores sincronizados antes de esta columna
+  /// existir y que todavía no pasaron por el backfill (ver siesa-sync.service.ts).
+  siesaTerceroRowId        Int?
+  /// "SIESA" si el registro fue creado/vinculado por la sincronización,
+  /// "MANUAL" si lo creó un usuario desde RicoSoft. Nunca cambia de MANUAL a
+  /// SIESA automáticamente — solo el backfill explícito lo hace, con
+  /// vinculación inequívoca.
+  origen                   String                @default("MANUAL") @db.VarChar(20)
+  ultimaSincronizacion     DateTime?
+  /// Si un usuario edita el nombre a mano, se pone en true y la
+  /// sincronización deja de sobrescribirlo — evita que un dato corregido a
+  /// mano en RicoSoft se revierta silenciosamente en el siguiente sync.
+  nombreEditadoManualmente Boolean               @default(false)
+  activo                   Boolean               @default(true)
+  createdAt                DateTime              @default(now())
+  tenant                   Tenant                @relation(fields: [tenantId], references: [id])
+  departamento             Departamento?         @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  facturas                 Factura[]
+  contratos                Contrato[]
+  servicios                ServicioSuscripcion[]
+  solicitudesCompra        SolicitudCompra[]
+  cotizaciones             CotizacionProveedor[]
 
   @@unique([tenantId, nit])
   @@index([tenantId])
   @@index([tenantId, departamentoId])
+  @@index([tenantId, siesaTerceroRowId])
+}
+
+/// Historial de corridas de sincronización de proveedores desde Siesa. Vive
+/// aparte de Auditoria porque necesita contadores estructurados y estado
+/// consultable (para polling desde la UI), no solo un texto libre — ver
+/// siesa-sync.service.ts. Cada corrida queda asociada a un solo tenant/ciaId,
+/// nunca mezcla varios.
+model SincronizacionSiesaLog {
+  id                    String    @id @default(uuid()) @db.UniqueIdentifier
+  tenantId              String    @db.UniqueIdentifier
+  ciaId                 Int
+  /// EN_COLA | EN_CURSO | COMPLETADO | FALLIDO | CANCELADO
+  estado                String    @default("EN_COLA") @db.VarChar(20)
+  iniciadoPorId         String    @db.UniqueIdentifier
+  iniciadoEn            DateTime  @default(now())
+  finalizadoEn          DateTime?
+  leidos                Int       @default(0)
+  creados               Int       @default(0)
+  actualizados          Int       @default(0)
+  desactivados          Int       @default(0)
+  sinCambios            Int       @default(0)
+  erroresCount          Int       @default(0)
+  /// JSON con el detalle de errores por fila (mismo shape que ya devolvía el
+  /// endpoint síncrono: [{ nit, mensaje }]).
+  errores               String?   @db.Text
+  mensajeError          String?   @db.Text
+  /// Bandera cooperativa: el bucle de sincronización la revisa
+  /// periódicamente y se detiene si está en true, en vez de matar el proceso.
+  cancelacionSolicitada Boolean   @default(false)
+  tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  iniciadoPor           User      @relation(fields: [iniciadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId, estado])
+  @@index([tenantId, iniciadoEn])
 }
 
 model Colaborador {
@@ -531,6 +638,246 @@ model CreditoCliente {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
+}
+
+/// Toma física mensual — Etapa I del módulo Producción & Planeación.
+/// Modelo NATIVO de RicoSoft (no existe en Siesa: se buscaron tablas de
+/// conteo físico/ajuste de inventario y no se encontró ninguna). La bodega
+/// (bodegaRowId) SÍ es real: referencia t150_mc_bodegas de Siesa,
+/// verificado en vivo contra t400_cm_existencia. RicoSoft nunca escribe en
+/// Siesa (integración de solo lectura) — "cerrar" una toma física es un
+/// registro interno de RicoSoft, no un ajuste real en el sistema contable;
+/// el ajuste en Siesa lo hace un usuario manualmente allá, si corresponde.
+model TomaFisica {
+  id            String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String            @db.UniqueIdentifier
+  bodegaRowId   Int
+  bodegaNombre  String            @db.VarChar(255)
+  fecha         DateTime
+  estado        String            @default("Abierta") @db.VarChar(20)
+  responsableId String            @db.UniqueIdentifier
+  responsable   String            @db.VarChar(255)
+  createdAt     DateTime          @default(now())
+  cerradaEn     DateTime?
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  lineas        TomaFisicaLinea[]
+
+  @@index([tenantId])
+}
+
+/// Una línea por ítem de la bodega, con el stock del sistema (snapshot de
+/// Siesa al momento de crear la toma) y el conteo físico (null hasta que
+/// alguien lo registre). Diferencia/diferenciaPct/valorDiferencia se
+/// calculan siempre al leer (lib/toma-fisica.ts), nunca se guardan — evita
+/// que queden desactualizados si se corrige un conteo.
+model TomaFisicaLinea {
+  id            String     @id @default(uuid()) @db.UniqueIdentifier
+  tomaFisicaId  String     @db.UniqueIdentifier
+  itemRowId     Int
+  descripcion   String?    @db.VarChar(255)
+  referencia    String?    @db.VarChar(255)
+  stockSistema  Decimal    @db.Decimal(18, 4)
+  conteoFisico  Decimal?   @db.Decimal(18, 4)
+  valorUnitario Decimal    @db.Decimal(18, 2)
+  tomaFisica    TomaFisica @relation(fields: [tomaFisicaId], references: [id], onDelete: Cascade)
+
+  @@index([tomaFisicaId])
+}
+
+/// Umbrales del módulo Producción & Planeación, configurables por tenant en
+/// vez de constantes fijas en el código (Parte 16 del plan de
+/// implementación). Una fila por tenant como máximo — si no existe, el
+/// backend usa los valores por defecto documentados en
+/// lib/inventario-siesa.ts, lib/cobertura-siesa.ts, etc.
+model ConfiguracionInventario {
+  id                   String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId             String   @unique @db.UniqueIdentifier
+  /// Días sin venta o menos: "vendible".
+  diasVendible         Int      @default(60)
+  /// Días sin venta o menos (y > diasVendible): "exceso"; más: "obsolescencia".
+  diasExceso           Int      @default(180)
+  /// Días de cobertura o menos: riesgo de ruptura de stock.
+  diasRupturaCobertura Int      @default(15)
+  /// Días de cobertura o más: sobre-cobertura (exceso de inventario frente a la venta).
+  diasSobreCobertura   Int      @default(180)
+  /// Inventario objetivo (Fase 6): días de cobertura que el negocio quiere mantener en stock — usado por domain/planeacion/inventario-objetivo.ts.
+  coberturaObjetivoDias Int     @default(45)
+  /// Multiplicador de seguridad sobre el inventario objetivo (1.0 = sin margen extra; 1.2 = 20% adicional de colchón).
+  factorSeguridad      Float    @default(1.0)
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+/// Plan de producción con estados — Etapa J del módulo Producción &
+/// Planeación. Modelo nativo de RicoSoft: Siesa no trackea WIP en tiempo
+/// real (t851_mf_op_docto_item confirmado en vivo con 0 líneas abiertas) ni
+/// tiene un MRP usable (t834_mf_ordenes_planeadas abandonado). Se puede
+/// crear a mano o a partir de una recomendación de producción (Bloque 4,
+/// lib/produccion-siesa.ts) — RicoSoft nunca escribe de vuelta a Siesa: este
+/// plan es solo seguimiento interno del avance, no crea una orden real allá.
+model PlanProduccion {
+  id                String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String   @db.UniqueIdentifier
+  itemRowId         Int
+  descripcion       String?  @db.VarChar(255)
+  referencia        String?  @db.VarChar(255)
+  unidadMedida      String?  @db.VarChar(50)
+  cantidadPlaneada  Decimal  @db.Decimal(18, 4)
+  /// Planificada -> Aprobada -> En producción -> Parcial | Terminada; Cancelada desde cualquier estado no terminal.
+  estado            String   @default("Planificada") @db.VarChar(20)
+  fechaPlaneada     DateTime
+  responsableId     String   @db.UniqueIdentifier
+  responsable       String   @db.VarChar(255)
+  notas             String?  @db.VarChar(500)
+  createdAt         DateTime @default(now())
+  actualizadoEn     DateTime @updatedAt
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+/// Gestión de liquidación — Fase G (acción "Liquidar" del Centro de
+/// Decisiones). RicoSoft NUNCA modifica las existencias reales en Siesa
+/// (Siesa es de solo lectura para este sistema): este modelo registra la
+/// DECISIÓN empresarial y su seguimiento, no un ajuste de inventario real.
+/// "EJECUTADA" significa que la empresa realizó la acción comercial/
+/// operativa fuera de esta integración (o que en el futuro exista una
+/// integración explícita que la ejecute) — nunca un escritura automática
+/// a Siesa. Snapshot de score/categoría/valor al momento de crear el
+/// registro (viene directo de domain/planeacion/liquidacion.ts, nunca
+/// recalculado en el frontend) — si luego cambia en Siesa, esta gestión
+/// sigue reflejando el contexto real que motivó la decisión.
+model GestionLiquidacion {
+  id                 String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId           String   @db.UniqueIdentifier
+  itemRowId          Int
+  descripcion        String?  @db.VarChar(255)
+  referencia         String?  @db.VarChar(255)
+  cantidadExistente  Decimal  @db.Decimal(18, 4)
+  valorTotal         Decimal  @db.Decimal(18, 2)
+  score              Int
+  /// CRITICA | ALTA | MEDIA | BAJA
+  categoria          String   @db.VarChar(10)
+  motivo             String   @db.VarChar(500)
+  /// PENDIENTE -> EN_REVISION -> APROBADA | RECHAZADA -> EJECUTADA
+  estado             String   @default("PENDIENTE") @db.VarChar(20)
+  responsableId      String   @db.UniqueIdentifier
+  responsable        String   @db.VarChar(255)
+  createdAt          DateTime @default(now())
+  actualizadoEn      DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+/// Control de Despachos — torre de control operativa del ciclo
+/// recibido→preparado→cargado→despachado→en tránsito→entregado.
+///
+/// DECISIÓN ARQUITECTÓNICA: RicoSoft no tiene un modelo "Pedido" ni
+/// "Cliente" nativo — todo lo comercial (ventas, cliente, productos,
+/// cantidades) vive en vivo en Siesa (v470_ventas + t461_cm_docto_factura_
+/// venta), ya facturado. Un Despacho SIEMPRE se origina desde un documento
+/// de venta REAL de Siesa (siesaDocRowId = f461_rowid_docto) — nunca se
+/// inventa un pedido paralelo. Cliente/producto/cantidades se congelan al
+/// crear (mismo patrón que TomaFisica con la existencia de Siesa): un
+/// snapshot, no una relación viva. RicoSoft nunca escribe de vuelta a
+/// Siesa — "preparado"/"cargado"/etc. es seguimiento logístico 100% nativo
+/// de RicoSoft, no un ajuste de inventario ni un estado de Siesa.
+///
+/// Bodega/vehículo/conductor son texto libre (no relaciones): no existe
+/// maestro de bodegas propio (Toma Física ya usa bodegas de Siesa
+/// solo-lectura) ni de vehículos/conductores — crear esas tablas ahora
+/// sería sobre-ingeniería sin flota que gestionar todavía.
+///
+/// El historial de eventos reutiliza el modelo Auditoria existente
+/// (entidadTipo="Despacho", entidadId=Despacho.id) en vez de crear una
+/// tabla de eventos paralela — mismo mecanismo que ya usa el resto del
+/// sistema para trazabilidad.
+model Despacho {
+  id                   String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId             String            @db.UniqueIdentifier
+  /// t461_cm_docto_factura_venta.f461_rowid_docto — documento de venta real de origen.
+  siesaDocRowId        Int
+  siesaDocReferencia   String?           @db.VarChar(100)
+  clienteNombre        String            @db.VarChar(255)
+  clienteNit           String?           @db.VarChar(50)
+  direccionEntrega     String?           @db.VarChar(500)
+  contactoEntrega      String?           @db.VarChar(255)
+  telefonoContacto     String?           @db.VarChar(50)
+  bodegaRowId          Int?
+  bodegaNombre         String?           @db.VarChar(255)
+  valorPedido          Decimal           @db.Decimal(18, 2)
+  /// RECIBIDO -> PREPARANDO -> PREPARADO -> PENDIENTE_CARGUE -> CARGANDO ->
+  /// CARGADO -> DESPACHADO -> EN_TRANSITO -> ENTREGADO | ENTREGA_PARCIAL;
+  /// CANCELADO desde cualquier estado antes de CARGADO; DEVUELTO desde
+  /// EN_TRANSITO/ENTREGA_PARCIAL. Ver lib/despachos.ts para la máquina completa.
+  estado               String            @default("RECIBIDO") @db.VarChar(20)
+  vehiculoPlaca        String?           @db.VarChar(20)
+  vehiculoTipo         String?           @db.VarChar(50)
+  conductorNombre      String?           @db.VarChar(255)
+  conductorTelefono    String?           @db.VarChar(50)
+  fechaCargue          DateTime?
+  fechaDespacho        DateTime?
+  fechaEntregaEstimada DateTime?
+  fechaEntregaReal     DateTime?
+  recibidoPor          String?           @db.VarChar(255)
+  responsableId        String            @db.UniqueIdentifier
+  responsable          String            @db.VarChar(255)
+  createdAt            DateTime          @default(now())
+  actualizadoEn        DateTime          @updatedAt
+  tenant               Tenant            @relation(fields: [tenantId], references: [id])
+  lineas               DespachoLinea[]
+  novedades            DespachoNovedad[]
+
+  @@index([tenantId, estado])
+  @@index([tenantId, siesaDocRowId])
+}
+
+/// Línea de producto del despacho — snapshot congelado de la línea de venta
+/// real en Siesa (v470_ventas) al momento de crear el despacho. Permite
+/// registrar avance de preparación/despacho/entrega SIN tocar existencias
+/// de Siesa: es seguimiento, no un movimiento de inventario real.
+model DespachoLinea {
+  id                 String   @id @default(uuid()) @db.UniqueIdentifier
+  despachoId         String   @db.UniqueIdentifier
+  itemRowId          Int
+  descripcion        String?  @db.VarChar(255)
+  referencia         String?  @db.VarChar(255)
+  unidadMedida       String?  @db.VarChar(50)
+  cantidadSolicitada Decimal  @db.Decimal(18, 4)
+  cantidadPreparada  Decimal? @db.Decimal(18, 4)
+  cantidadDespachada Decimal? @db.Decimal(18, 4)
+  cantidadEntregada  Decimal? @db.Decimal(18, 4)
+  observacion        String?  @db.VarChar(500)
+  despacho           Despacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+
+  @@index([despachoId])
+}
+
+/// Novedad registrada durante el ciclo del despacho (faltante, dirección
+/// incorrecta, cliente ausente, avería, rechazo, devolución, etc.) — no
+/// bloquea automáticamente el estado logístico: el responsable decide si
+/// amerita mover el Despacho a DEVUELTO/CANCELADO explícitamente.
+model DespachoNovedad {
+  id                    String    @id @default(uuid()) @db.UniqueIdentifier
+  despachoId            String    @db.UniqueIdentifier
+  /// PRODUCTO_FALTANTE | DIRECCION_INCORRECTA | CLIENTE_AUSENTE |
+  /// VEHICULO_NO_DISPONIBLE | MERCANCIA_AVERIADA | ENTREGA_PARCIAL |
+  /// RECHAZO_CLIENTE | DEVOLUCION | OTRA
+  tipo                  String    @db.VarChar(30)
+  descripcion           String    @db.VarChar(500)
+  /// ABIERTA -> RESUELTA
+  estado                String    @default("ABIERTA") @db.VarChar(10)
+  usuarioId             String    @db.UniqueIdentifier
+  usuario               String    @db.VarChar(255)
+  createdAt             DateTime  @default(now())
+  resueltaPorId         String?   @db.UniqueIdentifier
+  resueltaPor           String?   @db.VarChar(255)
+  fechaResolucion       DateTime?
+  observacionResolucion String?   @db.VarChar(500)
+  despacho              Despacho  @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+
+  @@index([despachoId])
 }
 
 model ProyeccionMensual {

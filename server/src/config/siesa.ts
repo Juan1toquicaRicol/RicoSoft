@@ -5,6 +5,13 @@ import sql from "mssql";
 // esta conexión solo puede establecerse desde una máquina/servidor con el
 // túnel activo hacia db06.siesacloud.local.
 let pool: sql.ConnectionPool | null = null;
+// M-05 (hardening 2026-09-02): sin esto, dos llamadas a getSiesaPool()
+// mientras la primera conexión todavía está en curso (pool no nulo pero
+// tampoco conectado todavía) veían ambas `pool?.connected` como falso y
+// cada una abría su propio ConnectionPool — la segunda quedaba huérfana
+// (nunca se cierra, nunca se reutiliza). Memoiza la PROMESA de conexión en
+// vuelo: la primera llamada la crea, las siguientes esperan la misma.
+let poolConectando: Promise<sql.ConnectionPool> | null = null;
 
 function leerConfigSiesa(): sql.config {
   const { SIESA_DB_HOST, SIESA_DB_PORT, SIESA_DB_NAME, SIESA_DB_USER, SIESA_DB_PASSWORD } = process.env;
@@ -34,8 +41,22 @@ function leerConfigSiesa(): sql.config {
 /** Devuelve el pool de conexión a Siesa, reutilizándolo entre llamadas. */
 export async function getSiesaPool(): Promise<sql.ConnectionPool> {
   if (pool?.connected) return pool;
-  pool = await new sql.ConnectionPool(leerConfigSiesa()).connect();
-  return pool;
+  if (poolConectando) return poolConectando;
+
+  poolConectando = new sql.ConnectionPool(leerConfigSiesa())
+    .connect()
+    .then((conectado) => {
+      pool = conectado;
+      return conectado;
+    })
+    .finally(() => {
+      // Se limpia siempre (éxito o error) para que una conexión fallida no
+      // deje a todas las llamadas futuras esperando para siempre la misma
+      // promesa rechazada — la siguiente llamada reintenta desde cero.
+      poolConectando = null;
+    });
+
+  return poolConectando;
 }
 
 export async function cerrarSiesaPool(): Promise<void> {

@@ -1,11 +1,25 @@
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
-import { prisma } from "../../config/prisma";
+import { Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { UPLOADS_DIR_COMPROBANTES } from "../../middleware/upload.middleware";
+import {
+  UPLOADS_DIR_COMPROBANTES,
+  moverArchivoDefinitivo,
+} from "../../middleware/upload.middleware";
 
 const METODOS_PAGO_VALIDOS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
+
+// M-10 (hardening 2026-09-02): bajo dos pagos concurrentes reales sobre la
+// misma factura, SQL Server puede resolver el conflicto de escritura entre
+// las dos transacciones con un deadlock (P2034) en vez de simplemente
+// serializarlas — no hay corrupción de datos (la transacción que pierde no
+// persiste nada), pero antes de este fix el error genérico caía al catch y
+// respondía 500, indistinguible de un error real para el cliente. Solo este
+// código conocido se traduce a 409; cualquier otro error sigue siendo 500.
+function esErrorDeConcurrencia(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+}
 
 function serializarPago(p: any) {
   return {
@@ -36,11 +50,23 @@ function serializarPago(p: any) {
  * "Aprobada". Es la ÚNICA forma de llegar a "Pagada" en el sistema (ya no
  * existe un cambio de estado manual a "Pagada" sin un pago real detrás).
  */
-async function recalcularEstadoPorPagos(tenantId: string, facturaId: string, actor: string) {
-  const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+type TenantPrismaTx = Omit<
+  NonNullable<AuthenticatedRequest["tenantPrisma"]>,
+  "$extends" | "$transaction" | "$disconnect" | "$connect" | "$use" | "$on"
+>;
+
+async function recalcularEstadoPorPagos(
+  tx: TenantPrismaTx,
+  tenantId: string,
+  facturaId: string,
+  actor: string,
+) {
+  const factura = await tx!.factura.findFirst({
+    where: { id: facturaId, tenantId, eliminado: false },
+  });
   if (!factura) return null;
 
-  const agregado = await prisma.pago.aggregate({
+  const agregado = await tx!.pago.aggregate({
     where: { facturaId, tenantId, estado: "Confirmado" },
     _sum: { valor: true },
   });
@@ -48,7 +74,7 @@ async function recalcularEstadoPorPagos(tenantId: string, facturaId: string, act
   const saldoPendiente = Number(factura.total) - totalPagado;
 
   if (saldoPendiente <= 0 && factura.estado === "Aprobada") {
-    return prisma.factura.update({
+    return tx!.factura.update({
       where: { id: facturaId },
       data: {
         estado: "Pagada",
@@ -60,12 +86,16 @@ async function recalcularEstadoPorPagos(tenantId: string, facturaId: string, act
     });
   }
   if (saldoPendiente > 0 && factura.estado === "Pagada") {
-    return prisma.factura.update({
+    return tx!.factura.update({
       where: { id: facturaId },
       data: {
         estado: "Aprobada",
         historial: {
-          create: { actor, accion: "Factura vuelve a Aprobada", detalle: "Un pago fue anulado; queda saldo pendiente." },
+          create: {
+            actor,
+            accion: "Factura vuelve a Aprobada",
+            detalle: "Un pago fue anulado; queda saldo pendiente.",
+          },
         },
       },
       include: { historial: { orderBy: { createdAt: "asc" } } },
@@ -85,10 +115,12 @@ export const listarPagosFactura = async (req: AuthenticatedRequest, res: Respons
     const tenantId = req.user!.tenantId;
     const { facturaId } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id: facturaId, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
-    const pagos = await prisma.pago.findMany({
+    const pagos = await req.tenantPrisma!.pago.findMany({
       where: { facturaId, tenantId },
       orderBy: { fecha: "desc" },
     });
@@ -126,12 +158,16 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
     }
     const valorNum = Number(valor);
     if (!Number.isFinite(valorNum) || valorNum <= 0) {
-      return res.status(400).json({ message: "El valor del pago debe ser un número mayor a cero." });
+      return res
+        .status(400)
+        .json({ message: "El valor del pago debe ser un número mayor a cero." });
     }
 
     // Aislamiento multi-tenant: la factura se busca por tenantId antes de
     // aceptar un pago sobre ella (IDOR).
-    const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id: facturaId, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
     if (factura.estado !== "Aprobada") {
@@ -140,52 +176,96 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
-    const pago = await prisma.pago.create({
-      data: {
-        tenantId,
-        facturaId,
-        fecha: fecha ? new Date(fecha) : new Date(),
-        valor: valorNum,
-        metodoPago,
-        referencia: typeof referencia === "string" && referencia.trim() ? referencia.trim() : null,
-        observaciones: typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
-        registradoPorId: req.user!.id,
-        registradoPorNombre: req.user!.nombre,
-      },
+    // El saldo pendiente se recalcula desde los pagos Confirmados reales
+    // (no desde un contador de la factura), así que es imposible que quede
+    // desactualizado por una carrera entre dos pagos concurrentes.
+    const agregadoPrevio = await req.tenantPrisma!.pago.aggregate({
+      where: { facturaId, tenantId, estado: "Confirmado" },
+      _sum: { valor: true },
     });
+    const saldoPendiente = Number(factura.total) - Number(agregadoPrevio._sum.valor ?? 0);
+    if (valorNum > saldoPendiente) {
+      return res.status(409).json({
+        message: `El pago ($${valorNum.toLocaleString("es-CO")}) supera el saldo pendiente de la factura ($${saldoPendiente.toLocaleString("es-CO")}).`,
+      });
+    }
 
-    await prisma.factura.update({
-      where: { id: facturaId },
-      data: {
-        historial: {
-          create: {
-            actor: req.user!.nombre,
-            accion: "Pago registrado",
-            detalle: `${metodoPago}: $${valorNum.toLocaleString("es-CO")}${referencia ? ` · Ref: ${referencia}` : ""}`,
+    // create + historial + recálculo de estado + auditoría son una sola
+    // unidad: si algo falla a mitad de camino, no debe quedar un pago
+    // registrado sin su auditoría, ni una factura en un estado que no
+    // corresponde a la suma real de sus pagos.
+    const { pago, facturaActualizada } = await req.tenantPrisma!.$transaction(async (tx) => {
+      const pago = await tx.pago.create({
+        data: {
+          tenantId,
+          facturaId,
+          fecha: fecha ? new Date(fecha) : new Date(),
+          valor: valorNum,
+          metodoPago,
+          referencia:
+            typeof referencia === "string" && referencia.trim() ? referencia.trim() : null,
+          observaciones:
+            typeof observaciones === "string" && observaciones.trim()
+              ? observaciones.trim()
+              : null,
+          registradoPorId: req.user!.id,
+          registradoPorNombre: req.user!.nombre,
+        },
+      });
+
+      await tx.factura.update({
+        where: { id: facturaId },
+        data: {
+          historial: {
+            create: {
+              actor: req.user!.nombre,
+              accion: "Pago registrado",
+              detalle: `${metodoPago}: $${valorNum.toLocaleString("es-CO")}${referencia ? ` · Ref: ${referencia}` : ""}`,
+            },
           },
         },
-      },
-    });
+      });
 
-    const facturaActualizada = await recalcularEstadoPorPagos(tenantId, facturaId, req.user!.nombre);
-
-    await prisma.auditoria.create({
-      data: {
+      const facturaActualizada = await recalcularEstadoPorPagos(
+        tx,
         tenantId,
-        usuarioId: req.user!.id,
-        accion: "PAGO_REGISTRADO",
-        detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${factura.numero}"`,
-        entidadTipo: "Pago",
-        entidadId: pago.id,
-        datosNuevos: JSON.stringify({ facturaId, valor: valorNum, metodoPago, estadoFactura: facturaActualizada?.estado }),
-      },
+        facturaId,
+        req.user!.nombre,
+      );
+
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PAGO_REGISTRADO",
+          detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${factura.numero}"`,
+          entidadTipo: "Pago",
+          entidadId: pago.id,
+          datosNuevos: JSON.stringify({
+            facturaId,
+            valor: valorNum,
+            metodoPago,
+            estadoFactura: facturaActualizada?.estado,
+          }),
+        },
+      });
+
+      return { pago, facturaActualizada };
     });
 
     return res.status(201).json({
       pago: serializarPago(pago),
-      factura: facturaActualizada ? { id: facturaActualizada.id, estado: facturaActualizada.estado } : null,
+      factura: facturaActualizada
+        ? { id: facturaActualizada.id, estado: facturaActualizada.estado }
+        : null,
     });
   } catch (error) {
+    if (esErrorDeConcurrencia(error)) {
+      console.warn("Conflicto de concurrencia al registrar pago (P2034):", error);
+      return res.status(409).json({
+        message: "Otro pago se procesó al mismo tiempo sobre esta factura. Verifica el saldo actual e intenta de nuevo.",
+      });
+    }
     console.error("Error al registrar pago:", error);
     return res.status(500).json({ message: "Error al registrar el pago." });
   }
@@ -201,50 +281,74 @@ export const anularPago = async (req: AuthenticatedRequest, res: Response) => {
     const tenantId = req.user!.tenantId;
     const { facturaId, id: pagoId } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id: facturaId, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
-    const pago = await prisma.pago.findFirst({ where: { id: pagoId, facturaId, tenantId } });
+    const pago = await req.tenantPrisma!.pago.findFirst({
+      where: { id: pagoId, facturaId, tenantId },
+    });
     if (!pago) return res.status(404).json({ message: "Pago no encontrado." });
     if (pago.estado === "Anulado") {
       return res.status(409).json({ message: "Este pago ya está anulado." });
     }
 
-    await prisma.pago.update({ where: { id: pagoId }, data: { estado: "Anulado" } });
+    const facturaActualizada = await req.tenantPrisma!.$transaction(async (tx) => {
+      await tx.pago.update({ where: { id: pagoId }, data: { estado: "Anulado" } });
 
-    await prisma.factura.update({
-      where: { id: facturaId },
-      data: {
-        historial: {
-          create: {
-            actor: req.user!.nombre,
-            accion: "Pago anulado",
-            detalle: `Se anuló el pago de $${Number(pago.valor).toLocaleString("es-CO")} (${pago.metodoPago}).`,
+      await tx.factura.update({
+        where: { id: facturaId },
+        data: {
+          historial: {
+            create: {
+              actor: req.user!.nombre,
+              accion: "Pago anulado",
+              detalle: `Se anuló el pago de $${Number(pago.valor).toLocaleString("es-CO")} (${pago.metodoPago}).`,
+            },
           },
         },
-      },
-    });
+      });
 
-    const facturaActualizada = await recalcularEstadoPorPagos(tenantId, facturaId, req.user!.nombre);
-
-    await prisma.auditoria.create({
-      data: {
+      const facturaActualizada = await recalcularEstadoPorPagos(
+        tx,
         tenantId,
-        usuarioId: req.user!.id,
-        accion: "PAGO_ANULADO",
-        detalle: `${req.user!.nombre} anuló un pago de $${Number(pago.valor).toLocaleString("es-CO")} de la factura "${factura.numero}"`,
-        entidadTipo: "Pago",
-        entidadId: pagoId,
-        datosAnteriores: JSON.stringify({ estado: "Confirmado" }),
-        datosNuevos: JSON.stringify({ estado: "Anulado", estadoFactura: facturaActualizada?.estado }),
-      },
+        facturaId,
+        req.user!.nombre,
+      );
+
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PAGO_ANULADO",
+          detalle: `${req.user!.nombre} anuló un pago de $${Number(pago.valor).toLocaleString("es-CO")} de la factura "${factura.numero}"`,
+          entidadTipo: "Pago",
+          entidadId: pagoId,
+          datosAnteriores: JSON.stringify({ estado: "Confirmado" }),
+          datosNuevos: JSON.stringify({
+            estado: "Anulado",
+            estadoFactura: facturaActualizada?.estado,
+          }),
+        },
+      });
+
+      return facturaActualizada;
     });
 
     return res.json({
       pago: serializarPago({ ...pago, estado: "Anulado" }),
-      factura: facturaActualizada ? { id: facturaActualizada.id, estado: facturaActualizada.estado } : null,
+      factura: facturaActualizada
+        ? { id: facturaActualizada.id, estado: facturaActualizada.estado }
+        : null,
     });
   } catch (error) {
+    if (esErrorDeConcurrencia(error)) {
+      console.warn("Conflicto de concurrencia al anular pago (P2034):", error);
+      return res.status(409).json({
+        message: "Otra operación se procesó al mismo tiempo sobre esta factura. Intenta de nuevo.",
+      });
+    }
     console.error("Error al anular pago:", error);
     return res.status(500).json({ message: "Error al anular el pago." });
   }
@@ -265,12 +369,16 @@ export const subirComprobantePago = async (req: AuthenticatedRequest, res: Respo
       return res.status(400).json({ message: "No se recibió ningún archivo." });
     }
 
-    const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id: facturaId, tenantId, eliminado: false },
+    });
     if (!factura) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Factura no encontrada." });
     }
-    const pago = await prisma.pago.findFirst({ where: { id: pagoId, facturaId, tenantId } });
+    const pago = await req.tenantPrisma!.pago.findFirst({
+      where: { id: pagoId, facturaId, tenantId },
+    });
     if (!pago) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Pago no encontrado." });
@@ -280,11 +388,15 @@ export const subirComprobantePago = async (req: AuthenticatedRequest, res: Respo
       fs.unlink(path.join(UPLOADS_DIR_COMPROBANTES, pago.comprobanteRuta), () => {});
     }
 
-    const actualizado = await prisma.pago.update({
+    // Tenant/factura/pago ya confirmados: recién acá se mueve el archivo de
+    // la carpeta temporal a la carpeta real de este pago.
+    const comprobanteRuta = moverArchivoDefinitivo(UPLOADS_DIR_COMPROBANTES, archivo, pagoId);
+
+    const actualizado = await req.tenantPrisma!.pago.update({
       where: { id: pagoId },
       data: {
         comprobanteNombre: archivo.originalname,
-        comprobanteRuta: path.join(pagoId, archivo.filename),
+        comprobanteRuta,
         comprobanteMime: archivo.mimetype,
         comprobanteTamano: archivo.size,
       },
@@ -302,10 +414,14 @@ export const obtenerComprobantePago = async (req: AuthenticatedRequest, res: Res
     const tenantId = req.user!.tenantId;
     const { facturaId, id: pagoId } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id: facturaId, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id: facturaId, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
-    const pago = await prisma.pago.findFirst({ where: { id: pagoId, facturaId, tenantId } });
+    const pago = await req.tenantPrisma!.pago.findFirst({
+      where: { id: pagoId, facturaId, tenantId },
+    });
     if (!pago || !pago.comprobanteRuta) {
       return res.status(404).json({ message: "Este pago no tiene un comprobante adjunto." });
     }

@@ -114,7 +114,18 @@ export const PERMISOS_SISTEMA = {
   IMPORTACIONES_RECIBIR: "importaciones.recibir",
   IMPORTACIONES_LIQUIDAR: "importaciones.liquidar",
   IMPORTACIONES_ELIMINAR: "importaciones.eliminar",
+  INTEGRACION_SIESA_VER: "integracion_siesa.ver",
   INTEGRACION_SIESA_SINCRONIZAR: "integracion_siesa.sincronizar",
+  INVENTARIO_CONFIGURAR: "inventario.configurar",
+  TOMA_FISICA_VER: "toma_fisica.ver",
+  TOMA_FISICA_GESTIONAR: "toma_fisica.gestionar",
+  PLAN_PRODUCCION_VER: "plan_produccion.ver",
+  PLAN_PRODUCCION_GESTIONAR: "plan_produccion.gestionar",
+  GESTION_LIQUIDACION_VER: "gestion_liquidacion.ver",
+  GESTION_LIQUIDACION_GESTIONAR: "gestion_liquidacion.gestionar",
+  VENTAS_VER: "ventas.ver",
+  DESPACHOS_VER: "despachos.ver",
+  DESPACHOS_GESTIONAR: "despachos.gestionar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -139,7 +150,10 @@ export interface PermisoDefinicion {
     | "Gestión Humana"
     | "Analítica"
     | "Importaciones"
-    | "Integraciones";
+    | "Integraciones"
+    | "Inventario"
+    | "Ventas"
+    | "Despachos";
   nombre: string;
   descripcion: string;
 }
@@ -596,25 +610,29 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.IMPORTACIONES_VER,
     modulo: "Importaciones",
     nombre: "Ver importaciones",
-    descripcion: "Permite consultar órdenes de compra internacionales, lotes y expedientes aduaneros.",
+    descripcion:
+      "Permite consultar órdenes de compra internacionales, lotes y expedientes aduaneros.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_CREAR,
     modulo: "Importaciones",
     nombre: "Crear órdenes de compra internacionales",
-    descripcion: "Permite registrar nuevas órdenes de compra internacional y sus lotes de embarque.",
+    descripcion:
+      "Permite registrar nuevas órdenes de compra internacional y sus lotes de embarque.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
     modulo: "Importaciones",
     nombre: "Gestionar tránsito y expediente aduanero",
-    descripcion: "Permite actualizar el estado de tránsito de un lote y su documentación DIAN (DIM, vistos buenos).",
+    descripcion:
+      "Permite actualizar el estado de tránsito de un lote y su documentación DIAN (DIM, vistos buenos).",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_RECIBIR,
     modulo: "Importaciones",
     nombre: "Recibir mercancía en planta",
-    descripcion: "Permite registrar el ingreso físico a planta de un lote antes de la liquidación definitiva.",
+    descripcion:
+      "Permite registrar el ingreso físico a planta de un lote antes de la liquidación definitiva.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR,
@@ -629,9 +647,79 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     descripcion: "Permite anular una orden de compra internacional.",
   },
   {
+    id: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,
+    modulo: "Integraciones",
+    nombre: "Ver integración con Siesa",
+    descripcion: "Permite consultar el historial y estado de las sincronizaciones con Siesa/UnoEE.",
+  },
+  {
     id: PERMISOS_SISTEMA.INTEGRACION_SIESA_SINCRONIZAR,
     modulo: "Integraciones",
     nombre: "Sincronizar datos con Siesa",
-    descripcion: "Permite disparar manualmente la sincronización de datos maestros desde Siesa/UnoEE.",
+    descripcion:
+      "Permite disparar y cancelar manualmente la sincronización de datos maestros desde Siesa/UnoEE.",
+  },
+  {
+    id: PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR,
+    modulo: "Inventario",
+    nombre: "Configurar umbrales de inventario",
+    descripcion:
+      "Permite ajustar los umbrales de días (vendible, exceso/obsolescencia, ruptura y sobre-cobertura) que usa la clasificación de inventario y producción recomendada.",
+  },
+  {
+    id: PERMISOS_SISTEMA.TOMA_FISICA_VER,
+    modulo: "Inventario",
+    nombre: "Ver tomas físicas",
+    descripcion: "Permite consultar las tomas físicas de inventario y sus diferencias.",
+  },
+  {
+    id: PERMISOS_SISTEMA.TOMA_FISICA_GESTIONAR,
+    modulo: "Inventario",
+    nombre: "Gestionar tomas físicas",
+    descripcion: "Permite crear tomas físicas, registrar conteos y cerrarlas.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PLAN_PRODUCCION_VER,
+    modulo: "Inventario",
+    nombre: "Ver plan de producción",
+    descripcion: "Permite consultar los planes de producción y su estado.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PLAN_PRODUCCION_GESTIONAR,
+    modulo: "Inventario",
+    nombre: "Gestionar plan de producción",
+    descripcion: "Permite crear planes de producción y avanzar su estado.",
+  },
+  {
+    id: PERMISOS_SISTEMA.GESTION_LIQUIDACION_VER,
+    modulo: "Inventario",
+    nombre: "Ver gestión de liquidación",
+    descripcion: "Permite consultar las gestiones de liquidación y su estado.",
+  },
+  {
+    id: PERMISOS_SISTEMA.GESTION_LIQUIDACION_GESTIONAR,
+    modulo: "Inventario",
+    nombre: "Gestionar liquidación",
+    descripcion: "Permite crear gestiones de liquidación y avanzar su estado (aprobar, rechazar, ejecutar).",
+  },
+  {
+    id: PERMISOS_SISTEMA.VENTAS_VER,
+    modulo: "Ventas",
+    nombre: "Ver Centro Comercial",
+    descripcion:
+      "Permite consultar disponibilidad comercial, clientes en riesgo y el histórico de ventas — sin necesitar el permiso completo de Analítica.",
+  },
+  {
+    id: PERMISOS_SISTEMA.DESPACHOS_VER,
+    modulo: "Despachos",
+    nombre: "Ver despachos",
+    descripcion: "Permite consultar el listado, detalle, línea de tiempo y novedades de los despachos.",
+  },
+  {
+    id: PERMISOS_SISTEMA.DESPACHOS_GESTIONAR,
+    modulo: "Despachos",
+    nombre: "Gestionar despachos",
+    descripcion:
+      "Permite crear despachos desde una venta real de Siesa, avanzar su estado logístico, y registrar/resolver novedades.",
   },
 ];

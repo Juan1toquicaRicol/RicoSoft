@@ -16,26 +16,36 @@ import { Route as BandejaRouteImport } from './routes/bandeja'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ContratosRouteImport } from './routes/contratos'
 import { Route as CreditosRouteImport } from './routes/creditos'
+import { Route as DespachosRouteImport } from './routes/despachos'
+import { Route as GerencialRouteImport } from './routes/gerencial'
 import { Route as GestionHumanaRouteImport } from './routes/gestion-humana'
 import { Route as HistoriaComprasRouteImport } from './routes/historia-compras'
 import { Route as ImportacionesRouteImport } from './routes/importaciones'
+import { Route as InventarioRouteImport } from './routes/inventario'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as OportunidadesRouteImport } from './routes/oportunidades'
 import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as PlanProduccionRouteImport } from './routes/plan-produccion'
 import { Route as ProyeccionRouteImport } from './routes/proyeccion'
 import { Route as ReglasRouteImport } from './routes/reglas'
 import { Route as ServiciosRouteImport } from './routes/servicios'
 import { Route as SolicitudesCompraRouteImport } from './routes/solicitudes-compra'
+import { Route as TomaFisicaRouteImport } from './routes/toma-fisica'
+import { Route as VentasRouteImport } from './routes/ventas'
 import { Route as ConfiguracionIndexRouteImport } from './routes/configuracion.index'
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
+import { Route as ConfiguracionIntegracionesSiesaRouteImport } from './routes/configuracion.integraciones-siesa'
 import { Route as ConfiguracionModulosRouteImport } from './routes/configuracion.modulos'
 import { Route as ConfiguracionPermisosRouteImport } from './routes/configuracion.permisos'
 import { Route as ConfiguracionProveedoresRouteImport } from './routes/configuracion.proveedores'
 import { Route as ConfiguracionRolesRouteImport } from './routes/configuracion.roles'
 import { Route as ConfiguracionUsuariosRouteImport } from './routes/configuracion.usuarios'
+import { Route as DespachosIdRouteImport } from './routes/despachos.$id'
 import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
 import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 import { Route as ImportacionesIdRouteImport } from './routes/importaciones.$id'
 import { Route as ServiciosIdRouteImport } from './routes/servicios.$id'
+import { Route as TomaFisicaIdRouteImport } from './routes/toma-fisica.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -72,6 +82,16 @@ const CreditosRoute = CreditosRouteImport.update({
   path: '/creditos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DespachosRoute = DespachosRouteImport.update({
+  id: '/despachos',
+  path: '/despachos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GerencialRoute = GerencialRouteImport.update({
+  id: '/gerencial',
+  path: '/gerencial',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GestionHumanaRoute = GestionHumanaRouteImport.update({
   id: '/gestion-humana',
   path: '/gestion-humana',
@@ -87,14 +107,29 @@ const ImportacionesRoute = ImportacionesRouteImport.update({
   path: '/importaciones',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InventarioRoute = InventarioRouteImport.update({
+  id: '/inventario',
+  path: '/inventario',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OportunidadesRoute = OportunidadesRouteImport.update({
+  id: '/oportunidades',
+  path: '/oportunidades',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerfilRoute = PerfilRouteImport.update({
   id: '/perfil',
   path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlanProduccionRoute = PlanProduccionRouteImport.update({
+  id: '/plan-produccion',
+  path: '/plan-produccion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProyeccionRoute = ProyeccionRouteImport.update({
@@ -117,6 +152,16 @@ const SolicitudesCompraRoute = SolicitudesCompraRouteImport.update({
   path: '/solicitudes-compra',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TomaFisicaRoute = TomaFisicaRouteImport.update({
+  id: '/toma-fisica',
+  path: '/toma-fisica',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VentasRoute = VentasRouteImport.update({
+  id: '/ventas',
+  path: '/ventas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfiguracionIndexRoute = ConfiguracionIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -126,6 +171,12 @@ const ConfiguracionDepartamentosRoute =
   ConfiguracionDepartamentosRouteImport.update({
     id: '/departamentos',
     path: '/departamentos',
+    getParentRoute: () => ConfiguracionRoute,
+  } as any)
+const ConfiguracionIntegracionesSiesaRoute =
+  ConfiguracionIntegracionesSiesaRouteImport.update({
+    id: '/integraciones-siesa',
+    path: '/integraciones-siesa',
     getParentRoute: () => ConfiguracionRoute,
   } as any)
 const ConfiguracionModulosRoute = ConfiguracionModulosRouteImport.update({
@@ -154,6 +205,11 @@ const ConfiguracionUsuariosRoute = ConfiguracionUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
+const DespachosIdRoute = DespachosIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => DespachosRoute,
+} as any)
 const FacturasIndexRoute = FacturasIndexRouteImport.update({
   id: '/facturas/',
   path: '/facturas/',
@@ -174,6 +230,11 @@ const ServiciosIdRoute = ServiciosIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ServiciosRoute,
 } as any)
+const TomaFisicaIdRoute = TomaFisicaIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => TomaFisicaRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -183,24 +244,34 @@ export interface FileRoutesByFullPath {
   '/configuracion': typeof ConfiguracionRouteWithChildren
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
+  '/despachos': typeof DespachosRouteWithChildren
+  '/gerencial': typeof GerencialRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
   '/importaciones': typeof ImportacionesRouteWithChildren
+  '/inventario': typeof InventarioRoute
   '/login': typeof LoginRoute
+  '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
+  '/plan-produccion': typeof PlanProduccionRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
+  '/toma-fisica': typeof TomaFisicaRouteWithChildren
+  '/ventas': typeof VentasRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
+  '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
+  '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
   '/servicios/$id': typeof ServiciosIdRoute
+  '/toma-fisica/$id': typeof TomaFisicaIdRoute
   '/configuracion/': typeof ConfiguracionIndexRoute
   '/facturas/': typeof FacturasIndexRoute
 }
@@ -211,24 +282,34 @@ export interface FileRoutesByTo {
   '/bandeja': typeof BandejaRoute
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
+  '/despachos': typeof DespachosRouteWithChildren
+  '/gerencial': typeof GerencialRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
   '/importaciones': typeof ImportacionesRouteWithChildren
+  '/inventario': typeof InventarioRoute
   '/login': typeof LoginRoute
+  '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
+  '/plan-produccion': typeof PlanProduccionRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
+  '/toma-fisica': typeof TomaFisicaRouteWithChildren
+  '/ventas': typeof VentasRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
+  '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
+  '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
   '/servicios/$id': typeof ServiciosIdRoute
+  '/toma-fisica/$id': typeof TomaFisicaIdRoute
   '/configuracion': typeof ConfiguracionIndexRoute
   '/facturas': typeof FacturasIndexRoute
 }
@@ -241,24 +322,34 @@ export interface FileRoutesById {
   '/configuracion': typeof ConfiguracionRouteWithChildren
   '/contratos': typeof ContratosRoute
   '/creditos': typeof CreditosRoute
+  '/despachos': typeof DespachosRouteWithChildren
+  '/gerencial': typeof GerencialRoute
   '/gestion-humana': typeof GestionHumanaRoute
   '/historia-compras': typeof HistoriaComprasRoute
   '/importaciones': typeof ImportacionesRouteWithChildren
+  '/inventario': typeof InventarioRoute
   '/login': typeof LoginRoute
+  '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
+  '/plan-produccion': typeof PlanProduccionRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/servicios': typeof ServiciosRouteWithChildren
   '/solicitudes-compra': typeof SolicitudesCompraRoute
+  '/toma-fisica': typeof TomaFisicaRouteWithChildren
+  '/ventas': typeof VentasRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
+  '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
+  '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
   '/servicios/$id': typeof ServiciosIdRoute
+  '/toma-fisica/$id': typeof TomaFisicaIdRoute
   '/configuracion/': typeof ConfiguracionIndexRoute
   '/facturas/': typeof FacturasIndexRoute
 }
@@ -272,24 +363,34 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/contratos'
     | '/creditos'
+    | '/despachos'
+    | '/gerencial'
     | '/gestion-humana'
     | '/historia-compras'
     | '/importaciones'
+    | '/inventario'
     | '/login'
+    | '/oportunidades'
     | '/perfil'
+    | '/plan-produccion'
     | '/proyeccion'
     | '/reglas'
     | '/servicios'
     | '/solicitudes-compra'
+    | '/toma-fisica'
+    | '/ventas'
     | '/configuracion/departamentos'
+    | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
+    | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
     | '/servicios/$id'
+    | '/toma-fisica/$id'
     | '/configuracion/'
     | '/facturas/'
   fileRoutesByTo: FileRoutesByTo
@@ -300,24 +401,34 @@ export interface FileRouteTypes {
     | '/bandeja'
     | '/contratos'
     | '/creditos'
+    | '/despachos'
+    | '/gerencial'
     | '/gestion-humana'
     | '/historia-compras'
     | '/importaciones'
+    | '/inventario'
     | '/login'
+    | '/oportunidades'
     | '/perfil'
+    | '/plan-produccion'
     | '/proyeccion'
     | '/reglas'
     | '/servicios'
     | '/solicitudes-compra'
+    | '/toma-fisica'
+    | '/ventas'
     | '/configuracion/departamentos'
+    | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
+    | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
     | '/servicios/$id'
+    | '/toma-fisica/$id'
     | '/configuracion'
     | '/facturas'
   id:
@@ -329,24 +440,34 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/contratos'
     | '/creditos'
+    | '/despachos'
+    | '/gerencial'
     | '/gestion-humana'
     | '/historia-compras'
     | '/importaciones'
+    | '/inventario'
     | '/login'
+    | '/oportunidades'
     | '/perfil'
+    | '/plan-produccion'
     | '/proyeccion'
     | '/reglas'
     | '/servicios'
     | '/solicitudes-compra'
+    | '/toma-fisica'
+    | '/ventas'
     | '/configuracion/departamentos'
+    | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
+    | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
     | '/servicios/$id'
+    | '/toma-fisica/$id'
     | '/configuracion/'
     | '/facturas/'
   fileRoutesById: FileRoutesById
@@ -359,15 +480,22 @@ export interface RootRouteChildren {
   ConfiguracionRoute: typeof ConfiguracionRouteWithChildren
   ContratosRoute: typeof ContratosRoute
   CreditosRoute: typeof CreditosRoute
+  DespachosRoute: typeof DespachosRouteWithChildren
+  GerencialRoute: typeof GerencialRoute
   GestionHumanaRoute: typeof GestionHumanaRoute
   HistoriaComprasRoute: typeof HistoriaComprasRoute
   ImportacionesRoute: typeof ImportacionesRouteWithChildren
+  InventarioRoute: typeof InventarioRoute
   LoginRoute: typeof LoginRoute
+  OportunidadesRoute: typeof OportunidadesRoute
   PerfilRoute: typeof PerfilRoute
+  PlanProduccionRoute: typeof PlanProduccionRoute
   ProyeccionRoute: typeof ProyeccionRoute
   ReglasRoute: typeof ReglasRoute
   ServiciosRoute: typeof ServiciosRouteWithChildren
   SolicitudesCompraRoute: typeof SolicitudesCompraRoute
+  TomaFisicaRoute: typeof TomaFisicaRouteWithChildren
+  VentasRoute: typeof VentasRoute
   FacturasIdRoute: typeof FacturasIdRoute
   FacturasIndexRoute: typeof FacturasIndexRoute
 }
@@ -423,6 +551,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CreditosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/despachos': {
+      id: '/despachos'
+      path: '/despachos'
+      fullPath: '/despachos'
+      preLoaderRoute: typeof DespachosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gerencial': {
+      id: '/gerencial'
+      path: '/gerencial'
+      fullPath: '/gerencial'
+      preLoaderRoute: typeof GerencialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gestion-humana': {
       id: '/gestion-humana'
       path: '/gestion-humana'
@@ -444,6 +586,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacionesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inventario': {
+      id: '/inventario'
+      path: '/inventario'
+      fullPath: '/inventario'
+      preLoaderRoute: typeof InventarioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -451,11 +600,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oportunidades': {
+      id: '/oportunidades'
+      path: '/oportunidades'
+      fullPath: '/oportunidades'
+      preLoaderRoute: typeof OportunidadesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/perfil': {
       id: '/perfil'
       path: '/perfil'
       fullPath: '/perfil'
       preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plan-produccion': {
+      id: '/plan-produccion'
+      path: '/plan-produccion'
+      fullPath: '/plan-produccion'
+      preLoaderRoute: typeof PlanProduccionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/proyeccion': {
@@ -486,6 +649,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SolicitudesCompraRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/toma-fisica': {
+      id: '/toma-fisica'
+      path: '/toma-fisica'
+      fullPath: '/toma-fisica'
+      preLoaderRoute: typeof TomaFisicaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ventas': {
+      id: '/ventas'
+      path: '/ventas'
+      fullPath: '/ventas'
+      preLoaderRoute: typeof VentasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/configuracion/': {
       id: '/configuracion/'
       path: '/'
@@ -498,6 +675,13 @@ declare module '@tanstack/react-router' {
       path: '/departamentos'
       fullPath: '/configuracion/departamentos'
       preLoaderRoute: typeof ConfiguracionDepartamentosRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
+    '/configuracion/integraciones-siesa': {
+      id: '/configuracion/integraciones-siesa'
+      path: '/integraciones-siesa'
+      fullPath: '/configuracion/integraciones-siesa'
+      preLoaderRoute: typeof ConfiguracionIntegracionesSiesaRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
     '/configuracion/modulos': {
@@ -535,6 +719,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionUsuariosRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
+    '/despachos/$id': {
+      id: '/despachos/$id'
+      path: '/$id'
+      fullPath: '/despachos/$id'
+      preLoaderRoute: typeof DespachosIdRouteImport
+      parentRoute: typeof DespachosRoute
+    }
     '/facturas/': {
       id: '/facturas/'
       path: '/facturas'
@@ -563,11 +754,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServiciosIdRouteImport
       parentRoute: typeof ServiciosRoute
     }
+    '/toma-fisica/$id': {
+      id: '/toma-fisica/$id'
+      path: '/$id'
+      fullPath: '/toma-fisica/$id'
+      preLoaderRoute: typeof TomaFisicaIdRouteImport
+      parentRoute: typeof TomaFisicaRoute
+    }
   }
 }
 
 interface ConfiguracionRouteChildren {
   ConfiguracionDepartamentosRoute: typeof ConfiguracionDepartamentosRoute
+  ConfiguracionIntegracionesSiesaRoute: typeof ConfiguracionIntegracionesSiesaRoute
   ConfiguracionModulosRoute: typeof ConfiguracionModulosRoute
   ConfiguracionPermisosRoute: typeof ConfiguracionPermisosRoute
   ConfiguracionProveedoresRoute: typeof ConfiguracionProveedoresRoute
@@ -578,6 +777,7 @@ interface ConfiguracionRouteChildren {
 
 const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
   ConfiguracionDepartamentosRoute: ConfiguracionDepartamentosRoute,
+  ConfiguracionIntegracionesSiesaRoute: ConfiguracionIntegracionesSiesaRoute,
   ConfiguracionModulosRoute: ConfiguracionModulosRoute,
   ConfiguracionPermisosRoute: ConfiguracionPermisosRoute,
   ConfiguracionProveedoresRoute: ConfiguracionProveedoresRoute,
@@ -588,6 +788,18 @@ const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
 
 const ConfiguracionRouteWithChildren = ConfiguracionRoute._addFileChildren(
   ConfiguracionRouteChildren,
+)
+
+interface DespachosRouteChildren {
+  DespachosIdRoute: typeof DespachosIdRoute
+}
+
+const DespachosRouteChildren: DespachosRouteChildren = {
+  DespachosIdRoute: DespachosIdRoute,
+}
+
+const DespachosRouteWithChildren = DespachosRoute._addFileChildren(
+  DespachosRouteChildren,
 )
 
 interface ImportacionesRouteChildren {
@@ -614,6 +826,18 @@ const ServiciosRouteWithChildren = ServiciosRoute._addFileChildren(
   ServiciosRouteChildren,
 )
 
+interface TomaFisicaRouteChildren {
+  TomaFisicaIdRoute: typeof TomaFisicaIdRoute
+}
+
+const TomaFisicaRouteChildren: TomaFisicaRouteChildren = {
+  TomaFisicaIdRoute: TomaFisicaIdRoute,
+}
+
+const TomaFisicaRouteWithChildren = TomaFisicaRoute._addFileChildren(
+  TomaFisicaRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnaliticaRoute: AnaliticaRoute,
@@ -622,15 +846,22 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracionRoute: ConfiguracionRouteWithChildren,
   ContratosRoute: ContratosRoute,
   CreditosRoute: CreditosRoute,
+  DespachosRoute: DespachosRouteWithChildren,
+  GerencialRoute: GerencialRoute,
   GestionHumanaRoute: GestionHumanaRoute,
   HistoriaComprasRoute: HistoriaComprasRoute,
   ImportacionesRoute: ImportacionesRouteWithChildren,
+  InventarioRoute: InventarioRoute,
   LoginRoute: LoginRoute,
+  OportunidadesRoute: OportunidadesRoute,
   PerfilRoute: PerfilRoute,
+  PlanProduccionRoute: PlanProduccionRoute,
   ProyeccionRoute: ProyeccionRoute,
   ReglasRoute: ReglasRoute,
   ServiciosRoute: ServiciosRouteWithChildren,
   SolicitudesCompraRoute: SolicitudesCompraRoute,
+  TomaFisicaRoute: TomaFisicaRouteWithChildren,
+  VentasRoute: VentasRoute,
   FacturasIdRoute: FacturasIdRoute,
   FacturasIndexRoute: FacturasIndexRoute,
 }

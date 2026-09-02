@@ -2,23 +2,56 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
 import type { Factura } from "@/lib/data";
 
-export function useFacturas() {
+export interface FacturasFiltros {
+  empresaId?: string;
+  estado?: string;
+  search?: string;
+  // Opcionales: si se pasan, el backend responde el envelope paginado real
+  // ({items,page,pageSize,total,totalPages}) en vez del array plano. Sin
+  // `page`, el contrato no cambia (compatibilidad con quien todavía no pagina).
+  page?: number;
+  pageSize?: number;
+}
+
+export function useFacturas(filtros: FacturasFiltros = {}) {
   const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const refresh = useCallback(async (opciones: { silencioso?: boolean } = {}) => {
-    if (!opciones.silencioso) setLoading(true);
-    setError("");
-    try {
-      const data = await fetchAuth("/facturas");
-      setFacturas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando facturas.");
-    } finally {
-      if (!opciones.silencioso) setLoading(false);
-    }
-  }, []);
+  const refresh = useCallback(
+    async (opciones: { silencioso?: boolean } = {}) => {
+      if (!opciones.silencioso) setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (filtros.empresaId) params.set("empresaId", filtros.empresaId);
+        if (filtros.estado) params.set("estado", filtros.estado);
+        if (filtros.search) params.set("search", filtros.search);
+        if (filtros.page) {
+          params.set("page", String(filtros.page));
+          params.set("pageSize", String(filtros.pageSize ?? 25));
+        }
+        const qs = params.toString();
+        const data = await fetchAuth(`/facturas${qs ? `?${qs}` : ""}`);
+        if (Array.isArray(data)) {
+          setFacturas(data);
+          setTotal(data.length);
+          setTotalPages(1);
+        } else {
+          setFacturas(data.items ?? []);
+          setTotal(data.total ?? 0);
+          setTotalPages(data.totalPages ?? 1);
+        }
+      } catch (err: any) {
+        setError(err.message || "Error cargando facturas.");
+      } finally {
+        if (!opciones.silencioso) setLoading(false);
+      }
+    },
+    [filtros.empresaId, filtros.estado, filtros.search, filtros.page, filtros.pageSize],
+  );
 
   useEffect(() => {
     refresh();
@@ -117,6 +150,8 @@ export function useFacturas() {
 
   return {
     facturas,
+    total,
+    totalPages,
     loading,
     error,
     refresh,

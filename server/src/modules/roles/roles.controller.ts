@@ -2,34 +2,51 @@ import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { parseRolPermisos, PERMISOS_SISTEMA } from "../../lib/permissions";
+import { obtenerCodigosPermisosAsignables } from "../permisos/permisos.service";
+import { whereAlcance } from "../../lib/alcance";
 
-const PERMISO_VALIDO = new Set<string>(Object.values(PERMISOS_SISTEMA));
+function serializar(r: {
+  id: string;
+  tenantId: string | null;
+  nombre: string;
+  descripcion: string | null;
+  esSistema: boolean;
+  activo: boolean;
+  permisos: string;
+  _count?: { users: number };
+}) {
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    descripcion: r.descripcion,
+    esSistema: r.esSistema,
+    activo: r.activo,
+    alcance: r.tenantId === null ? "GENERAL" : "TENANT",
+    permisos: parseRolPermisos(r.permisos),
+    usuariosAsignados: r._count?.users ?? 0,
+  };
+}
 
-function sanearPermisos(input: unknown): string[] {
+// Un código de permiso solo se puede asignar a un rol si está en el
+// catálogo del sistema (PERMISOS_SISTEMA) o si es un permiso personalizado
+// ACTIVO creado por este tenant en Administración Global > Permisos — ver
+// permisos.service.ts. Esto es lo que hace que un permiso creado ahí sea
+// realmente asignable a roles, no solo un registro decorativo.
+function sanearPermisos(input: unknown, validos: Set<string>): string[] {
   if (!Array.isArray(input)) return [];
-  return input.filter((p): p is string => typeof p === "string" && PERMISO_VALIDO.has(p));
+  return input.filter((p): p is string => typeof p === "string" && validos.has(p));
 }
 
 export const listarRoles = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const roles = await prisma.rol.findMany({
-      where: { tenantId },
+      where: whereAlcance(tenantId),
       include: { _count: { select: { users: true } } },
       orderBy: { nombre: "asc" },
     });
 
-    return res.json(
-      roles.map((r) => ({
-        id: r.id,
-        nombre: r.nombre,
-        descripcion: r.descripcion,
-        esSistema: r.esSistema,
-        activo: r.activo,
-        permisos: parseRolPermisos(r.permisos),
-        usuariosAsignados: r._count.users,
-      })),
-    );
+    return res.json(roles.map(serializar));
   } catch (error) {
     console.error("Error al listar roles:", error);
     return res.status(500).json({ message: "Error al obtener roles." });
@@ -40,14 +57,26 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(crearRolSchema).
-    const { nombre, descripcion, permisos } = req.body;
+    const { nombre, descripcion, permisos, alcance } = req.body;
+    if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
+      return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
+    }
+    // Un rol GENERAL (tenantId: null) es visible y editable por TODOS los
+    // tenants vía whereAlcance — solo un superadmin puede crearlos, o
+    // cualquier tenant podría empujar roles/permisos a las demás empresas.
+    if (alcance === "GENERAL" && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede crear roles de alcance general.",
+      });
+    }
 
+    const permisosValidos = await obtenerCodigosPermisosAsignables(tenantId);
     const rol = await prisma.rol.create({
       data: {
-        tenantId,
+        tenantId: alcance === "GENERAL" ? null : tenantId,
         nombre,
         descripcion: typeof descripcion === "string" ? descripcion : null,
-        permisos: JSON.stringify(sanearPermisos(permisos)),
+        permisos: JSON.stringify(sanearPermisos(permisos, permisosValidos)),
         esSistema: false,
       },
     });
@@ -57,7 +86,7 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
         tenantId,
         usuarioId: req.user!.id,
         accion: "ROL_CREADO",
-        detalle: `${req.user!.nombre} creó el rol "${rol.nombre}"`,
+        detalle: `${req.user!.nombre} creó el rol "${rol.nombre}" (${rol.tenantId === null ? "GENERAL" : "exclusivo de esta empresa"})`,
         entidadTipo: "Rol",
         entidadId: rol.id,
         datosNuevos: JSON.stringify({
@@ -68,15 +97,7 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
       },
     });
 
-    return res.status(201).json({
-      id: rol.id,
-      nombre: rol.nombre,
-      descripcion: rol.descripcion,
-      esSistema: rol.esSistema,
-      activo: rol.activo,
-      permisos: parseRolPermisos(rol.permisos),
-      usuariosAsignados: 0,
-    });
+    return res.status(201).json(serializar({ ...rol, _count: { users: 0 } }));
   } catch (error) {
     console.error("Error al crear rol:", error);
     return res.status(500).json({ message: "Error al crear el rol." });
@@ -87,11 +108,47 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { id } = req.params;
     const tenantId = req.user!.tenantId;
-    const { nombre, descripcion, permisos, activo } = req.body;
+    const { nombre, descripcion, permisos, activo, alcance } = req.body;
 
-    const rolExistente = await prisma.rol.findFirst({ where: { id, tenantId } });
+    const rolExistente = await prisma.rol.findFirst({ where: { id, ...whereAlcance(tenantId) } });
     if (!rolExistente) {
       return res.status(404).json({ message: "Rol no encontrado." });
+    }
+    if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
+      return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
+    }
+    // Un rol ya GENERAL es visible/editable por cualquier tenant vía
+    // whereAlcance; sin este check, cualquier empresa podría renombrarlo,
+    // cambiarle permisos o desactivarlo para todas las demás. Convertir un
+    // rol TENANT a GENERAL tiene el mismo alcance de impacto, así que exige
+    // lo mismo.
+    const tocaAlcanceGeneral = rolExistente.tenantId === null || alcance === "GENERAL";
+    if (tocaAlcanceGeneral && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede modificar roles de alcance general.",
+      });
+    }
+    let nuevoTenantId: string | null | undefined;
+    if (alcance !== undefined) {
+      const eraGeneral = rolExistente.tenantId === null;
+      const seraGeneral = alcance === "GENERAL";
+      if (eraGeneral && !seraGeneral) {
+        const usuariosDeOtroTenant = await prisma.user.count({
+          where: { rolId: id, tenantId: { not: tenantId } },
+        });
+        const membresiasDeOtroTenant = await prisma.membresia.count({
+          where: { rolId: id, tenantId: { not: tenantId } },
+        });
+        if (usuariosDeOtroTenant > 0 || membresiasDeOtroTenant > 0) {
+          return res.status(409).json({
+            message:
+              "No se puede convertir a exclusivo de esta empresa: hay usuarios o membresías de otras empresas con este rol.",
+          });
+        }
+        nuevoTenantId = tenantId;
+      } else if (!eraGeneral && seraGeneral) {
+        nuevoTenantId = null;
+      }
     }
     if (rolExistente.esSistema && Array.isArray(permisos)) {
       return res.status(409).json({
@@ -116,8 +173,12 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
-    const permisosSaneados = Array.isArray(permisos) ? sanearPermisos(permisos) : null;
-    const permisosAnteriores = Array.isArray(permisos) ? parseRolPermisos(rolExistente.permisos) : null;
+    const permisosSaneados = Array.isArray(permisos)
+      ? sanearPermisos(permisos, await obtenerCodigosPermisosAsignables(tenantId))
+      : null;
+    const permisosAnteriores = Array.isArray(permisos)
+      ? parseRolPermisos(rolExistente.permisos)
+      : null;
 
     const rol = await prisma.rol.update({
       where: { id },
@@ -126,6 +187,7 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
         ...(typeof descripcion === "string" ? { descripcion } : {}),
         ...(permisosSaneados !== null ? { permisos: JSON.stringify(permisosSaneados) } : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
+        ...(nuevoTenantId !== undefined ? { tenantId: nuevoTenantId } : {}),
       },
       include: { _count: { select: { users: true } } },
     });
@@ -135,8 +197,7 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
       const agregados = permisosSaneados.filter((p) => !permisosAnteriores.includes(p));
       const quitados = permisosAnteriores.filter((p) => !permisosSaneados.includes(p));
       if (agregados.length || quitados.length) {
-        detallePermisos =
-          ` Permisos agregados: [${agregados.join(", ") || "ninguno"}]. Permisos quitados: [${quitados.join(", ") || "ninguno"}].`;
+        detallePermisos = ` Permisos agregados: [${agregados.join(", ") || "ninguno"}]. Permisos quitados: [${quitados.join(", ") || "ninguno"}].`;
       }
     }
     const detalleActivo =
@@ -167,15 +228,7 @@ export const actualizarRol = async (req: AuthenticatedRequest, res: Response) =>
       },
     });
 
-    return res.json({
-      id: rol.id,
-      nombre: rol.nombre,
-      descripcion: rol.descripcion,
-      esSistema: rol.esSistema,
-      activo: rol.activo,
-      permisos: parseRolPermisos(rol.permisos),
-      usuariosAsignados: rol._count.users,
-    });
+    return res.json(serializar(rol));
   } catch (error) {
     console.error("Error al actualizar rol:", error);
     return res.status(500).json({ message: "Error al actualizar el rol." });
@@ -188,7 +241,7 @@ export const eliminarRol = async (req: AuthenticatedRequest, res: Response) => {
     const tenantId = req.user!.tenantId;
 
     const rol = await prisma.rol.findFirst({
-      where: { id, tenantId },
+      where: { id, ...whereAlcance(tenantId) },
       include: { _count: { select: { users: true } } },
     });
     if (!rol) {
@@ -202,6 +255,20 @@ export const eliminarRol = async (req: AuthenticatedRequest, res: Response) => {
         message: `No se puede eliminar: hay ${rol._count.users} usuario(s) con este rol asignado.`,
       });
     }
+    if (rol.tenantId === null && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede eliminar roles de alcance general.",
+      });
+    }
+    if (rol.tenantId === null) {
+      const usadoEnOtroLado = await prisma.user.count({ where: { rolId: id } });
+      const usadoEnMembresias = await prisma.membresia.count({ where: { rolId: id } });
+      if (usadoEnOtroLado > 0 || usadoEnMembresias > 0) {
+        return res.status(409).json({
+          message: "No se puede eliminar: es un rol general y está en uso en otra empresa.",
+        });
+      }
+    }
 
     await prisma.rol.delete({ where: { id } });
 
@@ -213,7 +280,10 @@ export const eliminarRol = async (req: AuthenticatedRequest, res: Response) => {
         detalle: `${req.user!.nombre} eliminó el rol "${rol.nombre}"`,
         entidadTipo: "Rol",
         entidadId: id,
-        datosAnteriores: JSON.stringify({ nombre: rol.nombre, permisos: parseRolPermisos(rol.permisos) }),
+        datosAnteriores: JSON.stringify({
+          nombre: rol.nombre,
+          permisos: parseRolPermisos(rol.permisos),
+        }),
       },
     });
 

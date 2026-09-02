@@ -2,25 +2,37 @@ import { Request, Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { obtenerTenantPorDominio } from "../../lib/dominios";
+import { whereAlcance } from "../../lib/alcance";
 
+function serializar(d: {
+  id: string;
+  tenantId: string | null;
+  nombre: string;
+  esSistemas: boolean;
+  activo: boolean;
+  _count?: { usuarios: number };
+}) {
+  return {
+    id: d.id,
+    nombre: d.nombre,
+    esSistemas: d.esSistemas,
+    activo: d.activo,
+    alcance: d.tenantId === null ? "GENERAL" : "TENANT",
+    usuariosAsignados: d._count?.usuarios ?? 0,
+  };
+}
+
+/** Departamentos generales + propios del tenant actual (nunca de otro tenant). */
 export const listarDepartamentos = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const departamentos = await prisma.departamento.findMany({
-      where: { tenantId },
+      where: whereAlcance(tenantId),
       include: { _count: { select: { usuarios: true } } },
       orderBy: { nombre: "asc" },
     });
 
-    return res.json(
-      departamentos.map((d) => ({
-        id: d.id,
-        nombre: d.nombre,
-        esSistemas: d.esSistemas,
-        activo: d.activo,
-        usuariosAsignados: d._count.usuarios,
-      })),
-    );
+    return res.json(departamentos.map(serializar));
   } catch (error) {
     console.error("Error al listar departamentos:", error);
     return res.status(500).json({ message: "Error al obtener departamentos." });
@@ -34,15 +46,12 @@ export const listarDepartamentos = async (req: AuthenticatedRequest, res: Respon
  *
  * El tenant se resuelve EXCLUSIVAMENTE por el dominio de correo (query
  * ?dominio=), nunca por tenant.findFirst() ni ningún otro criterio
- * arbitrario: cada dominio corporativo solo puede ver los departamentos de
- * SU propia empresa (departamento.tenantId === tenant identificado por
- * dominio), nunca los de otra. Si el dominio no está mapeado a ningún tenant
- * (o ese tenant está desactivado) se devuelve una lista vacía en vez de un
- * error, para no revelar qué dominios sí están configurados en el sistema.
+ * arbitrario. Incluye generales + los propios de ese tenant.
  */
 export const listarDepartamentosPublico = async (req: Request, res: Response) => {
   try {
-    const dominio = typeof req.query.dominio === "string" ? req.query.dominio.trim().toLowerCase() : "";
+    const dominio =
+      typeof req.query.dominio === "string" ? req.query.dominio.trim().toLowerCase() : "";
     if (!dominio) {
       return res.status(400).json({ message: "Falta indicar el dominio de correo (?dominio=)." });
     }
@@ -53,7 +62,7 @@ export const listarDepartamentosPublico = async (req: Request, res: Response) =>
     }
 
     const departamentos = await prisma.departamento.findMany({
-      where: { tenantId: tenant.id, activo: true },
+      where: { ...whereAlcance(tenant.id), activo: true },
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
@@ -68,17 +77,13 @@ export const listarDepartamentosPublico = async (req: Request, res: Response) =>
 /**
  * Departamentos activos (id + nombre) del tenant del usuario autenticado, sin
  * exigir el permiso administrativo "departamentos.ver" — para poblar el
- * select de "Área" en formularios operativos (Facturas, Solicitudes de
- * Compra, Servicios, Gestión Humana) que cualquier usuario logueado puede
- * llenar. A diferencia de /departamentos/publico (sin sesión, resuelto por
- * dominio de correo), acá el tenant sale de req.user!.tenantId — nunca del
- * body ni de query params.
+ * select de "Área" en formularios operativos. Incluye generales + propios.
  */
 export const listarDepartamentosPropios = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const departamentos = await prisma.departamento.findMany({
-      where: { tenantId, activo: true },
+      where: { ...whereAlcance(tenantId), activo: true },
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
@@ -92,14 +97,24 @@ export const listarDepartamentosPropios = async (req: AuthenticatedRequest, res:
 export const crearDepartamento = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { nombre, esSistemas } = req.body;
+    const { nombre, esSistemas, alcance } = req.body;
 
     if (!nombre || typeof nombre !== "string") {
       return res.status(400).json({ message: "El nombre del departamento es obligatorio." });
     }
+    if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
+      return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
+    }
 
+    // El alcance lo decide el body (GENERAL/TENANT), pero el tenant al que
+    // queda ligado un departamento TENANT sale SIEMPRE de la sesión — nunca
+    // se acepta un tenantId explícito del cliente.
     const departamento = await prisma.departamento.create({
-      data: { tenantId, nombre, esSistemas: Boolean(esSistemas) },
+      data: {
+        tenantId: alcance === "GENERAL" ? null : tenantId,
+        nombre,
+        esSistemas: Boolean(esSistemas),
+      },
     });
 
     await prisma.auditoria.create({
@@ -107,17 +122,11 @@ export const crearDepartamento = async (req: AuthenticatedRequest, res: Response
         tenantId,
         usuarioId: req.user!.id,
         accion: "DEPARTAMENTO_CREADO",
-        detalle: `${req.user!.nombre} creó el departamento "${departamento.nombre}"`,
+        detalle: `${req.user!.nombre} creó el departamento "${departamento.nombre}" (${departamento.tenantId === null ? "GENERAL" : "exclusivo de esta empresa"})`,
       },
     });
 
-    return res.status(201).json({
-      id: departamento.id,
-      nombre: departamento.nombre,
-      esSistemas: departamento.esSistemas,
-      activo: departamento.activo,
-      usuariosAsignados: 0,
-    });
+    return res.status(201).json(serializar({ ...departamento, _count: { usuarios: 0 } }));
   } catch (error) {
     console.error("Error al crear departamento:", error);
     return res.status(500).json({ message: "Error al crear el departamento." });
@@ -128,11 +137,45 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
   try {
     const { id } = req.params;
     const tenantId = req.user!.tenantId;
-    const { nombre, esSistemas, activo } = req.body;
+    const { nombre, esSistemas, activo, alcance } = req.body;
 
-    const existente = await prisma.departamento.findFirst({ where: { id, tenantId } });
+    // Visible/editable si es GENERAL o si es exclusivo de este tenant —
+    // nunca uno exclusivo de otro tenant (404, no revela que existe).
+    const existente = await prisma.departamento.findFirst({
+      where: { id, ...whereAlcance(tenantId) },
+      include: { _count: { select: { usuarios: true, membresias: true } } },
+    });
     if (!existente) {
       return res.status(404).json({ message: "Departamento no encontrado." });
+    }
+
+    let nuevoTenantId: string | null | undefined;
+    if (alcance !== undefined) {
+      if (alcance !== "GENERAL" && alcance !== "TENANT") {
+        return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
+      }
+      const eraGeneral = existente.tenantId === null;
+      const seraGeneral = alcance === "GENERAL";
+      if (eraGeneral && !seraGeneral) {
+        // GENERAL -> TENANT: si algún usuario/membresía de OTRO tenant ya lo
+        // usa, esa gente se quedaría con una referencia a un departamento
+        // que ya no puede ver — se bloquea la conversión.
+        const usuariosDeOtroTenant = await prisma.user.count({
+          where: { departamentoId: id, tenantId: { not: tenantId } },
+        });
+        const membresiasDeOtroTenant = await prisma.membresia.count({
+          where: { departamentoId: id, tenantId: { not: tenantId } },
+        });
+        if (usuariosDeOtroTenant > 0 || membresiasDeOtroTenant > 0) {
+          return res.status(409).json({
+            message:
+              "No se puede convertir a exclusivo de esta empresa: hay usuarios o membresías de otras empresas usando este departamento.",
+          });
+        }
+        nuevoTenantId = tenantId;
+      } else if (!eraGeneral && seraGeneral) {
+        nuevoTenantId = null; // TENANT -> GENERAL siempre es seguro (amplía, no restringe)
+      }
     }
 
     const departamento = await prisma.departamento.update({
@@ -141,6 +184,7 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
         ...(typeof nombre === "string" ? { nombre } : {}),
         ...(typeof esSistemas === "boolean" ? { esSistemas } : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
+        ...(nuevoTenantId !== undefined ? { tenantId: nuevoTenantId } : {}),
       },
       include: { _count: { select: { usuarios: true } } },
     });
@@ -150,17 +194,15 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
         tenantId,
         usuarioId: req.user!.id,
         accion: "DEPARTAMENTO_EDITADO",
-        detalle: `${req.user!.nombre} editó el departamento "${departamento.nombre}"`,
+        detalle:
+          `${req.user!.nombre} editó el departamento "${departamento.nombre}"` +
+          (nuevoTenantId !== undefined
+            ? ` (alcance cambiado a ${departamento.tenantId === null ? "GENERAL" : "TENANT"})`
+            : ""),
       },
     });
 
-    return res.json({
-      id: departamento.id,
-      nombre: departamento.nombre,
-      esSistemas: departamento.esSistemas,
-      activo: departamento.activo,
-      usuariosAsignados: departamento._count.usuarios,
-    });
+    return res.json(serializar(departamento));
   } catch (error) {
     console.error("Error al actualizar departamento:", error);
     return res.status(500).json({ message: "Error al actualizar el departamento." });
@@ -173,16 +215,27 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
     const tenantId = req.user!.tenantId;
 
     const departamento = await prisma.departamento.findFirst({
-      where: { id, tenantId },
-      include: { _count: { select: { usuarios: true } } },
+      where: { id, ...whereAlcance(tenantId) },
+      include: { _count: { select: { usuarios: true, membresias: true } } },
     });
     if (!departamento) {
       return res.status(404).json({ message: "Departamento no encontrado." });
     }
-    if (departamento._count.usuarios > 0) {
+    if (departamento._count.usuarios > 0 || departamento._count.membresias > 0) {
       return res.status(409).json({
-        message: `No se puede eliminar: hay ${departamento._count.usuarios} usuario(s) asignados a este departamento.`,
+        message: `No se puede eliminar: hay ${departamento._count.usuarios} usuario(s)/${departamento._count.membresias} membresía(s) asignados a este departamento.`,
       });
+    }
+    if (departamento.tenantId === null) {
+      // Es GENERAL: aunque este tenant no tenga usuarios ahí, otro sí podría.
+      const usadoEnOtroLado = await prisma.user.count({ where: { departamentoId: id } });
+      const usadoEnMembresias = await prisma.membresia.count({ where: { departamentoId: id } });
+      if (usadoEnOtroLado > 0 || usadoEnMembresias > 0) {
+        return res.status(409).json({
+          message:
+            "No se puede eliminar: es un departamento general y está en uso en otra empresa.",
+        });
+      }
     }
 
     await prisma.departamento.delete({ where: { id } });

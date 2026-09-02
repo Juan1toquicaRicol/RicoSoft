@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Clock,
   FileText,
+  Ship,
   ShoppingCart,
   TrendingUp,
   Users,
@@ -37,8 +38,13 @@ function DistribucionEstados({ datos }: { datos: { etiqueta: string; valor: numb
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-1.5">
         {datos.map((d, i) => (
-          <span key={d.etiqueta} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-            <span className={`h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-blue-800" : "bg-slate-400"}`} />
+          <span
+            key={d.etiqueta}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-600"
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-blue-800" : "bg-slate-400"}`}
+            />
             {d.etiqueta} <span className="font-bold text-slate-900">{d.valor}</span>
           </span>
         ))}
@@ -49,9 +55,10 @@ function DistribucionEstados({ datos }: { datos: { etiqueta: string; valor: numb
 
 function DashboardExecutive() {
   const { resumen, loading, error } = useDashboard();
-  const { facturas, solicitudes, creditos } = resumen;
+  const { facturas, solicitudes, creditos, importaciones } = resumen;
 
-  const sinAccesoAIndicadores = !loading && !error && !facturas && !solicitudes && !creditos;
+  const sinAccesoAIndicadores =
+    !loading && !error && !facturas && !solicitudes && !creditos && !importaciones;
 
   return (
     <AppShell
@@ -62,7 +69,9 @@ function DashboardExecutive() {
         {error && (
           <Alert variant="warning">
             <AlertTriangle />
-            <AlertDescription>No fue posible cargar todos los indicadores: {error}</AlertDescription>
+            <AlertDescription>
+              No fue posible cargar todos los indicadores: {error}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -137,25 +146,64 @@ function DashboardExecutive() {
             </h2>
             <div className="panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
               <DistribucionEstados
-                datos={["Pendiente", "En Cotización", "Aprobada", "Rechazada", "Comprado"].map((etiqueta) => ({
+                datos={[
+                  "Pendiente",
+                  "En Cotización",
+                  "Aprobada",
+                  "Rechazada",
+                  "Comprado",
+                  "Facturada",
+                ].map((etiqueta) => ({
                   etiqueta,
                   valor: solicitudes.porEstado[etiqueta] ?? 0,
                 }))}
               />
               <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-slate-100 pt-4">
-                {["Pendiente", "En Cotización", "Aprobada", "Rechazada", "Comprado"].map(
-                  (estado) => (
-                    <div key={estado}>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {estado}
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-slate-900 tabular-nums">
-                        {solicitudes.porEstado[estado] ?? 0}
-                      </p>
-                    </div>
-                  ),
-                )}
+                {[
+                  "Pendiente",
+                  "En Cotización",
+                  "Aprobada",
+                  "Rechazada",
+                  "Comprado",
+                  "Facturada",
+                ].map((estado) => (
+                  <div key={estado}>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {estado}
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-slate-900 tabular-nums">
+                      {solicitudes.porEstado[estado] ?? 0}
+                    </p>
+                  </div>
+                ))}
               </div>
+            </div>
+          </section>
+        )}
+
+        {!loading && importaciones && importaciones.totalLotes > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Ship className="h-4 w-4 text-slate-400" /> Importaciones
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <StatCard
+                label="Lotes en tránsito"
+                value={String(importaciones.enTransito)}
+                hint={`De ${importaciones.totalLotes} lotes totales`}
+                icon={Ship}
+              />
+              <StatCard
+                label="Nacionalizados"
+                value={String(importaciones.nacionalizados)}
+                icon={TrendingUp}
+              />
+              <StatCard
+                label="Pendientes de documentación (DIM)"
+                value={String(importaciones.pendientesDocumentacion)}
+                icon={AlertTriangle}
+                enfasis={importaciones.pendientesDocumentacion > 0 ? "atencion" : "default"}
+              />
             </div>
           </section>
         )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
+import { useSession } from "@/lib/session-context";
 
 export interface NotificacionApi {
   id: string;
@@ -18,6 +19,7 @@ export interface NotificacionApi {
  * campana, para no pedir 20 notificaciones en cada refresco de fondo.
  */
 export function useNotificaciones() {
+  const { user } = useSession();
   const [notificaciones, setNotificaciones] = useState<NotificacionApi[]>([]);
   const [noLeidas, setNoLeidas] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -44,13 +46,19 @@ export function useNotificaciones() {
     }
   }, []);
 
+  // La lista solo se popula al abrir la campana (ver NotificationBell), pero
+  // puede quedar en memoria de la empresa anterior si el usuario cambia de
+  // tenant sin volver a abrirla — se limpia explícitamente en cada cambio,
+  // junto con el contador, que sí se refresca de inmediato (no espera los 30s
+  // del polling de fondo).
   useEffect(() => {
+    setNotificaciones([]);
     refrescarContador();
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") refrescarContador();
     }, 30_000);
     return () => clearInterval(interval);
-  }, [refrescarContador]);
+  }, [refrescarContador, user?.tenantId]);
 
   const marcarLeida = useCallback(async (id: string) => {
     setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));

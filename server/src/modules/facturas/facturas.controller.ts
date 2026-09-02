@@ -4,7 +4,7 @@ import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
-import { UPLOADS_DIR } from "../../middleware/upload.middleware";
+import { UPLOADS_DIR, moverArchivoDefinitivo } from "../../middleware/upload.middleware";
 import { notificarPorPermiso, crearNotificacion } from "../../lib/notificaciones";
 
 const ESTADOS_VALIDOS = ["Pendiente", "Aprobada", "Pagada", "Rechazada"];
@@ -64,8 +64,26 @@ function serializar(f: any) {
       : null,
     contrato: f.contrato,
     solicitudCompraId: f.solicitudCompraId,
+    // Trazabilidad: SC de origen -> cotización ganadora (proveedor, valor,
+    // tiempo de entrega) -> quién aprobó la SC. Null cuando la factura no
+    // viene de una solicitud interna (carga manual/servicio recurrente).
     solicitudCompraRel: f.solicitudCompraRel
-      ? { id: f.solicitudCompraRel.id, item: f.solicitudCompraRel.item }
+      ? {
+          id: f.solicitudCompraRel.id,
+          item: f.solicitudCompraRel.item,
+          estado: f.solicitudCompraRel.estado,
+          aprobadaPor: f.solicitudCompraRel.resueltoPorNombre,
+          aprobadaEn: f.solicitudCompraRel.fechaResolucion,
+          cotizacionGanadora: f.solicitudCompraRel.cotizacionesProveedor?.[0]
+            ? {
+                proveedorId: f.solicitudCompraRel.cotizacionesProveedor[0].proveedorId,
+                proveedorNombre: f.solicitudCompraRel.cotizacionesProveedor[0].proveedorNombre,
+                proveedorNit: f.solicitudCompraRel.cotizacionesProveedor[0].proveedorNit,
+                valorTotalCOP: Number(f.solicitudCompraRel.cotizacionesProveedor[0].valorTotalCOP),
+                tiempoEntregaDias: f.solicitudCompraRel.cotizacionesProveedor[0].tiempoEntregaDias,
+              }
+            : null,
+        }
       : null,
     centroCostos: f.centroCostos,
     area: f.area,
@@ -108,14 +126,34 @@ const INCLUDE_FACTURA = {
   historial: { orderBy: { createdAt: "asc" as const } },
   servicioRel: { select: { id: true, nombreServicio: true, costo: true } },
   contratoRel: { select: { id: true, proveedor: true } },
-  solicitudCompraRel: { select: { id: true, item: true } },
+  // Trazabilidad completa: de dónde salió esta factura (SC -> cotización
+  // ganadora del cuadro comparativo -> proveedor, y quién aprobó la SC).
+  solicitudCompraRel: {
+    select: {
+      id: true,
+      item: true,
+      estado: true,
+      resueltoPorNombre: true,
+      fechaResolucion: true,
+      cotizacionesProveedor: {
+        where: { esGanadora: true },
+        select: {
+          proveedorId: true,
+          proveedorNombre: true,
+          proveedorNit: true,
+          valorTotalCOP: true,
+          tiempoEntregaDias: true,
+        },
+      },
+    },
+  },
   pagos: { where: { estado: "Confirmado" as const }, select: { valor: true, estado: true } },
 };
 
 export const listarFacturas = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId, estado, search, servicioId, limit } = req.query;
+    const { empresaId, estado, search, servicioId, limit, page } = req.query;
 
     const where: any = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
@@ -131,18 +169,52 @@ export const listarFacturas = async (req: AuthenticatedRequest, res: Response) =
       ];
     }
 
+    // Paginación real: se activa solo cuando el caller manda `page` (el
+    // listado principal de Facturas). Vistas puntuales como el detalle de un
+    // servicio (useFacturasPorServicio) siguen pidiendo solo `limit` y
+    // reciben el array plano de siempre — no es "paginación a medias", es un
+    // contrato distinto para un caso de uso distinto (últimas N, no listado
+    // paginable) que ya tenía su propio consumidor antes de este cambio.
+    if (typeof page !== "undefined") {
+      const pageNum = Math.max(1, Number.parseInt(String(page), 10) || 1);
+      const pageSizeNum = Math.min(
+        100,
+        Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
+      );
+
+      const [facturas, total] = await Promise.all([
+        req.tenantPrisma!.factura.findMany({
+          where,
+          include: INCLUDE_FACTURA,
+          orderBy: { createdAt: "desc" },
+          skip: (pageNum - 1) * pageSizeNum,
+          take: pageSizeNum,
+        }),
+        req.tenantPrisma!.factura.count({ where }),
+      ]);
+
+      return res.json({
+        items: facturas.map(serializar),
+        page: pageNum,
+        pageSize: pageSizeNum,
+        total,
+        totalPages: Math.ceil(total / pageSizeNum),
+      });
+    }
+
     // `limit` es opcional: vistas como el detalle de un servicio piden solo
     // las últimas N facturas relacionadas en vez de cargar el histórico
     // completo del tenant. Sin `limit`, se mantiene el tope de seguridad de
-    // siempre (1000) para no romper el listado general.
+    // siempre (1000) para no romper consumidores existentes que aún no piden
+    // `page`.
     const limiteNum = Number.parseInt(String(limit ?? ""), 10);
     const take = Number.isFinite(limiteNum) && limiteNum > 0 ? Math.min(limiteNum, 1000) : 1000;
 
-    const facturas = await prisma.factura.findMany({
+    const facturas = await req.tenantPrisma!.factura.findMany({
       where,
       include: INCLUDE_FACTURA,
       orderBy: { createdAt: "desc" },
-      take, // límite de seguridad; falta paginación real (ver auditoría)
+      take,
     });
 
     return res.json(facturas.map(serializar));
@@ -156,7 +228,7 @@ export const obtenerFactura = async (req: AuthenticatedRequest, res: Response) =
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
-    const factura = await prisma.factura.findFirst({
+    const factura = await req.tenantPrisma!.factura.findFirst({
       where: { id, tenantId, eliminado: false },
       include: INCLUDE_FACTURA,
     });
@@ -197,7 +269,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // corresponde a un servicio recurrente), pero si se envían deben existir
     // en el mismo tenant (IDOR) — igual que proveedor y responsable.
     if (servicioId) {
-      const servicioDb = await prisma.servicioSuscripcion.findFirst({
+      const servicioDb = await req.tenantPrisma!.servicioSuscripcion.findFirst({
         where: { id: servicioId, tenantId, eliminado: false },
       });
       if (!servicioDb) {
@@ -205,7 +277,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       }
     }
     if (contratoId) {
-      const contratoDb = await prisma.contrato.findFirst({
+      const contratoDb = await req.tenantPrisma!.contrato.findFirst({
         where: { id: contratoId, tenantId, eliminado: false },
       });
       if (!contratoDb) {
@@ -217,7 +289,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // factura queda aprobada automáticamente (ver más abajo). Opcional.
     let solicitudDb: Awaited<ReturnType<typeof prisma.solicitudCompra.findFirst>> = null;
     if (solicitudCompraId) {
-      solicitudDb = await prisma.solicitudCompra.findFirst({
+      solicitudDb = await req.tenantPrisma!.solicitudCompra.findFirst({
         where: { id: solicitudCompraId, tenantId, eliminado: false },
       });
       if (!solicitudDb) {
@@ -237,7 +309,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
     let proveedorNit = typeof nit === "string" ? nit : "";
     if (proveedorId) {
-      const proveedorDb = await prisma.proveedor.findFirst({
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
@@ -254,6 +326,10 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // cliente. Si no viene, se acepta el nombre en texto por compatibilidad.
     let responsableNombre = typeof responsable === "string" ? responsable : "";
     if (responsableId) {
+      // User está deliberadamente fuera de MODELOS_TENANT_SCOPED (lecturas
+      // cross-tenant legítimas en otros módulos, ver tenant-prisma.ts) — se
+      // mantiene con el cliente global, con el mismo filtro manual de
+      // tenantId que ya tenía antes de esta migración.
       const responsableDb = await prisma.user.findFirst({
         where: { id: responsableId, tenantId, activo: true },
       });
@@ -287,7 +363,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // Solo las facturas activas cuentan para la unicidad del número: una
     // factura eliminada (soft-delete) no debe bloquear para siempre volver a
     // usar ese número.
-    const existente = await prisma.factura.findFirst({
+    const existente = await req.tenantPrisma!.factura.findFirst({
       where: { tenantId, empresaId, numero, eliminado: false },
     });
     if (existente) {
@@ -313,7 +389,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
         ]
       : [{ actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" }];
 
-    const factura = await prisma.$transaction(async (tx) => {
+    const factura = await req.tenantPrisma!.$transaction(async (tx) => {
       const creada = await tx.factura.create({
         data: {
           tenantId,
@@ -419,7 +495,9 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
         .json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
     }
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
     if (!transicion.desde.includes(factura.estado)) {
@@ -440,7 +518,7 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
           ? "Factura rechazada"
           : "Pago registrado";
 
-    const actualizada = await prisma.factura.update({
+    const actualizada = await req.tenantPrisma!.factura.update({
       where: { id },
       data: {
         estado: nuevoEstado,
@@ -455,7 +533,7 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
       include: INCLUDE_FACTURA,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -488,7 +566,9 @@ export const subirArchivoFactura = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ message: "No se recibió ningún archivo." });
     }
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Factura no encontrada." });
@@ -499,11 +579,15 @@ export const subirArchivoFactura = async (req: AuthenticatedRequest, res: Respon
       fs.unlink(rutaAnterior, () => {});
     }
 
-    const actualizada = await prisma.factura.update({
+    // Solo hasta acá (tenant ya confirmado) se mueve el archivo de la
+    // carpeta temporal a la carpeta real de esta factura.
+    const archivoRuta = moverArchivoDefinitivo(UPLOADS_DIR, archivo, id);
+
+    const actualizada = await req.tenantPrisma!.factura.update({
       where: { id },
       data: {
         archivoNombre: archivo.originalname,
-        archivoRuta: path.join(id, archivo.filename),
+        archivoRuta,
         archivoMime: archivo.mimetype,
         archivoTamano: archivo.size,
         archivoSubidoPorNombre: req.user!.nombre,
@@ -519,7 +603,7 @@ export const subirArchivoFactura = async (req: AuthenticatedRequest, res: Respon
       include: INCLUDE_FACTURA,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -545,7 +629,9 @@ export const obtenerArchivoFactura = async (req: AuthenticatedRequest, res: Resp
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura || !factura.archivoRuta) {
       return res.status(404).json({ message: "Esta factura no tiene un archivo adjunto." });
     }
@@ -572,7 +658,9 @@ export const eliminarArchivoFactura = async (req: AuthenticatedRequest, res: Res
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
     if (!factura.archivoRuta) {
       return res.status(404).json({ message: "Esta factura no tiene un archivo adjunto." });
@@ -580,7 +668,7 @@ export const eliminarArchivoFactura = async (req: AuthenticatedRequest, res: Res
 
     fs.unlink(path.join(UPLOADS_DIR, factura.archivoRuta), () => {});
 
-    const actualizada = await prisma.factura.update({
+    const actualizada = await req.tenantPrisma!.factura.update({
       where: { id },
       data: {
         archivoNombre: null,
@@ -600,7 +688,7 @@ export const eliminarArchivoFactura = async (req: AuthenticatedRequest, res: Res
       include: INCLUDE_FACTURA,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -637,10 +725,12 @@ export const agregarComentarioFactura = async (req: AuthenticatedRequest, res: R
         .json({ message: "El comentario es demasiado largo (máx. 2000 caracteres)." });
     }
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
-    const actualizada = await prisma.factura.update({
+    const actualizada = await req.tenantPrisma!.factura.update({
       where: { id },
       data: {
         historial: {
@@ -671,10 +761,12 @@ export const eliminarFactura = async (req: AuthenticatedRequest, res: Response) 
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const factura = await prisma.factura.findFirst({ where: { id, tenantId, eliminado: false } });
+    const factura = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!factura) return res.status(404).json({ message: "Factura no encontrada." });
 
-    await prisma.factura.update({
+    await req.tenantPrisma!.factura.update({
       where: { id },
       data: {
         eliminado: true,
@@ -688,7 +780,7 @@ export const eliminarFactura = async (req: AuthenticatedRequest, res: Response) 
       },
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,

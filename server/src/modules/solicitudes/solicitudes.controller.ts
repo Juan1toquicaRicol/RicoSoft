@@ -4,7 +4,10 @@ import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
-import { UPLOADS_DIR_COTIZACIONES } from "../../middleware/upload.middleware";
+import {
+  UPLOADS_DIR_COTIZACIONES,
+  moverArchivoDefinitivo,
+} from "../../middleware/upload.middleware";
 import { crearNotificacion, notificarPorPermiso } from "../../lib/notificaciones";
 
 // "Facturada" no se alcanza a través de PATCH /:id/estado (no tiene entrada
@@ -116,7 +119,7 @@ export const listarSolicitudes = async (req: AuthenticatedRequest, res: Response
     const where: any = { tenantId, estado: { in: ESTADOS_ACTIVOS }, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
-    const solicitudes = await prisma.solicitudCompra.findMany({
+    const solicitudes = await req.tenantPrisma!.solicitudCompra.findMany({
       where,
       include: INCLUDE_FACTURA_VINCULADA,
       orderBy: { fechaSolicitud: "desc" },
@@ -155,11 +158,44 @@ export const listarHistorialCompras = async (req: AuthenticatedRequest, res: Res
       where.fechaResolucion = { ...(where.fechaResolucion || {}), lte: hastaFin };
     }
 
-    const historial = await prisma.solicitudCompra.findMany({
+    // Paginación real: a diferencia de "Solicitudes activas" (acotado por
+    // naturaleza — Pendiente/En Cotización se resuelven, nunca se acumulan),
+    // el historial crece indefinidamente con la antigüedad del tenant, así
+    // que sí necesita paginación real. Se activa con `page`; sin él, se
+    // conserva el comportamiento anterior (array + tope de seguridad) para
+    // no romper ningún consumidor existente que todavía no lo pida.
+    if (typeof req.query.page !== "undefined") {
+      const pageNum = Math.max(1, Number.parseInt(String(req.query.page), 10) || 1);
+      const pageSizeNum = Math.min(
+        100,
+        Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
+      );
+
+      const [historial, total] = await Promise.all([
+        req.tenantPrisma!.solicitudCompra.findMany({
+          where,
+          include: INCLUDE_FACTURA_VINCULADA,
+          orderBy: { fechaResolucion: "desc" },
+          skip: (pageNum - 1) * pageSizeNum,
+          take: pageSizeNum,
+        }),
+        req.tenantPrisma!.solicitudCompra.count({ where }),
+      ]);
+
+      return res.json({
+        items: historial.map(serializar),
+        page: pageNum,
+        pageSize: pageSizeNum,
+        total,
+        totalPages: Math.ceil(total / pageSizeNum),
+      });
+    }
+
+    const historial = await req.tenantPrisma!.solicitudCompra.findMany({
       where,
       include: INCLUDE_FACTURA_VINCULADA,
       orderBy: { fechaResolucion: "desc" },
-      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
+      take: 1000, // tope de seguridad para consumidores que no piden `page` todavía
     });
     return res.json(historial.map(serializar));
   } catch (error) {
@@ -198,6 +234,10 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
     // nombre que mande el cliente: se busca el usuario real por id dentro del
     // mismo tenant y su nombre se toma de la base de datos (evita ids de otro
     // tenant o nombres inventados).
+    // User está deliberadamente fuera de MODELOS_TENANT_SCOPED (lecturas
+    // cross-tenant legítimas en otros módulos, ver tenant-prisma.ts) — se
+    // mantiene con el cliente global, con el mismo filtro manual de
+    // tenantId que ya tenía antes de esta migración.
     const solicitanteUsuario = await prisma.user.findFirst({
       where: { id: solicitanteId, tenantId, activo: true },
     });
@@ -211,7 +251,7 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
     // mande el cliente — mismo principio que Facturas.
     let proveedorNombre: string | null = null;
     if (proveedorId) {
-      const proveedorDb = await prisma.proveedor.findFirst({
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
@@ -222,7 +262,7 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
       proveedorNombre = proveedorDb.nombre;
     }
 
-    const solicitud = await prisma.solicitudCompra.create({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.create({
       data: {
         tenantId,
         empresaId,
@@ -239,7 +279,7 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
       },
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -283,7 +323,7 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
         .json({ message: `No se puede establecer el estado "${nuevoEstado}" directamente.` });
     }
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
@@ -299,12 +339,27 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ message: "No tienes permiso para realizar esta acción." });
     }
 
+    // Quien crea la solicitud no puede ser quien la aprueba/rechaza, aunque
+    // tenga el permiso — separación de funciones básica de control interno.
+    // No aplica a "Comprado": ese paso lo suele ejecutar el mismo comprador
+    // que gestionó la solicitud, y ya viene después de una aprobación de
+    // otra persona.
+    if (
+      TRANSICIONES_DE_RESOLUCION.has(nuevoEstado) &&
+      solicitud.solicitanteId &&
+      solicitud.solicitanteId === req.user!.id
+    ) {
+      return res.status(403).json({
+        message: "No puedes aprobar o rechazar una solicitud que tú mismo creaste.",
+      });
+    }
+
     // Regla de las 3 cotizaciones: una solicitud no puede aprobarse sin
     // exactamente 3 cotizaciones de proveedor completas y una elegida como
     // ganadora en el cuadro comparativo. Se valida en el backend (aquí)
     // independientemente de que el frontend ya bloquee el botón por UX.
     if (nuevoEstado === "Aprobada") {
-      const cotizaciones = await prisma.cotizacionProveedor.findMany({
+      const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
         where: { solicitudCompraId: id, tenantId },
       });
       if (cotizaciones.length !== 3) {
@@ -329,17 +384,24 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
         typeof comentario === "string" && comentario.trim() ? comentario.trim() : null;
     }
 
-    const actualizada = await prisma.solicitudCompra.update({
+    const actualizada = await req.tenantPrisma!.solicitudCompra.update({
       where: { id },
       data,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
         accion: `SOLICITUD_COMPRA_${nuevoEstado.toUpperCase().replace(/ /g, "_")}`,
         detalle: `${req.user!.nombre} cambió la solicitud "${solicitud.item}" a "${nuevoEstado}"`,
+        entidadTipo: "SolicitudCompra",
+        entidadId: id,
+        datosAnteriores: JSON.stringify({ estado: solicitud.estado }),
+        datosNuevos: JSON.stringify({
+          estado: nuevoEstado,
+          comentarioResolucion: data.comentarioResolucion ?? null,
+        }),
       },
     });
 
@@ -374,14 +436,14 @@ export const eliminarSolicitud = async (req: AuthenticatedRequest, res: Response
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
 
-    await prisma.solicitudCompra.update({ where: { id }, data: { eliminado: true } });
+    await req.tenantPrisma!.solicitudCompra.update({ where: { id }, data: { eliminado: true } });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -414,7 +476,7 @@ export const subirCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
       return res.status(400).json({ message: "No se recibió ningún archivo." });
     }
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud) {
@@ -426,11 +488,15 @@ export const subirCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
       fs.unlink(path.join(UPLOADS_DIR_COTIZACIONES, solicitud.cotizacionRuta), () => {});
     }
 
-    const actualizada = await prisma.solicitudCompra.update({
+    // Tenant ya confirmado: recién acá se mueve el archivo de la carpeta
+    // temporal a la carpeta real de esta solicitud.
+    const cotizacionRuta = moverArchivoDefinitivo(UPLOADS_DIR_COTIZACIONES, archivo, id);
+
+    const actualizada = await req.tenantPrisma!.solicitudCompra.update({
       where: { id },
       data: {
         cotizacionNombre: archivo.originalname,
-        cotizacionRuta: path.join(id, archivo.filename),
+        cotizacionRuta,
         cotizacionMime: archivo.mimetype,
         cotizacionTamano: archivo.size,
         cotizacionSubidoPorNombre: req.user!.nombre,
@@ -438,7 +504,7 @@ export const subirCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
       },
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -464,7 +530,7 @@ export const obtenerCotizacionSolicitud = async (req: AuthenticatedRequest, res:
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const solicitud = await prisma.solicitudCompra.findFirst({
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
       where: { id, tenantId, eliminado: false },
     });
     if (!solicitud || !solicitud.cotizacionRuta) {

@@ -16,7 +16,7 @@ import {
 import { fetchApi } from "@/config/api"; // Tu cliente de API
 import { esDominioCorporativoValido } from "@/lib/dominios";
 import { validarPasswordSegura } from "@/lib/password";
-import { setToken } from "@/lib/session";
+import { setToken, setUltimaEmpresaPreferida, getUltimaEmpresaPreferida } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 
 export const Route = createFileRoute("/login")({
@@ -108,6 +108,7 @@ function Login() {
     // los permisos reales siempre se revalidan contra el backend.
     if (response.user) {
       localStorage.setItem("user", JSON.stringify(response.user));
+      if (response.user.tenantId) setUltimaEmpresaPreferida(response.user.tenantId);
     }
 
     const primerNombre = response.user?.nombre?.split(" ")[0];
@@ -193,7 +194,10 @@ function Login() {
         });
 
         if (response.requiresTenantSelection) {
-          setTenantSelection({ selectionToken: response.selectionToken, tenants: response.tenants });
+          setTenantSelection({
+            selectionToken: response.selectionToken,
+            tenants: response.tenants,
+          });
           return;
         }
 
@@ -220,6 +224,17 @@ function Login() {
   };
 
   if (tenantSelection) {
+    // Preferencia de UX únicamente: prioriza visualmente la última empresa
+    // usada, pero la lista real (a qué empresas hay acceso) siempre viene
+    // del backend en tenantSelection.tenants — si el usuario perdió acceso a
+    // la que tenía guardada, simplemente no aparece y no se prioriza nada.
+    const ultimaEmpresaId = getUltimaEmpresaPreferida();
+    const tenantsOrdenados = [...tenantSelection.tenants].sort((a, b) => {
+      if (a.id === ultimaEmpresaId) return -1;
+      if (b.id === ultimaEmpresaId) return 1;
+      return 0;
+    });
+
     return (
       <div className="min-h-screen bg-slate-50 flex">
         <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 bg-white">
@@ -236,9 +251,12 @@ function Login() {
             </div>
 
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Elige tu empresa</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                Selecciona la empresa con la que deseas trabajar
+              </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Tu cuenta tiene acceso a más de una empresa. Selecciona con cuál quieres entrar.
+                Tu cuenta tiene acceso a más de una empresa. Podrás cambiar de empresa después sin
+                cerrar sesión.
               </p>
             </div>
 
@@ -250,7 +268,7 @@ function Login() {
             )}
 
             <div className="space-y-2.5">
-              {tenantSelection.tenants.map((t) => (
+              {tenantsOrdenados.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -258,11 +276,25 @@ function Login() {
                   onClick={() => handleSeleccionarTenant(t.id)}
                   className="w-full flex items-center justify-between h-14 px-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-blue-300 transition-colors text-left disabled:opacity-60"
                 >
-                  <span className="text-sm font-semibold text-slate-900">{t.nombre}</span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900 truncate">
+                        {t.nombre}
+                      </span>
+                      {t.id === ultimaEmpresaId && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">
+                          Última vez
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" /> Activa
+                    </span>
+                  </span>
                   {tenantSeleccionando === t.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
                   ) : (
-                    <span className="text-xs font-semibold text-blue-700">Entrar →</span>
+                    <span className="shrink-0 text-xs font-semibold text-blue-700">Entrar →</span>
                   )}
                 </button>
               ))}
@@ -283,7 +315,11 @@ function Login() {
         </div>
 
         <div className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen items-center justify-center bg-slate-50 border-l border-slate-200 overflow-hidden">
-          <img src="/3logos.jpg" alt="Nuestras empresas" className="max-w-full max-h-full object-contain p-12" />
+          <img
+            src="/3logos.jpg"
+            alt="Nuestras empresas"
+            className="max-w-full max-h-full object-contain p-12"
+          />
         </div>
       </div>
     );

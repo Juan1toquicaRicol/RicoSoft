@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +69,7 @@ import {
   descargarCotizacionSolicitud,
   descargarCotizacionProveedor,
 } from "@/hooks/use-solicitudes";
-import { useProveedores } from "@/hooks/use-proveedores";
+import { useProveedorBusqueda, type ProveedorOpcion } from "@/hooks/use-proveedores";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
 import { useSession } from "@/lib/session-context";
@@ -77,6 +79,16 @@ import { money, Prioridad } from "@/lib/data";
 
 const PRIORIDADES_SOLICITUD: Prioridad[] = ["Baja", "Media", "Alta", "Urgente"];
 const PROVEEDOR_MANUAL = "__manual__";
+
+// Búsqueda opcional para prellenar el formulario de nueva solicitud desde
+// otra pantalla (ej. "Necesidades de abastecimiento" en Inventario) — nunca
+// crea la solicitud automáticamente, solo prellena item/cantidad para que
+// el usuario revise y complete el resto (empresa, responsable, proveedor)
+// antes de guardar, igual que si la hubiera escrito a mano.
+const busquedaSolicitudSchema = z.object({
+  item: z.string().optional(),
+  cantidad: z.number().positive().optional(),
+});
 
 export const Route = createFileRoute("/solicitudes-compra")({
   head: () => ({
@@ -88,10 +100,12 @@ export const Route = createFileRoute("/solicitudes-compra")({
       },
     ],
   }),
+  validateSearch: busquedaSolicitudSchema,
   component: SolicitudesCompraPage,
 });
 
 function SolicitudesCompraPage() {
+  const prellenado = Route.useSearch();
   const { empresaActiva, empresas } = useTenant();
   const {
     solicitudesCompra,
@@ -103,8 +117,11 @@ function SolicitudesCompraPage() {
     eliminarSolicitudCompra,
   } = useSolicitudes();
   const { departamentos } = useDepartamentosPublico();
-  const { proveedores } = useProveedores();
-  const proveedoresActivos = proveedores.filter((p) => p.activo);
+  const [proveedorSeleccionadoNombre, setProveedorSeleccionadoNombre] = useState<
+    string | undefined
+  >();
+  const [proveedorCotizacionSeleccionado, setProveedorCotizacionSeleccionado] =
+    useState<ProveedorOpcion | null>(null);
   const { user } = useSession();
 
   const puedeCrear = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_CREAR);
@@ -143,13 +160,17 @@ function SolicitudesCompraPage() {
     seleccionarGanadora,
   } = useCotizacionesProveedor(cotizacionesModal?.id ?? null);
   // Mismo filtro por departamento que el formulario de la solicitud: cada
-  // área solo cotiza con sus proveedores asignados + los generales.
+  // área solo cotiza con sus proveedores asignados + los generales. La
+  // búsqueda ahora es server-side (ver useProveedorBusqueda) — el filtro por
+  // departamento también lo aplica el backend, no un .filter() en cliente.
   const areaCotizacionDepartamentoId = departamentos.find(
     (d) => d.nombre === cotizacionesModal?.area,
   )?.id;
-  const proveedoresDelAreaCotizacion = proveedoresActivos.filter(
-    (p) => !p.departamentoId || p.departamentoId === areaCotizacionDepartamentoId,
-  );
+  const {
+    opciones: proveedoresDelAreaCotizacion,
+    loading: buscandoProveedoresCotizacion,
+    buscar: buscarProveedoresCotizacion,
+  } = useProveedorBusqueda(areaCotizacionDepartamentoId);
   const [formCotizacion, setFormCotizacion] = useState({
     proveedorId: "",
     proveedorNombre: "",
@@ -186,6 +207,7 @@ function SolicitudesCompraPage() {
 
   const abrirCotizaciones = (id: string, item: string, area: string) => {
     setFormCotizacion(cotizacionFormInicial);
+    setProveedorCotizacionSeleccionado(null);
     setArchivoCotizacion(null);
     setCotizacionesModal({ id, item, area });
   };
@@ -224,6 +246,7 @@ function SolicitudesCompraPage() {
       });
       toast.success("Cotización agregada.");
       setFormCotizacion(cotizacionFormInicial);
+      setProveedorCotizacionSeleccionado(null);
       setArchivoCotizacion(null);
       if (archivoCotizacionRef.current) archivoCotizacionRef.current.value = "";
     } catch (err: any) {
@@ -315,9 +338,11 @@ function SolicitudesCompraPage() {
     area: "Sistemas",
     solicitanteId: "",
     proveedorId: "",
-    item: "",
-    descripcion: "",
-    cantidad: 1,
+    item: prellenado.item ?? "",
+    descripcion: prellenado.item
+      ? "Generado desde Inventario > Necesidades de abastecimiento — revisa cantidad/proveedor antes de enviar."
+      : "",
+    cantidad: prellenado.cantidad ? Math.ceil(prellenado.cantidad) : 1,
     valorEstimado: 500000,
     prioridad: "Media" as Prioridad,
   });
@@ -331,10 +356,13 @@ function SolicitudesCompraPage() {
   // Cada departamento puede tener proveedores propios (p. ej. los de
   // Producción no deberían ofrecerse al crear una SC de Comercial): un
   // proveedor sin departamento asignado ("general") sigue apareciendo para
-  // cualquier área, para no romper el catálogo compartido ya existente.
-  const proveedoresDelArea = proveedoresActivos.filter(
-    (p) => !p.departamentoId || p.departamentoId === areaDepartamentoId,
-  );
+  // cualquier área. Búsqueda server-side (ver Fase 11/12 del plan Siesa):
+  // ya no se descarga el catálogo completo para filtrarlo en el cliente.
+  const {
+    opciones: proveedoresDelArea,
+    loading: buscandoProveedoresArea,
+    buscar: buscarProveedoresArea,
+  } = useProveedorBusqueda(areaDepartamentoId);
 
   const filteredSolicitudes = useMemo(() => {
     if (empresaActiva === "ALL") return solicitudesCompra;
@@ -394,6 +422,7 @@ function SolicitudesCompraPage() {
     }
     setGuardando(false);
     setModalOpen(false);
+    setProveedorSeleccionadoNombre(undefined);
     setForm({
       empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
       area: "Sistemas",
@@ -690,9 +719,10 @@ function SolicitudesCompraPage() {
                 </Label>
                 <Select
                   value={form.area}
-                  onValueChange={(val) =>
-                    setForm({ ...form, area: val, solicitanteId: "", proveedorId: "" })
-                  }
+                  onValueChange={(val) => {
+                    setForm({ ...form, area: val, solicitanteId: "", proveedorId: "" });
+                    setProveedorSeleccionadoNombre(undefined);
+                  }}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />
@@ -759,31 +789,28 @@ function SolicitudesCompraPage() {
               <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">
                 Proveedor (opcional)
               </Label>
-              <Select
+              <Combobox
                 value={form.proveedorId || "__none__"}
-                onValueChange={(val) =>
-                  setForm({ ...form, proveedorId: val === "__none__" ? "" : val })
-                }
-              >
-                <SelectTrigger id="proveedor" className="h-9 text-xs border-slate-300 bg-white">
-                  <SelectValue placeholder="Sin proveedor asociado" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-slate-200">
-                  <SelectItem value="__none__" className="text-xs">
-                    Sin proveedor asociado
-                  </SelectItem>
-                  {proveedoresDelArea.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">
-                      {p.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {proveedoresDelArea.length === 0 && (
+                onValueChange={(val) => {
+                  const proveedorId = val === "__none__" ? "" : val;
+                  setForm({ ...form, proveedorId });
+                  const elegido = proveedoresDelArea.find((p) => p.id === val);
+                  setProveedorSeleccionadoNombre(elegido ? elegido.nombre : undefined);
+                }}
+                placeholder="Sin proveedor asociado"
+                searchPlaceholder="Buscar por nombre o NIT..."
+                emptyText="Ningún proveedor coincide."
+                onSearchChange={buscarProveedoresArea}
+                loadingOptions={buscandoProveedoresArea}
+                selectedLabel={proveedorSeleccionadoNombre}
+                options={[
+                  { value: "__none__", label: "Sin proveedor asociado" },
+                  ...proveedoresDelArea.map((p) => ({ value: p.id, label: p.nombre })),
+                ]}
+              />
+              {proveedoresDelArea.length === 0 && !buscandoProveedoresArea && (
                 <p className="text-[11px] font-semibold text-slate-600">
-                  {proveedoresActivos.length === 0
-                    ? "No hay proveedores registrados."
-                    : `No hay proveedores asignados al área "${form.area}".`}{" "}
+                  {`No hay proveedores asignados al área "${form.area}" (o disponibles en general).`}{" "}
                   <Link to="/configuracion/proveedores" className="font-semibold underline">
                     Créalos en Configuración
                   </Link>{" "}
@@ -1008,32 +1035,35 @@ function SolicitudesCompraPage() {
                 </p>
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-slate-700">Proveedor *</Label>
-                  <Select
+                  <Combobox
                     value={formCotizacion.proveedorId}
-                    onValueChange={(val) =>
+                    onValueChange={(val) => {
                       setFormCotizacion({
                         ...formCotizacion,
                         proveedorId: val,
                         proveedorNombre: "",
                         proveedorNit: "",
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                      <SelectValue placeholder="Selecciona un proveedor" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200">
-                      {proveedoresDelAreaCotizacion.map((p) => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.nombre}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={PROVEEDOR_MANUAL} className="text-xs">
-                        Otro proveedor (no está en el catálogo)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {proveedoresDelAreaCotizacion.length === 0 && (
+                      });
+                      setProveedorCotizacionSeleccionado(
+                        proveedoresDelAreaCotizacion.find((p) => p.id === val) ?? null,
+                      );
+                    }}
+                    placeholder="Selecciona un proveedor"
+                    searchPlaceholder="Buscar por nombre o NIT..."
+                    emptyText="Ningún proveedor coincide."
+                    clearable={false}
+                    onSearchChange={buscarProveedoresCotizacion}
+                    loadingOptions={buscandoProveedoresCotizacion}
+                    selectedLabel={proveedorCotizacionSeleccionado?.nombre}
+                    options={[
+                      ...proveedoresDelAreaCotizacion.map((p) => ({
+                        value: p.id,
+                        label: p.nombre,
+                      })),
+                      { value: PROVEEDOR_MANUAL, label: "Otro proveedor (no está en el catálogo)" },
+                    ]}
+                  />
+                  {proveedoresDelAreaCotizacion.length === 0 && !buscandoProveedoresCotizacion && (
                     <p className="text-[11px] text-slate-500">
                       No hay proveedores asignados a "{cotizacionesModal?.area}" en el catálogo.
                     </p>
@@ -1076,11 +1106,7 @@ function SolicitudesCompraPage() {
                         <Label className="text-xs font-semibold text-slate-700">NIT</Label>
                         <Input
                           disabled
-                          value={
-                            proveedoresDelAreaCotizacion.find(
-                              (p) => p.id === formCotizacion.proveedorId,
-                            )?.nit ?? ""
-                          }
+                          value={proveedorCotizacionSeleccionado?.nit ?? ""}
                           className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
                         />
                       </div>

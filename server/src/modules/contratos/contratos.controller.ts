@@ -11,14 +11,48 @@ function serializar(c: any) {
 export const listarContratos = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId } = req.query;
+    const { empresaId, estado, search, page } = req.query;
     const where: any = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
+    if (typeof estado === "string" && ESTADOS_VALIDOS.includes(estado)) where.estado = estado;
+    if (typeof search === "string" && search.trim()) {
+      const term = search.trim();
+      where.OR = [{ proveedor: { contains: term } }, { responsable: { contains: term } }];
+    }
 
-    const contratos = await prisma.contrato.findMany({
+    // Paginación real (Bloque 6): opt-in con `page`, mismo patrón que
+    // Facturas/Historial de compras — sin `page`, se conserva el array
+    // plano con tope de seguridad para no romper consumidores existentes.
+    if (typeof page !== "undefined") {
+      const pageNum = Math.max(1, Number.parseInt(String(page), 10) || 1);
+      const pageSizeNum = Math.min(
+        100,
+        Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
+      );
+
+      const [contratos, total] = await Promise.all([
+        req.tenantPrisma!.contrato.findMany({
+          where,
+          orderBy: { fechaFin: "asc" },
+          skip: (pageNum - 1) * pageSizeNum,
+          take: pageSizeNum,
+        }),
+        req.tenantPrisma!.contrato.count({ where }),
+      ]);
+
+      return res.json({
+        items: contratos.map(serializar),
+        page: pageNum,
+        pageSize: pageSizeNum,
+        total,
+        totalPages: Math.ceil(total / pageSizeNum),
+      });
+    }
+
+    const contratos = await req.tenantPrisma!.contrato.findMany({
       where,
       orderBy: { fechaFin: "asc" },
-      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
+      take: 1000, // tope de seguridad para consumidores que no piden `page` todavía
     });
     return res.json(contratos.map(serializar));
   } catch (error) {
@@ -52,35 +86,52 @@ export const crearContrato = async (req: AuthenticatedRequest, res: Response) =>
     // cliente); si no, se acepta texto libre por compatibilidad.
     let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
     if (proveedorId) {
-      const proveedorDb = await prisma.proveedor.findFirst({
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
-        return res.status(404).json({ message: "El proveedor seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El proveedor seleccionado no existe o está inactivo." });
       }
       proveedorNombre = proveedorDb.nombre;
     }
 
     let responsableNombre = typeof responsable === "string" ? responsable : "";
     if (responsableId) {
+      // User está deliberadamente fuera de MODELOS_TENANT_SCOPED (lecturas
+      // cross-tenant legítimas en otros módulos, ver tenant-prisma.ts) — se
+      // mantiene con el cliente global, con el mismo filtro manual de
+      // tenantId que ya tenía antes de esta migración.
       const responsableDb = await prisma.user.findFirst({
         where: { id: responsableId, tenantId, activo: true },
       });
       if (!responsableDb) {
-        return res.status(404).json({ message: "El responsable seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El responsable seleccionado no existe o está inactivo." });
       }
       responsableNombre = responsableDb.nombre;
     }
 
-    if (!empresaId || !proveedorNombre || !responsableNombre || !area || !fechaInicio || !fechaFin) {
+    if (
+      !empresaId ||
+      !proveedorNombre ||
+      !responsableNombre ||
+      !area ||
+      !fechaInicio ||
+      !fechaFin
+    ) {
       return res.status(400).json({ message: "Faltan campos obligatorios del contrato." });
     }
     const valor = Number(valorContratado);
     if (!Number.isFinite(valor) || valor < 0) {
-      return res.status(400).json({ message: "El valor contratado debe ser un número no negativo." });
+      return res
+        .status(400)
+        .json({ message: "El valor contratado debe ser un número no negativo." });
     }
 
-    const contrato = await prisma.contrato.create({
+    const contrato = await req.tenantPrisma!.contrato.create({
       data: {
         tenantId,
         empresaId,
@@ -100,7 +151,7 @@ export const crearContrato = async (req: AuthenticatedRequest, res: Response) =>
       },
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -122,14 +173,16 @@ export const actualizarContrato = async (req: AuthenticatedRequest, res: Respons
     const { id } = req.params;
     const { estado, observaciones } = req.body;
 
-    const existente = await prisma.contrato.findFirst({ where: { id, tenantId, eliminado: false } });
+    const existente = await req.tenantPrisma!.contrato.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!existente) return res.status(404).json({ message: "Contrato no encontrado." });
 
     if (estado && !ESTADOS_VALIDOS.includes(estado)) {
       return res.status(400).json({ message: "Estado no válido." });
     }
 
-    const contrato = await prisma.contrato.update({
+    const contrato = await req.tenantPrisma!.contrato.update({
       where: { id },
       data: {
         ...(estado ? { estado } : {}),
@@ -137,7 +190,7 @@ export const actualizarContrato = async (req: AuthenticatedRequest, res: Respons
       },
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -163,12 +216,14 @@ export const eliminarContrato = async (req: AuthenticatedRequest, res: Response)
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const contrato = await prisma.contrato.findFirst({ where: { id, tenantId, eliminado: false } });
+    const contrato = await req.tenantPrisma!.contrato.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!contrato) return res.status(404).json({ message: "Contrato no encontrado." });
 
-    await prisma.contrato.update({ where: { id }, data: { eliminado: true } });
+    await req.tenantPrisma!.contrato.update({ where: { id }, data: { eliminado: true } });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,

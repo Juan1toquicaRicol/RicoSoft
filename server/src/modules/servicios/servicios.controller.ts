@@ -9,7 +9,9 @@ function serializar(s: any) {
   return {
     ...s,
     costo: Number(s.costo),
-    contratoRel: s.contratoRel ? { id: s.contratoRel.id, proveedor: s.contratoRel.proveedor } : undefined,
+    contratoRel: s.contratoRel
+      ? { id: s.contratoRel.id, proveedor: s.contratoRel.proveedor }
+      : undefined,
   };
 }
 
@@ -20,15 +22,51 @@ const INCLUDE_SERVICIO = {
 export const listarServicios = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId } = req.query;
+    const { empresaId, estado, search, page } = req.query;
     const where: any = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
+    if (typeof estado === "string" && estado) where.estado = estado;
+    if (typeof search === "string" && search.trim()) {
+      const term = search.trim();
+      where.OR = [{ nombreServicio: { contains: term } }, { proveedor: { contains: term } }];
+    }
 
-    const servicios = await prisma.servicioSuscripcion.findMany({
+    // Paginación real (Bloque 6): opt-in con `page`, mismo patrón que
+    // Facturas/Contratos — sin `page`, se conserva el array plano con tope
+    // de seguridad para no romper consumidores existentes (p. ej. el select
+    // de servicios activos del formulario de Facturas).
+    if (typeof page !== "undefined") {
+      const pageNum = Math.max(1, Number.parseInt(String(page), 10) || 1);
+      const pageSizeNum = Math.min(
+        100,
+        Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
+      );
+
+      const [servicios, total] = await Promise.all([
+        req.tenantPrisma!.servicioSuscripcion.findMany({
+          where,
+          include: INCLUDE_SERVICIO,
+          orderBy: { fechaRenovacion: "asc" },
+          skip: (pageNum - 1) * pageSizeNum,
+          take: pageSizeNum,
+        }),
+        req.tenantPrisma!.servicioSuscripcion.count({ where }),
+      ]);
+
+      return res.json({
+        items: servicios.map(serializar),
+        page: pageNum,
+        pageSize: pageSizeNum,
+        total,
+        totalPages: Math.ceil(total / pageSizeNum),
+      });
+    }
+
+    const servicios = await req.tenantPrisma!.servicioSuscripcion.findMany({
       where,
       include: INCLUDE_SERVICIO,
       orderBy: { fechaRenovacion: "asc" },
-      take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
+      take: 1000, // tope de seguridad para consumidores que no piden `page` todavía
     });
     return res.json(servicios.map(serializar));
   } catch (error) {
@@ -48,7 +86,7 @@ export const obtenerServicio = async (req: AuthenticatedRequest, res: Response) 
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const servicio = await prisma.servicioSuscripcion.findFirst({
+    const servicio = await req.tenantPrisma!.servicioSuscripcion.findFirst({
       where: { id, tenantId, eliminado: false },
       include: INCLUDE_SERVICIO,
     });
@@ -89,29 +127,39 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
     // que mande el cliente; si no, se acepta texto libre por compatibilidad.
     let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
     if (proveedorId) {
-      const proveedorDb = await prisma.proveedor.findFirst({
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
       });
       if (!proveedorDb) {
-        return res.status(404).json({ message: "El proveedor seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El proveedor seleccionado no existe o está inactivo." });
       }
       proveedorNombre = proveedorDb.nombre;
     }
 
     let responsableNombre = typeof responsableArea === "string" ? responsableArea : "";
     if (responsableId) {
+      // User está deliberadamente fuera de MODELOS_TENANT_SCOPED (lecturas
+      // cross-tenant legítimas en otros módulos, ver tenant-prisma.ts) — se
+      // mantiene con el cliente global, con el mismo filtro manual de
+      // tenantId que ya tenía antes de esta migración.
       const responsableDb = await prisma.user.findFirst({
         where: { id: responsableId, tenantId, activo: true },
       });
       if (!responsableDb) {
-        return res.status(404).json({ message: "El responsable seleccionado no existe o está inactivo." });
+        return res
+          .status(404)
+          .json({ message: "El responsable seleccionado no existe o está inactivo." });
       }
       responsableNombre = responsableDb.nombre;
     }
 
     // Aislamiento multi-tenant: el contrato relacionado debe ser del mismo tenant (IDOR).
     if (contratoId) {
-      const contratoDb = await prisma.contrato.findFirst({ where: { id: contratoId, tenantId, eliminado: false } });
+      const contratoDb = await req.tenantPrisma!.contrato.findFirst({
+        where: { id: contratoId, tenantId, eliminado: false },
+      });
       if (!contratoDb) {
         return res.status(404).json({ message: "El contrato seleccionado no existe." });
       }
@@ -128,17 +176,20 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
     if (diaVencimiento !== undefined && diaVencimiento !== null && diaVencimiento !== "") {
       diaVencimientoNum = Number(diaVencimiento);
       if (!Number.isInteger(diaVencimientoNum) || diaVencimientoNum < 1 || diaVencimientoNum > 31) {
-        return res.status(400).json({ message: "El día de vencimiento debe ser un número entre 1 y 31." });
+        return res
+          .status(400)
+          .json({ message: "El día de vencimiento debe ser un número entre 1 y 31." });
       }
     }
 
-    const servicio = await prisma.servicioSuscripcion.create({
+    const servicio = await req.tenantPrisma!.servicioSuscripcion.create({
       data: {
         tenantId,
         empresaId,
         area,
         nombreServicio,
-        descripcion: typeof descripcion === "string" && descripcion.trim() ? descripcion.trim() : null,
+        descripcion:
+          typeof descripcion === "string" && descripcion.trim() ? descripcion.trim() : null,
         proveedorId: proveedorId || null,
         proveedor: proveedorNombre,
         contratoId: contratoId || null,
@@ -151,12 +202,13 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
         fechaRenovacion: new Date(fechaRenovacion),
         responsableId: responsableId || null,
         responsableArea: responsableNombre || "Líder de Área",
-        observaciones: typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
+        observaciones:
+          typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
       },
       include: INCLUDE_SERVICIO,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -164,7 +216,11 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
         detalle: `${req.user!.nombre} registró el servicio "${nombreServicio}"`,
         entidadTipo: "ServicioSuscripcion",
         entidadId: servicio.id,
-        datosNuevos: JSON.stringify({ nombreServicio, proveedor: proveedorNombre, costo: costoNum }),
+        datosNuevos: JSON.stringify({
+          nombreServicio,
+          proveedor: proveedorNombre,
+          costo: costoNum,
+        }),
       },
     });
 
@@ -180,17 +236,19 @@ export const toggleEstadoServicio = async (req: AuthenticatedRequest, res: Respo
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const servicio = await prisma.servicioSuscripcion.findFirst({ where: { id, tenantId, eliminado: false } });
+    const servicio = await req.tenantPrisma!.servicioSuscripcion.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!servicio) return res.status(404).json({ message: "Servicio no encontrado." });
 
     const nuevoEstado = servicio.estado === "Activo" ? "Inactivo" : "Activo";
-    const actualizado = await prisma.servicioSuscripcion.update({
+    const actualizado = await req.tenantPrisma!.servicioSuscripcion.update({
       where: { id },
       data: { estado: nuevoEstado },
       include: INCLUDE_SERVICIO,
     });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,
@@ -222,12 +280,17 @@ export const eliminarServicio = async (req: AuthenticatedRequest, res: Response)
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
 
-    const servicio = await prisma.servicioSuscripcion.findFirst({ where: { id, tenantId, eliminado: false } });
+    const servicio = await req.tenantPrisma!.servicioSuscripcion.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
     if (!servicio) return res.status(404).json({ message: "Servicio no encontrado." });
 
-    await prisma.servicioSuscripcion.update({ where: { id }, data: { eliminado: true } });
+    await req.tenantPrisma!.servicioSuscripcion.update({
+      where: { id },
+      data: { eliminado: true },
+    });
 
-    await prisma.auditoria.create({
+    await req.tenantPrisma!.auditoria.create({
       data: {
         tenantId,
         usuarioId: req.user!.id,

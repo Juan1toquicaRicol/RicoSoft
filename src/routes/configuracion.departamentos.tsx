@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
-import { Building2, Plus, Trash2, ShieldCheck, Users } from "lucide-react";
+import { Building2, Plus, Trash2, ShieldCheck, Users, Globe2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
@@ -11,7 +11,14 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/configuracion/departamentos")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.DEPARTAMENTOS_VER),
@@ -23,6 +30,7 @@ interface DepartamentoApi {
   nombre: string;
   esSistemas: boolean;
   activo: boolean;
+  alcance: "GENERAL" | "TENANT";
   usuariosAsignados: number;
 }
 
@@ -38,6 +46,7 @@ function DepartamentosConfigPage() {
   const [creando, setCreando] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoEsSistemas, setNuevoEsSistemas] = useState(false);
+  const [nuevoAlcance, setNuevoAlcance] = useState<"GENERAL" | "TENANT">("TENANT");
 
   const fetchDepartamentos = async () => {
     setLoading(true);
@@ -62,10 +71,15 @@ function DepartamentosConfigPage() {
     try {
       await fetchAuth("/departamentos", {
         method: "POST",
-        body: JSON.stringify({ nombre: nuevoNombre.trim(), esSistemas: nuevoEsSistemas }),
+        body: JSON.stringify({
+          nombre: nuevoNombre.trim(),
+          esSistemas: nuevoEsSistemas,
+          alcance: nuevoAlcance,
+        }),
       });
       setNuevoNombre("");
       setNuevoEsSistemas(false);
+      setNuevoAlcance("TENANT");
       setCreando(false);
       fetchDepartamentos();
     } catch (err: any) {
@@ -82,6 +96,24 @@ function DepartamentosConfigPage() {
       fetchDepartamentos();
     } catch (err: any) {
       toast.error(err.message || "Error al actualizar el departamento.");
+    }
+  };
+
+  const handleCambiarAlcance = async (departamento: DepartamentoApi) => {
+    const nuevo = departamento.alcance === "GENERAL" ? "TENANT" : "GENERAL";
+    const mensaje =
+      nuevo === "GENERAL"
+        ? `¿Convertir "${departamento.nombre}" en GENERAL? Quedará disponible para todas las empresas.`
+        : `¿Convertir "${departamento.nombre}" en exclusivo de esta empresa? Otras empresas dejarán de poder usarlo (se bloqueará si ya lo están usando).`;
+    if (!confirm(mensaje)) return;
+    try {
+      await fetchAuth(`/departamentos/${departamento.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ alcance: nuevo }),
+      });
+      fetchDepartamentos();
+    } catch (err: any) {
+      toast.error(err.message || "Error al cambiar el alcance del departamento.");
     }
   };
 
@@ -105,7 +137,8 @@ function DepartamentosConfigPage() {
           </h1>
           <p className="text-sm text-slate-500">
             Departamentos de la empresa. Cada usuario pertenece a uno; el marcado como "Sistemas"
-            habilita el acceso a Configuración para quienes además tengan el permiso correspondiente.
+            habilita el acceso a Configuración para quienes además tengan el permiso
+            correspondiente.
           </p>
         </div>
         {puedeCrear && (
@@ -136,6 +169,29 @@ function DepartamentosConfigPage() {
             />
             Es el departamento de Sistemas
           </label>
+          <div className="flex items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-500">Alcance:</span>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="alcance-departamento"
+                checked={nuevoAlcance === "TENANT"}
+                onChange={() => setNuevoAlcance("TENANT")}
+                className="accent-blue-600"
+              />
+              Solo esta empresa
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="alcance-departamento"
+                checked={nuevoAlcance === "GENERAL"}
+                onChange={() => setNuevoAlcance("GENERAL")}
+                className="accent-blue-600"
+              />
+              General — todas las empresas
+            </label>
+          </div>
           <Button type="submit" variant="success">
             Crear
           </Button>
@@ -158,7 +214,9 @@ function DepartamentosConfigPage() {
             {departamentos.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-slate-500 py-6">
-                  {loading ? "Cargando departamentos..." : error || "No hay departamentos registrados."}
+                  {loading
+                    ? "Cargando departamentos..."
+                    : error || "No hay departamentos registrados."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -168,8 +226,26 @@ function DepartamentosConfigPage() {
                     <div className="flex items-center gap-2 font-medium text-slate-800">
                       {d.nombre}
                       {d.esSistemas && (
-                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 gap-1">
+                        <Badge
+                          variant="outline"
+                          className="border-blue-200 bg-blue-50 text-blue-700 gap-1"
+                        >
                           <ShieldCheck className="h-3 w-3" /> Sistemas
+                        </Badge>
+                      )}
+                      {d.alcance === "GENERAL" ? (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1"
+                        >
+                          <Globe2 className="h-3 w-3" /> General
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-slate-50 text-slate-600 gap-1"
+                        >
+                          <Building2 className="h-3 w-3" /> Esta empresa
                         </Badge>
                       )}
                     </div>
@@ -185,7 +261,10 @@ function DepartamentosConfigPage() {
                         Activo
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-slate-900 text-white"
+                      >
                         Inactivo
                       </Badge>
                     )}
@@ -194,6 +273,11 @@ function DepartamentosConfigPage() {
                     {puedeEditar && (
                       <Button size="sm" variant="outline" onClick={() => handleToggleActivo(d)}>
                         {d.activo ? "Desactivar" : "Activar"}
+                      </Button>
+                    )}
+                    {puedeEditar && (
+                      <Button size="sm" variant="outline" onClick={() => handleCambiarAlcance(d)}>
+                        {d.alcance === "GENERAL" ? "Hacer exclusivo" : "Hacer general"}
                       </Button>
                     )}
                     {puedeEliminar && d.usuariosAsignados === 0 && (

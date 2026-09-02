@@ -1,6 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import { clearSession, fetchCurrentUser, fetchAuth, setToken, SessionUser } from "./session";
+import {
+  clearSession,
+  fetchCurrentUser,
+  fetchAuth,
+  setToken,
+  setUltimaEmpresaPreferida,
+  SessionUser,
+} from "./session";
 
 interface SessionContextType {
   user: SessionUser | null;
@@ -42,6 +49,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ tenantId }),
       });
       setToken(response.token);
+      if (response.user?.tenantId) setUltimaEmpresaPreferida(response.user.tenantId);
       await refresh();
     },
     [refresh],

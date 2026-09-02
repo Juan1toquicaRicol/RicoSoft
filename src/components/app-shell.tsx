@@ -30,6 +30,12 @@ import {
   Truck,
   Ship,
   Check,
+  Package,
+  ClipboardList,
+  Factory,
+  Target,
+  Gauge,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -64,6 +70,13 @@ const ICONOS_MODULO: Record<string, LucideIcon> = {
   Inbox,
   History,
   Ship,
+  Package,
+  ClipboardList,
+  Factory,
+  Target,
+  Gauge,
+  ShoppingBag,
+  Truck,
 };
 
 interface AppShellProps {
@@ -80,15 +93,15 @@ export function AppShell({ children, title, description, actions }: AppShellProp
   const [adminMenuAbierto, setAdminMenuAbierto] = useState(pathname.startsWith("/configuracion"));
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const { modulos: modulosMenu } = useModulosMenu();
-  const {
-    tenants: tenantsAccesibles,
-    tenantActualId,
-    loading: cargandoTenants,
-  } = useTenantsAccesibles();
+  // El id/nombre de la empresa ACTIVA siempre se lee de `user` (SessionContext,
+  // recién refrescado tras cada login/switch) — nunca del propio estado
+  // interno de este hook, que solo se pide una vez al montar AppShell (que no
+  // se desmonta al cambiar de empresa) y quedaría desactualizado.
+  const { tenants: tenantsAccesibles, loading: cargandoTenants } = useTenantsAccesibles();
   const [cambiandoTenant, setCambiandoTenant] = useState(false);
 
   const handleCambiarEmpresa = async (tenantId: string) => {
-    if (tenantId === tenantActualId || cambiandoTenant) return;
+    if (tenantId === user?.tenantId || cambiandoTenant) return;
     setCambiandoTenant(true);
     try {
       await switchTenant(tenantId);
@@ -445,7 +458,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                       className="flex items-center justify-between gap-2 text-xs font-semibold"
                     >
                       {t.nombre}
-                      {t.id === tenantActualId && <Check className="h-3.5 w-3.5 text-blue-700" />}
+                      {t.id === user.tenantId && <Check className="h-3.5 w-3.5 text-blue-700" />}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -467,7 +480,16 @@ export function AppShell({ children, title, description, actions }: AppShellProp
         </header>
 
         {/* Area de Trabajo con Rutas */}
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        {/* key=tenantId: fuerza a React a desmontar y remontar por completo
+            la página actual cuando cambia la empresa activa. AppShell mismo
+            nunca se desmonta entre rutas, así que sin esto cualquier hook de
+            una página ya montada (useFacturas, useSolicitudes, useDashboard,
+            etc.) seguiría con datos de la empresa anterior hasta un refresh
+            manual — este remount reinicia TODOS sus estados/efectos de una
+            sola vez, sin tener que tocar cada hook de la app uno por uno. */}
+        <main key={user.tenantId} className="flex-1 p-6 overflow-y-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

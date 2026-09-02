@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import {
   validarSolicitudIdParaArchivo,
   uploadCotizacionSolicitud,
@@ -26,6 +27,9 @@ import {
 const router = Router();
 
 router.use(authenticateJWT);
+// SolicitudCompra + CotizacionProveedor usan req.tenantPrisma (mismo patrón
+// que Proveedores/Facturas — ver tenant-prisma.ts).
+router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("solicitudes.ver"), listarSolicitudes);
 router.get("/historial", requirePermission("solicitudes.ver"), listarHistorialCompras);

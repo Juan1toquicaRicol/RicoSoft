@@ -24,7 +24,22 @@ export interface Factura {
   contratoRel?: { id: string; proveedor: string } | null;
   contrato?: string;
   solicitudCompraId?: string | null;
-  solicitudCompraRel?: { id: string; item: string } | null;
+  // Trazabilidad completa: SC de origen -> cotización ganadora del cuadro
+  // comparativo (proveedor, valor, tiempo de entrega) -> quién la aprobó.
+  solicitudCompraRel?: {
+    id: string;
+    item: string;
+    estado: string;
+    aprobadaPor: string | null;
+    aprobadaEn: string | null;
+    cotizacionGanadora: {
+      proveedorId: string | null;
+      proveedorNombre: string;
+      proveedorNit: string;
+      valorTotalCOP: number;
+      tiempoEntregaDias: number;
+    } | null;
+  } | null;
   centroCostos?: string;
   area: string;
   responsable: string;
@@ -214,6 +229,25 @@ export function compact(value: number) {
   return new Intl.NumberFormat("es-CO", { notation: "compact", maximumFractionDigits: 1 }).format(
     value,
   );
+}
+
+/**
+ * Formatea una cantidad junto con su unidad de medida real (viene de Siesa,
+ * v470_id_unidad_medida) — cuando la unidad es KG y la cantidad llega a
+ * 1.000 o más, se muestra en toneladas ("37,4 t") en vez del número crudo
+ * en kilos, que es como el negocio lee estas cifras en la práctica. Para
+ * cualquier otra unidad (UND, servicios, etc.) o cantidades menores a
+ * 1.000 kg, se mantiene el formato compacto de siempre.
+ */
+export function formatCantidad(cantidad: number, unidadMedida?: string | null): string {
+  const unidad = (unidadMedida ?? "").trim().toUpperCase();
+  if (unidad === "KG" && Math.abs(cantidad) >= 1000) {
+    const toneladas = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 }).format(
+      cantidad / 1000,
+    );
+    return `${toneladas} t`;
+  }
+  return unidadMedida ? `${compact(cantidad)} ${unidadMedida}` : compact(cantidad);
 }
 
 // --- Créditos de clientes ---

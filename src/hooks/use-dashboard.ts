@@ -16,6 +16,13 @@ export interface DashboardSolicitudes {
   porEstado: Record<string, number>;
 }
 
+export interface DashboardImportaciones {
+  totalLotes: number;
+  enTransito: number;
+  nacionalizados: number;
+  pendientesDocumentacion: number;
+}
+
 export interface DashboardCreditos {
   total: number;
   totalSaldo: number;
@@ -27,6 +34,7 @@ export interface DashboardResumen {
   facturas?: DashboardFacturas;
   solicitudes?: DashboardSolicitudes;
   creditos?: DashboardCreditos;
+  importaciones?: DashboardImportaciones;
 }
 
 export function useDashboard() {

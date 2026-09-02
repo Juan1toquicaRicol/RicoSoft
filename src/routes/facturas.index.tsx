@@ -1,6 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, CheckCircle2, Trash2, Upload, XCircle } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  Upload,
+  XCircle,
+} from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -32,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +61,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTenant } from "@/lib/tenant-context";
 import { useFacturas } from "@/hooks/use-facturas";
-import { useProveedores } from "@/hooks/use-proveedores";
+import { useProveedorBusqueda, type ProveedorOpcion } from "@/hooks/use-proveedores";
 import { useServicios } from "@/hooks/use-servicios";
 import { useContratos } from "@/hooks/use-contratos";
 import { useHistorialCompras } from "@/hooks/use-solicitudes";
@@ -90,12 +99,49 @@ const ACCION_LABEL: Record<"Aprobada" | "Rechazada", { verbo: string; titulo: st
   Rechazada: { verbo: "rechazar", titulo: "¿Rechazar esta factura?" },
 };
 
+const PAGE_SIZE = 25;
+
 function FacturasPage() {
   const { empresaActiva, empresas } = useTenant();
-  const { facturas, loading, error, addFactura, updateEstadoFactura, eliminarFactura } =
-    useFacturas();
-  const { proveedores } = useProveedores();
-  const proveedoresActivos = proveedores.filter((p) => p.activo);
+  const [estadoSel, setEstadoSel] = useState<(typeof estadosFilter)[number]>("Todas");
+  const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
+  const [page, setPage] = useState(1);
+
+  const {
+    facturas,
+    total,
+    totalPages,
+    loading,
+    error,
+    addFactura,
+    updateEstadoFactura,
+    eliminarFactura,
+  } = useFacturas({
+    empresaId: empresaActiva === "ALL" ? undefined : empresaActiva,
+    estado: estadoSel === "Todas" ? undefined : estadoSel,
+    search: qDebounced || undefined,
+    page,
+    pageSize: PAGE_SIZE,
+  });
+
+  // Debounce de la búsqueda: espera a que el usuario deje de escribir antes
+  // de pedirle al servidor, y siempre vuelve a la página 1 (una búsqueda
+  // nueva invalida la posición de página anterior).
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  useEffect(() => {
+    setPage(1);
+  }, [empresaActiva, estadoSel, qDebounced]);
+
+  const {
+    opciones: proveedorOpciones,
+    loading: buscandoProveedores,
+    buscar: buscarProveedores,
+  } = useProveedorBusqueda();
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ProveedorOpcion | null>(null);
   const { suscripciones } = useServicios();
   const { contratos } = useContratos();
   const contratosActivos = contratos.filter((c) => c.estado === "Activo");
@@ -110,8 +156,6 @@ function FacturasPage() {
   const puedePagar = hasPermission(user, PERMISOS_SISTEMA.FACTURAS_PAGAR);
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.FACTURAS_ELIMINAR);
 
-  const [estadoSel, setEstadoSel] = useState<(typeof estadosFilter)[number]>("Todas");
-  const [q, setQ] = useState("");
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -188,36 +232,26 @@ function FacturasPage() {
       ? `El valor de la factura (${money(totalFormPreview)}) supera el valor recurrente configurado para "${servicioSeleccionado.nombreServicio}" (${money(servicioSeleccionado.costo, servicioSeleccionado.moneda)}).`
       : null;
 
-  const filteredFacturas = useMemo(() => {
-    return facturas.filter((f) => {
-      const matchEmpresa = empresaActiva === "ALL" || f.empresaId === empresaActiva;
-      const matchEstado = estadoSel === "Todas" || f.estado === estadoSel;
-      const term = q.trim().toLowerCase();
-      const matchQ =
-        !term ||
-        [f.numero, f.proveedor, f.nit, f.responsable, f.area].some((v) =>
-          v.toLowerCase().includes(term),
-        );
-      return matchEmpresa && matchEstado && matchQ;
-    });
-  }, [facturas, empresaActiva, estadoSel, q]);
-
+  // El filtrado (empresa/estado/búsqueda) ahora ocurre server-side (ver
+  // useFacturas de arriba) — `facturas` ya es exactamente la página filtrada
+  // que corresponde. El agrupamiento sigue siendo client-side, sobre la
+  // página actual (mismo patrón ya usado en Configuración > Proveedores).
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
       case "area":
-        return (f: (typeof filteredFacturas)[number]) => f.area;
+        return (f: (typeof facturas)[number]) => f.area;
       case "proveedor":
-        return (f: (typeof filteredFacturas)[number]) => f.proveedor;
+        return (f: (typeof facturas)[number]) => f.proveedor;
       case "estado":
-        return (f: (typeof filteredFacturas)[number]) => f.estado;
+        return (f: (typeof facturas)[number]) => f.estado;
       default:
         return null;
     }
   }, [agrupacion]);
 
   const gruposFacturas = useMemo(
-    () => agruparFilas(filteredFacturas, claveDeAgrupacion),
-    [filteredFacturas, claveDeAgrupacion],
+    () => agruparFilas(facturas, claveDeAgrupacion),
+    [facturas, claveDeAgrupacion],
   );
 
   const handleSaveFactura = async (e: React.FormEvent) => {
@@ -468,7 +502,7 @@ function FacturasPage() {
                 ))}
               </Fragment>
             ))}
-            {filteredFacturas.length === 0 && (
+            {facturas.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={9} className="p-0">
                   {loading ? (
@@ -494,6 +528,34 @@ function FacturasPage() {
             )}
           </TableBody>
         </Table>
+
+        {total > 0 && (
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-500">
+            <p>
+              {facturas.length} de {total} facturas — página {page} de {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="gap-1"
+              >
+                Siguiente <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL REGISTRAR FACTURA */}
@@ -549,28 +611,21 @@ function FacturasPage() {
                 <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">
                   Proveedor *
                 </Label>
-                <Select
+                <Combobox
                   value={form.proveedorId}
-                  onValueChange={(val) => setForm({ ...form, proveedorId: val })}
-                  disabled={proveedoresActivos.length === 0}
-                >
-                  <SelectTrigger id="proveedor" className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue
-                      placeholder={
-                        proveedoresActivos.length === 0
-                          ? "Sin proveedores registrados"
-                          : "Selecciona un proveedor"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {proveedoresActivos.map((p) => (
-                      <SelectItem key={p.id} value={p.id} className="text-xs">
-                        {p.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(val) => {
+                    setForm({ ...form, proveedorId: val });
+                    setProveedorSeleccionado(proveedorOpciones.find((p) => p.id === val) ?? null);
+                  }}
+                  placeholder="Escribe para buscar un proveedor..."
+                  searchPlaceholder="Buscar por nombre o NIT..."
+                  emptyText="Ningún proveedor coincide."
+                  clearable={false}
+                  onSearchChange={buscarProveedores}
+                  loadingOptions={buscandoProveedores}
+                  selectedLabel={proveedorSeleccionado?.nombre}
+                  options={proveedorOpciones.map((p) => ({ value: p.id, label: p.nombre }))}
+                />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="nit" className="text-xs font-semibold text-slate-700">
@@ -579,13 +634,13 @@ function FacturasPage() {
                 <Input
                   id="nit"
                   disabled
-                  value={proveedoresActivos.find((p) => p.id === form.proveedorId)?.nit ?? ""}
+                  value={proveedorSeleccionado?.nit ?? ""}
                   placeholder="Se completa al elegir el proveedor"
                   className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
                 />
               </div>
             </div>
-            {proveedoresActivos.length === 0 && (
+            {form.proveedorId === "" && proveedorOpciones.length === 0 && !buscandoProveedores && (
               <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay proveedores registrados.{" "}
                 <Link to="/configuracion/proveedores" className="font-semibold underline">
@@ -690,7 +745,7 @@ function FacturasPage() {
                   type="number"
                   id="subtotal"
                   value={form.subtotal}
-                  onChange={(e) => setForm({ ...form, subtotal: Number(e.target.value) })}
+                  onChange={(e) => setForm({ ...form, subtotal: e.target.value })}
                   className="h-9 text-xs border-slate-300"
                 />
               </div>
@@ -702,7 +757,7 @@ function FacturasPage() {
                   type="number"
                   id="iva"
                   value={form.iva}
-                  onChange={(e) => setForm({ ...form, iva: Number(e.target.value) })}
+                  onChange={(e) => setForm({ ...form, iva: e.target.value })}
                   className="h-9 text-xs border-slate-300"
                 />
               </div>

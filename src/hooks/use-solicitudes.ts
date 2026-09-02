@@ -99,6 +99,13 @@ export interface HistorialFiltros {
   solicitante?: string;
   desde?: string;
   hasta?: string;
+  // Opcionales: si se pasa `page`, el backend responde el envelope paginado
+  // real ({items,page,pageSize,total,totalPages}) en vez del array plano.
+  // Sin `page` (p. ej. el selector de "solicitudes Comprado" en Facturas,
+  // que necesita el conjunto completo para elegir cuál facturar), el
+  // contrato no cambia.
+  page?: number;
+  pageSize?: number;
 }
 
 export async function descargarCotizacionSolicitud(id: string) {
@@ -205,6 +212,8 @@ export async function descargarCotizacionProveedor(solicitudId: string, cotizaci
  */
 export function useHistorialCompras(filtros: HistorialFiltros) {
   const [historial, setHistorial] = useState<SolicitudCompra[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -219,9 +228,21 @@ export function useHistorialCompras(filtros: HistorialFiltros) {
       if (filtros.solicitante) params.set("solicitante", filtros.solicitante);
       if (filtros.desde) params.set("desde", filtros.desde);
       if (filtros.hasta) params.set("hasta", filtros.hasta);
+      if (filtros.page) {
+        params.set("page", String(filtros.page));
+        params.set("pageSize", String(filtros.pageSize ?? 25));
+      }
       const qs = params.toString();
       const data = await fetchAuth(`/solicitudes-compra/historial${qs ? `?${qs}` : ""}`);
-      setHistorial(data);
+      if (Array.isArray(data)) {
+        setHistorial(data);
+        setTotal(data.length);
+        setTotalPages(1);
+      } else {
+        setHistorial(data.items ?? []);
+        setTotal(data.total ?? 0);
+        setTotalPages(data.totalPages ?? 1);
+      }
     } catch (err: any) {
       setError(err.message || "Error cargando la historia de compras.");
     } finally {
@@ -234,11 +255,13 @@ export function useHistorialCompras(filtros: HistorialFiltros) {
     filtros.solicitante,
     filtros.desde,
     filtros.hasta,
+    filtros.page,
+    filtros.pageSize,
   ]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { historial, loading, error, refresh };
+  return { historial, total, totalPages, loading, error, refresh };
 }

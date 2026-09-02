@@ -3,9 +3,25 @@ import path from "path";
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { UPLOADS_DIR_EXPEDIENTES, UPLOADS_DIR_VISTOS_BUENOS } from "../../middleware/upload.middleware";
+import {
+  UPLOADS_DIR_EXPEDIENTES,
+  UPLOADS_DIR_VISTOS_BUENOS,
+  moverArchivoDefinitivo,
+} from "../../middleware/upload.middleware";
 
-const INCOTERMS_VALIDOS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
+const INCOTERMS_VALIDOS = [
+  "EXW",
+  "FCA",
+  "FAS",
+  "FOB",
+  "CFR",
+  "CIF",
+  "CPT",
+  "CIP",
+  "DAP",
+  "DPU",
+  "DDP",
+];
 const MONEDAS_VALIDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
 const ESTADOS_ORDEN_VALIDOS = ["Borrador", "Confirmada", "Cerrada", "Anulada"];
 // Validación de forma en el controlador, mismo patrón que ESTADOS_ORDEN_VALIDOS
@@ -21,7 +37,13 @@ const TIPOS_DOCUMENTO_EXPEDIENTE: Record<
   TipoDocumentoExpediente,
   { nombre: string; ruta: string; mime: string; tamano: string; etiqueta: string }
 > = {
-  dim: { nombre: "dimNombre", ruta: "dimRuta", mime: "dimMime", tamano: "dimTamano", etiqueta: "DIM" },
+  dim: {
+    nombre: "dimNombre",
+    ruta: "dimRuta",
+    mime: "dimMime",
+    tamano: "dimTamano",
+    etiqueta: "DIM",
+  },
   "factura-comercial": {
     nombre: "facturaComercialNombre",
     ruta: "facturaComercialRuta",
@@ -58,11 +80,16 @@ const serializarItem = (item: any) => ({
   descripcion: item.descripcion,
   subpartidaArancelariaId: item.subpartidaArancelariaId,
   subpartida: item.subpartida
-    ? { id: item.subpartida.id, subpartida: item.subpartida.subpartida, descripcion: item.subpartida.descripcion }
+    ? {
+        id: item.subpartida.id,
+        subpartida: item.subpartida.subpartida,
+        descripcion: item.subpartida.descripcion,
+      }
     : null,
   cantidad: numero(item.cantidad),
   pesoKg: item.pesoKg !== null && item.pesoKg !== undefined ? numero(item.pesoKg) : null,
-  volumenM3: item.volumenM3 !== null && item.volumenM3 !== undefined ? numero(item.volumenM3) : null,
+  volumenM3:
+    item.volumenM3 !== null && item.volumenM3 !== undefined ? numero(item.volumenM3) : null,
   valorUnitarioFob: numero(item.valorUnitarioFob),
 });
 
@@ -93,7 +120,9 @@ const serializarVistoBueno = (v: any) => ({
   numero: v.numero,
   estado: v.estado,
   fecha: v.fecha,
-  archivo: v.archivoNombre ? { nombre: v.archivoNombre, mime: v.archivoMime, tamano: v.archivoTamano } : null,
+  archivo: v.archivoNombre
+    ? { nombre: v.archivoNombre, mime: v.archivoMime, tamano: v.archivoTamano }
+    : null,
 });
 
 const serializarExpediente = (e: any) => ({
@@ -106,10 +135,18 @@ const serializarExpediente = (e: any) => ({
   documentos: {
     dim: e.dimNombre ? { nombre: e.dimNombre, mime: e.dimMime, tamano: e.dimTamano } : null,
     facturaComercial: e.facturaComercialNombre
-      ? { nombre: e.facturaComercialNombre, mime: e.facturaComercialMime, tamano: e.facturaComercialTamano }
+      ? {
+          nombre: e.facturaComercialNombre,
+          mime: e.facturaComercialMime,
+          tamano: e.facturaComercialTamano,
+        }
       : null,
     certificadoOrigen: e.certificadoOrigenNombre
-      ? { nombre: e.certificadoOrigenNombre, mime: e.certificadoOrigenMime, tamano: e.certificadoOrigenTamano }
+      ? {
+          nombre: e.certificadoOrigenNombre,
+          mime: e.certificadoOrigenMime,
+          tamano: e.certificadoOrigenTamano,
+        }
       : null,
   },
   vistosBuenos: (e.vistosBuenos ?? []).map(serializarVistoBueno),
@@ -143,7 +180,9 @@ const serializarOrden = (o: any) => ({
   valorEstimadoTotal: numero(o.valorEstimadoTotal),
   estado: o.estado,
   observaciones: o.observaciones,
-  responsable: o.responsableUsuario ? { id: o.responsableUsuario.id, nombre: o.responsableUsuario.nombre } : null,
+  responsable: o.responsableUsuario
+    ? { id: o.responsableUsuario.id, nombre: o.responsableUsuario.nombre }
+    : null,
   createdAt: o.createdAt,
   items: (o.items ?? []).map(serializarItem),
   lotes: (o.lotes ?? []).map(serializarLote),
@@ -191,7 +230,9 @@ export const listarOrdenesCompraIntl = async (req: AuthenticatedRequest, res: Re
     return res.json(ordenes.map(serializarOrden));
   } catch (error) {
     console.error("Error al listar órdenes de compra internacionales:", error);
-    return res.status(500).json({ message: "Error al obtener las órdenes de compra internacionales." });
+    return res
+      .status(500)
+      .json({ message: "Error al obtener las órdenes de compra internacionales." });
   }
 };
 
@@ -202,7 +243,8 @@ export const obtenerOrdenCompraIntl = async (req: AuthenticatedRequest, res: Res
       where: { id: req.params.id, tenantId, eliminado: false },
       include: INCLUDE_ORDEN_DETALLE,
     });
-    if (!orden) return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
     return res.json(serializarOrden(orden));
   } catch (error) {
     console.error("Error al obtener orden de compra internacional:", error);
@@ -219,14 +261,26 @@ export const obtenerOrdenCompraIntl = async (req: AuthenticatedRequest, res: Res
 export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { numeroOrden, incoterm, proveedorExtranjero, paisOrigen, moneda, trmPactada, observaciones, items } =
-      req.body;
+    const {
+      numeroOrden,
+      incoterm,
+      proveedorExtranjero,
+      paisOrigen,
+      moneda,
+      trmPactada,
+      observaciones,
+      items,
+    } = req.body;
 
     if (!INCOTERMS_VALIDOS.includes(incoterm)) {
-      return res.status(400).json({ message: `Incoterm inválido. Valores permitidos: ${INCOTERMS_VALIDOS.join(", ")}.` });
+      return res.status(400).json({
+        message: `Incoterm inválido. Valores permitidos: ${INCOTERMS_VALIDOS.join(", ")}.`,
+      });
     }
     if (!MONEDAS_VALIDAS.includes(moneda)) {
-      return res.status(400).json({ message: `Moneda inválida. Valores permitidos: ${MONEDAS_VALIDAS.join(", ")}.` });
+      return res
+        .status(400)
+        .json({ message: `Moneda inválida. Valores permitidos: ${MONEDAS_VALIDAS.join(", ")}.` });
     }
     const trm = numero(trmPactada);
     if (!Number.isFinite(trm) || trm <= 0) {
@@ -235,25 +289,37 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
 
     // Solo las órdenes activas cuentan para la unicidad del número: una orden
     // eliminada (soft-delete) no debe bloquear para siempre volver a usarlo.
-    const existente = await prisma.ordenCompraIntl.findFirst({ where: { tenantId, numeroOrden, eliminado: false } });
+    const existente = await prisma.ordenCompraIntl.findFirst({
+      where: { tenantId, numeroOrden, eliminado: false },
+    });
     if (existente) {
-      return res.status(409).json({ message: `Ya existe una orden activa con el número "${numeroOrden}".` });
+      return res
+        .status(409)
+        .json({ message: `Ya existe una orden activa con el número "${numeroOrden}".` });
     }
 
     for (const item of items) {
       calcularCantidadValida(numero(item.cantidad), item.descripcion);
     }
 
-    const subpartidaIds = [...new Set(items.map((i: any) => i.subpartidaArancelariaId).filter(Boolean))] as string[];
+    const subpartidaIds = [
+      ...new Set(items.map((i: any) => i.subpartidaArancelariaId).filter(Boolean)),
+    ] as string[];
     const subpartidas = subpartidaIds.length
-      ? await prisma.clasificacionArancelariaMatriz.findMany({ where: { id: { in: subpartidaIds }, activo: true } })
+      ? await prisma.clasificacionArancelariaMatriz.findMany({
+          where: { id: { in: subpartidaIds }, activo: true },
+        })
       : [];
-    const tarifaPorSubpartida = new Map(subpartidas.map((s) => [s.id, numero(s.tarifaArancelariaBase)]));
+    const tarifaPorSubpartida = new Map(
+      subpartidas.map((s) => [s.id, numero(s.tarifaArancelariaBase)]),
+    );
 
     let valorEstimadoTotal = 0;
     for (const item of items) {
       const fobCop = numero(item.cantidad) * numero(item.valorUnitarioFob) * trm;
-      const tarifa = item.subpartidaArancelariaId ? tarifaPorSubpartida.get(item.subpartidaArancelariaId) ?? 0 : 0;
+      const tarifa = item.subpartidaArancelariaId
+        ? (tarifaPorSubpartida.get(item.subpartidaArancelariaId) ?? 0)
+        : 0;
       valorEstimadoTotal += fobCop + fobCop * (tarifa / 100);
     }
 
@@ -280,7 +346,13 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
           })),
         },
         historial: {
-          create: [{ actor: req.user!.nombre, accion: "Orden creada", detalle: `Landed cost estimado: $${valorEstimadoTotal.toLocaleString("es-CO")}` }],
+          create: [
+            {
+              actor: req.user!.nombre,
+              accion: "Orden creada",
+              detalle: `Landed cost estimado: $${valorEstimadoTotal.toLocaleString("es-CO")}`,
+            },
+          ],
         },
       },
       include: INCLUDE_ORDEN_DETALLE,
@@ -289,7 +361,8 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
     return res.status(201).json(serializarOrden(orden));
   } catch (error) {
     console.error("Error al crear orden de compra internacional:", error);
-    const message = error instanceof Error ? error.message : "Error al crear la orden de compra internacional.";
+    const message =
+      error instanceof Error ? error.message : "Error al crear la orden de compra internacional.";
     return res.status(400).json({ message });
   }
 };
@@ -297,14 +370,27 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
 export const crearLoteImportacion = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const orden = await prisma.ordenCompraIntl.findFirst({ where: { id: req.params.id, tenantId, eliminado: false } });
-    if (!orden) return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
     if (orden.estado === "Anulada" || orden.estado === "Cerrada") {
-      return res.status(400).json({ message: `No se pueden registrar lotes en una orden en estado "${orden.estado}".` });
+      return res.status(400).json({
+        message: `No se pueden registrar lotes en una orden en estado "${orden.estado}".`,
+      });
     }
 
-    const { blAwb, contenedor, precinto, puertoOrigen, puertoDestino, naviera, fechaEmbarque, fechaLlegadaEstimada } =
-      req.body;
+    const {
+      blAwb,
+      contenedor,
+      precinto,
+      puertoOrigen,
+      puertoDestino,
+      naviera,
+      fechaEmbarque,
+      fechaLlegadaEstimada,
+    } = req.body;
 
     const lote = await prisma.loteImportacion.create({
       data: {
@@ -322,11 +408,19 @@ export const crearLoteImportacion = async (req: AuthenticatedRequest, res: Respo
     });
 
     await prisma.importacionHistorial.create({
-      data: { ordenCompraId: orden.id, actor: req.user!.nombre, accion: "Lote registrado", detalle: `BL/AWB ${blAwb}` },
+      data: {
+        ordenCompraId: orden.id,
+        actor: req.user!.nombre,
+        accion: "Lote registrado",
+        detalle: `BL/AWB ${blAwb}`,
+      },
     });
 
     if (orden.estado === "Borrador") {
-      await prisma.ordenCompraIntl.update({ where: { id: orden.id }, data: { estado: "Confirmada" } });
+      await prisma.ordenCompraIntl.update({
+        where: { id: orden.id },
+        data: { estado: "Confirmada" },
+      });
     }
 
     return res.status(201).json(serializarLote(lote));
@@ -355,13 +449,23 @@ export const actualizarEstadoLote = async (req: AuthenticatedRequest, res: Respo
     const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
     if (!ESTADOS_TRANSITO_MANUAL.includes(lote.estado)) {
-      return res.status(400).json({ message: `El lote ya está en estado "${lote.estado}" y no puede volver a tránsito manual.` });
+      return res.status(400).json({
+        message: `El lote ya está en estado "${lote.estado}" y no puede volver a tránsito manual.`,
+      });
     }
 
-    const actualizado = await prisma.loteImportacion.update({ where: { id: lote.id }, data: { estado } });
+    const actualizado = await prisma.loteImportacion.update({
+      where: { id: lote.id },
+      data: { estado },
+    });
 
     await prisma.importacionHistorial.create({
-      data: { ordenCompraId: lote.ordenCompraId, actor: req.user!.nombre, accion: "Cambio de estado de tránsito", detalle: `${lote.estado} → ${estado}` },
+      data: {
+        ordenCompraId: lote.ordenCompraId,
+        actor: req.user!.nombre,
+        accion: "Cambio de estado de tránsito",
+        detalle: `${lote.estado} → ${estado}`,
+      },
     });
 
     return res.json(serializarLote(actualizado));
@@ -387,7 +491,9 @@ export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Res
     });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
     if (lote.estado === "Liberado pre-compra" || lote.estado === "Nacionalizado") {
-      return res.status(400).json({ message: `El lote ya fue recibido en planta (estado actual: "${lote.estado}").` });
+      return res
+        .status(400)
+        .json({ message: `El lote ya fue recibido en planta (estado actual: "${lote.estado}").` });
     }
 
     const trmPactada = numero(lote.ordenCompra.trmPactada);
@@ -415,7 +521,10 @@ export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Res
     await prisma.$transaction([
       prisma.loteImportacion.update({
         where: { id: lote.id },
-        data: { estado: "Liberado pre-compra", fechaLlegadaReal: lote.fechaLlegadaReal ?? new Date() },
+        data: {
+          estado: "Liberado pre-compra",
+          fechaLlegadaReal: lote.fechaLlegadaReal ?? new Date(),
+        },
       }),
       prisma.costeoImportacionDetalle.createMany({ data: costeosProvisionales }),
       prisma.importacionHistorial.create({
@@ -479,9 +588,14 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
 
     const trmLiq = numero(trmLiquidacion);
     const trmPactada = numero(lote.ordenCompra.trmPactada);
-    const sumFobUsd = items.reduce((acc, item) => acc + numero(item.cantidad) * numero(item.valorUnitarioFob), 0);
+    const sumFobUsd = items.reduce(
+      (acc, item) => acc + numero(item.cantidad) * numero(item.valorUnitarioFob),
+      0,
+    );
     if (sumFobUsd <= 0) {
-      return res.status(400).json({ message: "El valor FOB total de la orden debe ser mayor a cero para prorratear costos." });
+      return res.status(400).json({
+        message: "El valor FOB total de la orden debe ser mayor a cero para prorratear costos.",
+      });
     }
 
     const totalIvaDescontable = numero(ivaDescontableCop);
@@ -557,7 +671,10 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
 
     const actualizado = await prisma.loteImportacion.findUnique({
       where: { id: lote.id },
-      include: { expediente: { include: { vistosBuenos: true } }, costeos: { orderBy: { fechaLiquidacion: "desc" } } },
+      include: {
+        expediente: { include: { vistosBuenos: true } },
+        costeos: { orderBy: { fechaLiquidacion: "desc" } },
+      },
     });
 
     return res.json(serializarLote(actualizado));
@@ -570,10 +687,16 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
 export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const orden = await prisma.ordenCompraIntl.findFirst({ where: { id: req.params.id, tenantId, eliminado: false } });
-    if (!orden) return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
 
-    await prisma.ordenCompraIntl.update({ where: { id: orden.id }, data: { estado: "Anulada", eliminado: true } });
+    await prisma.ordenCompraIntl.update({
+      where: { id: orden.id },
+      data: { estado: "Anulada", eliminado: true },
+    });
     await prisma.importacionHistorial.create({
       data: { ordenCompraId: orden.id, actor: req.user!.nombre, accion: "Orden anulada" },
     });
@@ -635,7 +758,10 @@ export const actualizarExpedienteAduanero = async (req: AuthenticatedRequest, re
   }
 };
 
-export const subirDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+export const subirDocumentoExpedienteAduanero = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
   try {
     const tenantId = req.user!.tenantId;
     const tipo = req.params.tipo as TipoDocumentoExpediente;
@@ -658,12 +784,17 @@ export const subirDocumentoExpedienteAduanero = async (req: AuthenticatedRequest
       return res.status(404).json({ message: "Lote de importación no encontrado." });
     }
 
-    const expedienteActual = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
+    const expedienteActual = await prisma.expedienteAduanero.findUnique({
+      where: { loteId: lote.id },
+    });
     const rutaAnterior = expedienteActual ? (expedienteActual as any)[campos.ruta] : null;
 
+    // Tenant/lote ya confirmados: recién acá se mueve el archivo de la
+    // carpeta temporal a la carpeta real de este lote.
+    const rutaDefinitiva = moverArchivoDefinitivo(UPLOADS_DIR_EXPEDIENTES, archivo, lote.id);
     const datosArchivo = {
       [campos.nombre]: archivo.originalname,
-      [campos.ruta]: path.join(lote.id, archivo.filename),
+      [campos.ruta]: rutaDefinitiva,
       [campos.mime]: archivo.mimetype,
       [campos.tamano]: archivo.size,
     };
@@ -679,7 +810,9 @@ export const subirDocumentoExpedienteAduanero = async (req: AuthenticatedRequest
         data: {
           ordenCompraId: lote.ordenCompraId,
           actor: req.user!.nombre,
-          accion: rutaAnterior ? `Documento ${campos.etiqueta} reemplazado` : `Documento ${campos.etiqueta} adjuntado`,
+          accion: rutaAnterior
+            ? `Documento ${campos.etiqueta} reemplazado`
+            : `Documento ${campos.etiqueta} adjuntado`,
           detalle: archivo.originalname,
         },
       }),
@@ -702,7 +835,10 @@ export const subirDocumentoExpedienteAduanero = async (req: AuthenticatedRequest
  * del disco la ruta guardada en BD (nunca una ruta armada desde input del
  * cliente).
  */
-export const obtenerDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+export const obtenerDocumentoExpedienteAduanero = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
   try {
     const tenantId = req.user!.tenantId;
     const tipo = req.params.tipo as TipoDocumentoExpediente;
@@ -715,7 +851,9 @@ export const obtenerDocumentoExpedienteAduanero = async (req: AuthenticatedReque
     const expediente = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
     const ruta = expediente ? (expediente as any)[campos.ruta] : null;
     if (!expediente || !ruta) {
-      return res.status(404).json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
+      return res
+        .status(404)
+        .json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
     }
 
     const rutaAbsoluta = path.join(UPLOADS_DIR_EXPEDIENTES, ruta);
@@ -726,7 +864,10 @@ export const obtenerDocumentoExpedienteAduanero = async (req: AuthenticatedReque
     const nombre = (expediente as any)[campos.nombre];
     const mime = (expediente as any)[campos.mime];
     res.setHeader("Content-Type", mime || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(nombre || "documento")}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(nombre || "documento")}"`,
+    );
     return res.sendFile(rutaAbsoluta);
   } catch (error) {
     console.error("Error al obtener documento del expediente aduanero:", error);
@@ -734,7 +875,10 @@ export const obtenerDocumentoExpedienteAduanero = async (req: AuthenticatedReque
   }
 };
 
-export const eliminarDocumentoExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
+export const eliminarDocumentoExpedienteAduanero = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
   try {
     const tenantId = req.user!.tenantId;
     const tipo = req.params.tipo as TipoDocumentoExpediente;
@@ -747,7 +891,9 @@ export const eliminarDocumentoExpedienteAduanero = async (req: AuthenticatedRequ
     const expediente = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
     const ruta = expediente ? (expediente as any)[campos.ruta] : null;
     if (!expediente || !ruta) {
-      return res.status(404).json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
+      return res
+        .status(404)
+        .json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
     }
 
     fs.unlink(path.join(UPLOADS_DIR_EXPEDIENTES, ruta), () => {});
@@ -841,7 +987,9 @@ export const actualizarVistoBueno = async (req: AuthenticatedRequest, res: Respo
 
     const { entidad, numero: numeroVisto, estado, fecha } = req.body;
     if (estado !== undefined && estado !== null && !ESTADOS_VISTO_BUENO_VALIDOS.includes(estado)) {
-      return res.status(400).json({ message: `Estado inválido. Usa: ${ESTADOS_VISTO_BUENO_VALIDOS.join(", ")}.` });
+      return res
+        .status(400)
+        .json({ message: `Estado inválido. Usa: ${ESTADOS_VISTO_BUENO_VALIDOS.join(", ")}.` });
     }
 
     const estadoAnterior = vistoBueno.estado;
@@ -862,7 +1010,9 @@ export const actualizarVistoBueno = async (req: AuthenticatedRequest, res: Respo
           actor: req.user!.nombre,
           accion: "Visto bueno actualizado",
           detalle:
-            estado && estado !== estadoAnterior ? `${vistoBueno.entidad}: ${estadoAnterior} → ${estado}` : vistoBueno.entidad,
+            estado && estado !== estadoAnterior
+              ? `${vistoBueno.entidad}: ${estadoAnterior} → ${estado}`
+              : vistoBueno.entidad,
         },
       }),
     ]);
@@ -893,12 +1043,16 @@ export const subirDocumentoVistoBueno = async (req: AuthenticatedRequest, res: R
       fs.unlink(path.join(UPLOADS_DIR_VISTOS_BUENOS, vistoBueno.archivoRuta), () => {});
     }
 
+    // Tenant/visto bueno ya confirmados: recién acá se mueve el archivo de
+    // la carpeta temporal a la carpeta real de este visto bueno.
+    const archivoRuta = moverArchivoDefinitivo(UPLOADS_DIR_VISTOS_BUENOS, archivo, vistoBueno.id);
+
     const [actualizado] = await prisma.$transaction([
       prisma.vistoBuenoAduanero.update({
         where: { id: vistoBueno.id },
         data: {
           archivoNombre: archivo.originalname,
-          archivoRuta: path.join(vistoBueno.id, archivo.filename),
+          archivoRuta,
           archivoMime: archivo.mimetype,
           archivoTamano: archivo.size,
         },
@@ -907,7 +1061,9 @@ export const subirDocumentoVistoBueno = async (req: AuthenticatedRequest, res: R
         data: {
           ordenCompraId: vistoBueno.expediente.lote.ordenCompraId,
           actor: req.user!.nombre,
-          accion: vistoBueno.archivoRuta ? "Documento de visto bueno reemplazado" : "Documento de visto bueno adjuntado",
+          accion: vistoBueno.archivoRuta
+            ? "Documento de visto bueno reemplazado"
+            : "Documento de visto bueno adjuntado",
           detalle: `${vistoBueno.entidad}: ${archivo.originalname}`,
         },
       }),

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ShieldCheck, Users, Key, Building2, LayoutGrid, Truck } from "lucide-react";
+import { ShieldCheck, Users, Key, Building2, LayoutGrid, Truck, Cloud } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -67,6 +67,13 @@ function Configuracion() {
       icon: LayoutGrid,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.MODULOS_VER),
+    },
+    {
+      to: "/configuracion/integraciones-siesa",
+      label: "Integraciones",
+      icon: Cloud,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER),
     },
   ] as const;
 

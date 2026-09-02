@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { whereAlcance } from "../../lib/alcance";
 import { validarPasswordSegura } from "../../lib/password";
 import { esDominioCorporativoValido } from "../../lib/dominios";
 
@@ -61,7 +62,9 @@ export const cambiarPasswordPropio = async (req: AuthenticatedRequest, res: Resp
     const { passwordActual, passwordNueva, confirmarPassword } = req.body;
 
     if (passwordNueva !== confirmarPassword) {
-      return res.status(400).json({ message: "La confirmación no coincide con la nueva contraseña." });
+      return res
+        .status(400)
+        .json({ message: "La confirmación no coincide con la nueva contraseña." });
     }
     const errorPassword = validarPasswordSegura(passwordNueva);
     if (errorPassword) {
@@ -219,13 +222,17 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     if (departamentoId) {
-      const departamento = await prisma.departamento.findFirst({ where: { id: departamentoId, tenantId } });
+      const departamento = await prisma.departamento.findFirst({
+        where: { id: departamentoId, ...whereAlcance(tenantId) },
+      });
       if (!departamento) {
         return res.status(404).json({ message: "El departamento seleccionado no existe." });
       }
     }
     if (rolId) {
-      const rol = await prisma.rol.findFirst({ where: { id: rolId, tenantId, activo: true } });
+      const rol = await prisma.rol.findFirst({
+        where: { id: rolId, ...whereAlcance(tenantId), activo: true },
+      });
       if (!rol) {
         return res.status(404).json({ message: "El rol seleccionado no existe o está inactivo." });
       }
@@ -358,7 +365,9 @@ export const asignarRolUsuario = async (req: AuthenticatedRequest, res: Response
     }
 
     if (rolId !== null) {
-      const rol = await prisma.rol.findFirst({ where: { id: rolId, tenantId, activo: true } });
+      const rol = await prisma.rol.findFirst({
+        where: { id: rolId, ...whereAlcance(tenantId), activo: true },
+      });
       if (!rol) {
         return res.status(404).json({ message: "El rol seleccionado no existe o está inactivo." });
       }
@@ -553,7 +562,11 @@ export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) 
         detalle: `${req.user!.nombre} eliminó la cuenta de ${usuario.email}`,
         entidadTipo: "User",
         entidadId: id,
-        datosAnteriores: JSON.stringify({ nombre: usuario.nombre, email: usuario.email, activo: usuario.activo }),
+        datosAnteriores: JSON.stringify({
+          nombre: usuario.nombre,
+          email: usuario.email,
+          activo: usuario.activo,
+        }),
       },
     });
 
@@ -579,7 +592,7 @@ export const asignarDepartamentoUsuario = async (req: AuthenticatedRequest, res:
 
     if (departamentoId !== null) {
       const departamento = await prisma.departamento.findFirst({
-        where: { id: departamentoId, tenantId },
+        where: { id: departamentoId, ...whereAlcance(tenantId) },
       });
       if (!departamento) {
         return res.status(404).json({ message: "El departamento seleccionado no existe." });

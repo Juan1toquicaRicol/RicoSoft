@@ -30,6 +30,7 @@ describe.skipIf(!RUN)(
     let tokenAAdmin: string;
     let tokenASinPermiso: string;
     let tokenBAdmin: string;
+    let tokenAAprobador: string;
     let solicitanteAId: string;
 
     beforeAll(async () => {
@@ -75,6 +76,21 @@ describe.skipIf(!RUN)(
           activo: true,
         },
       });
+      // Aprobador distinto del solicitante: desde el fix de A-03
+      // (auditoría 2026-09-02), el backend impide que quien creó la
+      // solicitud sea quien la apruebe/rechace, así que las pruebas de
+      // aprobación necesitan un segundo usuario de Tenant A para actuar
+      // como aprobador legítimo.
+      await prisma.user.create({
+        data: {
+          tenantId: tenantAId,
+          email: `aprobador-a-${sufijo}@test.ricosoft.local`,
+          passwordHash,
+          nombre: "Aprobador Tenant A",
+          isSuperadmin: true,
+          activo: true,
+        },
+      });
 
       const login = async (email: string): Promise<string> => {
         const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
@@ -89,6 +105,7 @@ describe.skipIf(!RUN)(
       tokenAAdmin = await login(`solicitante-a-${sufijo}@test.ricosoft.local`);
       tokenASinPermiso = await login(`sinpermiso-a-${sufijo}@test.ricosoft.local`);
       tokenBAdmin = await login(`admin-b-${sufijo}@test.ricosoft.local`);
+      tokenAAprobador = await login(`aprobador-a-${sufijo}@test.ricosoft.local`);
     });
 
     afterAll(async () => {
@@ -108,6 +125,7 @@ describe.skipIf(!RUN)(
         where: { tenantId: { in: [tenantAId, tenantBId] } },
       });
       await prisma.auditoria.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
+      await prisma.notificacion.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
       await prisma.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
       await prisma.$disconnect();
@@ -152,7 +170,7 @@ describe.skipIf(!RUN)(
       const id = await crearSolicitud(`Item sin cotizar ${sufijo}`);
       const res = await request(app)
         .patch(`/api/solicitudes-compra/${id}/estado`)
-        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .set("Authorization", `Bearer ${tokenAAprobador}`)
         .send({ estado: "Aprobada" });
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/3 cotizaciones/);
@@ -209,7 +227,7 @@ describe.skipIf(!RUN)(
       // Sin ganadora todavía no se puede aprobar.
       const sinGanadora = await request(app)
         .patch(`/api/solicitudes-compra/${id}/estado`)
-        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .set("Authorization", `Bearer ${tokenAAprobador}`)
         .send({ estado: "Aprobada" });
       expect(sinGanadora.status).toBe(409);
       expect(sinGanadora.body.message).toMatch(/ganadora/);
@@ -222,7 +240,7 @@ describe.skipIf(!RUN)(
 
       const aprobar = await request(app)
         .patch(`/api/solicitudes-compra/${id}/estado`)
-        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .set("Authorization", `Bearer ${tokenAAprobador}`)
         .send({ estado: "Aprobada" });
       expect(aprobar.status).toBe(200);
       expect(aprobar.body.estado).toBe("Aprobada");

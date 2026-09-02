@@ -1,9 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { loadSessionUser, verificarTokenVersion, SessionUser } from "../lib/permissions";
+import type { TenantPrisma } from "../lib/tenant-prisma";
 
 export interface AuthenticatedRequest extends Request {
   user?: SessionUser;
+  /** Cliente Prisma con enforcement automático de tenantId — ver
+   * middleware/tenant-prisma.middleware.ts. Piloto: existe en paralelo al
+   * cliente global `prisma`, ningún controller lo usa todavía. */
+  tenantPrisma?: TenantPrisma;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -61,7 +66,9 @@ export const requireSuperadmin = (req: AuthenticatedRequest, res: Response, next
     return res.status(401).json({ message: "No autenticado." });
   }
   if (!req.user.isSuperadmin) {
-    return res.status(403).json({ message: "Solo un superadministrador puede realizar esta acción." });
+    return res
+      .status(403)
+      .json({ message: "Solo un superadministrador puede realizar esta acción." });
   }
   return next();
 };

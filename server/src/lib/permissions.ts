@@ -78,7 +78,18 @@ export const PERMISOS_SISTEMA = {
   IMPORTACIONES_RECIBIR: "importaciones.recibir",
   IMPORTACIONES_LIQUIDAR: "importaciones.liquidar",
   IMPORTACIONES_ELIMINAR: "importaciones.eliminar",
+  INTEGRACION_SIESA_VER: "integracion_siesa.ver",
   INTEGRACION_SIESA_SINCRONIZAR: "integracion_siesa.sincronizar",
+  INVENTARIO_CONFIGURAR: "inventario.configurar",
+  TOMA_FISICA_VER: "toma_fisica.ver",
+  TOMA_FISICA_GESTIONAR: "toma_fisica.gestionar",
+  PLAN_PRODUCCION_VER: "plan_produccion.ver",
+  PLAN_PRODUCCION_GESTIONAR: "plan_produccion.gestionar",
+  GESTION_LIQUIDACION_VER: "gestion_liquidacion.ver",
+  GESTION_LIQUIDACION_GESTIONAR: "gestion_liquidacion.gestionar",
+  VENTAS_VER: "ventas.ver",
+  DESPACHOS_VER: "despachos.ver",
+  DESPACHOS_GESTIONAR: "despachos.gestionar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -112,7 +123,7 @@ interface UsuarioConPermisosCrudos {
   isSuperadmin: boolean;
   activo: boolean;
   departamento: { esSistemas: boolean } | null;
-  rolRel: { permisos: string } | null;
+  rolRel: { permisos: string; activo: boolean } | null;
   permisosDirectos: { permisoId: string; concedido: boolean }[];
 }
 
@@ -137,7 +148,9 @@ function calcularPermisosEfectivos(user: UsuarioConPermisosCrudos): Set<string> 
   if (user.isSuperadmin || user.departamento?.esSistemas) {
     Object.values(PERMISOS_SISTEMA).forEach((p) => permisos.add(p));
   } else {
-    if (user.rolRel) {
+    // Un rol desactivado no debe seguir concediendo permisos a quienes lo
+    // tengan asignado — desactivarlo era, hasta ahora, un no-op silencioso.
+    if (user.rolRel && user.rolRel.activo) {
       parseRolPermisos(user.rolRel.permisos).forEach((p) => permisos.add(p));
     }
     for (const directo of user.permisosDirectos) {
@@ -159,14 +172,14 @@ function calcularPermisosEfectivosMembresia(membresia: {
   activo: boolean;
   isSuperadmin: boolean;
   departamento: { esSistemas: boolean } | null;
-  rolRel: { permisos: string } | null;
+  rolRel: { permisos: string; activo: boolean } | null;
 }): Set<string> {
   const permisos = new Set<string>();
   if (!membresia.activo) return permisos;
 
   if (membresia.isSuperadmin || membresia.departamento?.esSistemas) {
     Object.values(PERMISOS_SISTEMA).forEach((p) => permisos.add(p));
-  } else if (membresia.rolRel) {
+  } else if (membresia.rolRel && membresia.rolRel.activo) {
     parseRolPermisos(membresia.rolRel.permisos).forEach((p) => permisos.add(p));
   }
   return permisos;

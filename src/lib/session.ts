@@ -55,6 +55,26 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
+const ULTIMA_EMPRESA_KEY = "ultima_empresa_tenant_id";
+
+/**
+ * Recuerda la última empresa con la que el usuario trabajó, SOLO como
+ * comodidad de UX (preseleccionarla en el selector de login). Nunca se usa
+ * para decidir acceso: cada login/cambio de empresa revalida contra el
+ * backend igual, y si el usuario ya no tiene acceso a esta empresa, la
+ * preferencia simplemente se ignora (no aparecerá en la lista real que
+ * manda el servidor).
+ */
+export function setUltimaEmpresaPreferida(tenantId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ULTIMA_EMPRESA_KEY, tenantId);
+}
+
+export function getUltimaEmpresaPreferida(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ULTIMA_EMPRESA_KEY);
+}
+
 /**
  * Pide al backend la sesión actual a partir del token guardado. Es la única
  * fuente de verdad del usuario autenticado: nunca se confía en datos de
