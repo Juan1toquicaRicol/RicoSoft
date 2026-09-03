@@ -280,4 +280,23 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     expect(auditorias.length).toBeGreaterThanOrEqual(2);
     expect(auditorias.every((a) => a.tenantId === tenantAId)).toBe(true);
   });
+
+  // ---- Cartera Siesa (solo lectura) ----
+
+  it("12. GET /creditos/cartera-siesa responde disponible:false (nunca 500) cuando el tenant no tiene siesaCiaId", async () => {
+    const res = await request(app)
+      .get("/api/creditos/cartera-siesa")
+      .set("Authorization", `Bearer ${tokenAGestor}`);
+    expect(res.status).toBe(200);
+    expect(res.body.disponible).toBe(false);
+    expect(typeof res.body.motivo).toBe("string");
+    expect(res.body.items).toEqual([]);
+  });
+
+  it("13. GET /creditos/cartera-siesa exige el permiso creditos.ver", async () => {
+    const res = await request(app)
+      .get("/api/creditos/cartera-siesa")
+      .set("Authorization", `Bearer ${tokenASinPermiso}`);
+    expect(res.status).toBe(403);
+  });
 });

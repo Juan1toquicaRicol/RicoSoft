@@ -11,12 +11,20 @@ const ESTADOS_VALIDOS = ["Pendiente", "Aprobada", "Pagada", "Rechazada"];
 const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Crítica"];
 const MONEDAS_VALIDAS = ["COP", "USD"];
 
-// Una solicitud de compra solo puede vincularse a una factura final desde
-// estos dos estados (Aprobada, o ya marcada Comprado tras la aprobación):
-// vincular la factura la mueve atómicamente a "Facturada" y aprueba la
-// factura automáticamente (ver crearFactura). Ver solicitudes.controller.ts
-// para la máquina de estados completa de SolicitudCompra.
-const ESTADOS_SC_VINCULABLES_A_FACTURA = ["Aprobada", "Comprado"];
+// Una solicitud de compra puede vincularse a UNA O VARIAS facturas (compras
+// que se facturan parcialmente o en varios documentos) desde estos tres
+// estados: Aprobada o Comprado (primera factura) y también Facturada (ya
+// tiene al menos una factura vinculada, pero eso no la cierra — sigue
+// disponible mientras el flujo de negocio no defina lo contrario; ver
+// listarSolicitudesDisponiblesParaFactura en solicitudes.controller.ts, que
+// además filtra por saldo pendiente > 0). Vincular la primera factura mueve
+// la solicitud atómicamente a "Facturada" y la aprueba automáticamente (ver
+// crearFactura); vincular facturas adicionales no cambia el estado (ya está
+// en "Facturada"). Ver solicitudes.controller.ts para la máquina de estados
+// completa de SolicitudCompra. Exportado porque solicitudes.controller.ts
+// reutiliza esta misma lista al buscar solicitudes disponibles — nunca debe
+// haber dos copias de este criterio.
+export const ESTADOS_SC_VINCULABLES_A_FACTURA = ["Aprobada", "Comprado", "Facturada"];
 
 // Transiciones de estado permitidas y el permiso requerido para ejecutarlas.
 // "Pagada" NO está aquí a propósito: ya no se alcanza cambiando el estado a
@@ -90,6 +98,12 @@ function serializar(f: any) {
     responsable: f.responsable,
     fecha: f.fecha,
     vence: f.vence,
+    // Datos de dónde/cómo pagarle al proveedor y condiciones de pago
+    // negociadas, para el paso de "recepción de factura" antes de
+    // consolidar el pago. Snapshot editable, no una referencia en vivo al
+    // catálogo de Proveedor.
+    condicionesPago: f.condicionesPago,
+    datosPago: f.datosPago,
     subtotal: Number(f.subtotal),
     iva: Number(f.iva),
     total,
@@ -153,12 +167,17 @@ const INCLUDE_FACTURA = {
 export const listarFacturas = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId, estado, search, servicioId, limit, page } = req.query;
+    const { empresaId, estado, search, servicioId, solicitudCompraId, limit, page } = req.query;
 
     const where: any = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && ESTADOS_VALIDOS.includes(estado)) where.estado = estado;
     if (typeof servicioId === "string" && servicioId) where.servicioId = servicioId;
+    // Mismo patrón que servicioId — usado por "Facturas relacionadas" en el
+    // detalle de Solicitud de Compra (ver useFacturasPorSolicitud), sin
+    // duplicar el listado de facturas en un endpoint aparte.
+    if (typeof solicitudCompraId === "string" && solicitudCompraId)
+      where.solicitudCompraId = solicitudCompraId;
     if (typeof search === "string" && search.trim()) {
       const term = search.trim();
       where.OR = [
@@ -263,13 +282,26 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       moneda,
       prioridad,
       origen,
+      condicionesPago,
+      datosPago,
     } = req.body;
+
+    // Una factura se relaciona con UNA sola cosa: solicitud de compra,
+    // servicio/suscripción o contrato — nunca varias a la vez (evita un
+    // origen ambiguo de "por qué se aprobó esta factura sola").
+    if ([solicitudCompraId, servicioId, contratoId].filter(Boolean).length > 1) {
+      return res.status(400).json({
+        message:
+          "Una factura solo puede relacionarse con una solicitud de compra, un servicio o un contrato — no varios a la vez.",
+      });
+    }
 
     // El servicio/contrato relacionados son opcionales (no toda factura
     // corresponde a un servicio recurrente), pero si se envían deben existir
     // en el mismo tenant (IDOR) — igual que proveedor y responsable.
+    let servicioDb: Awaited<ReturnType<typeof prisma.servicioSuscripcion.findFirst>> = null;
     if (servicioId) {
-      const servicioDb = await req.tenantPrisma!.servicioSuscripcion.findFirst({
+      servicioDb = await req.tenantPrisma!.servicioSuscripcion.findFirst({
         where: { id: servicioId, tenantId, eliminado: false },
       });
       if (!servicioDb) {
@@ -308,6 +340,16 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // selecciona ninguno del catálogo.
     let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
     let proveedorNit = typeof nit === "string" ? nit : "";
+    // Snapshot de condiciones/datos de pago del proveedor al momento de
+    // recibir la factura: se copian del catálogo si hay proveedorId, pero
+    // el body puede sobrescribirlos (p. ej. condiciones puntuales de esta
+    // factura, distintas del default del proveedor).
+    let condicionesPagoFinal: string | null =
+      typeof condicionesPago === "string" && condicionesPago.trim()
+        ? condicionesPago.trim()
+        : null;
+    let datosPagoFinal: string | null =
+      typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null;
     if (proveedorId) {
       const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
         where: { id: proveedorId, tenantId, activo: true },
@@ -319,6 +361,8 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       }
       proveedorNombre = proveedorDb.nombre;
       proveedorNit = proveedorDb.nit;
+      if (!condicionesPagoFinal) condicionesPagoFinal = proveedorDb.condicionesPago;
+      if (!datosPagoFinal) datosPagoFinal = proveedorDb.datosPago;
     }
 
     // Mismo principio para el responsable: si viene responsableId, el nombre
@@ -378,6 +422,13 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // "Facturada". Ambos cambios quedan en una sola transacción: nunca debe
     // quedar una factura aprobada con su solicitud todavía "Aprobada", ni
     // viceversa.
+    //
+    // Una factura de un servicio/suscripción recurrente (ej. internet,
+    // licencias) tampoco pasa por aprobación: en el mundo real esa factura
+    // ya la revisó y firmó el encargado del servicio antes de llegar a
+    // Contabilidad — exigir una segunda aprobación en RicoSoft duplicaría un
+    // control que ya ocurrió fuera del sistema.
+    const autoAprobada = Boolean(solicitudDb || servicioDb);
     const historialInicial = solicitudDb
       ? [
           { actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" },
@@ -387,7 +438,16 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
             detalle: `Vinculada a la solicitud de compra "${solicitudDb.item}", ya aprobada con cotización ganadora.`,
           },
         ]
-      : [{ actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" }];
+      : servicioDb
+        ? [
+            { actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" },
+            {
+              actor: "Sistema",
+              accion: "Factura aprobada automáticamente",
+              detalle: `Vinculada al servicio/suscripción "${servicioDb.nombreServicio}" — no requiere una segunda aprobación en RicoSoft.`,
+            },
+          ]
+        : [{ actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" }];
 
     const factura = await req.tenantPrisma!.$transaction(async (tx) => {
       const creada = await tx.factura.create({
@@ -407,11 +467,13 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
           responsableId: responsableId || null,
           responsable: responsableNombre,
           vence: new Date(vence),
+          condicionesPago: condicionesPagoFinal,
+          datosPago: datosPagoFinal,
           subtotal: sub,
           iva: ivaNum,
           total: sub + ivaNum,
           moneda: monedaFinal,
-          estado: solicitudDb ? "Aprobada" : "Pendiente",
+          estado: autoAprobada ? "Aprobada" : "Pendiente",
           prioridad: prioridadFinal,
           origen: typeof origen === "string" ? origen : "Carga manual",
           historial: { create: historialInicial },
@@ -429,16 +491,24 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       });
 
       if (solicitudDb) {
-        await tx.solicitudCompra.update({
-          where: { id: solicitudDb.id },
-          data: { estado: "Facturada" },
-        });
+        // Idempotente si ya estaba "Facturada" (segunda/tercera factura de
+        // la misma solicitud) — no hay una transición real que registrar dos
+        // veces, solo el mensaje de auditoría cambia para reflejarlo.
+        const yaEstabaFacturada = solicitudDb.estado === "Facturada";
+        if (!yaEstabaFacturada) {
+          await tx.solicitudCompra.update({
+            where: { id: solicitudDb.id },
+            data: { estado: "Facturada" },
+          });
+        }
         await tx.auditoria.create({
           data: {
             tenantId,
             usuarioId: req.user!.id,
             accion: "SOLICITUD_COMPRA_FACTURADA",
-            detalle: `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}"; quedó aprobada automáticamente y la solicitud pasó a "Facturada".`,
+            detalle: yaEstabaFacturada
+              ? `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}" (factura adicional; la solicitud ya estaba "Facturada"); quedó aprobada automáticamente.`
+              : `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}"; quedó aprobada automáticamente y la solicitud pasó a "Facturada".`,
           },
         });
       }
@@ -475,6 +545,53 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
   } catch (error) {
     console.error("Error al crear factura:", error);
     return res.status(500).json({ message: "Error al registrar la factura." });
+  }
+};
+
+/**
+ * Edita las condiciones/datos de pago de una factura ya recibida (snapshot
+ * copiado del proveedor al crearla, pero puede diferir de esta factura en
+ * particular). Deliberadamente no toca ningún otro campo ni el estado.
+ */
+export const actualizarCondicionesPagoFactura = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+    const { condicionesPago, datosPago } = req.body;
+
+    const existente = await req.tenantPrisma!.factura.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
+    if (!existente) return res.status(404).json({ message: "Factura no encontrada." });
+
+    const actualizada = await req.tenantPrisma!.factura.update({
+      where: { id },
+      data: {
+        ...(condicionesPago !== undefined
+          ? {
+              condicionesPago:
+                typeof condicionesPago === "string" && condicionesPago.trim()
+                  ? condicionesPago.trim()
+                  : null,
+            }
+          : {}),
+        ...(datosPago !== undefined
+          ? {
+              datosPago:
+                typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null,
+            }
+          : {}),
+      },
+      include: INCLUDE_FACTURA,
+    });
+
+    return res.json(serializar(actualizada));
+  } catch (error) {
+    console.error("Error al actualizar condiciones de pago de factura:", error);
+    return res.status(500).json({ message: "Error al actualizar la factura." });
   }
 };
 

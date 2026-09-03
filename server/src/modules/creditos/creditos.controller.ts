@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { leerSaldosAbiertosSiesa } from "../integraciones-siesa/siesa-financiero.service";
 
 const ESTADOS_VALIDOS = ["Al día", "Por vencer", "Vencido", "Paz y Salvo"];
 const DIAS_ALERTA_POR_VENCER = 7;
@@ -35,6 +36,103 @@ export const listarCreditos = async (req: AuthenticatedRequest, res: Response) =
   } catch (error) {
     console.error("Error al listar créditos:", error);
     return res.status(500).json({ message: "Error al obtener los créditos." });
+  }
+};
+
+/**
+ * Cartera real por cliente, leída en vivo de Siesa (t353_co_saldo_abierto) —
+ * a diferencia de CreditoCliente (cupo/saldo llevados a mano en RicoSoft,
+ * hoy vacío en todos los tenants), esto es la cartera de verdad: la suma de
+ * los saldos abiertos que cada tercero le debe a la compañía. Es de SOLO
+ * LECTURA — nunca se escribe en Siesa, y no existe un endpoint de "registrar
+ * pago" aquí porque el pago real se registra en Siesa, no en RicoSoft.
+ * Paginado y con búsqueda server-side: un tenant real puede tener miles de
+ * saldos abiertos (~2000 filas para RICOL), nunca se manda todo al frontend.
+ */
+export const listarCarteraSiesa = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+    if (!tenant?.siesaCiaId) {
+      return res.json({
+        disponible: false,
+        motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+        items: [],
+        page: 1,
+        pageSize: 25,
+        total: 0,
+        totalPages: 1,
+      });
+    }
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25));
+
+    const saldos = await leerSaldosAbiertosSiesa(tenant.siesaCiaId);
+
+    // Solo cartera (saldo>0 = el tercero nos debe); un mismo cliente puede
+    // tener varias facturas/documentos abiertos en t353 — se consolida en
+    // una sola fila por cliente, con la fecha de vencimiento más antigua
+    // (la más urgente) para calcular el estado.
+    const porCliente = new Map<
+      string,
+      { cliente: string; nit: string | null; saldo: number; vence: Date }
+    >();
+    for (const s of saldos) {
+      if (s.saldo <= 0) continue;
+      const clave = s.terceroNit || s.terceroNombre || String(s.terceroRowId ?? "SIN_ID");
+      const actual = porCliente.get(clave);
+      if (!actual) {
+        porCliente.set(clave, {
+          cliente: s.terceroNombre || "Sin nombre",
+          nit: s.terceroNit,
+          saldo: s.saldo,
+          vence: s.vence,
+        });
+      } else {
+        actual.saldo += s.saldo;
+        if (s.vence < actual.vence) actual.vence = s.vence;
+      }
+    }
+
+    let clientes = [...porCliente.values()];
+    if (search) {
+      clientes = clientes.filter(
+        (c) => c.cliente.toLowerCase().includes(search) || (c.nit || "").toLowerCase().includes(search),
+      );
+    }
+    clientes.sort((a, b) => b.saldo - a.saldo);
+
+    const total = clientes.length;
+    const pagina = clientes.slice((page - 1) * pageSize, page * pageSize);
+    const items = pagina.map((c) => ({
+      cliente: c.cliente,
+      nit: c.nit,
+      saldo: c.saldo,
+      vence: c.vence,
+      estado: calcularEstado(c.saldo, c.vence),
+    }));
+
+    return res.json({
+      disponible: true,
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    });
+  } catch (error) {
+    console.error("Error al leer la cartera de Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+      totalPages: 1,
+    });
   }
 };
 

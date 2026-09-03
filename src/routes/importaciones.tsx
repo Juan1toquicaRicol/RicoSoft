@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus, Ship, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Ship, Trash2 } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,7 +36,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useImportaciones, type EstadoOrdenIntl, type ItemOrdenInput } from "@/hooks/use-importaciones";
+import {
+  useImportaciones,
+  type EstadoOrdenIntl,
+  type ItemOrdenInput,
+  type OrdenCompraIntl,
+} from "@/hooks/use-importaciones";
 import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 import { useSession } from "@/lib/session-context";
@@ -73,6 +78,34 @@ function estadoResumenLotes(orden: { lotes: { estado: string }[] }): string {
     return idx < prioridad.indexOf(acc) ? l.estado : acc;
   }, orden.lotes[0].estado);
   return peor;
+}
+
+/**
+ * Alerta de una importación para "Requieren atención" — prioriza la novedad
+ * abierta de mayor prioridad; si no hay ninguna, usa la actividad vencida
+ * de situacionActual (ya calculada por el backend, nunca en frontend).
+ */
+function alertaOrden(o: OrdenCompraIntl): { emoji: string; texto: string; responsable: string | null } | null {
+  const novedadesAbiertas = o.novedades.filter((n) => n.estado !== "Resuelta");
+  const novedadAlta = novedadesAbiertas.find((n) => n.prioridad === "Alta");
+  if (novedadAlta) {
+    return { emoji: "🔴", texto: novedadAlta.descripcion, responsable: novedadAlta.responsable };
+  }
+  if (novedadesAbiertas.length > 0) {
+    return {
+      emoji: "🟠",
+      texto: novedadesAbiertas[0].descripcion,
+      responsable: novedadesAbiertas[0].responsable,
+    };
+  }
+  if (o.situacionActual.atencion) {
+    return {
+      emoji: "🟡",
+      texto: `${o.situacionActual.atencion} (${o.situacionActual.diasRetraso} día(s) de retraso)`,
+      responsable: o.situacionActual.responsable,
+    };
+  }
+  return null;
 }
 
 function ImportacionesPage() {
@@ -186,6 +219,48 @@ function ImportacionesPage() {
         )
       }
     >
+      {(() => {
+        const conAlerta = ordenes
+          .filter((o) => o.estado !== "Anulada" && o.estado !== "Cerrada")
+          .map((o) => ({ orden: o, alerta: alertaOrden(o) }))
+          .filter((x): x is { orden: OrdenCompraIntl; alerta: NonNullable<ReturnType<typeof alertaOrden>> } => x.alerta !== null)
+          .sort((a, b) => (a.alerta.emoji === "🔴" ? -1 : 1) - (b.alerta.emoji === "🔴" ? -1 : 1));
+
+        if (conAlerta.length === 0) return null;
+
+        return (
+          <div className="mb-4 panel p-5 bg-white border-slate-200 shadow-2xs">
+            <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+              <AlertTriangle className="h-4 w-4 text-orange-600" /> Importaciones que requieren atención
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {conAlerta.slice(0, 8).map(({ orden, alerta }) => (
+                <li key={orden.id}>
+                  <Link
+                    to="/importaciones/$id"
+                    params={{ id: orden.id }}
+                    className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs hover:bg-slate-50"
+                  >
+                    <span className="shrink-0">{alerta.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-slate-800">
+                        {orden.codigo} · {orden.proveedorExtranjero}
+                      </p>
+                      <p className="truncate text-slate-500">{alerta.texto}</p>
+                    </div>
+                    {alerta.responsable && (
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        {alerta.responsable}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
+
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 lg:flex lg:items-center lg:justify-between bg-slate-50/80">
           <div className="flex flex-wrap gap-2">
@@ -232,20 +307,23 @@ function ImportacionesPage() {
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">FOB estimado</TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado orden</TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado mercancía</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Próxima acción</TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
             {gruposOrdenes.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />}
+                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={8} />}
                 {grupo.filas.map((o) => (
                   <TableRow key={o.id}>
                     <TableCell className="px-4 py-3 font-bold text-xs">
                       <Link to="/importaciones/$id" params={{ id: o.id }} className="text-blue-800 hover:underline">
-                        {o.numeroOrden}
+                        {o.codigo}
                       </Link>
-                      <p className="text-[10px] text-slate-400 font-normal">{o.lotes.length} lote(s)</p>
+                      <p className="text-[10px] text-slate-400 font-normal">
+                        {o.numeroOrden} · {o.lotes.length} lote(s)
+                      </p>
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <p className="font-bold text-slate-900 truncate max-w-[220px]">{o.proveedorExtranjero}</p>
@@ -264,6 +342,12 @@ function ImportacionesPage() {
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <EstadoBadge estado={estadoResumenLotes(o)} />
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-xs text-slate-600">
+                      {o.situacionActual.proximaAccion ?? "—"}
+                      {o.situacionActual.responsable && (
+                        <p className="text-[10px] text-slate-400">{o.situacionActual.responsable}</p>
+                      )}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1.5">
@@ -290,7 +374,7 @@ function ImportacionesPage() {
             ))}
             {filteredOrdenes.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   {loading ? (
                     <div className="py-12 text-center text-xs text-slate-500">Cargando órdenes de compra internacionales...</div>
                   ) : error ? (

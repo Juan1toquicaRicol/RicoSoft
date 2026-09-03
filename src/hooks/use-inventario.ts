@@ -121,6 +121,10 @@ export interface RecomendacionProduccion {
   inventarioDisponible: number;
   cantidadPendienteEntrar: number;
   produccionRecomendada: number;
+  ventaPromedioMensual: number;
+  tendenciaPct: number | null;
+  mesesConVenta: number;
+  confianza: "alta" | "media" | "baja";
 }
 
 export interface ProduccionRecomendada {

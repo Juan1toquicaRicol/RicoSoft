@@ -10,6 +10,7 @@ import {
   obtenerVentasGerencial,
   obtenerVentasPorVendedorGerencial,
   obtenerHistoricoVentasGerencial,
+  obtenerClientesVentaGerencial,
 } from "./analitica.controller";
 
 const router = Router();
@@ -33,5 +34,6 @@ router.get(
   requirePermission("analitica.ver"),
   obtenerHistoricoVentasGerencial,
 );
+router.get("/ventas/clientes", requirePermission("analitica.ver"), obtenerClientesVentaGerencial);
 
 export default router;

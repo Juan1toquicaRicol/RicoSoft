@@ -12,6 +12,11 @@ import {
 // el cuadro comparativo queda congelado como quedó al aprobar.
 const ESTADOS_ADMITEN_COTIZACIONES = ["Pendiente", "En Cotización"];
 const MAX_COTIZACIONES = 3;
+// Antes se exigían las 3 cotizaciones completas antes de poder elegir
+// ganadora. Relajado a pedido del negocio: con al menos 1 cotización ya se
+// puede elegir ganadora (ver también solicitudes.controller.ts, que exige lo
+// mismo — al menos 1 + ganadora — para aprobar la solicitud).
+const MIN_COTIZACIONES_PARA_GANADORA = 1;
 
 function serializarCotizacion(c: any) {
   return {
@@ -224,8 +229,9 @@ export const eliminarCotizacionSolicitud = async (req: AuthenticatedRequest, res
 
 /**
  * Marca una cotización como la ganadora del cuadro comparativo (y desmarca
- * cualquier otra). Requiere que ya existan las 3 cotizaciones completas: es
- * la decisión de Gerencia que, junto con las 3 cotizaciones, desbloquea el
+ * cualquier otra). Requiere al menos MIN_COTIZACIONES_PARA_GANADORA
+ * cotización(es) registrada(s) (antes se exigían las 3 completas): es la
+ * decisión de Gerencia que, junto con la(s) cotización(es), desbloquea el
  * paso de la solicitud a "Aprobada" (ver cambiarEstadoSolicitud).
  */
 export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, res: Response) => {
@@ -246,9 +252,9 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
     const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
       where: { solicitudCompraId: id, tenantId },
     });
-    if (cotizaciones.length !== MAX_COTIZACIONES) {
+    if (cotizaciones.length < MIN_COTIZACIONES_PARA_GANADORA) {
       return res.status(409).json({
-        message: `Se requieren las ${MAX_COTIZACIONES} cotizaciones antes de elegir la ganadora (hay ${cotizaciones.length}).`,
+        message: `Se requiere al menos ${MIN_COTIZACIONES_PARA_GANADORA} cotización antes de elegir la ganadora (hay ${cotizaciones.length}).`,
       });
     }
     const objetivo = cotizaciones.find((c) => c.id === cotizacionId);

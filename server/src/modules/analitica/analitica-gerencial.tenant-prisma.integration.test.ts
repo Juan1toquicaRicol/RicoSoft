@@ -178,14 +178,13 @@ describe.skipIf(!RUN)("Centro Gerencial Financiero — resumen-gerencial (multi-
     await prisma.$disconnect();
   });
 
-  it("reporta ventas como explícitamente no disponible, sin inventar cifras", async () => {
+  it("ya no expone un bloque ventas propio (retirado en el P0 Comercial: las ventas reales viven en /analitica/ventas*, no duplicadas aquí)", async () => {
     const res = await request(app)
       .get("/api/analitica/resumen-gerencial")
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.ventas.disponible).toBe(false);
-    expect(typeof res.body.ventas.motivo).toBe("string");
-    expect(res.body.ventas.motivo.length).toBeGreaterThan(0);
+    expect(res.body.ventas).toBeUndefined();
+    expect(res.body).toHaveProperty("financieroSiesa");
   });
 
   it("calcula cuentas por pagar (total, buckets, concentración) con montos exactos y aislados por tenant", async () => {

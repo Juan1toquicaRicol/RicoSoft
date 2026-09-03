@@ -11,16 +11,31 @@ import {
   leerTopProductosVentaKilosSiesa,
   leerTopClientesPorMargenSiesa,
   leerTopVendedoresPorMargenSiesa,
+  leerVentasPorClienteConsolidadoSiesa,
+  leerResumenVentaDiaSiesa,
 } from "../integraciones-siesa/siesa-ventas.service";
 import { leerSaldosAbiertosSiesa } from "../integraciones-siesa/siesa-financiero.service";
-import { calcularResumenVentas, calcularVentasPorVendedor } from "../../lib/ventas-siesa";
+import {
+  calcularResumenVentas,
+  calcularVentasPorVendedor,
+  calcularParetoClientes,
+} from "../../lib/ventas-siesa";
 import { calcularResumenFinancieroSiesa } from "../../lib/financiero-siesa";
+import { getOrSetCache } from "../../lib/memo-cache";
 
 // Estados de Factura que representan una obligación todavía por pagar
 // (Rechazada no cuenta: nunca llega a deberse; Pagada tampoco: ya se saldó).
 const ESTADOS_POR_PAGAR = ["Pendiente", "Aprobada"];
 
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+// TTL de la caché en memoria para las consultas agregadas de ventas (ver
+// lib/memo-cache.ts): protege el pool de Siesa (max: 5 conexiones) de que
+// varios usuarios recargando /analitica en la misma ventana corta disparen
+// la misma consulta pesada repetidas veces. 45s: suficientemente corto para
+// que nadie perciba datos "viejos" de forma relevante, suficientemente largo
+// para absorber recargas repetidas de un dashboard.
+const CACHE_TTL_VENTAS_MS = 45_000;
 
 const formatoCOP = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -229,6 +244,8 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
       creditos?: unknown;
       servicios?: unknown;
       importaciones?: unknown;
+      contratos?: unknown;
+      despachos?: unknown;
     } = {};
 
     if (puede("facturas.ver")) {
@@ -353,6 +370,35 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
         .slice(0, 5)
         .map((c) => ({ cliente: c.cliente, saldo: Number(c.saldo) }));
       resultado.creditos = { total: creditos.length, totalSaldo, pendientes, topDeudores };
+    }
+
+    if (puede("contratos.ver")) {
+      const contratos = await req.tenantPrisma!.contrato.findMany({
+        where: { tenantId, eliminado: false, estado: "Activo" },
+        select: { valorContratado: true, fechaFin: true },
+      });
+      const en30Dias = new Date(ahora.getTime() + 30 * 24 * 60 * 60 * 1000);
+      resultado.contratos = {
+        activos: contratos.length,
+        valorContratadoActivo: contratos.reduce((acc, c) => acc + Number(c.valorContratado), 0),
+        proximosAVencer: contratos.filter((c) => c.fechaFin >= ahora && c.fechaFin <= en30Dias).length,
+      };
+    }
+
+    if (puede("despachos.ver")) {
+      const ESTADOS_CERRADOS = ["ENTREGADO", "CANCELADO", "DEVUELTO"];
+      const [despachos, novedadesAbiertas] = await Promise.all([
+        req.tenantPrisma!.despacho.findMany({ where: { tenantId }, select: { estado: true } }),
+        req.tenantPrisma!.despachoNovedad.count({
+          where: { estado: "ABIERTA", despacho: { tenantId } },
+        }),
+      ]);
+      resultado.despachos = {
+        total: despachos.length,
+        enProceso: despachos.filter((d) => !ESTADOS_CERRADOS.includes(d.estado)).length,
+        entregados: despachos.filter((d) => d.estado === "ENTREGADO").length,
+        novedadesAbiertas,
+      };
     }
 
     return res.json(resultado);
@@ -626,11 +672,13 @@ export const obtenerResumenGerencial = async (req: AuthenticatedRequest, res: Re
     }
 
     return res.json({
-      ventas: {
-        disponible: false,
-        motivo:
-          "No existe actualmente ninguna fuente de datos de ventas conectada a RicoSoft. La integración con Siesa solo lee proveedores/terceros (t202_mm_proveedores / t200_mm_terceros); no se ha explorado ni conectado ninguna tabla de facturación de venta, pedidos, clientes o remisiones. El esquema propio de RicoSoft tampoco incluye un modelo transaccional de ventas.",
-      },
+      // Nota: las ventas reales SÍ existen y se leen en vivo desde Siesa —
+      // ver GET /analitica/ventas, /ventas/vendedores, /ventas/clientes y
+      // /ventas/historico. Este endpoint (resumen-gerencial) es solo
+      // financiero/cartera; antes tenía aquí un bloque `ventas:
+      // {disponible:false}` heredado de una versión anterior a que esos
+      // endpoints existieran — se retiró por ser código muerto y
+      // contradictorio (P0 Comercial, 2026-09-03).
       financieroSiesa,
       cartera: {
         total: totalCartera,
@@ -667,6 +715,25 @@ export const obtenerResumenGerencial = async (req: AuthenticatedRequest, res: Re
  * responde 200 con `disponible:false` y el motivo — nunca inventa cifras ni
  * tumba el endpoint con un 500 por una dependencia externa.
  */
+// Filtro global de fecha compartido por /ventas, /ventas/vendedores y
+// /ventas/clientes (P0 Comercial): `desde`/`hasta` (ISO date) opcionales en
+// el query string, con el mismo default de siempre (mes actual) cuando no
+// se pasan — así ningún consumidor existente del frontend se rompe por no
+// mandarlos todavía.
+function parseRangoVentasQuery(
+  req: AuthenticatedRequest,
+  ahora: Date,
+): { desde: Date; hasta: Date } {
+  const { desde: desdeQuery, hasta: hastaQuery } = req.query;
+  const inicioMesActual = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1));
+  const inicioMesSiguiente = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + 1, 1));
+  const desde =
+    typeof desdeQuery === "string" && desdeQuery ? new Date(desdeQuery) : inicioMesActual;
+  const hasta =
+    typeof hastaQuery === "string" && hastaQuery ? new Date(hastaQuery) : inicioMesSiguiente;
+  return { desde, hasta };
+}
+
 export const obtenerVentasGerencial = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
   const tenant = await prisma.tenant.findUnique({
@@ -690,15 +757,32 @@ export const obtenerVentasGerencial = async (req: AuthenticatedRequest, res: Res
   // datos reales antes de este fix).
   const ahora = new Date();
   const desdeSerieMensual = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 12, 1));
-  const inicioMesActual = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1));
-  const inicioMesSiguiente = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + 1, 1));
+  // La serie mensual de 12 meses es siempre la tendencia completa (no se
+  // filtra por desde/hasta: cortarla rompería el gráfico de evolución). Los
+  // "top" sí respetan el filtro global de fecha si se manda uno explícito;
+  // por defecto siguen siendo el mes actual, igual que antes de este filtro.
+  const { desde: inicioMesActual, hasta: inicioMesSiguiente } = parseRangoVentasQuery(req, ahora);
+
+  const claveCache = `ventas:${tenant.siesaCiaId}:${desdeSerieMensual.toISOString()}:${inicioMesActual.toISOString()}:${inicioMesSiguiente.toISOString()}`;
   try {
-    const [serie, topClientes, topProductosKilos, topClientesPorMargen] = await Promise.all([
-      leerVentasMensualesSiesa(tenant.siesaCiaId, desdeSerieMensual),
-      leerTopClientesVentaSiesa(tenant.siesaCiaId, inicioMesActual, inicioMesSiguiente, 5),
-      leerTopProductosVentaKilosSiesa(tenant.siesaCiaId, inicioMesActual, inicioMesSiguiente, 10),
-      leerTopClientesPorMargenSiesa(tenant.siesaCiaId, inicioMesActual, inicioMesSiguiente, 5),
-    ]);
+    const { serie, topClientes, topProductosKilos, topClientesPorMargen } = await getOrSetCache(
+      claveCache,
+      CACHE_TTL_VENTAS_MS,
+      async () => {
+        const [serie, topClientes, topProductosKilos, topClientesPorMargen] = await Promise.all([
+          leerVentasMensualesSiesa(tenant.siesaCiaId!, desdeSerieMensual),
+          leerTopClientesVentaSiesa(tenant.siesaCiaId!, inicioMesActual, inicioMesSiguiente, 5),
+          leerTopProductosVentaKilosSiesa(
+            tenant.siesaCiaId!,
+            inicioMesActual,
+            inicioMesSiguiente,
+            10,
+          ),
+          leerTopClientesPorMargenSiesa(tenant.siesaCiaId!, inicioMesActual, inicioMesSiguiente, 5),
+        ]);
+        return { serie, topClientes, topProductosKilos, topClientesPorMargen };
+      },
+    );
     return res.json({
       ...calcularResumenVentas(serie, topClientes, ahora),
       topProductosKilos,
@@ -755,18 +839,37 @@ export const obtenerVentasPorVendedorGerencial = async (
     Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate() + 1),
   );
 
+  const claveCache = `ventas-vendedores:${tenant.siesaCiaId}:${inicioHoy.toISOString()}`;
   try {
-    const [filas, detalleHoy, topVendedoresPorMargen] = await Promise.all([
-      leerVentasDiariasPorVendedorSiesa(tenant.siesaCiaId, desde, hasta),
-      // Detalle de hoy con hora real (f461_ts) — ver leerVentasDeHoyConHoraSiesa.
-      leerVentasDeHoyConHoraSiesa(tenant.siesaCiaId, inicioHoy, hasta),
-      leerTopVendedoresPorMargenSiesa(tenant.siesaCiaId, inicioMesActual, inicioMesSiguiente, 10),
-    ]);
+    const { filas, detalleHoy, topVendedoresPorMargen, resumenHoy } = await getOrSetCache(
+      claveCache,
+      CACHE_TTL_VENTAS_MS,
+      async () => {
+        const [filas, detalleHoy, topVendedoresPorMargen, resumenHoy] = await Promise.all([
+          leerVentasDiariasPorVendedorSiesa(tenant.siesaCiaId!, desde, hasta),
+          // Detalle de hoy con hora real (f461_ts) — ver leerVentasDeHoyConHoraSiesa.
+          leerVentasDeHoyConHoraSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
+          leerTopVendedoresPorMargenSiesa(
+            tenant.siesaCiaId!,
+            inicioMesActual,
+            inicioMesSiguiente,
+            10,
+          ),
+          // Total del día — $ y kg — para los indicadores superiores de
+          // Analítica ("Total ventas hoy"). Mismo rango [inicioHoy, hasta)
+          // ya usado para detalleHoy, un solo total en vez de sumar en
+          // frontend las filas de detalleHoy (que no traen kilos).
+          leerResumenVentaDiaSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
+        ]);
+        return { filas, detalleHoy, topVendedoresPorMargen, resumenHoy };
+      },
+    );
     return res.json({
       disponible: true,
       vendedores: calcularVentasPorVendedor(filas, ahora),
       detalleHoy,
       topVendedoresPorMargen,
+      resumenHoy,
     });
   } catch (error) {
     console.error("Error al leer ventas por vendedor desde Siesa:", error);
@@ -776,6 +879,56 @@ export const obtenerVentasPorVendedorGerencial = async (
       vendedores: [],
       detalleHoy: [],
       topVendedoresPorMargen: [],
+      resumenHoy: null,
+    });
+  }
+};
+
+/**
+ * Venta + kilos + margen + Pareto por cliente, dentro de [desde, hasta) —
+ * "Inteligencia > Clientes" del target de analítica comercial (P0). Mismo
+ * principio de autoridad y de "nunca 500 por Siesa caído" que el resto de
+ * /analitica/ventas*. El Pareto (% acumulado) se calcula en Node
+ * (calcularParetoClientes, función pura) sobre el resultado ya agregado en
+ * SQL Server — nunca sobre el detalle de documentos.
+ */
+export const obtenerClientesVentaGerencial = async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.user!.tenantId;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
+
+  if (!tenant?.siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+      clientes: [],
+    });
+  }
+
+  const ahora = new Date();
+  const { desde, hasta } = parseRangoVentasQuery(req, ahora);
+  const limite = Math.min(
+    200,
+    Math.max(1, Number.parseInt(String(req.query.limite ?? "50"), 10) || 50),
+  );
+
+  const claveCache = `ventas-clientes:${tenant.siesaCiaId}:${desde.toISOString()}:${hasta.toISOString()}:${limite}`;
+  try {
+    const consolidado = await getOrSetCache(claveCache, CACHE_TTL_VENTAS_MS, () =>
+      leerVentasPorClienteConsolidadoSiesa(tenant.siesaCiaId!, desde, hasta, limite),
+    );
+    return res.json({
+      disponible: true,
+      clientes: calcularParetoClientes(consolidado),
+    });
+  } catch (error) {
+    console.error("Error al leer ventas por cliente desde Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      clientes: [],
     });
   }
 };
@@ -827,11 +980,22 @@ export const obtenerHistoricoVentasGerencial = async (req: AuthenticatedRequest,
     100,
     Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
   );
+  // Filtros globales de drill-down (KPI/gráfico -> cliente/vendedor/producto
+  // -> documento Siesa): entidad exacta por rowid, no texto libre. Igual que
+  // el resto de query params numéricos del sistema, se ignoran si no son un
+  // entero válido en vez de fallar con 400 — un filtro mal formado se trata
+  // como "sin filtrar", no como error.
+  const vendedorRowId = Number.parseInt(String(req.query.vendedorRowId ?? ""), 10);
+  const clienteRowId = Number.parseInt(String(req.query.clienteRowId ?? ""), 10);
+  const itemRowId = Number.parseInt(String(req.query.itemRowId ?? ""), 10);
   const filtros = {
     ciaId: tenant.siesaCiaId,
     desde,
     hasta,
     search: typeof search === "string" && search.trim() ? search.trim() : undefined,
+    vendedorRowId: Number.isFinite(vendedorRowId) ? vendedorRowId : undefined,
+    clienteRowId: Number.isFinite(clienteRowId) ? clienteRowId : undefined,
+    itemRowId: Number.isFinite(itemRowId) ? itemRowId : undefined,
   };
 
   try {

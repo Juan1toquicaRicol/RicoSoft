@@ -677,4 +677,67 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
       .set("Authorization", `Bearer ${tokenA}`);
     expect(intento.status).toBe(404);
   });
+
+  it("29. Una factura vinculada a un servicio/suscripción queda Aprobada automáticamente (no requiere aprobación manual)", async () => {
+    const servicioA = await prisma.servicioSuscripcion.create({
+      data: {
+        tenantId: tenantAId,
+        empresaId: "001",
+        area: "Sistemas",
+        nombreServicio: `Internet corporativo ${sufijo}`,
+        proveedor: "Proveedor de A",
+        periodicidad: "Mensual",
+        costo: 500000,
+        fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        responsableArea: "Sistemas",
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/facturas")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(datosFacturaBase({ numero: `FAC-SERV-A-${sufijo}`, servicioId: servicioA.id }));
+    expect(res.status).toBe(201);
+    expect(res.body.estado).toBe("Aprobada");
+  });
+
+  it("30. Una factura no puede relacionarse con más de una cosa a la vez (solicitud + servicio simultáneos)", async () => {
+    const servicioA = await prisma.servicioSuscripcion.create({
+      data: {
+        tenantId: tenantAId,
+        empresaId: "001",
+        area: "Sistemas",
+        nombreServicio: `Servicio combinado ${sufijo}`,
+        proveedor: "Proveedor de A",
+        periodicidad: "Mensual",
+        costo: 200000,
+        fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        responsableArea: "Sistemas",
+      },
+    });
+    const solicitudA = await prisma.solicitudCompra.create({
+      data: {
+        tenantId: tenantAId,
+        empresaId: "001",
+        area: "Sistemas",
+        solicitante: "Solicitante A",
+        item: `Item combinado ${sufijo}`,
+        cantidad: 1,
+        valorEstimado: 100000,
+        estado: "Aprobada",
+      },
+    });
+
+    const numero = `FAC-COMBINADA-${sufijo}`;
+    const res = await request(app)
+      .post("/api/facturas")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(
+        datosFacturaBase({ numero, servicioId: servicioA.id, solicitudCompraId: solicitudA.id }),
+      );
+    expect(res.status).toBe(400);
+
+    const enDb = await prisma.factura.findFirst({ where: { tenantId: tenantAId, numero } });
+    expect(enDb).toBeNull();
+  });
 });

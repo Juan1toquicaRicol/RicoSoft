@@ -30,10 +30,32 @@ export interface DashboardCreditos {
   topDeudores: { cliente: string; saldo: number }[];
 }
 
+export interface DashboardServicios {
+  activos: number;
+  costoRecurrenteMensual: number;
+  proximosVencimientos: number;
+}
+
+export interface DashboardContratos {
+  activos: number;
+  valorContratadoActivo: number;
+  proximosAVencer: number;
+}
+
+export interface DashboardDespachos {
+  total: number;
+  enProceso: number;
+  entregados: number;
+  novedadesAbiertas: number;
+}
+
 export interface DashboardResumen {
   facturas?: DashboardFacturas;
   solicitudes?: DashboardSolicitudes;
   creditos?: DashboardCreditos;
+  servicios?: DashboardServicios;
+  contratos?: DashboardContratos;
+  despachos?: DashboardDespachos;
   importaciones?: DashboardImportaciones;
 }
 

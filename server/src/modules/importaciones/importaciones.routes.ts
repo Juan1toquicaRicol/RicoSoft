@@ -16,6 +16,13 @@ import {
   actualizarExpedienteAduaneroSchema,
   crearVistoBuenoSchema,
   actualizarVistoBuenoSchema,
+  crearActividadImportacionSchema,
+  actualizarActividadImportacionSchema,
+  crearNovedadImportacionSchema,
+  resolverNovedadImportacionSchema,
+  crearPagoImportacionSchema,
+  actualizarEstadoPagoImportacionSchema,
+  cerrarOrdenCompraIntlSchema,
 } from "./importaciones.schemas";
 import {
   listarOrdenesCompraIntl,
@@ -34,6 +41,13 @@ import {
   actualizarVistoBueno,
   subirDocumentoVistoBueno,
   obtenerDocumentoVistoBueno,
+  crearActividadImportacion,
+  actualizarActividadImportacion,
+  crearNovedadImportacion,
+  resolverNovedadImportacion,
+  crearPagoImportacion,
+  actualizarEstadoPagoImportacion,
+  cerrarOrdenCompraIntl,
 } from "./importaciones.controller";
 
 const router = Router();
@@ -126,6 +140,59 @@ router.post(
   validarVistoBuenoIdParaArchivo,
   uploadDocumentoVistoBueno,
   subirDocumentoVistoBueno,
+);
+
+// Actividades esperadas (motor de seguimiento) — mismo permiso que gestionar
+// tránsito/expediente: es parte de la misma responsabilidad operativa.
+router.post(
+  "/:id/actividades",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(crearActividadImportacionSchema),
+  crearActividadImportacion,
+);
+router.patch(
+  "/actividades/:id",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(actualizarActividadImportacionSchema),
+  actualizarActividadImportacion,
+);
+
+// Novedades — mismo permiso, mismo motivo.
+router.post(
+  "/:id/novedades",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(crearNovedadImportacionSchema),
+  crearNovedadImportacion,
+);
+router.patch(
+  "/novedades/:id/resolver",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(resolverNovedadImportacionSchema),
+  resolverNovedadImportacion,
+);
+
+// Pagos — reutiliza IMPORTACIONES_LIQUIDAR (misma responsabilidad
+// financiera que ya cubre la liquidación de costeo), no se crea un permiso
+// nuevo.
+router.post(
+  "/:id/pagos",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR),
+  validarBody(crearPagoImportacionSchema),
+  crearPagoImportacion,
+);
+router.patch(
+  "/pagos/:id/estado",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR),
+  validarBody(actualizarEstadoPagoImportacionSchema),
+  actualizarEstadoPagoImportacion,
+);
+
+// Cierre del expediente.
+router.post(
+  "/:id/cerrar",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(cerrarOrdenCompraIntlSchema),
+  cerrarOrdenCompraIntl,
 );
 
 export default router;

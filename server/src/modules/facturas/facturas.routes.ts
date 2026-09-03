@@ -12,6 +12,7 @@ import {
   listarFacturas,
   obtenerFactura,
   crearFactura,
+  actualizarCondicionesPagoFactura,
   cambiarEstadoFactura,
   subirArchivoFactura,
   obtenerArchivoFactura,
@@ -41,6 +42,11 @@ router.post("/", requirePermission("facturas.crear"), crearFactura);
 // El permiso específico (aprobar/rechazar/pagar) se valida dentro del controlador
 // según el estado destino, porque depende del contenido del body.
 router.patch("/:id/estado", cambiarEstadoFactura);
+router.patch(
+  "/:id/condiciones-pago",
+  requirePermission("facturas.crear"),
+  actualizarCondicionesPagoFactura,
+);
 
 router.get("/:id/archivo", requirePermission("facturas.ver"), obtenerArchivoFactura);
 router.post(

@@ -74,8 +74,12 @@ export function useFacturas(filtros: FacturasFiltros = {}) {
       prioridad: string;
       origen: string;
     }) => {
-      await fetchAuth("/facturas", { method: "POST", body: JSON.stringify(data) });
+      const creada: Factura = await fetchAuth("/facturas", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       await refresh();
+      return creada;
     },
     [refresh],
   );
@@ -85,6 +89,17 @@ export function useFacturas(filtros: FacturasFiltros = {}) {
       await fetchAuth(`/facturas/${id}/estado`, {
         method: "PATCH",
         body: JSON.stringify({ estado, detalle }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const actualizarCondicionesPagoFactura = useCallback(
+    async (id: string, data: { condicionesPago?: string; datosPago?: string }) => {
+      await fetchAuth(`/facturas/${id}/condiciones-pago`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
       });
       await refresh();
     },
@@ -158,6 +173,7 @@ export function useFacturas(filtros: FacturasFiltros = {}) {
     refreshOne,
     addFactura,
     updateEstadoFactura,
+    actualizarCondicionesPagoFactura,
     subirArchivoFactura,
     eliminarArchivoFactura,
     descargarArchivoFactura,
@@ -189,6 +205,40 @@ export function useFacturasPorServicio(servicioId: string | undefined, limite = 
       setLoading(false);
     }
   }, [servicioId, limite]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { facturas, loading, error, refresh };
+}
+
+/**
+ * Facturas relacionadas con UNA solicitud de compra (sección "Facturas
+ * relacionadas" en el detalle de Solicitud de Compra) — reutiliza GET
+ * /facturas?solicitudCompraId=... (mismo patrón que useFacturasPorServicio),
+ * sin duplicar el listado de facturas en un endpoint propio del módulo de
+ * solicitudes. Una solicitud puede tener varias facturas (facturación
+ * parcial), por eso siempre es un arreglo.
+ */
+export function useFacturasPorSolicitud(solicitudCompraId: string | undefined) {
+  const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!solicitudCompraId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/facturas?solicitudCompraId=${solicitudCompraId}`);
+      setFacturas(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err.message || "Error cargando las facturas relacionadas.");
+    } finally {
+      setLoading(false);
+    }
+  }, [solicitudCompraId]);
 
   useEffect(() => {
     refresh();

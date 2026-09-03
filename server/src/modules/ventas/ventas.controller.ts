@@ -9,11 +9,17 @@ import {
   leerUltimaCompraClientesSiesa,
   leerPrecioPromedioItemSiesa,
   leerClientesPorItemSiesa,
+  leerHistoricoComprasClienteSiesa,
 } from "../integraciones-siesa/siesa-ventas.service";
 import { calcularClientesEnRiesgoSiesa } from "../../lib/ventas-siesa";
 import { calcularDisponibilidadComercial } from "../../domain/ventas/disponibilidad";
 import { construirContextoPlaneacionSiesa } from "../inventario/inventario.controller";
-import { consultarDisponibilidadSchema, buscarProductosSchema, contextoProductoSchema } from "./ventas.schemas";
+import {
+  consultarDisponibilidadSchema,
+  buscarProductosSchema,
+  contextoProductoSchema,
+  historicoClienteSchema,
+} from "./ventas.schemas";
 
 async function resolverCiaSiesa(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
@@ -205,5 +211,46 @@ export const obtenerContextoProducto = async (req: AuthenticatedRequest, res: Re
   } catch (error) {
     console.error("Error al calcular el contexto del producto desde Siesa:", error);
     return res.json({ disponible: false, motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+  }
+};
+
+/**
+ * "¿Qué dejó de comprar este cliente?" — historial de compras de UN
+ * cliente, producto por producto, con la última fecha y cuántas veces lo
+ * compró (Ventas > Clientes en riesgo, drill-down). Ventana de 12 meses,
+ * mismo criterio que calcularClientesEnRiesgoSiesa (leerUltimaCompraClientesSiesa
+ * ya usa esa misma ventana para "última compra" del cliente en general).
+ */
+export const obtenerHistoricoComprasCliente = async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.user!.tenantId;
+  const parseo = historicoClienteSchema.safeParse(req.params);
+  if (!parseo.success) {
+    return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+  }
+
+  const siesaCiaId = await resolverCiaSiesa(tenantId);
+  if (!siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
+  }
+
+  const ahora = new Date();
+  const desde12m = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 12, 1));
+
+  try {
+    const productos = await leerHistoricoComprasClienteSiesa(
+      siesaCiaId,
+      parseo.data.clienteRowId,
+      desde12m,
+    );
+    return res.json({ disponible: true, productos });
+  } catch (error) {
+    console.error("Error al leer el histórico de compras del cliente desde Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 };

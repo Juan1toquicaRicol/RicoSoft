@@ -14,3 +14,7 @@ export const buscarProductosSchema = z.object({
 export const contextoProductoSchema = z.object({
   itemRowId: z.coerce.number({ required_error: "itemRowId es requerido." }).int(),
 });
+
+export const historicoClienteSchema = z.object({
+  clienteRowId: z.coerce.number({ required_error: "clienteRowId es requerido." }).int(),
+});

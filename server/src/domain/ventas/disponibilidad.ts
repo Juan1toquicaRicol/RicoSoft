@@ -100,6 +100,12 @@ export function calcularDisponibilidadComercial(
         inventarioDisponible: 0,
         cantidadPendienteEntrar: 0,
         produccionRecomendada: deficit,
+        // Ítem sintético (no viene del pronóstico real) — sin historial que
+        // respalde una confianza, se marca explícitamente como tal.
+        ventaPromedioMensual: 0,
+        tendenciaPct: null,
+        mesesConVenta: 0,
+        confianza: "baja" as const,
       },
     ],
     bom,
@@ -140,6 +146,12 @@ export function calcularDisponibilidadComercial(
         inventarioDisponible: 0,
         cantidadPendienteEntrar: 0,
         produccionRecomendada: deficit,
+        // Ítem sintético (no viene del pronóstico real) — sin historial que
+        // respalde una confianza, se marca explícitamente como tal.
+        ventaPromedioMensual: 0,
+        tendenciaPct: null,
+        mesesConVenta: 0,
+        confianza: "baja" as const,
       },
     ],
     bom,

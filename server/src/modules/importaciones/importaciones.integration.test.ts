@@ -152,6 +152,12 @@ describe.skipIf(!RUN)(
       await prisma.costeoImportacionDetalle.deleteMany({
         where: { tenantId: { in: [tenantAId, tenantBId] } },
       });
+      // ImportacionActividad.loteId -> LoteImportacion es onDelete: NoAction
+      // (no hay cascada automática) — igual que el resto de este bloque, se
+      // borra explícitamente antes que los lotes que referencia.
+      await prisma.importacionActividad.deleteMany({
+        where: { tenantId: { in: [tenantAId, tenantBId] } },
+      });
       await prisma.loteImportacion.deleteMany({
         where: { tenantId: { in: [tenantAId, tenantBId] } },
       });

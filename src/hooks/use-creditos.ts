@@ -58,3 +58,56 @@ export function useCreditos() {
 
   return { creditos, loading, error, refresh, addCredito, registrarPago, marcarPazYSalvo, eliminarCredito };
 }
+
+export interface ClienteCarteraSiesa {
+  cliente: string;
+  nit: string | null;
+  saldo: number;
+  vence: string;
+  estado: string;
+}
+
+/**
+ * Cartera real por cliente, leída en vivo de Siesa — de solo lectura (no
+ * hay acciones de registrar pago/paz-y-salvo aquí, eso vive en Siesa).
+ * Paginada y con búsqueda server-side: un tenant real puede tener miles de
+ * saldos abiertos.
+ */
+export function useCarteraSiesa() {
+  const [items, setItems] = useState<ClienteCarteraSiesa[]>([]);
+  const [disponible, setDisponible] = useState(true);
+  const [motivo, setMotivo] = useState("");
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async (opts?: { search?: string; page?: number; pageSize?: number }) => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (opts?.search) params.set("search", opts.search);
+      params.set("page", String(opts?.page ?? 1));
+      params.set("pageSize", String(opts?.pageSize ?? 25));
+      const data = await fetchAuth(`/creditos/cartera-siesa?${params.toString()}`);
+      setDisponible(data.disponible !== false);
+      setMotivo(data.motivo || "");
+      setItems(Array.isArray(data.items) ? data.items : []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.totalPages ?? 1);
+      setPage(data.page ?? 1);
+    } catch (err: any) {
+      setError(err.message || "Error cargando la cartera de Siesa.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { items, disponible, motivo, total, page, totalPages, loading, error, refresh };
+}

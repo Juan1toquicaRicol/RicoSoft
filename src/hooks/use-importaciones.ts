@@ -82,8 +82,125 @@ export interface LoteImportacion {
   costeos: CosteoImportacionDetalle[];
 }
 
+export type EtapaImportacion =
+  | "Orden"
+  | "Documentación"
+  | "Embarque"
+  | "Tránsito"
+  | "Aduana"
+  | "Nacionalización"
+  | "Pagos"
+  | "Recepción"
+  | "Cierre";
+
+export type ResponsableTipo = "Interno" | "Proveedor" | "AgenciaAduana" | "Transportador" | "Naviera" | "Otro";
+
+export const ETIQUETA_RESPONSABLE_TIPO: Record<ResponsableTipo, string> = {
+  Interno: "Interno (Ricol)",
+  Proveedor: "Proveedor",
+  AgenciaAduana: "Agencia de aduanas",
+  Transportador: "Transportador",
+  Naviera: "Naviera",
+  Otro: "Otro",
+};
+
+export type EstadoActividad = "Pendiente" | "EnCurso" | "Completada" | "Bloqueada" | "Omitida";
+
+export interface ActividadImportacion {
+  id: string;
+  ordenCompraId: string;
+  loteId: string | null;
+  nombre: string;
+  etapa: EtapaImportacion;
+  responsableTipo: ResponsableTipo;
+  responsableNombre: string | null;
+  fechaPlanificada: string | null;
+  fechaLimite: string | null;
+  fechaReal: string | null;
+  estado: EstadoActividad;
+  dependeDeId: string | null;
+  observacion: string | null;
+}
+
+export type TipoNovedad =
+  | "Retraso"
+  | "DocumentoFaltante"
+  | "Inconsistencia"
+  | "Dano"
+  | "Faltante"
+  | "ProblemaAduanero"
+  | "ProblemaProveedor"
+  | "ProblemaTransporte"
+  | "ProblemaFinanciero"
+  | "Bloqueo"
+  | "Otro";
+
+export const ETIQUETA_TIPO_NOVEDAD: Record<TipoNovedad, string> = {
+  Retraso: "Retraso",
+  DocumentoFaltante: "Documento faltante",
+  Inconsistencia: "Inconsistencia",
+  Dano: "Daño",
+  Faltante: "Faltante",
+  ProblemaAduanero: "Problema aduanero",
+  ProblemaProveedor: "Problema con el proveedor",
+  ProblemaTransporte: "Problema de transporte",
+  ProblemaFinanciero: "Problema financiero",
+  Bloqueo: "Bloqueo",
+  Otro: "Otro",
+};
+
+export type OrigenNovedad = "Interno" | "Externo" | "PorDeterminar";
+export type PrioridadNovedad = "Alta" | "Media" | "Baja";
+export type EstadoNovedad = "Abierta" | "EnGestion" | "Resuelta";
+
+export interface NovedadImportacion {
+  id: string;
+  ordenCompraId: string;
+  tipo: TipoNovedad;
+  descripcion: string;
+  origen: OrigenNovedad;
+  responsable: string | null;
+  prioridad: PrioridadNovedad;
+  impacto: string | null;
+  fechaDeteccion: string;
+  fechaLimite: string | null;
+  estado: EstadoNovedad;
+  accionRequerida: string | null;
+  responsableResolucion: string | null;
+  fechaResolucion: string | null;
+  automatica: boolean;
+  creadoPor: string | null;
+  createdAt: string;
+}
+
+export type EstadoPago = "Pendiente" | "Pagado" | "Anulado";
+
+export interface PagoImportacion {
+  id: string;
+  ordenCompraId: string;
+  concepto: string;
+  valor: number;
+  moneda: string;
+  fechaVencimiento: string | null;
+  estado: EstadoPago;
+  fechaPago: string | null;
+  responsable: string | null;
+  comprobante: { nombre: string; mime: string | null; tamano: number | null } | null;
+  observaciones: string | null;
+  createdAt: string;
+}
+
+export interface SituacionActual {
+  etapaActual: string;
+  atencion: string | null;
+  responsable: string | null;
+  diasRetraso: number | null;
+  proximaAccion: string | null;
+}
+
 export interface OrdenCompraIntl {
   id: string;
+  codigo: string;
   numeroOrden: string;
   incoterm: string;
   proveedorExtranjero: string;
@@ -92,12 +209,27 @@ export interface OrdenCompraIntl {
   trmPactada: number;
   valorEstimadoTotal: number;
   estado: EstadoOrdenIntl;
+  fechaEstimadaCierre: string | null;
+  fechaCierre: string | null;
   observaciones: string | null;
   responsable: { id: string; nombre: string } | null;
   createdAt: string;
   items: ItemOrdenCompraIntl[];
   lotes: LoteImportacion[];
-  historial: { fecha: string; actor: string; accion: string; detalle: string | null }[];
+  historial: {
+    fecha: string;
+    actor: string;
+    accion: string;
+    detalle: string | null;
+    origen: "Sistema" | "Manual";
+    responsable: string | null;
+    etapa: EtapaImportacion | null;
+    evidencia: { nombre: string; mime: string | null; tamano: number | null } | null;
+  }[];
+  actividades: ActividadImportacion[];
+  novedades: NovedadImportacion[];
+  pagos: PagoImportacion[];
+  situacionActual: SituacionActual;
 }
 
 export interface ItemOrdenInput {
@@ -163,6 +295,36 @@ export interface ActualizarVistoBuenoInput {
   numero?: string | null;
   estado?: string;
   fecha?: string | null;
+}
+
+export interface CrearActividadInput {
+  nombre: string;
+  etapa: EtapaImportacion;
+  responsableTipo: ResponsableTipo;
+  responsableNombre?: string;
+  fechaPlanificada?: string;
+  fechaLimite?: string;
+  loteId?: string;
+  dependeDeId?: string;
+}
+
+export interface CrearNovedadInput {
+  tipo: TipoNovedad;
+  descripcion: string;
+  origen?: OrigenNovedad;
+  responsable?: string;
+  prioridad?: PrioridadNovedad;
+  impacto?: string;
+  fechaLimite?: string;
+  accionRequerida?: string;
+}
+
+export interface CrearPagoInput {
+  concepto: string;
+  valor: number;
+  moneda?: string;
+  fechaVencimiento?: string;
+  observaciones?: string;
 }
 
 export function useImportaciones() {
@@ -331,6 +493,75 @@ export function useOrdenCompraIntl(id: string | undefined) {
     return fetchAuthBlob(`/importaciones/vistos-buenos/${vistoId}/documento`);
   }, []);
 
+  const crearActividad = useCallback(
+    async (data: CrearActividadInput) => {
+      if (!id) return;
+      await fetchAuth(`/importaciones/${id}/actividades`, { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  const completarActividad = useCallback(
+    async (actividadId: string, observacion?: string) => {
+      await fetchAuth(`/importaciones/actividades/${actividadId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado: "Completada", observacion }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const crearNovedad = useCallback(
+    async (data: CrearNovedadInput) => {
+      if (!id) return;
+      await fetchAuth(`/importaciones/${id}/novedades`, { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  const resolverNovedad = useCallback(
+    async (novedadId: string, comentario?: string) => {
+      await fetchAuth(`/importaciones/novedades/${novedadId}/resolver`, {
+        method: "PATCH",
+        body: JSON.stringify({ comentario }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const crearPago = useCallback(
+    async (data: CrearPagoInput) => {
+      if (!id) return;
+      await fetchAuth(`/importaciones/${id}/pagos`, { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  const marcarPagoPagado = useCallback(
+    async (pagoId: string) => {
+      await fetchAuth(`/importaciones/pagos/${pagoId}/estado`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado: "Pagado" }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const cerrarOrden = useCallback(
+    async (opts?: { forzar?: boolean; justificacion?: string }) => {
+      if (!id) return;
+      await fetchAuth(`/importaciones/${id}/cerrar`, { method: "POST", body: JSON.stringify(opts ?? {}) });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
   return {
     orden,
     loading,
@@ -348,6 +579,13 @@ export function useOrdenCompraIntl(id: string | undefined) {
     actualizarVistoBueno,
     subirDocumentoVistoBueno,
     descargarDocumentoVistoBueno,
+    crearActividad,
+    completarActividad,
+    crearNovedad,
+    resolverNovedad,
+    crearPago,
+    marcarPagoPagado,
+    cerrarOrden,
   };
 }
 

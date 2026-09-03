@@ -48,6 +48,7 @@ const CATEGORIA_POR_ESTADO: Record<string, EstadoCategoria> = {
   Pagada: "positivo",
   Comprado: "positivo",
   Facturada: "positivo",
+  Recibida: "positivo",
   Pendiente: "pendiente",
   "En Cotización": "pendiente",
   "Por vencer": "pendiente",

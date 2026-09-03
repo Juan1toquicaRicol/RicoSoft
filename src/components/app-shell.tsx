@@ -36,6 +36,7 @@ import {
   Target,
   Gauge,
   ShoppingBag,
+  Tags,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +46,7 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission, canAccessAdmin } from "@/lib/session";
 import { useModulosMenu } from "@/hooks/use-modulos";
 import { useTenantsAccesibles } from "@/hooks/use-tenants-accesibles";
+import { abreviarNombreTenant } from "@/lib/tenant-context";
 import { NotificationBell } from "@/components/notification-bell";
 import {
   DropdownMenu,
@@ -155,6 +157,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
   const canVerDepartamentos = hasPermission(user, PERMISOS_SISTEMA.DEPARTAMENTOS_VER);
   const canVerProveedores = hasPermission(user, PERMISOS_SISTEMA.PROVEEDORES_VER);
   const canVerModulos = hasPermission(user, PERMISOS_SISTEMA.MODULOS_VER);
+  const canVerClasificacionItems = hasPermission(user, PERMISOS_SISTEMA.CONFIGURACION_VER);
   const canVerAuditoria = hasPermission(user, PERMISOS_SISTEMA.AUDITORIA_VER);
 
   const handleLogout = () => {
@@ -167,7 +170,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
       {/* Fondo oscuro detrás del sidebar en móvil, cierra al tocarlo */}
       {sidebarAbierto && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden cursor-pointer"
           onClick={() => setSidebarAbierto(false)}
           aria-hidden="true"
         />
@@ -354,6 +357,20 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                       </Link>
                     )}
 
+                    {canVerClasificacionItems && (
+                      <Link
+                        to="/configuracion/clasificacion-items"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                          pathname.startsWith("/configuracion/clasificacion-items")
+                            ? "bg-blue-50 text-blue-800 font-semibold"
+                            : "hover:bg-slate-100 text-black"
+                        }`}
+                      >
+                        <Tags className="h-3.5 w-3.5" />
+                        <span>Clasificación de ítems</span>
+                      </Link>
+                    )}
+
                     {canVerModulos && (
                       <Link
                         to="/configuracion/modulos"
@@ -444,7 +461,9 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
                   >
                     <Building2 className="h-3.5 w-3.5" />
-                    {cambiandoTenant ? "Cambiando..." : `Estás en: ${user.tenantNombre}`}
+                    {cambiandoTenant
+                      ? "Cambiando..."
+                      : `Estás en ${abreviarNombreTenant(user.tenantNombre)}`}
                     <ChevronDown className="h-3 w-3" />
                   </button>
                 </DropdownMenuTrigger>
@@ -457,7 +476,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                       onClick={() => handleCambiarEmpresa(t.id)}
                       className="flex items-center justify-between gap-2 text-xs font-semibold"
                     >
-                      {t.nombre}
+                      {abreviarNombreTenant(t.nombre)}
                       {t.id === user.tenantId && <Check className="h-3.5 w-3.5 text-blue-700" />}
                     </DropdownMenuItem>
                   ))}
@@ -466,7 +485,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
             ) : (
               !cargandoTenants && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                  <Building2 className="h-3.5 w-3.5" /> Estás en: {user.tenantNombre}
+                  <Building2 className="h-3.5 w-3.5" /> Estás en {abreviarNombreTenant(user.tenantNombre)}
                 </span>
               )
             )}

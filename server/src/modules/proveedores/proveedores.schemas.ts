@@ -8,6 +8,8 @@ export const crearProveedorSchema = z.object({
   contacto: z.string().nullish(),
   telefono: z.string().nullish(),
   email: z.string().nullish(),
+  condicionesPago: z.string().nullish(),
+  datosPago: z.string().nullish(),
   // Departamento dueño del proveedor; ausente/null = proveedor general,
   // visible para cualquier departamento (ver comentario en schema.prisma).
   departamentoId: z.string().nullish(),
@@ -19,6 +21,8 @@ export const actualizarProveedorSchema = z.object({
   contacto: z.string().nullish(),
   telefono: z.string().nullish(),
   email: z.string().nullish(),
+  condicionesPago: z.string().nullish(),
+  datosPago: z.string().nullish(),
   activo: z.boolean().nullish(),
   departamentoId: z.string().nullish(),
 });

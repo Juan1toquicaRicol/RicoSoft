@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Ban,
   Check,
+  CreditCard,
   DollarSign,
   Download,
   FileSignature,
@@ -11,6 +12,7 @@ import {
   Loader2,
   MessageSquare,
   Paperclip,
+  Pencil,
   Receipt,
   Send,
   ShoppingCart,
@@ -26,6 +28,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -53,6 +56,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { money } from "@/lib/data";
+import { siglaEmpresa } from "@/lib/tenant-context";
 import { useFacturas, usePollingFacturas } from "@/hooks/use-facturas";
 import { usePagosFactura, METODOS_PAGO, type Pago } from "@/hooks/use-pagos";
 import { useSession } from "@/lib/session-context";
@@ -84,6 +88,7 @@ function DetalleFactura() {
     error,
     refreshOne,
     updateEstadoFactura,
+    actualizarCondicionesPagoFactura,
     subirArchivoFactura,
     eliminarArchivoFactura,
     descargarArchivoFactura,
@@ -168,13 +173,13 @@ function DetalleFactura() {
 
   const campos = [
     ["Número", factura.numero],
-    ["Empresa ID", factura.empresaId],
+    ["Empresa", siglaEmpresa(factura.empresaId)],
     ["Proveedor", factura.proveedor],
     ["NIT Proveedor", factura.nit],
-    ["Área Responsable", factura.area],
+    ["Departamento Responsable", factura.area],
     ["Responsable", factura.responsable],
-    ["Fecha de Emisión", factura.fecha],
-    ["Vencimiento", factura.vence],
+    ["Fecha de Emisión", new Date(factura.fecha).toLocaleString("es-CO")],
+    ["Vencimiento", new Date(factura.vence).toLocaleDateString("es-CO")],
     ["Moneda", factura.moneda],
     ["Prioridad", factura.prioridad],
     ["Origen", factura.origen],
@@ -186,7 +191,7 @@ function DetalleFactura() {
   return (
     <AppShell
       title={`Factura ${factura.numero}`}
-      description={`${factura.proveedor} · Empresa ID: ${factura.empresaId}`}
+      description={`${factura.proveedor} · Empresa: ${siglaEmpresa(factura.empresaId)}`}
       actions={
         <>
           <Link to="/facturas">
@@ -343,6 +348,16 @@ function DetalleFactura() {
               </div>
             </div>
           </div>
+
+          <CondicionesPagoFactura
+            facturaId={factura.id}
+            condicionesPago={factura.condicionesPago}
+            datosPago={factura.datosPago}
+            proveedor={factura.proveedor}
+            nit={factura.nit}
+            canManage={canManageArchivo}
+            onGuardar={actualizarCondicionesPagoFactura}
+          />
 
           <PagosFactura
             pagos={pagos}
@@ -658,6 +673,130 @@ function RegistrarPagoModal({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface CondicionesPagoFacturaProps {
+  facturaId: string;
+  condicionesPago: string | null;
+  datosPago: string | null;
+  proveedor: string;
+  nit: string;
+  canManage: boolean;
+  onGuardar: (id: string, data: { condicionesPago?: string; datosPago?: string }) => Promise<void>;
+}
+
+/**
+ * Panel de "recepción de factura": muestra los datos consolidados del
+ * proveedor (NIT, condiciones y dónde pagarle) antes de consolidar el pago,
+ * y permite corregirlos puntualmente para esta factura sin tocar el
+ * catálogo de Proveedores.
+ */
+function CondicionesPagoFactura({
+  facturaId,
+  condicionesPago,
+  datosPago,
+  proveedor,
+  nit,
+  canManage,
+  onGuardar,
+}: CondicionesPagoFacturaProps) {
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [form, setForm] = useState({
+    condicionesPago: condicionesPago || "",
+    datosPago: datosPago || "",
+  });
+
+  const handleAbrir = () => {
+    setForm({ condicionesPago: condicionesPago || "", datosPago: datosPago || "" });
+    setEditando(true);
+  };
+
+  const handleGuardar = async () => {
+    setGuardando(true);
+    try {
+      await onGuardar(facturaId, form);
+      toast.success("Condiciones de pago actualizadas.");
+      setEditando(false);
+    } catch (err: any) {
+      toast.error(err.message || "Error al actualizar las condiciones de pago.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 mb-3">
+        <h2 className="text-sm font-semibold flex items-center gap-1.5">
+          <CreditCard className="h-4 w-4 text-slate-500" /> Datos y Condiciones de Pago
+        </h2>
+        {canManage && !editando && (
+          <Button type="button" variant="outline" size="xs" className="gap-1.5" onClick={handleAbrir}>
+            <Pencil className="h-3.5 w-3.5" /> Editar
+          </Button>
+        )}
+      </div>
+
+      {!editando ? (
+        <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-[11px] uppercase tracking-wide text-slate-500">Proveedor / NIT</dt>
+            <dd className="mt-0.5 text-sm font-medium">
+              {proveedor} · {nit}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] uppercase tracking-wide text-slate-500">
+              Condiciones de pago
+            </dt>
+            <dd className="mt-0.5 text-sm font-medium">{condicionesPago || "Sin especificar"}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-[11px] uppercase tracking-wide text-slate-500">
+              Dónde pagar (banco / cuenta / beneficiario)
+            </dt>
+            <dd className="mt-0.5 whitespace-pre-wrap text-sm font-medium">
+              {datosPago || "Sin especificar"}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Condiciones de pago</Label>
+            <Input
+              value={form.condicionesPago}
+              onChange={(e) => setForm({ ...form, condicionesPago: e.target.value })}
+              placeholder="Ej. 30 días crédito"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Dónde pagar (banco / cuenta / beneficiario)</Label>
+            <Textarea
+              value={form.datosPago}
+              onChange={(e) => setForm({ ...form, datosPago: e.target.value })}
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditando(false)}
+              disabled={guardando}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" onClick={handleGuardar} disabled={guardando}>
+              {guardando ? "Guardando..." : "Guardar"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

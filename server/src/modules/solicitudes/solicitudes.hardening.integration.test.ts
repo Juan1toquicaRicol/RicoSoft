@@ -101,6 +101,7 @@ describe.skipIf(!RUN)("Solicitudes — autoaprobación, rol inactivo y auditorí
     await prisma.auditoria.deleteMany({ where: { tenantId } });
     await prisma.solicitudCompra.deleteMany({ where: { tenantId } });
     await prisma.notificacion.deleteMany({ where: { tenantId } });
+    await prisma.inboxItem.deleteMany({ where: { tenantId } });
     await prisma.user.deleteMany({ where: { tenantId } });
     await prisma.rol.deleteMany({ where: { tenantId } });
     await prisma.tenant.deleteMany({ where: { id: tenantId } });

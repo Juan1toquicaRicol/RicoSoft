@@ -6,6 +6,7 @@ import {
   obtenerCentroComercial,
   buscarProductosVenta,
   obtenerContextoProducto,
+  obtenerHistoricoComprasCliente,
 } from "./ventas.controller";
 
 const router = Router();
@@ -17,5 +18,10 @@ router.get("/disponibilidad", requirePermission("ventas.ver"), obtenerDisponibil
 router.get("/centro", requirePermission("ventas.ver"), obtenerCentroComercial);
 router.get("/productos/buscar", requirePermission("ventas.ver"), buscarProductosVenta);
 router.get("/productos/:itemRowId/contexto", requirePermission("ventas.ver"), obtenerContextoProducto);
+router.get(
+  "/clientes/:clienteRowId/historico",
+  requirePermission("ventas.ver"),
+  obtenerHistoricoComprasCliente,
+);
 
 export default router;

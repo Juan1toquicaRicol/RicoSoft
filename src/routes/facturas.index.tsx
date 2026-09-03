@@ -4,8 +4,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Search,
   Trash2,
   Upload,
+  X,
   XCircle,
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -59,12 +61,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTenant } from "@/lib/tenant-context";
+import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import { useFacturas } from "@/hooks/use-facturas";
 import { useProveedorBusqueda, type ProveedorOpcion } from "@/hooks/use-proveedores";
 import { useServicios } from "@/hooks/use-servicios";
 import { useContratos } from "@/hooks/use-contratos";
-import { useHistorialCompras } from "@/hooks/use-solicitudes";
+import { useSolicitudesDisponiblesParaFactura } from "@/hooks/use-solicitudes";
+import type { SolicitudDisponibleParaFactura } from "@/lib/data";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
 import { useSession } from "@/lib/session-context";
@@ -117,6 +120,7 @@ function FacturasPage() {
     addFactura,
     updateEstadoFactura,
     eliminarFactura,
+    subirArchivoFactura,
   } = useFacturas({
     empresaId: empresaActiva === "ALL" ? undefined : empresaActiva,
     estado: estadoSel === "Todas" ? undefined : estadoSel,
@@ -145,11 +149,15 @@ function FacturasPage() {
   const { suscripciones } = useServicios();
   const { contratos } = useContratos();
   const contratosActivos = contratos.filter((c) => c.estado === "Activo");
-  // Solicitudes de compra ya marcadas "Comprado": son las que están
-  // esperando su factura final para poder pagarse.
-  const { historial: solicitudesCompradas } = useHistorialCompras({ estado: "Comprado" });
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
+  // La empresa "de verdad" es la del tenant en el que se está (cada tenant
+  // de este despliegue es una de las 3 empresas del grupo) — empresaActiva
+  // es un filtro de solo lectura aparte que ningún control activa todavía,
+  // así que no basta por sí solo para autocompletar. Si no se puede
+  // determinar ninguna, se deja elegir manualmente (null).
+  const empresaBloqueada =
+    empresaIdDeTenant(user?.tenantNombre) || (empresaActiva !== "ALL" ? empresaActiva : null);
 
   const puedeAprobar = hasPermission(user, PERMISOS_SISTEMA.FACTURAS_APROBAR);
   const puedeRechazar = hasPermission(user, PERMISOS_SISTEMA.FACTURAS_RECHAZAR);
@@ -199,7 +207,7 @@ function FacturasPage() {
   };
 
   const [form, setForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+    empresaId: empresaBloqueada || "RC",
     numero: "",
     proveedorId: "",
     servicioId: "",
@@ -214,6 +222,20 @@ function FacturasPage() {
     origen: "Carga manual" as const,
   });
 
+  // Solicitud de compra relacionada: se busca priorizando el proveedor de la
+  // factura (ver useSolicitudesDisponiblesParaFactura) — nunca se descarga el
+  // catálogo completo de solicitudes al elegir una.
+  const [solicitudSeleccionada, setSolicitudSeleccionada] =
+    useState<SolicitudDisponibleParaFactura | null>(null);
+  const [dialogSolicitudOpen, setDialogSolicitudOpen] = useState(false);
+  const [buscarSolicitudTexto, setBuscarSolicitudTexto] = useState("");
+  const [archivoFactura, setArchivoFactura] = useState<File | null>(null);
+  const {
+    solicitudes: solicitudesDisponibles,
+    loading: buscandoSolicitudes,
+    buscar: buscarSolicitudesDisponibles,
+  } = useSolicitudesDisponiblesParaFactura(form.proveedorId || undefined);
+
   const areaDepartamentoId = departamentos.find((d) => d.nombre === form.area)?.id;
   const { usuarios: usuariosArea, loading: cargandoUsuariosArea } =
     useUsuariosPorDepartamento(areaDepartamentoId);
@@ -227,10 +249,33 @@ function FacturasPage() {
   );
   const servicioSeleccionado = suscripciones.find((s) => s.id === form.servicioId) ?? null;
   const totalFormPreview = Number(form.subtotal || 0) + Number(form.iva || 0);
+  // Una factura solo se relaciona con UNA de las tres cosas a la vez.
+  const tieneSolicitud = Boolean(form.solicitudCompraId);
+  const tieneServicio = Boolean(form.servicioId);
+  const tieneContrato = Boolean(form.contratoId);
+  const tieneServicioOContrato = tieneServicio || tieneContrato;
   const alertaValorPreview =
     servicioSeleccionado && totalFormPreview > servicioSeleccionado.costo
       ? `El valor de la factura (${money(totalFormPreview)}) supera el valor recurrente configurado para "${servicioSeleccionado.nombreServicio}" (${money(servicioSeleccionado.costo, servicioSeleccionado.moneda)}).`
       : null;
+  // Advertencia informativa (no bloqueante, ver spec): si la factura supera
+  // el saldo que le queda a la solicitud (valor estimado menos lo ya
+  // facturado con otras facturas), se avisa pero se permite continuar.
+  const alertaSolicitudPreview =
+    solicitudSeleccionada && totalFormPreview > solicitudSeleccionada.saldoPendiente
+      ? `El valor de la factura (${money(totalFormPreview)}) supera el saldo pendiente de la solicitud de compra "${solicitudSeleccionada.item}" (${money(solicitudSeleccionada.saldoPendiente)}) en ${money(totalFormPreview - solicitudSeleccionada.saldoPendiente)}.`
+      : null;
+
+  // Si el usuario cambia de proveedor después de elegir una solicitud, esa
+  // solicitud ya no es necesariamente compatible — se limpia la selección en
+  // vez de dejar una relación que el usuario ya no ve reflejada en pantalla.
+  useEffect(() => {
+    if (solicitudSeleccionada && solicitudSeleccionada.proveedorId !== (form.proveedorId || null)) {
+      setSolicitudSeleccionada(null);
+      setForm((f) => ({ ...f, solicitudCompraId: "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.proveedorId]);
 
   // El filtrado (empresa/estado/búsqueda) ahora ocurre server-side (ver
   // useFacturas de arriba) — `facturas` ya es exactamente la página filtrada
@@ -258,12 +303,13 @@ function FacturasPage() {
     e.preventDefault();
     if (!form.numero || !form.proveedorId) return;
     if (!form.responsableId) {
-      toast.error("Selecciona el responsable del área.");
+      toast.error("Selecciona el responsable del departamento.");
       return;
     }
 
+    let creada;
     try {
-      await addFactura({
+      creada = await addFactura({
         empresaId: form.empresaId,
         numero: form.numero,
         proveedorId: form.proveedorId,
@@ -284,9 +330,22 @@ function FacturasPage() {
       return;
     }
 
+    // La factura ya quedó registrada; el documento adjunto es un paso
+    // adicional que no debe bloquear ni deshacer el registro si falla.
+    if (archivoFactura) {
+      try {
+        await subirArchivoFactura(creada.id, archivoFactura);
+      } catch (err: any) {
+        toast.error(
+          err.message ||
+            "La factura se registró, pero no fue posible adjuntar el documento. Puedes subirlo desde el detalle.",
+        );
+      }
+    }
+
     setModalOpen(false);
     setForm({
-      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+      empresaId: empresaBloqueada || "RC",
       numero: "",
       proveedorId: "",
       servicioId: "",
@@ -300,11 +359,13 @@ function FacturasPage() {
       prioridad: "Media",
       origen: "Carga manual",
     });
+    setSolicitudSeleccionada(null);
+    setArchivoFactura(null);
   };
 
   return (
     <AppShell
-      title="Recepción de Facturas por Estado"
+      title="Recepción de facturas"
       description="Control del flujo documental y financiero de facturas por estado (Pendiente, Aprobada, Pagada, Rechazada)."
       actions={
         <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
@@ -336,7 +397,7 @@ function FacturasPage() {
               onChange={setAgrupacion}
               opciones={[
                 OPCION_SIN_AGRUPAR,
-                { value: "area", label: "Área" },
+                { value: "area", label: "Departamento" },
                 { value: "proveedor", label: "Proveedor" },
                 { value: "estado", label: "Estado" },
               ]}
@@ -363,7 +424,7 @@ function FacturasPage() {
                 Proveedor / NIT
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Área
+                Departamento
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Vencimiento
@@ -410,7 +471,7 @@ function FacturasPage() {
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
                       >
-                        {f.empresaId}
+                        {siglaEmpresa(f.empresaId)}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -423,7 +484,9 @@ function FacturasPage() {
                       {f.area}
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <p className="text-xs font-mono text-slate-500">{f.vence}</p>
+                      <p className="text-xs font-mono text-slate-500">
+                        {new Date(f.vence).toLocaleDateString("es-CO")}
+                      </p>
                       {(f.estado === "Pendiente" || f.estado === "Aprobada") && (
                         <BarraVencimiento
                           fecha={f.vence}
@@ -560,53 +623,19 @@ function FacturasPage() {
 
       {/* MODAL REGISTRAR FACTURA */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+        <DialogContent className="sm:max-w-2xl bg-white border-slate-200 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">
-              Recepción de Nueva Factura
-            </DialogTitle>
+            <DialogTitle className="text-slate-900 font-bold">Recepcionar Factura</DialogTitle>
             <DialogDescription className="text-slate-500">
-              Ingreso de factura a flujo de aprobación.
+              Registra la factura y envíala al flujo de aprobación correspondiente.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSaveFactura} className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
-                  Empresa Receptora *
-                </Label>
-                <Select
-                  value={form.empresaId}
-                  onValueChange={(val) => setForm({ ...form, empresaId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id} className="text-xs">
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="numero" className="text-xs font-semibold text-slate-700">
-                  Número de Factura *
-                </Label>
-                <Input
-                  required
-                  id="numero"
-                  placeholder="Ej: FE-10492"
-                  value={form.numero}
-                  onChange={(e) => setForm({ ...form, numero: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleSaveFactura} className="space-y-5 py-2">
+            {/* ── FACTURA ── */}
+            <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200 pb-1.5">
+                Factura
+              </p>
               <div className="space-y-1">
                 <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">
                   Proveedor *
@@ -617,7 +646,7 @@ function FacturasPage() {
                     setForm({ ...form, proveedorId: val });
                     setProveedorSeleccionado(proveedorOpciones.find((p) => p.id === val) ?? null);
                   }}
-                  placeholder="Escribe para buscar un proveedor..."
+                  placeholder="Buscar proveedor por nombre o NIT..."
                   searchPlaceholder="Buscar por nombre o NIT..."
                   emptyText="Ningún proveedor coincide."
                   clearable={false}
@@ -626,219 +655,365 @@ function FacturasPage() {
                   selectedLabel={proveedorSeleccionado?.nombre}
                   options={proveedorOpciones.map((p) => ({ value: p.id, label: p.nombre }))}
                 />
+                {proveedorSeleccionado && (
+                  <p className="text-[11px] text-slate-500">NIT {proveedorSeleccionado.nit}</p>
+                )}
+                {form.proveedorId === "" &&
+                  proveedorOpciones.length === 0 &&
+                  !buscandoProveedores && (
+                    <p className="text-[11px] font-semibold text-slate-600">
+                      No hay proveedores registrados.{" "}
+                      <Link to="/configuracion/proveedores" className="font-semibold underline">
+                        Créalos en Configuración
+                      </Link>{" "}
+                      antes de recepcionar una factura.
+                    </p>
+                  )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="nit" className="text-xs font-semibold text-slate-700">
-                  NIT Proveedor
-                </Label>
-                <Input
-                  id="nit"
-                  disabled
-                  value={proveedorSeleccionado?.nit ?? ""}
-                  placeholder="Se completa al elegir el proveedor"
-                  className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
-                />
-              </div>
-            </div>
-            {form.proveedorId === "" && proveedorOpciones.length === 0 && !buscandoProveedores && (
-              <p className="-mt-2 text-[11px] font-semibold text-slate-600">
-                No hay proveedores registrados.{" "}
-                <Link to="/configuracion/proveedores" className="font-semibold underline">
-                  Créalos en Configuración
-                </Link>{" "}
-                antes de recepcionar una factura.
-              </p>
-            )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="servicio" className="text-xs font-semibold text-slate-700">
-                  Servicio / Suscripción (opcional)
-                </Label>
-                <Select
-                  value={form.servicioId || "__none__"}
-                  onValueChange={(val) =>
-                    setForm({ ...form, servicioId: val === "__none__" ? "" : val })
-                  }
-                >
-                  <SelectTrigger id="servicio" className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue placeholder="Sin servicio asociado" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="__none__" className="text-xs">
-                      Sin servicio asociado
-                    </SelectItem>
-                    {serviciosDelProveedor.map((s) => (
-                      <SelectItem key={s.id} value={s.id} className="text-xs">
-                        {s.nombreServicio}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="contrato" className="text-xs font-semibold text-slate-700">
-                  Contrato (opcional)
-                </Label>
-                <Select
-                  value={form.contratoId || "__none__"}
-                  onValueChange={(val) =>
-                    setForm({ ...form, contratoId: val === "__none__" ? "" : val })
-                  }
-                >
-                  <SelectTrigger id="contrato" className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue placeholder="Sin contrato asociado" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="__none__" className="text-xs">
-                      Sin contrato asociado
-                    </SelectItem>
-                    {contratosActivos.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">
-                        {c.proveedor} — {c.area}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="solicitudCompra" className="text-xs font-semibold text-slate-700">
-                Solicitud de Compra (opcional)
-              </Label>
-              <Select
-                value={form.solicitudCompraId || "__none__"}
-                onValueChange={(val) =>
-                  setForm({ ...form, solicitudCompraId: val === "__none__" ? "" : val })
-                }
-              >
-                <SelectTrigger
-                  id="solicitudCompra"
-                  className="h-9 text-xs border-slate-300 bg-white"
-                >
-                  <SelectValue placeholder="Sin solicitud de compra asociada" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-slate-200">
-                  <SelectItem value="__none__" className="text-xs">
-                    Sin solicitud de compra asociada
-                  </SelectItem>
-                  {solicitudesCompradas.map((s) => (
-                    <SelectItem key={s.id} value={s.id} className="text-xs">
-                      {s.item} — {s.proveedor || s.solicitante}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-slate-500">
-                Solo aparecen solicitudes ya marcadas "Comprado": esta es la factura final que las
-                cierra.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="subtotal" className="text-xs font-semibold text-slate-700">
-                  Subtotal (COP)
-                </Label>
-                <Input
-                  type="number"
-                  id="subtotal"
-                  value={form.subtotal}
-                  onChange={(e) => setForm({ ...form, subtotal: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="iva" className="text-xs font-semibold text-slate-700">
-                  IVA (COP)
-                </Label>
-                <Input
-                  type="number"
-                  id="iva"
-                  value={form.iva}
-                  onChange={(e) => setForm({ ...form, iva: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-            </div>
-
-            {alertaValorPreview && (
-              <Alert variant="warning" className="py-2.5">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                <AlertDescription className="text-[11px]">{alertaValorPreview}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
-                  Área Asignada
-                </Label>
-                <Select
-                  value={form.area}
-                  onValueChange={(val) => setForm({ ...form, area: val, responsableId: "" })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {departamentos.map((d) => (
-                      <SelectItem key={d.id} value={d.nombre} className="text-xs">
-                        {d.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="vence" className="text-xs font-semibold text-slate-700">
-                  Fecha de Vencimiento
-                </Label>
-                <Input
-                  type="date"
-                  id="vence"
-                  value={form.vence}
-                  onChange={(e) => setForm({ ...form, vence: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">
-                Responsable *
-              </Label>
-              <Select
-                value={form.responsableId}
-                onValueChange={(val) => setForm({ ...form, responsableId: val })}
-                disabled={!areaDepartamentoId || cargandoUsuariosArea || usuariosArea.length === 0}
-              >
-                <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                  <SelectValue
-                    placeholder={
-                      cargandoUsuariosArea
-                        ? "Cargando usuarios..."
-                        : usuariosArea.length === 0
-                          ? "Sin usuarios en esta área"
-                          : "Selecciona un responsable"
-                    }
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="numero" className="text-xs font-semibold text-slate-700">
+                    Número de factura *
+                  </Label>
+                  <Input
+                    required
+                    id="numero"
+                    placeholder="Ej: FE-10492"
+                    value={form.numero}
+                    onChange={(e) => setForm({ ...form, numero: e.target.value })}
+                    className="h-9 text-xs border-slate-300"
                   />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-slate-200">
-                  {usuariosArea.map((u) => (
-                    <SelectItem key={u.id} value={u.id} className="text-xs">
-                      {u.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="vence" className="text-xs font-semibold text-slate-700">
+                    Fecha de vencimiento
+                  </Label>
+                  <Input
+                    type="date"
+                    id="vence"
+                    value={form.vence}
+                    onChange={(e) => setForm({ ...form, vence: e.target.value })}
+                    className="h-9 text-xs border-slate-300"
+                  />
+                </div>
+              </div>
+
+              {!empresaBloqueada && (
+                <div className="space-y-1">
+                  <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
+                    Empresa receptora *
+                  </Label>
+                  <Select
+                    value={form.empresaId}
+                    onValueChange={(val) => setForm({ ...form, empresaId: val })}
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.sigla}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* ── VALORES ── */}
+            <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200 pb-1.5">
+                Valores
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="subtotal" className="text-xs font-semibold text-slate-700">
+                    Subtotal (COP)
+                  </Label>
+                  <Input
+                    type="number"
+                    id="subtotal"
+                    value={form.subtotal}
+                    onChange={(e) => setForm({ ...form, subtotal: e.target.value })}
+                    className="h-9 text-xs border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="iva" className="text-xs font-semibold text-slate-700">
+                    IVA (COP)
+                  </Label>
+                  <Input
+                    type="number"
+                    id="iva"
+                    value={form.iva}
+                    onChange={(e) => setForm({ ...form, iva: e.target.value })}
+                    className="h-9 text-xs border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Total</Label>
+                  <Input
+                    disabled
+                    value={money(totalFormPreview)}
+                    className="h-9 text-xs border-slate-300 bg-slate-50 font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {alertaValorPreview && (
+                <Alert variant="warning" className="py-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <AlertDescription className="text-[11px]">{alertaValorPreview}</AlertDescription>
+                </Alert>
+              )}
+              {alertaSolicitudPreview && (
+                <Alert variant="warning" className="py-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <AlertDescription className="text-[11px]">
+                    {alertaSolicitudPreview}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+
+            {/* ── RELACIONAR ── */}
+            <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200 pb-1.5">
+                Relacionar factura
+              </p>
+              <div className="divide-y divide-slate-100 rounded-md border border-slate-200 bg-slate-50/60">
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="shrink-0 text-xs font-semibold text-slate-600 w-36">
+                    Solicitud de compra
+                  </span>
+                  {solicitudSeleccionada ? (
+                    <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-blue-900">
+                          {solicitudSeleccionada.item}
+                        </p>
+                        <p className="text-[11px] text-blue-700">
+                          Pendiente {money(solicitudSeleccionada.saldoPendiente)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSolicitudSeleccionada(null);
+                          setForm({ ...form, solicitudCompraId: "" });
+                        }}
+                        className="shrink-0 rounded-md p-1 text-blue-700 hover:bg-blue-100"
+                        title="Quitar solicitud relacionada"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!form.proveedorId || tieneServicioOContrato}
+                      onClick={() => {
+                        setBuscarSolicitudTexto("");
+                        buscarSolicitudesDisponibles();
+                        setDialogSolicitudOpen(true);
+                      }}
+                      className="flex flex-1 items-center justify-between gap-2 text-xs text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Search className="h-3.5 w-3.5" />
+                        {tieneServicioOContrato
+                          ? "Ya relacionada con servicio/contrato"
+                          : form.proveedorId
+                            ? "Sin solicitud asociada"
+                            : "Elige un proveedor primero"}
+                      </span>
+                      <span aria-hidden>›</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <Label
+                    htmlFor="servicio"
+                    className="shrink-0 text-xs font-semibold text-slate-600 w-36"
+                  >
+                    Servicio / suscripción
+                  </Label>
+                  <Select
+                    value={form.servicioId || "__none__"}
+                    disabled={tieneSolicitud || tieneContrato}
+                    onValueChange={(val) => {
+                      if (val === "__none__") {
+                        setForm({ ...form, servicioId: "" });
+                        return;
+                      }
+                      // Servicio y solicitud/contrato son mutuamente
+                      // excluyentes; además, el servicio ya sabe quién lo
+                      // gestiona — se autocompleta área y responsable.
+                      const servicio = serviciosDelProveedor.find((s) => s.id === val);
+                      setForm({
+                        ...form,
+                        servicioId: val,
+                        solicitudCompraId: "",
+                        contratoId: "",
+                        area: servicio?.area || form.area,
+                        responsableId: servicio?.responsableId || form.responsableId,
+                      });
+                      if (servicio) setSolicitudSeleccionada(null);
+                    }}
+                  >
+                    <SelectTrigger
+                      id="servicio"
+                      className="h-8 flex-1 border-none bg-transparent text-xs shadow-none hover:bg-white disabled:opacity-60"
+                    >
+                      <SelectValue placeholder="Sin servicio asociado" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      <SelectItem value="__none__" className="text-xs">
+                        Sin servicio asociado
+                      </SelectItem>
+                      {serviciosDelProveedor.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                          {s.nombreServicio}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <Label
+                    htmlFor="contrato"
+                    className="shrink-0 text-xs font-semibold text-slate-600 w-36"
+                  >
+                    Contrato
+                  </Label>
+                  <Select
+                    value={form.contratoId || "__none__"}
+                    disabled={tieneSolicitud || tieneServicio}
+                    onValueChange={(val) => {
+                      if (val === "__none__") {
+                        setForm({ ...form, contratoId: "" });
+                        return;
+                      }
+                      setForm({ ...form, contratoId: val, solicitudCompraId: "", servicioId: "" });
+                      setSolicitudSeleccionada(null);
+                    }}
+                  >
+                    <SelectTrigger
+                      id="contrato"
+                      className="h-8 flex-1 border-none bg-transparent text-xs shadow-none hover:bg-white disabled:opacity-60"
+                    >
+                      <SelectValue placeholder="Sin contrato asociado" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      <SelectItem value="__none__" className="text-xs">
+                        Sin contrato asociado
+                      </SelectItem>
+                      {contratosActivos.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.proveedor} — {c.area}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── GESTIÓN ── */}
+            <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200 pb-1.5">
+                Gestión
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
+                    Departamento responsable
+                  </Label>
+                  <Select
+                    value={form.area}
+                    onValueChange={(val) => setForm({ ...form, area: val, responsableId: "" })}
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {departamentos.map((d) => (
+                        <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                          {d.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">
+                    Responsable *
+                  </Label>
+                  <Select
+                    value={form.responsableId}
+                    onValueChange={(val) => setForm({ ...form, responsableId: val })}
+                    disabled={
+                      !areaDepartamentoId || cargandoUsuariosArea || usuariosArea.length === 0
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue
+                        placeholder={
+                          cargandoUsuariosArea
+                            ? "Cargando usuarios..."
+                            : usuariosArea.length === 0
+                              ? "Sin usuarios en este departamento"
+                              : "Selecciona un responsable"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {usuariosArea.map((u) => (
+                        <SelectItem key={u.id} value={u.id} className="text-xs">
+                          {u.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
                 <p className="text-[11px] font-semibold text-slate-600">
                   No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt;
                   Usuarios.
                 </p>
               )}
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Documento (opcional)</Label>
+                {archivoFactura ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span className="truncate text-xs font-semibold text-slate-700">
+                      📎 {archivoFactura.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setArchivoFactura(null)}
+                      className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-slate-100"
+                      title="Quitar documento"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <Input
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg,image/webp"
+                    onChange={(e) => setArchivoFactura(e.target.files?.[0] || null)}
+                    className="h-9 text-xs border-slate-300 bg-white file:mr-2 file:text-xs file:font-semibold"
+                  />
+                )}
+              </div>
             </div>
 
             <DialogFooter className="mt-4">
@@ -850,10 +1025,97 @@ function FacturasPage() {
                 size="sm"
                 className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
               >
-                Registrar Factura
+                Registrar factura
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Selector de solicitud de compra compatible con el proveedor elegido
+          arriba (ver useSolicitudesDisponiblesParaFactura) — separado del
+          modal principal para no anidar dos <Dialog> abiertos a la vez. */}
+      <Dialog open={dialogSolicitudOpen} onOpenChange={setDialogSolicitudOpen}>
+        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">
+              Solicitudes de compra de {proveedorSeleccionado?.nombre || "este proveedor"}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Solo se muestran solicitudes aprobadas/compradas con saldo pendiente por facturar.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder="Buscar por concepto..."
+            value={buscarSolicitudTexto}
+            onChange={(e) => {
+              const texto = e.target.value;
+              setBuscarSolicitudTexto(texto);
+              buscarSolicitudesDisponibles(texto);
+            }}
+            className="h-9 text-xs border-slate-300"
+          />
+          <div className="max-h-96 space-y-2 overflow-y-auto">
+            {buscandoSolicitudes ? (
+              <p className="py-6 text-center text-xs text-slate-500">Buscando...</p>
+            ) : solicitudesDisponibles.length === 0 ? (
+              <p className="py-6 text-center text-xs text-slate-500">
+                No hay solicitudes de compra disponibles para este proveedor.
+              </p>
+            ) : (
+              solicitudesDisponibles.map((s) => (
+                <div
+                  key={s.id}
+                  className="rounded-md border border-slate-200 p-3 hover:border-blue-300 hover:bg-blue-50/50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900">{s.item}</p>
+                      {s.descripcion && (
+                        <p className="truncate text-[11px] text-slate-500">{s.descripcion}</p>
+                      )}
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {s.proveedor || "Sin proveedor"} ·{" "}
+                        {new Date(s.fechaSolicitud).toLocaleDateString("es-CO")} · {s.estado}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="success"
+                      className="shrink-0"
+                      onClick={() => {
+                        setSolicitudSeleccionada(s);
+                        // Una factura solo se relaciona con una cosa: elegir
+                        // solicitud limpia servicio/contrato si había alguno.
+                        setForm({
+                          ...form,
+                          solicitudCompraId: s.id,
+                          servicioId: "",
+                          contratoId: "",
+                        });
+                        setDialogSolicitudOpen(false);
+                      }}
+                    >
+                      Seleccionar
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex gap-4 text-[11px]">
+                    <span className="text-slate-500">
+                      Solicitado <b className="text-slate-800">{money(s.valorEstimado)}</b>
+                    </span>
+                    <span className="text-slate-500">
+                      Facturado <b className="text-slate-800">{money(s.facturado)}</b>
+                    </span>
+                    <span className="text-slate-500">
+                      Pendiente <b className="text-blue-800">{money(s.saldoPendiente)}</b>
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

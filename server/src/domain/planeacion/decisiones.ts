@@ -110,7 +110,7 @@ export interface ResumenDecisionesPlaneacion {
 }
 
 /** Confianza según cuántos meses de historia real de venta respaldan la señal — nunca inventada. */
-function confianzaPorHistorial(mesesConVenta: number | undefined): Confianza {
+export function confianzaPorHistorial(mesesConVenta: number | undefined): Confianza {
   if (mesesConVenta === undefined) return "baja";
   if (mesesConVenta >= 6) return "alta";
   if (mesesConVenta >= 1) return "media";

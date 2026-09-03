@@ -57,6 +57,13 @@ const MODELOS_TENANT_SCOPED = new Set([
   "PlanProduccion",
   "GestionLiquidacion",
   "Despacho",
+  "OportunidadSeguimiento",
+  "ImportacionActividad",
+  "ImportacionNovedad",
+  "ImportacionPago",
+  "ClasificacionFuncionalItem",
+  "ItemClasificacionAsignada",
+  "InboxItem",
 ]);
 
 /** Convención de Prisma: el accessor del cliente es el nombre del modelo

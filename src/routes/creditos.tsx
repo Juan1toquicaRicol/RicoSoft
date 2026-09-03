@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { DollarSign, Plus, ShieldCheck, Trash2 } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Cloud, DollarSign, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCreditos } from "@/hooks/use-creditos";
+import { useCreditos, useCarteraSiesa } from "@/hooks/use-creditos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
@@ -285,6 +285,8 @@ function Creditos() {
         </Table>
       </div>
 
+      <PanelCarteraSiesa />
+
       {/* MODAL NUEVO CRÉDITO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
@@ -431,5 +433,134 @@ function Creditos() {
         </AlertDialogContent>
       </AlertDialog>
     </AppShell>
+  );
+}
+
+/**
+ * Cartera real por cliente, en vivo desde Siesa — de solo lectura. A
+ * diferencia de la tabla de arriba (cupos/saldos llevados a mano en
+ * RicoSoft), esto es la cartera de verdad, calculada de los saldos
+ * abiertos reales; por eso no tiene botones de "Registrar pago" ni "Paz y
+ * salvo" — esas acciones se hacen en Siesa, RicoSoft nunca le escribe.
+ */
+function PanelCarteraSiesa() {
+  const { items, disponible, motivo, total, page, totalPages, loading, refresh } = useCarteraSiesa();
+  const [search, setSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBuscar = (valor: string) => {
+    setSearch(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => refresh({ search: valor, page: 1 }), 300);
+  };
+
+  if (!disponible) {
+    return (
+      <div className="mt-6 panel bg-white border-slate-200 rounded-lg shadow-2xs p-6 text-center text-xs text-slate-500">
+        {motivo || "No fue posible conectar con Siesa en este momento."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-3">
+        <div className="flex items-center gap-2">
+          <Cloud className="h-4 w-4 text-blue-500" />
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Cartera Siesa (tiempo real)</h2>
+            <p className="text-[11px] text-slate-500">
+              Saldos reales por cliente, leídos directamente de Siesa. Solo lectura.
+            </p>
+          </div>
+        </div>
+        <Input
+          placeholder="Buscar por cliente o NIT..."
+          value={search}
+          onChange={(e) => handleBuscar(e.target.value)}
+          className="h-9 w-full max-w-xs bg-white text-xs border-slate-300 shadow-2xs"
+        />
+      </div>
+      <Table>
+        <TableHeader className="bg-slate-100/80">
+          <TableRow className="hover:bg-slate-100/80">
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+              Cliente
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+              Saldo pendiente
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+              Vencimiento más antiguo
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+              Estado
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="text-slate-800 font-medium">
+          {items.length === 0 ? (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={4} className="p-0">
+                <div className="py-12 text-center text-xs text-slate-500">
+                  {loading ? "Cargando cartera..." : "No hay clientes con saldo pendiente."}
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : (
+            items.map((c) => (
+              <TableRow key={`${c.cliente}-${c.nit}`}>
+                <TableCell className="px-4 py-3">
+                  <p className="font-bold text-xs text-slate-900">{c.cliente}</p>
+                  {c.nit && <p className="text-[11px] font-mono text-slate-500">NIT {c.nit}</p>}
+                </TableCell>
+                <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                  {money(c.saldo)}
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  <p className="font-mono text-xs text-slate-500">
+                    {new Date(c.vence).toLocaleDateString("es-CO")}
+                  </p>
+                  {c.estado !== "Paz y Salvo" && (
+                    <BarraVencimiento fecha={c.vence} etiquetaVencido="Vencido" className="mt-1" />
+                  )}
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  <EstadoBadge estado={c.estado} />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+          <p className="text-[11px] font-semibold text-slate-500">
+            {items.length} de {total} clientes con cartera pendiente — página {page} de {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={page <= 1 || loading}
+              onClick={() => refresh({ search, page: page - 1 })}
+              className="h-7 gap-1 text-[11px] font-bold"
+            >
+              <ChevronLeft className="h-3 w-3" /> Anterior
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={page >= totalPages || loading}
+              onClick={() => refresh({ search, page: page + 1 })}
+              className="h-7 gap-1 text-[11px] font-bold"
+            >
+              Siguiente <ChevronRight className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

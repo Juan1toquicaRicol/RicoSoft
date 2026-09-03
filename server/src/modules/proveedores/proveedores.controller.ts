@@ -59,6 +59,8 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
         contacto: p.contacto,
         telefono: p.telefono,
         email: p.email,
+        condicionesPago: p.condicionesPago,
+        datosPago: p.datosPago,
         activo: p.activo,
         departamentoId: p.departamentoId,
         departamento: p.departamento
@@ -85,7 +87,8 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
   try {
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(crearProveedorSchema).
-    const { nombre, nit, contacto, telefono, email, departamentoId } = req.body;
+    const { nombre, nit, contacto, telefono, email, condicionesPago, datosPago, departamentoId } =
+      req.body;
 
     const nitLimpio = nit.trim();
     const existente = await req.tenantPrisma!.proveedor.findFirst({
@@ -118,6 +121,11 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
         contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null,
         telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
         email: typeof email === "string" && email.trim() ? email.trim() : null,
+        condicionesPago:
+          typeof condicionesPago === "string" && condicionesPago.trim()
+            ? condicionesPago.trim()
+            : null,
+        datosPago: typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null,
         departamentoId: departamentoIdFinal,
       },
       include: { departamento: { select: { id: true, nombre: true } } },
@@ -142,6 +150,8 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
       contacto: proveedor.contacto,
       telefono: proveedor.telefono,
       email: proveedor.email,
+      condicionesPago: proveedor.condicionesPago,
+      datosPago: proveedor.datosPago,
       activo: proveedor.activo,
       departamentoId: proveedor.departamentoId,
       departamento: proveedor.departamento
@@ -162,7 +172,17 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
     const { id } = req.params;
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(actualizarProveedorSchema).
-    const { nombre, nit, contacto, telefono, email, activo, departamentoId } = req.body;
+    const {
+      nombre,
+      nit,
+      contacto,
+      telefono,
+      email,
+      condicionesPago,
+      datosPago,
+      activo,
+      departamentoId,
+    } = req.body;
 
     const existente = await req.tenantPrisma!.proveedor.findFirst({ where: { id, tenantId } });
     if (!existente) {
@@ -212,6 +232,17 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
         ...(email !== undefined
           ? { email: typeof email === "string" && email.trim() ? email.trim() : null }
           : {}),
+        ...(condicionesPago !== undefined
+          ? {
+              condicionesPago:
+                typeof condicionesPago === "string" && condicionesPago.trim()
+                  ? condicionesPago.trim()
+                  : null,
+            }
+          : {}),
+        ...(datosPago !== undefined
+          ? { datosPago: typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null }
+          : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
         ...(departamentoIdFinal !== undefined ? { departamentoId: departamentoIdFinal } : {}),
       },
@@ -249,6 +280,8 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       contacto: proveedor.contacto,
       telefono: proveedor.telefono,
       email: proveedor.email,
+      condicionesPago: proveedor.condicionesPago,
+      datosPago: proveedor.datosPago,
       activo: proveedor.activo,
       departamentoId: proveedor.departamentoId,
       departamento: proveedor.departamento

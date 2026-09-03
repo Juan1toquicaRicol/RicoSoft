@@ -396,7 +396,7 @@ function GestionHumana() {
             <SelectorAgrupacion
               value={agrupacionEmpleados}
               onChange={setAgrupacionEmpleados}
-              opciones={[OPCION_SIN_AGRUPAR, { value: "area", label: "Área" }, { value: "estado", label: "Estado" }]}
+              opciones={[OPCION_SIN_AGRUPAR, { value: "area", label: "Departamento" }, { value: "estado", label: "Estado" }]}
             />
           </div>
           <Table>
@@ -405,7 +405,7 @@ function GestionHumana() {
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Documento</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cargo / Área</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cargo / Departamento</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fechas Contratación</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Salario Actual</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">Strikes</TableHead>
@@ -858,7 +858,7 @@ function GestionHumana() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
-                  Área
+                  Departamento
                 </Label>
                 <Select
                   value={empForm.area}

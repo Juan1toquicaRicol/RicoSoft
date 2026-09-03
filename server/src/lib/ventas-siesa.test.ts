@@ -3,6 +3,8 @@ import {
   calcularResumenVentas,
   calcularVentasPorVendedor,
   calcularClientesEnRiesgoSiesa,
+  calcularParetoClientes,
+  type ClienteVentaConsolidadaSiesa,
 } from "./ventas-siesa";
 import type {
   VentaMensualSiesa,
@@ -385,5 +387,53 @@ describe("calcularClientesEnRiesgoSiesa", () => {
       totalVentaEnRiesgo: 0,
       totalKilosEnRiesgo: 0,
     });
+  });
+});
+
+describe("calcularParetoClientes", () => {
+  const cliente = (
+    nombre: string,
+    neto: number,
+    overrides: Partial<ClienteVentaConsolidadaSiesa> = {},
+  ): ClienteVentaConsolidadaSiesa => ({
+    clienteRowId: null,
+    clienteNombre: nombre,
+    clienteNit: null,
+    neto,
+    costo: 0,
+    margen: 0,
+    kilos: 0,
+    documentos: 1,
+    ...overrides,
+  });
+
+  it("ordena de mayor a menor venta y calcula % individual y acumulado correctamente", () => {
+    const r = calcularParetoClientes([cliente("A", 200), cliente("B", 500), cliente("C", 300)]);
+    // Total = 1000. Orden esperado: B (500), C (300), A (200).
+    expect(r.map((c) => c.clienteNombre)).toEqual(["B", "C", "A"]);
+    expect(r[0].pctIndividual).toBe(50);
+    expect(r[0].pctAcumulado).toBe(50);
+    expect(r[1].pctIndividual).toBe(30);
+    expect(r[1].pctAcumulado).toBe(80);
+    expect(r[2].pctIndividual).toBe(20);
+    expect(r[2].pctAcumulado).toBe(100);
+  });
+
+  it("con una lista vacía, devuelve una lista vacía sin lanzar (no divide por cero)", () => {
+    expect(calcularParetoClientes([])).toEqual([]);
+  });
+
+  it("con un solo cliente, ese cliente concentra el 100% individual y acumulado", () => {
+    const r = calcularParetoClientes([cliente("Único", 1000)]);
+    expect(r).toHaveLength(1);
+    expect(r[0].pctIndividual).toBe(100);
+    expect(r[0].pctAcumulado).toBe(100);
+  });
+
+  it("no muta el array de entrada (copia antes de ordenar)", () => {
+    const entrada = [cliente("A", 100), cliente("B", 900)];
+    const copiaOriginal = [...entrada];
+    calcularParetoClientes(entrada);
+    expect(entrada).toEqual(copiaOriginal);
   });
 });

@@ -18,6 +18,7 @@ import analiticaRoutes from "./modules/analitica/analitica.routes";
 import modulosRoutes from "./modules/modulos/modulos.routes";
 import notificacionesRoutes from "./modules/notificaciones/notificaciones.routes";
 import proveedoresRoutes from "./modules/proveedores/proveedores.routes";
+import itemClasificacionesRoutes from "./modules/item-clasificaciones/item-clasificaciones.routes";
 import importacionesRoutes from "./modules/importaciones/importaciones.routes";
 import integracionesSiesaRoutes from "./modules/integraciones-siesa/siesa-sync.routes";
 import membresiasRoutes from "./modules/membresias/membresias.routes";
@@ -28,6 +29,8 @@ import gestionLiquidacionRoutes from "./modules/gestion-liquidacion/gestion-liqu
 import gerencialRoutes from "./modules/gerencial/gerencial.routes";
 import ventasRoutes from "./modules/ventas/ventas.routes";
 import despachosRoutes from "./modules/despachos/despachos.routes";
+import logisticaRoutes from "./modules/logistica/logistica.routes";
+import oportunidadesRoutes from "./modules/oportunidades/oportunidades.routes";
 
 export const isProduction = process.env.NODE_ENV === "production";
 
@@ -98,6 +101,7 @@ export function createApp() {
   app.use("/api/modulos", modulosRoutes);
   app.use("/api/notificaciones", notificacionesRoutes);
   app.use("/api/proveedores", proveedoresRoutes);
+  app.use("/api/item-clasificaciones", itemClasificacionesRoutes);
   app.use("/api/importaciones", importacionesRoutes);
   app.use("/api/integraciones/siesa", integracionesSiesaRoutes);
   app.use("/api/membresias", membresiasRoutes);
@@ -108,6 +112,8 @@ export function createApp() {
   app.use("/api/gerencial", gerencialRoutes);
   app.use("/api/ventas", ventasRoutes);
   app.use("/api/despachos", despachosRoutes);
+  app.use("/api/logistica", logisticaRoutes);
+  app.use("/api/oportunidades", oportunidadesRoutes);
 
   // 404 para cualquier ruta no reconocida bajo /api
   app.use("/api", (_req, res) => {

@@ -168,6 +168,48 @@ function claveMes(m: { anio: number; mes: number }): string {
   return `${m.anio}-${m.mes}`;
 }
 
+export interface ClienteVentaConsolidadaSiesa {
+  clienteRowId: number | null;
+  clienteNombre: string | null;
+  clienteNit: string | null;
+  neto: number;
+  costo: number;
+  margen: number;
+  kilos: number;
+  documentos: number;
+}
+
+export interface ClienteParetoSiesa extends ClienteVentaConsolidadaSiesa {
+  /** % de la venta total del período que representa este cliente solo. */
+  pctIndividual: number;
+  /** % acumulado hasta este cliente, en el ranking ordenado desc por neto — la curva de Pareto. */
+  pctAcumulado: number;
+}
+
+/**
+ * Ordena una lista de clientes (ya agregada en SQL) por venta neta
+ * descendente y calcula el % individual y acumulado de cada uno sobre el
+ * total del período — la curva de Pareto ("¿qué % de clientes concentra
+ * el 80% de la venta?"). Función pura, sin I/O: opera sobre resultados ya
+ * agregados en SQL Server, nunca sobre el detalle de documentos.
+ */
+export function calcularParetoClientes(
+  clientes: ClienteVentaConsolidadaSiesa[],
+): ClienteParetoSiesa[] {
+  const ordenados = [...clientes].sort((a, b) => b.neto - a.neto);
+  const totalNeto = ordenados.reduce((acc, c) => acc + c.neto, 0);
+
+  let acumulado = 0;
+  return ordenados.map((c) => {
+    acumulado += c.neto;
+    return {
+      ...c,
+      pctIndividual: totalNeto > 0 ? Math.round((c.neto / totalNeto) * 1000) / 10 : 0,
+      pctAcumulado: totalNeto > 0 ? Math.round((acumulado / totalNeto) * 1000) / 10 : 0,
+    };
+  });
+}
+
 export interface ClienteEnRiesgoSiesa {
   clienteRowId: number;
   clienteNombre: string | null;

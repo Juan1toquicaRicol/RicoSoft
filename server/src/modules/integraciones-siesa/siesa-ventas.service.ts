@@ -685,6 +685,11 @@ export interface FiltrosHistoricoVentas {
   hasta: Date;
   /** Texto libre: busca por nombre/NIT de cliente o nombre de vendedor. */
   search?: string;
+  /** Filtros globales de la analítica comercial (drill-down): entidad exacta, no texto libre. */
+  vendedorRowId?: number;
+  clienteRowId?: number;
+  /** Producto: filtra por EXISTS contra v470_ventas (el producto vive a nivel de línea, no de encabezado). */
+  itemRowId?: number;
 }
 
 // f461_num_docto_referencia es el único campo de referencia de texto libre
@@ -692,7 +697,11 @@ export interface FiltrosHistoricoVentas {
 // consecutivo de factura de venta formateado en esta tabla (ver auditoría:
 // no se inventó ningún campo). Se muestra tal cual bajo "Referencia"; el
 // identificador estable es f461_rowid_docto (id interno de Siesa).
-function construirWhereHistorico(f: FiltrosHistoricoVentas) {
+//
+// Exportada (no solo usada internamente) para poder probarla como función
+// pura, sin depender del túnel VPN hacia Siesa — construye SQL, nunca lo
+// ejecuta.
+export function construirWhereHistorico(f: FiltrosHistoricoVentas) {
   const condiciones = [
     "f.f461_id_cia = @ciaId",
     "f.f461_id_fecha >= @desde",
@@ -701,6 +710,17 @@ function construirWhereHistorico(f: FiltrosHistoricoVentas) {
   if (f.search) {
     condiciones.push(
       "(tc.f200_razon_social LIKE @search OR tc.f200_nit LIKE @search OR tv.f200_razon_social LIKE @search)",
+    );
+  }
+  if (f.vendedorRowId !== undefined) {
+    condiciones.push("f.f461_rowid_tercero_vendedor = @vendedorRowId");
+  }
+  if (f.clienteRowId !== undefined) {
+    condiciones.push("f.f461_rowid_tercero_fact = @clienteRowId");
+  }
+  if (f.itemRowId !== undefined) {
+    condiciones.push(
+      "EXISTS (SELECT 1 FROM v470_ventas v WHERE v.v470_rowid_docto_fact = f.f461_rowid_docto AND v.v470_rowid_item_ext = @itemRowId)",
     );
   }
   return condiciones.join(" AND ");
@@ -726,6 +746,9 @@ export async function leerHistoricoVentasSiesa(
     .input("skip", (page - 1) * pageSize)
     .input("take", pageSize);
   if (filtros.search) request.input("search", `%${filtros.search}%`);
+  if (filtros.vendedorRowId !== undefined) request.input("vendedorRowId", filtros.vendedorRowId);
+  if (filtros.clienteRowId !== undefined) request.input("clienteRowId", filtros.clienteRowId);
+  if (filtros.itemRowId !== undefined) request.input("itemRowId", filtros.itemRowId);
 
   const { recordset } = await request.query<{
     id: number;
@@ -783,6 +806,9 @@ export async function contarHistoricoVentasSiesa(filtros: FiltrosHistoricoVentas
     .input("desde", filtros.desde)
     .input("hasta", filtros.hasta);
   if (filtros.search) request.input("search", `%${filtros.search}%`);
+  if (filtros.vendedorRowId !== undefined) request.input("vendedorRowId", filtros.vendedorRowId);
+  if (filtros.clienteRowId !== undefined) request.input("clienteRowId", filtros.clienteRowId);
+  if (filtros.itemRowId !== undefined) request.input("itemRowId", filtros.itemRowId);
 
   const { recordset } = await request.query<{ n: number }>(`
     SELECT COUNT(*) AS n
@@ -1079,5 +1105,201 @@ export async function leerComprasPorClienteProductoSiesa(
     unidadMedida: r.unidadMedida?.trim() || null,
     cantidadHistorica: Number(r.cantidadHistorica ?? 0),
     netoHistorico: Number(r.netoHistorico ?? 0),
+  }));
+}
+
+export interface ClienteVentaConsolidadaFilaSiesa {
+  clienteRowId: number | null;
+  clienteNombre: string | null;
+  clienteNit: string | null;
+  neto: number;
+  costo: number;
+  margen: number;
+  kilos: number;
+  documentos: number;
+}
+
+/**
+ * Venta + kilos + margen + # documentos por cliente, dentro de [desde,
+ * hasta) — la vista consolidada que pide "Inteligencia > Clientes" (Pareto
+ * incluido, calculado en Node por calcularParetoClientes sobre este mismo
+ * resultado, nunca en SQL). Mismo join v470_ventas -> t461 ya verificado en
+ * vivo por leerTopClientesPorMargenSiesa (reconciliación exacta neto-costo=
+ * margen); kilos con el mismo criterio ya usado en
+ * leerActividadMensualKilosClientesSiesa (solo unidad 'KG', vía SUM
+ * condicional para no necesitar una segunda consulta).
+ */
+export async function leerVentasPorClienteConsolidadoSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+  limite = 50,
+): Promise<ClienteVentaConsolidadaFilaSiesa[]> {
+  const pool = await getSiesaPool();
+  const { recordset } = await pool
+    .request()
+    .input("ciaId", ciaId)
+    .input("desde", desde)
+    .input("hasta", hasta)
+    .input("limite", limite).query<{
+    clienteRowId: number | null;
+    clienteNombre: string | null;
+    clienteNit: string | null;
+    neto: number;
+    costo: number;
+    margen: number;
+    kilos: number;
+    documentos: number;
+  }>(`
+    SELECT TOP (@limite)
+      f.f461_rowid_tercero_fact AS clienteRowId,
+      MAX(tc.f200_razon_social) AS clienteNombre,
+      MAX(tc.f200_nit) AS clienteNit,
+      SUM(v.v470_vlr_bruto - ISNULL(v.v470_vlr_dscto_linea, 0) - ISNULL(v.v470_vlr_dscto_global, 0)) AS neto,
+      SUM(v.v470_costo_prom_tot) AS costo,
+      SUM(v.v470_utilidad_prom) AS margen,
+      SUM(CASE WHEN LTRIM(RTRIM(v.v470_id_unidad_medida)) = 'KG' THEN v.v470_cant_base ELSE 0 END) AS kilos,
+      COUNT(DISTINCT v.v470_rowid_docto_fact) AS documentos
+    FROM v470_ventas v
+    INNER JOIN t461_cm_docto_factura_venta f
+      ON f.f461_rowid_docto = v.v470_rowid_docto_fact AND f.f461_id_cia = v.v470_id_cia
+    LEFT JOIN t200_mm_terceros tc ON tc.f200_rowid = f.f461_rowid_tercero_fact
+    WHERE v.v470_id_cia = @ciaId
+      AND v.v470_rowid_docto_fact IS NOT NULL
+      AND v.v470_id_fecha >= @desde AND v.v470_id_fecha < @hasta
+    GROUP BY f.f461_rowid_tercero_fact
+    ORDER BY SUM(v.v470_vlr_bruto - ISNULL(v.v470_vlr_dscto_linea, 0) - ISNULL(v.v470_vlr_dscto_global, 0)) DESC
+  `);
+  return recordset.map((r) => ({
+    clienteRowId: r.clienteRowId,
+    clienteNombre: r.clienteNombre,
+    clienteNit: r.clienteNit,
+    neto: Number(r.neto ?? 0),
+    costo: Number(r.costo ?? 0),
+    margen: Number(r.margen ?? 0),
+    kilos: Number(r.kilos ?? 0),
+    documentos: r.documentos,
+  }));
+}
+
+export interface ResumenVentaDiaSiesa {
+  neto: number;
+  kilos: number;
+  documentos: number;
+}
+
+/**
+ * Resumen agregado de ventas dentro de [desde, hasta) — dinero (t461,
+ * bruto-descuento, sin IVA, mismo criterio que el resto del archivo) +
+ * kilos (v470, solo unidad 'KG', mismo criterio que
+ * leerActividadMensualKilosClientesSiesa). Usado para "Total ventas hoy —
+ * $" y "Total ventas hoy — kg" en Analítica: un solo número por cada
+ * unidad, no una serie ni un desglose — evita traer detalle para un total.
+ */
+export async function leerResumenVentaDiaSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+): Promise<ResumenVentaDiaSiesa> {
+  const pool = await getSiesaPool();
+  const [dinero, kilos] = await Promise.all([
+    pool.request().input("ciaId", ciaId).input("desde", desde).input("hasta", hasta).query<{
+      neto: number;
+      documentos: number;
+    }>(`
+      SELECT
+        SUM(f.f461_vlr_bruto - f.f461_vlr_dscto) AS neto,
+        COUNT(*) AS documentos
+      FROM t461_cm_docto_factura_venta f
+      WHERE f.f461_id_cia = @ciaId AND f.f461_id_fecha >= @desde AND f.f461_id_fecha < @hasta
+    `),
+    pool.request().input("ciaId", ciaId).input("desde", desde).input("hasta", hasta).query<{
+      kilos: number;
+    }>(`
+      SELECT SUM(v.v470_cant_base) AS kilos
+      FROM v470_ventas v
+      WHERE v.v470_id_cia = @ciaId
+        AND v.v470_rowid_docto_fact IS NOT NULL
+        AND v.v470_id_fecha >= @desde AND v.v470_id_fecha < @hasta
+        AND LTRIM(RTRIM(v.v470_id_unidad_medida)) = 'KG'
+    `),
+  ]);
+  return {
+    neto: Number(dinero.recordset[0]?.neto ?? 0),
+    documentos: dinero.recordset[0]?.documentos ?? 0,
+    kilos: Number(kilos.recordset[0]?.kilos ?? 0),
+  };
+}
+
+export interface HistoricoCompraProductoClienteSiesa {
+  itemRowId: number;
+  descripcion: string | null;
+  referencia: string | null;
+  unidadMedida: string | null;
+  cantidadHistorica: number;
+  netoHistorico: number;
+  numCompras: number;
+  ultimaCompra: Date;
+}
+
+/**
+ * Qué le compraba UN cliente específico, producto por producto, dentro de
+ * [desde, hoy) — "¿qué dejó de comprar este cliente?" (Ventas > Clientes en
+ * riesgo, drill-down por cliente). Mismo join v470_ventas -> t461 ya
+ * verificado en vivo en leerTopClientesPorMargenSiesa/
+ * leerComprasPorClienteProductoSiesa, filtrado a un solo cliente en SQL en
+ * vez de traer el cruce completo cliente×producto. numCompras cuenta
+ * documentos distintos (no líneas) para no inflar "veces que compró" si un
+ * mismo producto aparece en varias líneas del mismo documento.
+ */
+export async function leerHistoricoComprasClienteSiesa(
+  ciaId: number,
+  clienteRowId: number,
+  desde: Date,
+): Promise<HistoricoCompraProductoClienteSiesa[]> {
+  const pool = await getSiesaPool();
+  const { recordset } = await pool
+    .request()
+    .input("ciaId", ciaId)
+    .input("clienteRowId", clienteRowId)
+    .input("desde", desde).query<{
+    itemRowId: number;
+    descripcion: string | null;
+    referencia: string | null;
+    unidadMedida: string | null;
+    cantidadHistorica: number;
+    netoHistorico: number;
+    numCompras: number;
+    ultimaCompra: Date;
+  }>(`
+    SELECT
+      v.v470_rowid_item_ext AS itemRowId,
+      MAX(it.f120_descripcion) AS descripcion,
+      MAX(it.f120_referencia) AS referencia,
+      MAX(LTRIM(RTRIM(v.v470_id_unidad_medida))) AS unidadMedida,
+      SUM(v.v470_cant_base) AS cantidadHistorica,
+      SUM(v.v470_vlr_bruto - ISNULL(v.v470_vlr_dscto_linea, 0) - ISNULL(v.v470_vlr_dscto_global, 0)) AS netoHistorico,
+      COUNT(DISTINCT v.v470_rowid_docto_fact) AS numCompras,
+      MAX(v.v470_id_fecha) AS ultimaCompra
+    FROM v470_ventas v
+    INNER JOIN t461_cm_docto_factura_venta f
+      ON f.f461_rowid_docto = v.v470_rowid_docto_fact AND f.f461_id_cia = v.v470_id_cia
+    LEFT JOIN t120_mc_items it ON it.f120_rowid = v.v470_rowid_item_ext
+    WHERE v.v470_id_cia = @ciaId
+      AND v.v470_rowid_docto_fact IS NOT NULL
+      AND f.f461_rowid_tercero_fact = @clienteRowId
+      AND v.v470_id_fecha >= @desde
+    GROUP BY v.v470_rowid_item_ext
+    ORDER BY MAX(v.v470_id_fecha) DESC
+  `);
+  return recordset.map((r) => ({
+    itemRowId: r.itemRowId,
+    descripcion: r.descripcion?.trim() || null,
+    referencia: r.referencia?.trim() || null,
+    unidadMedida: r.unidadMedida?.trim() || null,
+    cantidadHistorica: Number(r.cantidadHistorica ?? 0),
+    netoHistorico: Number(r.netoHistorico ?? 0),
+    numCompras: r.numCompras,
+    ultimaCompra: r.ultimaCompra,
   }));
 }

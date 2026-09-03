@@ -8,6 +8,8 @@ export interface Proveedor {
   contacto: string | null;
   telefono: string | null;
   email: string | null;
+  condicionesPago: string | null;
+  datosPago: string | null;
   activo: boolean;
   // Departamento dueño del proveedor; null = proveedor general, disponible
   // para cualquier departamento (ver comentario en schema.prisma).
@@ -28,6 +30,8 @@ export interface DatosProveedor {
   contacto?: string;
   telefono?: string;
   email?: string;
+  condicionesPago?: string;
+  datosPago?: string;
   departamentoId?: string | null;
 }
 

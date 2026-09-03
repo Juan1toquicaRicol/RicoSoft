@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
-import type { CotizacionProveedor, SolicitudCompra } from "@/lib/data";
+import type { CotizacionProveedor, SolicitudCompra, SolicitudDisponibleParaFactura } from "@/lib/data";
 
 /**
  * Solicitudes de compra ACTIVAS (Pendiente / En Cotización). En cuanto una
@@ -80,6 +80,17 @@ export function useSolicitudes() {
     [refresh],
   );
 
+  const confirmarRecepcionSolicitud = useCallback(
+    async (id: string, comentario?: string) => {
+      await fetchAuth(`/solicitudes-compra/${id}/confirmar-recepcion`, {
+        method: "POST",
+        body: JSON.stringify({ comentario }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
   return {
     solicitudesCompra: solicitudes,
     loading,
@@ -89,7 +100,73 @@ export function useSolicitudes() {
     subirCotizacionSolicitud,
     updateEstadoSolicitudCompra,
     eliminarSolicitudCompra,
+    confirmarRecepcionSolicitud,
   };
+}
+
+/**
+ * Una solicitud puntual por id (página de detalle /solicitudes-compra/$id)
+ * — a diferencia de useSolicitudes (solo activas) o useHistorialCompras
+ * (solo resueltas), esta funciona sin importar el estado, porque la página
+ * de detalle debe poder abrirse directo con un link o recargarse.
+ */
+export function useSolicitudDetalle(id: string | undefined) {
+  const [solicitud, setSolicitud] = useState<SolicitudCompra | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/solicitudes-compra/${id}`);
+      setSolicitud(data);
+    } catch (err: any) {
+      setError(err.message || "Error cargando la solicitud de compra.");
+      setSolicitud(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const cambiarEstado = useCallback(
+    async (estado: SolicitudCompra["estado"], comentario?: string) => {
+      await fetchAuth(`/solicitudes-compra/${id}/estado`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado, comentario }),
+      });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  const confirmarRecepcion = useCallback(
+    async (comentario?: string) => {
+      await fetchAuth(`/solicitudes-compra/${id}/confirmar-recepcion`, {
+        method: "POST",
+        body: JSON.stringify({ comentario }),
+      });
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  const subirCotizacion = useCallback(
+    async (file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/solicitudes-compra/${id}/archivo`, formData);
+      await refresh();
+    },
+    [id, refresh],
+  );
+
+  return { solicitud, loading, error, refresh, cambiarEstado, confirmarRecepcion, subirCotizacion };
 }
 
 export interface HistorialFiltros {
@@ -116,7 +193,10 @@ export async function descargarCotizacionSolicitud(id: string) {
  * Cuadro comparativo de cotizaciones de proveedor de una solicitud de
  * compra: listar, agregar (hasta 3), eliminar y elegir la ganadora.
  */
-export function useCotizacionesProveedor(solicitudId: string | null) {
+export function useCotizacionesProveedor(
+  solicitudId: string | null,
+  onChange?: () => void,
+) {
   const [cotizaciones, setCotizaciones] = useState<CotizacionProveedor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -161,8 +241,9 @@ export function useCotizacionesProveedor(solicitudId: string | null) {
       formData.append("archivo", data.archivo);
       await fetchAuthUpload(`/solicitudes-compra/${solicitudId}/cotizaciones`, formData);
       await refresh();
+      onChange?.();
     },
-    [solicitudId, refresh],
+    [solicitudId, refresh, onChange],
   );
 
   const eliminarCotizacion = useCallback(
@@ -172,8 +253,9 @@ export function useCotizacionesProveedor(solicitudId: string | null) {
         method: "DELETE",
       });
       await refresh();
+      onChange?.();
     },
-    [solicitudId, refresh],
+    [solicitudId, refresh, onChange],
   );
 
   const seleccionarGanadora = useCallback(
@@ -186,8 +268,9 @@ export function useCotizacionesProveedor(solicitudId: string | null) {
         },
       );
       await refresh();
+      onChange?.();
     },
-    [solicitudId, refresh],
+    [solicitudId, refresh, onChange],
   );
 
   return {
@@ -203,6 +286,45 @@ export function useCotizacionesProveedor(solicitudId: string | null) {
 
 export async function descargarCotizacionProveedor(solicitudId: string, cotizacionId: string) {
   return fetchAuthBlob(`/solicitudes-compra/${solicitudId}/cotizaciones/${cotizacionId}/archivo`);
+}
+
+/**
+ * Solicitudes de compra que todavía pueden recibir una factura (selector
+ * "Solicitud de compra relacionada" en Recepcionar Factura). Se resuelve
+ * server-side: prioriza el proveedor de la factura (proveedorId) y ya trae
+ * el saldo pendiente calculado — el frontend nunca descarga el catálogo
+ * completo de solicitudes para filtrarlo acá.
+ */
+export function useSolicitudesDisponiblesParaFactura(proveedorId?: string) {
+  const [solicitudes, setSolicitudes] = useState<SolicitudDisponibleParaFactura[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const buscar = useCallback(
+    async (search?: string) => {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (proveedorId) params.set("proveedorId", proveedorId);
+        if (search) params.set("search", search);
+        const qs = params.toString();
+        const data = await fetchAuth(`/solicitudes-compra/disponibles-para-factura${qs ? `?${qs}` : ""}`);
+        setSolicitudes(Array.isArray(data) ? data : []);
+      } catch (err: any) {
+        setError(err.message || "Error cargando solicitudes de compra disponibles.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [proveedorId],
+  );
+
+  useEffect(() => {
+    buscar();
+  }, [buscar]);
+
+  return { solicitudes, loading, error, buscar };
 }
 
 /**

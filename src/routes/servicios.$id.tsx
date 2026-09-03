@@ -19,6 +19,7 @@ import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/data";
+import { siglaEmpresa } from "@/lib/tenant-context";
 import { useServicio, useServicios } from "@/hooks/use-servicios";
 import { useFacturasPorServicio } from "@/hooks/use-facturas";
 import { useSession } from "@/lib/session-context";
@@ -102,8 +103,8 @@ function DetalleServicio() {
 
   const campos = [
     ["Proveedor", servicio.proveedor],
-    ["Área", servicio.area],
-    ["Empresa", servicio.empresaId],
+    ["Departamento", servicio.area],
+    ["Empresa", siglaEmpresa(servicio.empresaId)],
     ["Periodicidad", servicio.periodicidad],
     ["Responsable", servicio.responsableArea],
     ["Próxima renovación", new Date(servicio.fechaRenovacion).toLocaleDateString("es-CO")],

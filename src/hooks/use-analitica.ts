@@ -38,7 +38,6 @@ export interface FinancieroSiesa {
 }
 
 export interface ResumenGerencial {
-  ventas: { disponible: boolean; motivo: string };
   /** Cartera/CxP reales leídas en vivo desde el módulo Financiero de Siesa (t353_co_saldo_abierto). */
   financieroSiesa: FinancieroSiesa;
   cartera: {
@@ -66,7 +65,6 @@ export interface ResumenGerencial {
 }
 
 const RESUMEN_GERENCIAL_VACIO: ResumenGerencial = {
-  ventas: { disponible: false, motivo: "" },
   financieroSiesa: { disponible: false },
   cartera: {
     total: 0,
@@ -127,8 +125,14 @@ export interface VentasGerencial {
   }[];
 }
 
+export interface FiltroRangoVentas {
+  /** ISO date. Filtro global de fecha — sin él, el backend usa el mes actual (comportamiento previo). */
+  desde?: string;
+  hasta?: string;
+}
+
 /** Ventas reales leídas en vivo desde Siesa (t461_cm_docto_factura_venta). */
-export function useVentasGerencial() {
+export function useVentasGerencial(filtro: FiltroRangoVentas = {}) {
   const [ventas, setVentas] = useState<VentasGerencial>({ disponible: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -137,14 +141,18 @@ export function useVentasGerencial() {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchAuth("/analitica/ventas");
+      const params = new URLSearchParams();
+      if (filtro.desde) params.set("desde", filtro.desde);
+      if (filtro.hasta) params.set("hasta", filtro.hasta);
+      const qs = params.toString();
+      const data = await fetchAuth(`/analitica/ventas${qs ? `?${qs}` : ""}`);
       setVentas(data);
     } catch (err: any) {
       setError(err.message || "Error cargando las ventas.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filtro.desde, filtro.hasta]);
 
   useEffect(() => {
     refresh();
@@ -182,6 +190,13 @@ export interface VendedorMargen {
   margen: number;
 }
 
+/** Total del día — $ y kg — mismo rango que detalleHoy. */
+export interface ResumenVentaHoy {
+  neto: number;
+  kilos: number;
+  documentos: number;
+}
+
 export interface VentasPorVendedor {
   disponible: boolean;
   motivo?: string;
@@ -189,6 +204,7 @@ export interface VentasPorVendedor {
   detalleHoy: VentaDeHoyConHora[];
   /** Top vendedores por margen/utilidad real del mes actual (no por valor vendido). */
   topVendedoresPorMargen: VendedorMargen[];
+  resumenHoy: ResumenVentaHoy | null;
 }
 
 /** Ranking de ventas diarias por vendedor (hoy/ayer/7 días/mes) + detalle de hoy con hora, leído en vivo desde Siesa. */
@@ -198,6 +214,7 @@ export function useVentasPorVendedor() {
     vendedores: [],
     detalleHoy: [],
     topVendedoresPorMargen: [],
+    resumenHoy: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -222,6 +239,56 @@ export function useVentasPorVendedor() {
   return { ...datos, loading, error, refresh };
 }
 
+export interface ClienteVentaConsolidada {
+  clienteRowId: number | null;
+  clienteNombre: string | null;
+  clienteNit: string | null;
+  neto: number;
+  costo: number;
+  margen: number;
+  kilos: number;
+  documentos: number;
+  /** % de la venta total del período que representa este cliente solo. */
+  pctIndividual: number;
+  /** % acumulado hasta este cliente en el ranking — la curva de Pareto. */
+  pctAcumulado: number;
+}
+
+/** Venta + kilos + margen + Pareto por cliente, leído en vivo desde Siesa. */
+export function useClientesVenta(filtro: FiltroRangoVentas & { limite?: number } = {}) {
+  const [disponible, setDisponible] = useState(false);
+  const [motivo, setMotivo] = useState<string | undefined>();
+  const [clientes, setClientes] = useState<ClienteVentaConsolidada[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (filtro.desde) params.set("desde", filtro.desde);
+      if (filtro.hasta) params.set("hasta", filtro.hasta);
+      if (filtro.limite) params.set("limite", String(filtro.limite));
+      const qs = params.toString();
+      const data = await fetchAuth(`/analitica/ventas/clientes${qs ? `?${qs}` : ""}`);
+      setDisponible(data.disponible);
+      setMotivo(data.motivo);
+      setClientes(data.clientes ?? []);
+    } catch (err: any) {
+      setError(err.message || "Error cargando ventas por cliente.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filtro.desde, filtro.hasta, filtro.limite]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { disponible, motivo, clientes, loading, error, refresh };
+}
+
 export interface DocumentoVenta {
   id: number;
   fecha: string;
@@ -243,19 +310,30 @@ export interface HistoricoVentasFiltros {
   search?: string;
   page?: number;
   pageSize?: number;
+  /** Filtros globales de drill-down: entidad exacta (rowid de Siesa), no texto libre. */
+  vendedorRowId?: number;
+  clienteRowId?: number;
+  itemRowId?: number;
 }
 
-/** Histórico paginado de documentos de venta, leído en vivo desde Siesa. */
-export function useHistoricoVentas(filtros: HistoricoVentasFiltros) {
+/**
+ * Histórico paginado de documentos de venta, leído en vivo desde Siesa.
+ * `enabled` (default true) evita el fetch automático al montar — el
+ * histórico es pesado y en Analítica se carga solo cuando el usuario lo
+ * pide explícitamente (ver "Cargar ventas históricas"), no compite con la
+ * información operacional del día.
+ */
+export function useHistoricoVentas(filtros: HistoricoVentasFiltros, enabled = true) {
   const [disponible, setDisponible] = useState(false);
   const [motivo, setMotivo] = useState<string | undefined>();
   const [items, setItems] = useState<DocumentoVenta[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     setError("");
     try {
@@ -263,6 +341,11 @@ export function useHistoricoVentas(filtros: HistoricoVentasFiltros) {
       if (filtros.desde) params.set("desde", filtros.desde);
       if (filtros.hasta) params.set("hasta", filtros.hasta);
       if (filtros.search) params.set("search", filtros.search);
+      if (filtros.vendedorRowId !== undefined)
+        params.set("vendedorRowId", String(filtros.vendedorRowId));
+      if (filtros.clienteRowId !== undefined)
+        params.set("clienteRowId", String(filtros.clienteRowId));
+      if (filtros.itemRowId !== undefined) params.set("itemRowId", String(filtros.itemRowId));
       params.set("page", String(filtros.page ?? 1));
       params.set("pageSize", String(filtros.pageSize ?? 25));
       const data = await fetchAuth(`/analitica/ventas/historico?${params.toString()}`);
@@ -276,11 +359,22 @@ export function useHistoricoVentas(filtros: HistoricoVentasFiltros) {
     } finally {
       setLoading(false);
     }
-  }, [filtros.desde, filtros.hasta, filtros.search, filtros.page, filtros.pageSize]);
+  }, [
+    enabled,
+    filtros.desde,
+    filtros.hasta,
+    filtros.search,
+    filtros.page,
+    filtros.pageSize,
+    filtros.vendedorRowId,
+    filtros.clienteRowId,
+    filtros.itemRowId,
+  ]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (enabled) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, enabled]);
 
   return { disponible, motivo, items, total, totalPages, loading, error, refresh };
 }

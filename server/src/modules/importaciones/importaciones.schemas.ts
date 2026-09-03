@@ -71,3 +71,54 @@ export const actualizarVistoBuenoSchema = z.object({
   estado: z.string().nullish(),
   fecha: z.string().nullish(),
 });
+
+// --- Expediente vivo: actividades / novedades / pagos / cierre ---
+
+export const crearActividadImportacionSchema = z.object({
+  nombre: z.string(textoObligatorio("El nombre de la actividad es obligatorio.")),
+  etapa: z.string(textoObligatorio("La etapa es obligatoria.")),
+  responsableTipo: z.string(textoObligatorio("El tipo de responsable es obligatorio.")),
+  responsableNombre: z.string().nullish(),
+  fechaPlanificada: z.string().nullish(),
+  fechaLimite: z.string().nullish(),
+  loteId: z.string().uuid().nullish(),
+  dependeDeId: z.string().uuid().nullish(),
+});
+
+export const actualizarActividadImportacionSchema = z.object({
+  estado: z.string().nullish(),
+  observacion: z.string().nullish(),
+  fechaReal: z.string().nullish(),
+});
+
+export const crearNovedadImportacionSchema = z.object({
+  tipo: z.string(textoObligatorio("El tipo de novedad es obligatorio.")),
+  descripcion: z.string(textoObligatorio("La descripción es obligatoria.")),
+  origen: z.string().nullish(),
+  responsable: z.string().nullish(),
+  prioridad: z.string().nullish(),
+  impacto: z.string().nullish(),
+  fechaLimite: z.string().nullish(),
+  accionRequerida: z.string().nullish(),
+});
+
+export const resolverNovedadImportacionSchema = z.object({
+  comentario: z.string().nullish(),
+});
+
+export const crearPagoImportacionSchema = z.object({
+  concepto: z.string(textoObligatorio("El concepto del pago es obligatorio.")),
+  valor: numero,
+  moneda: z.string().nullish(),
+  fechaVencimiento: z.string().nullish(),
+  observaciones: z.string().nullish(),
+});
+
+export const actualizarEstadoPagoImportacionSchema = z.object({
+  estado: z.string(textoObligatorio("El estado es obligatorio.")),
+});
+
+export const cerrarOrdenCompraIntlSchema = z.object({
+  forzar: z.boolean().nullish(),
+  justificacion: z.string().nullish(),
+});

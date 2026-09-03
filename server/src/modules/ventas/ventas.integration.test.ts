@@ -157,4 +157,26 @@ describe.skipIf(!RUN)("Ventas — Centro Operativo Comercial (multi-tenant real)
       .set("Authorization", `Bearer ${tokenSinPermiso}`);
     expect(contexto.status).toBe(403);
   });
+
+  it("GET /ventas/clientes/:clienteRowId/historico responde 200 con disponible:false cuando el tenant no tiene siesaCiaId", async () => {
+    const res = await request(app)
+      .get("/api/ventas/clientes/12345/historico")
+      .set("Authorization", `Bearer ${tokenAdmin}`);
+    expect(res.status).toBe(200);
+    expect(res.body.disponible).toBe(false);
+  });
+
+  it("GET /ventas/clientes/:clienteRowId/historico responde 403 sin el permiso ventas.ver", async () => {
+    const res = await request(app)
+      .get("/api/ventas/clientes/12345/historico")
+      .set("Authorization", `Bearer ${tokenSinPermiso}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /ventas/clientes/:clienteRowId/historico rechaza un clienteRowId no numérico con 400", async () => {
+    const res = await request(app)
+      .get("/api/ventas/clientes/no-es-numero/historico")
+      .set("Authorization", `Bearer ${tokenAdmin}`);
+    expect(res.status).toBe(400);
+  });
 });

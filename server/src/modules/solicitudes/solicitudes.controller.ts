@@ -9,11 +9,16 @@ import {
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
 import { crearNotificacion, notificarPorPermiso } from "../../lib/notificaciones";
+import { crearItemDeTrabajo, resolverItemDeTrabajo } from "../../lib/inbox";
+import { ESTADOS_SC_VINCULABLES_A_FACTURA } from "../facturas/facturas.controller";
 
 // "Facturada" no se alcanza a través de PATCH /:id/estado (no tiene entrada
 // en TRANSICIONES): la establece internamente facturas.controller.ts cuando
 // se vincula una factura a una solicitud ya Aprobada/Comprada, de forma
 // atómica junto con la aprobación automática de esa factura.
+// "Recibida" tampoco: solo se alcanza vía confirmarRecepcionSolicitud, la
+// confirmación del propio solicitante de que recibió el producto/servicio
+// físicamente, una vez la factura vinculada ya está "Pagada".
 const ESTADOS_VALIDOS = [
   "Pendiente",
   "En Cotización",
@@ -21,19 +26,33 @@ const ESTADOS_VALIDOS = [
   "Rechazada",
   "Comprado",
   "Facturada",
+  "Recibida",
 ];
 const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Urgente"];
 
-// Número exacto de cotizaciones de proveedor requeridas antes de poder
-// aprobar una solicitud (ver cotizaciones.controller.ts).
-const NUM_COTIZACIONES_REQUERIDAS = 3;
+// Traduce la prioridad de negocio de la solicitud (ya existente, no
+// inventada) a la prioridad del Inbox — ver lib/inbox.ts.
+const PRIORIDAD_INBOX: Record<string, "CRITICA" | "ALTA" | "MEDIA" | "BAJA"> = {
+  Urgente: "CRITICA",
+  Alta: "ALTA",
+  Media: "MEDIA",
+  Baja: "BAJA",
+};
+
+// Antes se exigían exactamente 3 cotizaciones de proveedor para poder
+// aprobar. Regla relajada a petición del negocio: basta con al menos 1
+// cotización y una elegida como ganadora — el tope máximo de 3 (para no
+// alargar el cuadro comparativo indefinidamente) se mantiene en
+// cotizaciones.controller.ts (MAX_COTIZACIONES), sin relación con esto.
+const MIN_COTIZACIONES_REQUERIDAS = 1;
+const MAX_COTIZACIONES_COMPARATIVO = 3;
 
 // Estados que aún requieren gestión: se muestran en "Solicitudes de compra".
 const ESTADOS_ACTIVOS = ["Pendiente", "En Cotización"];
 // Estados ya resueltos: se muestran en "Historia de compras" y ya no aparecen
 // en el listado de solicitudes activas. Ninguna solicitud se elimina de la
 // base de datos; solo cambia su campo `estado`.
-const ESTADOS_HISTORICOS = ["Aprobada", "Rechazada", "Comprado", "Facturada"];
+const ESTADOS_HISTORICOS = ["Aprobada", "Rechazada", "Comprado", "Facturada", "Recibida"];
 
 const TRANSICIONES: Record<string, { desde: string[]; permiso: string }> = {
   Aprobada: {
@@ -60,6 +79,10 @@ function serializar(s: any) {
     cotizacionTamano,
     cotizacionSubidoPorNombre,
     cotizacionSubidoEn,
+    recepcionConfirmadaPorId,
+    recepcionConfirmadaPorNombre,
+    recepcionConfirmadaEn,
+    recepcionComentario,
     facturas,
     cotizacionesProveedor,
     ...resto
@@ -83,7 +106,8 @@ function serializar(s: any) {
     // pedir el detalle completo de cada cotización.
     cotizacionesResumen: {
       total: cotizacionesProv.length,
-      requeridas: NUM_COTIZACIONES_REQUERIDAS,
+      minimo: MIN_COTIZACIONES_REQUERIDAS,
+      maximo: MAX_COTIZACIONES_COMPARATIVO,
       tieneGanadora: cotizacionesProv.some((c: any) => c.esGanadora),
     },
     // Factura final que se paga, si ya se registró (una solicitud "Comprado"
@@ -92,6 +116,15 @@ function serializar(s: any) {
       Array.isArray(facturas) && facturas.length > 0
         ? { id: facturas[0].id, numero: facturas[0].numero, estado: facturas[0].estado }
         : null,
+    // Confirmación del solicitante original de que recibió físicamente el
+    // producto/servicio (ver confirmarRecepcionSolicitud).
+    recepcion: s.recepcionConfirmadaEn
+      ? {
+          confirmadaPor: s.recepcionConfirmadaPorNombre,
+          confirmadaEn: s.recepcionConfirmadaEn,
+          comentario: s.recepcionComentario,
+        }
+      : null,
   };
 }
 
@@ -129,6 +162,30 @@ export const listarSolicitudes = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error("Error al listar solicitudes de compra:", error);
     return res.status(500).json({ message: "Error al obtener solicitudes de compra." });
+  }
+};
+
+/**
+ * Una solicitud puntual por id, en cualquier estado (activa o histórica) —
+ * respalda la página de detalle (/solicitudes-compra/:id), que necesita
+ * poder abrirse directo (o recargarse) sin depender de que el registro esté
+ * en la página que listarSolicitudes/listarHistorialCompras haya cargado.
+ */
+export const obtenerSolicitud = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+      include: INCLUDE_FACTURA_VINCULADA,
+    });
+    if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
+
+    return res.json(serializar(solicitud));
+  } catch (error) {
+    console.error("Error al obtener la solicitud de compra:", error);
+    return res.status(500).json({ message: "Error al obtener la solicitud de compra." });
   }
 };
 
@@ -201,6 +258,108 @@ export const listarHistorialCompras = async (req: AuthenticatedRequest, res: Res
   } catch (error) {
     console.error("Error al listar historia de compras:", error);
     return res.status(500).json({ message: "Error al obtener la historia de compras." });
+  }
+};
+
+/**
+ * Solicitudes de compra que todavía pueden recibir una factura — punto de
+ * entrada del selector "Solicitud de compra relacionada" en Recepcionar
+ * Factura. Reutiliza ESTADOS_SC_VINCULABLES_A_FACTURA (misma lista que usa
+ * facturas.controller.ts al vincular), así que nunca hay dos criterios de
+ * "vinculable" desincronizados. Prioriza el proveedor de la factura si se
+ * indica `proveedorId` — no expone el catálogo completo del tenant.
+ *
+ * "Facturación pendiente" se calcula con SUM(Factura.total) de las facturas
+ * activas (no eliminadas, no Rechazada — una factura rechazada nunca llegó
+ * a facturar nada) ya vinculadas a cada solicitud; solo se listan
+ * solicitudes con saldoPendiente > 0. Es un cálculo exacto (no aproximado):
+ * los datos actuales (Factura.solicitudCompraId + Factura.total) alcanzan
+ * para determinarlo sin ambigüedad.
+ */
+export const listarSolicitudesDisponiblesParaFactura = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const proveedorId =
+      typeof req.query.proveedorId === "string" && req.query.proveedorId
+        ? req.query.proveedorId
+        : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: any = {
+      tenantId,
+      eliminado: false,
+      estado: { in: ESTADOS_SC_VINCULABLES_A_FACTURA },
+    };
+    if (proveedorId) where.proveedorId = proveedorId;
+    if (search) {
+      where.OR = [
+        { item: { contains: search } },
+        { descripcion: { contains: search } },
+        { proveedor: { contains: search } },
+      ];
+    }
+
+    const solicitudes = await req.tenantPrisma!.solicitudCompra.findMany({
+      where,
+      select: {
+        id: true,
+        empresaId: true,
+        item: true,
+        descripcion: true,
+        proveedorId: true,
+        proveedor: true,
+        valorEstimado: true,
+        estado: true,
+        fechaSolicitud: true,
+      },
+      orderBy: { fechaSolicitud: "desc" },
+      take: 200, // tope de seguridad, mismo criterio que el resto de listados no paginados de este módulo
+    });
+    if (solicitudes.length === 0) return res.json([]);
+
+    const totales = await req.tenantPrisma!.factura.groupBy({
+      by: ["solicitudCompraId"],
+      where: {
+        tenantId,
+        eliminado: false,
+        estado: { not: "Rechazada" },
+        solicitudCompraId: { in: solicitudes.map((s) => s.id) },
+      },
+      _sum: { total: true },
+    });
+    const facturadoPorSolicitud = new Map<string, number>(
+      totales
+        .filter((t) => t.solicitudCompraId)
+        .map((t) => [t.solicitudCompraId as string, Number(t._sum.total ?? 0)]),
+    );
+
+    const disponibles = solicitudes
+      .map((s) => {
+        const valorEstimado = Number(s.valorEstimado);
+        const facturado = facturadoPorSolicitud.get(s.id) ?? 0;
+        return {
+          id: s.id,
+          empresaId: s.empresaId,
+          item: s.item,
+          descripcion: s.descripcion,
+          proveedorId: s.proveedorId,
+          proveedor: s.proveedor,
+          valorEstimado,
+          estado: s.estado,
+          fechaSolicitud: s.fechaSolicitud,
+          facturado,
+          saldoPendiente: valorEstimado - facturado,
+        };
+      })
+      .filter((s) => s.saldoPendiente > 0);
+
+    return res.json(disponibles);
+  } catch (error) {
+    console.error("Error al listar solicitudes disponibles para factura:", error);
+    return res.status(500).json({ message: "Error al obtener solicitudes disponibles." });
   }
 };
 
@@ -300,6 +459,20 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
       { excluirUsuarioId: req.user!.id },
     );
 
+    await crearItemDeTrabajo(req.tenantPrisma!, {
+      tenantId,
+      tipo: "SOLICITUD_COMPRA_PENDIENTE",
+      categoria: "APROBACION",
+      sourceModule: "solicitudes",
+      sourceEntityTipo: "SolicitudCompra",
+      sourceEntityId: solicitud.id,
+      titulo: `Solicitud de compra "${item}" pendiente de aprobación`,
+      descripcion: `${solicitanteUsuario.nombre} · ${solicitud.empresaId}`,
+      prioridad: PRIORIDAD_INBOX[solicitud.prioridad] || "MEDIA",
+      asignadoPermiso: PERMISOS_SISTEMA.SOLICITUDES_APROBAR,
+      enlace: `/solicitudes-compra/${solicitud.id}`,
+    });
+
     return res.status(201).json(serializar(solicitud));
   } catch (error) {
     console.error("Error al crear solicitud de compra:", error);
@@ -354,17 +527,19 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
       });
     }
 
-    // Regla de las 3 cotizaciones: una solicitud no puede aprobarse sin
-    // exactamente 3 cotizaciones de proveedor completas y una elegida como
-    // ganadora en el cuadro comparativo. Se valida en el backend (aquí)
+    // Regla de cotizaciones: una solicitud no puede aprobarse sin al menos
+    // MIN_COTIZACIONES_REQUERIDAS cotización(es) de proveedor y una elegida
+    // como ganadora en el cuadro comparativo (antes se exigían exactamente
+    // 3; relajado a pedido del negocio — con 1 o 2 cotizaciones también se
+    // puede aprobar si hay ganadora). Se valida en el backend (aquí)
     // independientemente de que el frontend ya bloquee el botón por UX.
     if (nuevoEstado === "Aprobada") {
       const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
         where: { solicitudCompraId: id, tenantId },
       });
-      if (cotizaciones.length !== 3) {
+      if (cotizaciones.length < MIN_COTIZACIONES_REQUERIDAS) {
         return res.status(409).json({
-          message: `Se requieren exactamente 3 cotizaciones de proveedor para aprobar esta solicitud (hay ${cotizaciones.length}).`,
+          message: `Se requiere al menos ${MIN_COTIZACIONES_REQUERIDAS} cotización de proveedor para aprobar esta solicitud (hay ${cotizaciones.length}).`,
         });
       }
       if (!cotizaciones.some((c) => c.esGanadora)) {
@@ -388,6 +563,19 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
       where: { id },
       data,
     });
+
+    // La solicitud dejó de necesitar aprobación (fue aprobada o rechazada) —
+    // resuelve el ítem de Inbox desde el mismo lugar donde el estado real
+    // cambió, nunca a mano desde el propio Inbox.
+    if (TRANSICIONES_DE_RESOLUCION.has(nuevoEstado)) {
+      await resolverItemDeTrabajo(req.tenantPrisma!, {
+        tenantId,
+        sourceModule: "solicitudes",
+        sourceEntityId: id,
+        tipo: "SOLICITUD_COMPRA_PENDIENTE",
+        resolvedByUsuarioId: req.user!.id,
+      });
+    }
 
     await req.tenantPrisma!.auditoria.create({
       data: {
@@ -423,6 +611,83 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
   } catch (error) {
     console.error("Error al cambiar estado de solicitud:", error);
     return res.status(500).json({ message: "Error al actualizar la solicitud." });
+  }
+};
+
+/**
+ * Confirmación del solicitante original de que recibió físicamente el
+ * producto/servicio pedido. Cierra el ciclo Solicitud -> Cotizaciones ->
+ * Aprobación -> Factura -> Pago -> Recepción. A diferencia del resto de
+ * transiciones (que requieren un permiso de gestión), esta es self-service:
+ * solo el propio solicitante puede confirmarla, sin importar sus permisos,
+ * y solo cuando ya existe una factura vinculada totalmente pagada.
+ */
+export const confirmarRecepcionSolicitud = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+    const { comentario } = req.body;
+
+    const solicitud = await req.tenantPrisma!.solicitudCompra.findFirst({
+      where: { id, tenantId, eliminado: false },
+      include: {
+        facturas: {
+          where: { eliminado: false },
+          select: { id: true, numero: true, estado: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+    if (!solicitud) return res.status(404).json({ message: "Solicitud no encontrada." });
+
+    if (!solicitud.solicitanteId || solicitud.solicitanteId !== req.user!.id) {
+      return res.status(403).json({
+        message: "Solo quien creó la solicitud puede confirmar la recepción del producto.",
+      });
+    }
+
+    if (solicitud.estado !== "Facturada") {
+      return res.status(409).json({
+        message: `No se puede confirmar la recepción desde el estado "${solicitud.estado}".`,
+      });
+    }
+
+    const facturaVinculada = solicitud.facturas[0];
+    if (!facturaVinculada || facturaVinculada.estado !== "Pagada") {
+      return res.status(409).json({
+        message:
+          "La factura vinculada a esta solicitud todavía no está totalmente pagada; no se puede confirmar la recepción.",
+      });
+    }
+
+    const actualizada = await req.tenantPrisma!.solicitudCompra.update({
+      where: { id },
+      data: {
+        estado: "Recibida",
+        recepcionConfirmadaPorId: req.user!.id,
+        recepcionConfirmadaPorNombre: req.user!.nombre,
+        recepcionConfirmadaEn: new Date(),
+        recepcionComentario:
+          typeof comentario === "string" && comentario.trim() ? comentario.trim() : null,
+      },
+    });
+
+    await req.tenantPrisma!.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        accion: "SOLICITUD_COMPRA_RECIBIDA",
+        detalle: `${req.user!.nombre} confirmó la recepción del producto de la solicitud "${solicitud.item}" (factura "${facturaVinculada.numero}").`,
+        entidadTipo: "SolicitudCompra",
+        entidadId: id,
+      },
+    });
+
+    return res.json(serializar(actualizada));
+  } catch (error) {
+    console.error("Error al confirmar recepción de solicitud de compra:", error);
+    return res.status(500).json({ message: "Error al confirmar la recepción." });
   }
 };
 

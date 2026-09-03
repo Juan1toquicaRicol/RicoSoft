@@ -213,6 +213,123 @@ export interface ItemBusquedaSiesa {
  * recorta con LTRIM/RTRIM). Búsqueda directa contra el maestro de ítems de
  * Siesa (t120_mc_items) — no hay catálogo propio de productos en RicoSoft.
  */
+export interface ItemMaestroSiesa {
+  itemRowId: number;
+  descripcion: string | null;
+  referencia: string | null;
+  unidadMedida: string | null;
+  esVendible: boolean;
+  naturaleza: NaturalezaInventario;
+}
+
+/**
+ * Listado PAGINADO del maestro de ítems (t120_mc_items) — a diferencia de
+ * buscarItemsSiesa (autocompletado, exige búsqueda, tope fijo de
+ * resultados), esta función sirve la pantalla administrativa de
+ * clasificación funcional: necesita poder listar el catálogo completo
+ * (miles de ítems, ver ExistenciaItemSiesa) sin descargarlo todo al
+ * navegador. `search` es opcional aquí (sin él, pagina el catálogo
+ * completo); mismo criterio de naturaleza ya verificado en
+ * leerExistenciasSiesa, reutilizado tal cual. Excluye servicios y
+ * repuestos (tipo=2/3) — esta pantalla es para clasificar materia
+ * prima/mercancía física (resinas, masterbatch, insumos), no fletes ni
+ * tornillos.
+ */
+export async function listarItemsMaestroSiesa(
+  ciaId: number,
+  opciones: {
+    search?: string;
+    page: number;
+    pageSize: number;
+    /**
+     * Filtro opcional por itemRowId, resuelto de antemano en RicoSoft (p.
+     * ej. "solo los ítems ya clasificados con X" o "excluye los ya
+     * clasificados"). Se traduce a IN/NOT IN en SQL para que el filtrado y
+     * la paginación ocurran en Siesa en vez de traer el catálogo completo a
+     * Node — ver listarItemsConClasificacion en item-clasificaciones.controller.ts.
+     * Con listas muy grandes (más de LIMITE_IDS_EN_CLAUSULA) el llamador
+     * debe usar otra estrategia: SQL Server limita a ~2100 parámetros por
+     * consulta.
+     */
+    itemRowIdsFiltro?: { modo: "incluir" | "excluir"; ids: number[] };
+  },
+): Promise<{ items: ItemMaestroSiesa[]; total: number }> {
+  const pool = await getSiesaPool();
+  const condicionBusqueda = opciones.search
+    ? "AND (f120_descripcion LIKE @search OR f120_referencia LIKE @search)"
+    : "";
+
+  const filtro = opciones.itemRowIdsFiltro;
+  let condicionIds = "";
+  if (filtro) {
+    if (filtro.ids.length === 0) {
+      // IN () vacío nunca matchea nada; NOT IN () de una lista vacía
+      // matchea todo — ambos son válidos como constante SQL, sin parámetros.
+      condicionIds = filtro.modo === "incluir" ? "AND 1 = 0" : "";
+    } else {
+      const parametros = filtro.ids.map((_, i) => `@id${i}`).join(", ");
+      condicionIds = `AND f120_rowid ${filtro.modo === "incluir" ? "IN" : "NOT IN"} (${parametros})`;
+    }
+  }
+
+  const requestBase = () => {
+    const req = pool.request().input("ciaId", ciaId);
+    if (opciones.search) req.input("search", `%${opciones.search}%`);
+    if (filtro) filtro.ids.forEach((id, i) => req.input(`id${i}`, id));
+    return req;
+  };
+
+  // Esta pantalla es para clasificar materia prima/mercancía física
+  // (resinas, masterbatch, insumos) — se excluyen tipo=2 (servicios reales:
+  // FLETE, BODEGAJE) y tipo=3 (repuestos reales: tornillos), verificados en
+  // vivo (ver comentario de clasificarNaturaleza más arriba). No se filtra
+  // por esVendible: tanto "producto" como "insumo" deben poder clasificarse.
+  const condicionNaturaleza = "AND ISNULL(f120_ind_tipo_item, 1) NOT IN (2, 3)";
+
+  const [itemsResult, totalResult] = await Promise.all([
+    requestBase()
+      .input("skip", (opciones.page - 1) * opciones.pageSize)
+      .input("take", opciones.pageSize).query<{
+      itemRowId: number;
+      descripcion: string | null;
+      referencia: string | null;
+      unidadMedida: string | null;
+      indVenta: number | null;
+      tipoItem: number | null;
+    }>(`
+      SELECT
+        f120_rowid AS itemRowId,
+        f120_descripcion AS descripcion,
+        f120_referencia AS referencia,
+        LTRIM(RTRIM(f120_id_unidad_inventario)) AS unidadMedida,
+        f120_ind_venta AS indVenta,
+        f120_ind_tipo_item AS tipoItem
+      FROM t120_mc_items
+      WHERE f120_id_cia = @ciaId ${condicionBusqueda} ${condicionIds} ${condicionNaturaleza}
+      ORDER BY f120_descripcion
+      OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY
+    `),
+    requestBase().query<{ n: number }>(`
+      SELECT COUNT(*) AS n FROM t120_mc_items
+      WHERE f120_id_cia = @ciaId ${condicionBusqueda} ${condicionIds} ${condicionNaturaleza}
+    `),
+  ]);
+
+  const items = itemsResult.recordset.map((r) => {
+    const esVendible = r.indVenta !== 0;
+    return {
+      itemRowId: r.itemRowId,
+      descripcion: r.descripcion?.trim() || null,
+      referencia: r.referencia?.trim() || null,
+      unidadMedida: r.unidadMedida?.trim() || null,
+      esVendible,
+      naturaleza: clasificarNaturaleza(r.tipoItem, esVendible),
+    };
+  });
+
+  return { items, total: totalResult.recordset[0]?.n ?? 0 };
+}
+
 export async function buscarItemsSiesa(
   ciaId: number,
   search: string,

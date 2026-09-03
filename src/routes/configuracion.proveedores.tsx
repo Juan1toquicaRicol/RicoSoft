@@ -22,7 +22,15 @@ import { useProveedores, type Proveedor } from "@/hooks/use-proveedores";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -77,9 +85,14 @@ function ProveedoresConfigPage() {
     contacto: "",
     telefono: "",
     email: "",
+    condicionesPago: "",
+    datosPago: "",
     departamentoId: SIN_DEPARTAMENTO,
   });
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
+  const [editandoPago, setEditandoPago] = useState<Proveedor | null>(null);
+  const [formPago, setFormPago] = useState({ condicionesPago: "", datosPago: "" });
+  const [guardandoPago, setGuardandoPago] = useState(false);
 
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
@@ -122,6 +135,8 @@ function ProveedoresConfigPage() {
         contacto: "",
         telefono: "",
         email: "",
+        condicionesPago: "",
+        datosPago: "",
         departamentoId: SIN_DEPARTAMENTO,
       });
       setCreando(false);
@@ -147,6 +162,29 @@ function ProveedoresConfigPage() {
       });
     } catch (err: any) {
       toast.error(err.message || "Error al actualizar el departamento del proveedor.");
+    }
+  };
+
+  const handleAbrirEdicionPago = (p: Proveedor) => {
+    setEditandoPago(p);
+    setFormPago({ condicionesPago: p.condicionesPago || "", datosPago: p.datosPago || "" });
+  };
+
+  const handleGuardarPago = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editandoPago) return;
+    setGuardandoPago(true);
+    try {
+      await actualizarProveedor(editandoPago.id, {
+        condicionesPago: formPago.condicionesPago,
+        datosPago: formPago.datosPago,
+      });
+      toast.success(`Condiciones de pago de "${editandoPago.nombre}" actualizadas.`);
+      setEditandoPago(null);
+    } catch (err: any) {
+      toast.error(err.message || "Error al actualizar las condiciones de pago.");
+    } finally {
+      setGuardandoPago(false);
     }
   };
 
@@ -225,6 +263,18 @@ function ProveedoresConfigPage() {
             placeholder="Correo (opcional)"
             value={nuevo.email}
             onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })}
+          />
+          <Input
+            placeholder="Condiciones de pago (ej. 30 días crédito)"
+            value={nuevo.condicionesPago}
+            onChange={(e) => setNuevo({ ...nuevo, condicionesPago: e.target.value })}
+          />
+          <Textarea
+            placeholder="Datos de pago (banco, cuenta, beneficiario)..."
+            value={nuevo.datosPago}
+            onChange={(e) => setNuevo({ ...nuevo, datosPago: e.target.value })}
+            className="sm:col-span-2"
+            rows={2}
           />
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-500">Departamento (opcional)</label>
@@ -385,6 +435,15 @@ function ProveedoresConfigPage() {
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         {puedeEditar && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAbrirEdicionPago(p)}
+                          >
+                            Datos de pago
+                          </Button>
+                        )}
+                        {puedeEditar && (
                           <Button size="sm" variant="outline" onClick={() => handleToggleActivo(p)}>
                             {p.activo ? "Desactivar" : "Activar"}
                           </Button>
@@ -438,6 +497,39 @@ function ProveedoresConfigPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!editandoPago} onOpenChange={(open) => !open && setEditandoPago(null)}>
+        <DialogContent className="bg-white">
+          <DialogHeader>
+            <DialogTitle>Datos de pago — {editandoPago?.nombre}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleGuardarPago} className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-500">Condiciones de pago</label>
+              <Input
+                placeholder="Ej. 30 días crédito"
+                value={formPago.condicionesPago}
+                onChange={(e) => setFormPago({ ...formPago, condicionesPago: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-500">
+                Datos de pago (banco, cuenta, beneficiario)
+              </label>
+              <Textarea
+                value={formPago.datosPago}
+                onChange={(e) => setFormPago({ ...formPago, datosPago: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" variant="success" disabled={guardandoPago}>
+                {guardandoPago ? "Guardando..." : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

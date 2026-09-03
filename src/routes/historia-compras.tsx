@@ -1,14 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Eye,
-  History,
-  Paperclip,
-  ShoppingCart,
-  X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, History, ShoppingCart, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -39,15 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { useTenant } from "@/lib/tenant-context";
-import { useHistorialCompras, descargarCotizacionSolicitud } from "@/hooks/use-solicitudes";
+import { useTenant, siglaEmpresa } from "@/lib/tenant-context";
+import { useHistorialCompras } from "@/hooks/use-solicitudes";
 import { money } from "@/lib/data";
 import type { SolicitudCompra } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -66,7 +50,14 @@ export const Route = createFileRoute("/historia-compras")({
   component: HistoriaComprasPage,
 });
 
-const ESTADOS_FILTRO = ["Todas", "Aprobada", "Rechazada", "Comprado", "Facturada"] as const;
+const ESTADOS_FILTRO = [
+  "Todas",
+  "Aprobada",
+  "Rechazada",
+  "Comprado",
+  "Facturada",
+  "Recibida",
+] as const;
 type EstadoFiltro = (typeof ESTADOS_FILTRO)[number];
 
 const AREAS = [
@@ -92,23 +83,7 @@ function HistoriaComprasPage() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [page, setPage] = useState(1);
-  const [detalle, setDetalle] = useState<SolicitudCompra | null>(null);
-  const [descargandoCotizacion, setDescargandoCotizacion] = useState(false);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
-
-  const handleVerCotizacion = async (id: string) => {
-    setDescargandoCotizacion(true);
-    try {
-      const blob = await descargarCotizacionSolicitud(id);
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir la cotización.");
-    } finally {
-      setDescargandoCotizacion(false);
-    }
-  };
 
   // Página real server-side: el backend ya no devuelve el historial completo
   // (podía crecer indefinidamente con la antigüedad del tenant) — solo la
@@ -208,7 +183,7 @@ function HistoriaComprasPage() {
               onChange={setAgrupacion}
               opciones={[
                 OPCION_SIN_AGRUPAR,
-                { value: "area", label: "Área" },
+                { value: "area", label: "Departamento" },
                 { value: "proveedor", label: "Proveedor" },
                 { value: "estado", label: "Estado" },
                 { value: "empresa", label: "Empresa" },
@@ -218,7 +193,7 @@ function HistoriaComprasPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Área</Label>
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Departamento</Label>
               <Select
                 value={area}
                 onValueChange={(val) => {
@@ -231,7 +206,7 @@ function HistoriaComprasPage() {
                 </SelectTrigger>
                 <SelectContent className="bg-white border-slate-200">
                   <SelectItem value="__todas__" className="text-xs">
-                    Todas las áreas
+                    Todos los departamentos
                   </SelectItem>
                   {AREAS.map((a) => (
                     <SelectItem key={a} value={a} className="text-xs">
@@ -305,7 +280,7 @@ function HistoriaComprasPage() {
                 Empresa
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Solicitante / Área
+                Solicitante / Departamento
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Ítem Solicitado
@@ -348,7 +323,7 @@ function HistoriaComprasPage() {
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
                       >
-                        {sol.empresaId}
+                        {siglaEmpresa(sol.empresaId)}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -356,7 +331,13 @@ function HistoriaComprasPage() {
                       <p className="text-[11px] text-slate-500">{sol.area}</p>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <p className="font-bold text-slate-900 text-xs">{sol.item}</p>
+                      <Link
+                        to="/solicitudes-compra/$id"
+                        params={{ id: sol.id }}
+                        className="font-bold text-slate-900 text-xs hover:text-blue-800 hover:underline"
+                      >
+                        {sol.item}
+                      </Link>
                       <p className="text-[11px] text-slate-500 truncate max-w-[200px]">
                         Cant. {sol.cantidad}
                       </p>
@@ -389,14 +370,11 @@ function HistoriaComprasPage() {
                       {sol.resueltoPorNombre || "-"}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-right">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => setDetalle(sol)}
-                        className="h-7 text-[11px] gap-1"
-                      >
-                        <Eye className="h-3 w-3" /> Ver
-                      </Button>
+                      <Link to="/solicitudes-compra/$id" params={{ id: sol.id }}>
+                        <Button size="xs" variant="outline" className="h-7 text-[11px] gap-1">
+                          <Eye className="h-3 w-3" /> Ver
+                        </Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -458,111 +436,6 @@ function HistoriaComprasPage() {
         )}
       </div>
 
-      {/* ── Modal de detalle completo ── */}
-      <Dialog open={!!detalle} onOpenChange={(open) => !open && setDetalle(null)}>
-        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
-          {detalle && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-slate-900 font-bold flex items-center gap-2">
-                  Solicitud de Compra
-                  <EstadoBadge estado={detalle.estado} />
-                </DialogTitle>
-                <DialogDescription className="text-slate-500">
-                  Registro histórico permanente. Empresa {detalle.empresaId}.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-2 text-sm">
-                <Campo label="Solicitante" valor={detalle.solicitante} />
-                <Campo label="Área" valor={detalle.area} />
-                <Campo label="Ítem solicitado" valor={detalle.item} span2 />
-                <Campo
-                  label="Proveedor"
-                  valor={detalle.proveedor || "Sin proveedor asociado"}
-                  span2
-                />
-                {detalle.factura && (
-                  <div className="col-span-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Factura final
-                    </p>
-                    <Link
-                      to="/facturas/$id"
-                      params={{ id: detalle.factura.id }}
-                      className="font-semibold text-blue-800 hover:underline"
-                    >
-                      {detalle.factura.numero} ({detalle.factura.estado})
-                    </Link>
-                  </div>
-                )}
-                <Campo label="Cantidad" valor={String(detalle.cantidad)} />
-                <Campo label="Valor estimado" valor={money(detalle.valorEstimado)} />
-                <Campo label="Prioridad" valor={detalle.prioridad} />
-                <Campo
-                  label="Fecha de solicitud"
-                  valor={new Date(detalle.fechaSolicitud).toLocaleString("es-CO")}
-                />
-                <Campo
-                  label="Fecha de resolución"
-                  valor={
-                    detalle.fechaResolucion
-                      ? new Date(detalle.fechaResolucion).toLocaleString("es-CO")
-                      : "-"
-                  }
-                />
-                <Campo
-                  label={detalle.estado === "Rechazada" ? "Rechazada por" : "Aprobada por"}
-                  valor={detalle.resueltoPorNombre || "-"}
-                  span2
-                />
-                <Campo
-                  label={
-                    detalle.estado === "Rechazada"
-                      ? "Motivo del rechazo"
-                      : "Comentario de aprobación"
-                  }
-                  valor={detalle.comentarioResolucion || "Sin comentarios registrados."}
-                  span2
-                />
-                {detalle.descripcion && (
-                  <Campo label="Justificación de la compra" valor={detalle.descripcion} span2 />
-                )}
-                <div className="col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Cotización
-                  </p>
-                  {detalle.cotizacion ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      disabled={descargandoCotizacion}
-                      onClick={() => handleVerCotizacion(detalle.id)}
-                      className="mt-1 h-7 gap-1.5 text-[11px] font-bold"
-                    >
-                      <Paperclip className="h-3 w-3" />
-                      {descargandoCotizacion ? "Abriendo..." : detalle.cotizacion.nombre}
-                      <Download className="h-3 w-3" />
-                    </Button>
-                  ) : (
-                    <p className="text-slate-500 font-semibold">Sin cotización adjunta.</p>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </AppShell>
-  );
-}
-
-function Campo({ label, valor, span2 }: { label: string; valor: string; span2?: boolean }) {
-  return (
-    <div className={span2 ? "col-span-2" : undefined}>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="text-slate-900 font-semibold">{valor}</p>
-    </div>
   );
 }

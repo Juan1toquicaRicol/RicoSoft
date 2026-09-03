@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, Info, Search, TrendingDown, Users } from "lucide-react";
+import { AlertTriangle, ChevronDown, Info, Loader2, Search, TrendingDown, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -14,14 +14,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PanelColapsable } from "@/components/ui/panel-colapsable";
 import {
   useCentroComercial,
   useDisponibilidadComercial,
   useBusquedaProductos,
   useContextoProducto,
+  useHistoricoComprasCliente,
   type DisponibilidadComercial,
   type ItemBusqueda,
   type ContextoProducto,
+  type ClienteEnRiesgo,
 } from "@/hooks/use-ventas";
 import { compact, formatCantidad, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -346,6 +349,128 @@ function PanelDisponibilidad() {
   );
 }
 
+/**
+ * Fila expandible de "Clientes en riesgo": al desplegar, responde "¿qué
+ * dejó de comprar este cliente?" y "¿cuánto compraba antes?" sin sacar al
+ * vendedor de Ventas. Reutiliza GET /ventas/clientes/:id/historico (carga
+ * perezosa, solo al abrir) — ningún cálculo nuevo en frontend.
+ */
+function FilaClienteEnRiesgo({ cliente: c }: { cliente: ClienteEnRiesgo }) {
+  const [abierto, setAbierto] = useState(false);
+  const { consultar, loading } = useHistoricoComprasCliente();
+  const [historico, setHistorico] = useState<Awaited<ReturnType<typeof consultar>> | null>(null);
+
+  const handleToggle = async () => {
+    const next = !abierto;
+    setAbierto(next);
+    if (next && !historico) {
+      try {
+        setHistorico(await consultar(c.clienteRowId));
+      } catch {
+        // El hook ya expone `error`; el detalle simplemente no se llena.
+      }
+    }
+  };
+
+  return (
+    <>
+      <TableRow className="cursor-pointer hover:bg-slate-50/80" onClick={handleToggle}>
+        <TableCell className="w-8">
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`}
+          />
+        </TableCell>
+        <TableCell className="text-xs font-semibold text-slate-800">
+          {c.clienteNombre ?? "Cliente sin nombre"}
+        </TableCell>
+        <TableCell className="text-right text-xs">
+          <span
+            className={cn("num font-semibold", c.severidad === "alta" ? "text-red-600" : "text-amber-600")}
+          >
+            {c.diasInactivo} días
+          </span>
+        </TableCell>
+        <TableCell className="num text-right text-xs text-slate-600">
+          {money(c.promedioMensualNeto)}
+        </TableCell>
+        <TableCell className="num text-right text-xs font-bold text-slate-900">
+          {money(c.ventaEstimadaPerdida)}
+        </TableCell>
+        <TableCell className="num text-right text-xs text-slate-600">
+          {c.kilosEstimadosPerdidos > 0 ? formatCantidad(c.kilosEstimadosPerdidos, "KG") : "—"}
+        </TableCell>
+      </TableRow>
+      {abierto && (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={6} className="bg-slate-50/60 px-6 py-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Qué le compraba este cliente (últimos 12 meses)
+            </p>
+            {loading && !historico && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando historial de compras...
+              </p>
+            )}
+            {historico && !historico.disponible && (
+              <p className="mt-2 text-xs text-slate-500">{historico.motivo ?? "Sin datos disponibles."}</p>
+            )}
+            {historico?.disponible && (
+              (historico.productos ?? []).length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">Sin compras registradas en el período.</p>
+              ) : (
+                <div className="mt-2 overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-100">
+                      <TableRow className="hover:bg-slate-100">
+                        <TableHead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Producto
+                        </TableHead>
+                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Cantidad
+                        </TableHead>
+                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Valor histórico
+                        </TableHead>
+                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Veces comprado
+                        </TableHead>
+                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Última compra
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(historico.productos ?? []).map((p) => (
+                        <TableRow key={p.itemRowId}>
+                          <TableCell className="text-xs text-slate-700">
+                            {p.descripcion ?? p.referencia ?? "Producto sin descripción"}
+                          </TableCell>
+                          <TableCell className="num text-right text-xs text-slate-600">
+                            {formatCantidad(p.cantidadHistorica, p.unidadMedida)}
+                          </TableCell>
+                          <TableCell className="num text-right text-xs text-slate-600">
+                            {money(p.netoHistorico)}
+                          </TableCell>
+                          <TableCell className="num text-right text-xs text-slate-600">
+                            {p.numCompras}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-slate-500">
+                            {new Date(p.ultimaCompra).toLocaleDateString("es-CO", { timeZone: "UTC" })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
 function Ventas() {
   const { centro, loading } = useCentroComercial();
 
@@ -367,16 +492,22 @@ function Ventas() {
       {!loading && centro.disponible && (
         <>
           {(centro.productosEnRiesgoQuiebre ?? []).length > 0 && (
-            <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                <h2 className="text-sm font-bold text-slate-900">No comprometer sin revisar</h2>
-              </div>
-              <p className="text-xs text-slate-500">
-                Productos con riesgo real de quedarse sin stock — revisa antes de prometer una fecha
-                de entrega
-              </p>
-              <div className="mt-3 space-y-2">
+            <PanelColapsable
+              className="mt-4"
+              defaultOpen={false}
+              title={
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" /> No comprometer sin revisar
+                </span>
+              }
+              description="Productos con riesgo real de quedarse sin stock — revisa antes de prometer una fecha de entrega"
+              actions={
+                <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-800">
+                  {(centro.productosEnRiesgoQuiebre ?? []).length}
+                </span>
+              }
+            >
+              <div className="space-y-2">
                 {(centro.productosEnRiesgoQuiebre ?? []).slice(0, 10).map((p) => (
                   <div key={p.itemRowId} className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
                     <p className="text-xs font-bold text-orange-800">{p.titulo}</p>
@@ -387,7 +518,7 @@ function Ventas() {
               <Link to="/inventario" className="mt-3 inline-block text-[11px] font-semibold text-blue-700 hover:underline">
                 Ver Centro de Decisiones
               </Link>
-            </div>
+            </PanelColapsable>
           )}
 
           {((centro.clientesInactivos ?? []).length > 0 || (centro.caidasClientesTop ?? []).length > 0) && (
@@ -418,7 +549,7 @@ function Ventas() {
                     Material estimado en riesgo
                   </p>
                   <p className="num mt-1 text-xl font-bold text-amber-700">
-                    {compact(centro.totalKilosEnRiesgo ?? 0)} kg
+                    {formatCantidad(centro.totalKilosEnRiesgo ?? 0, "KG")}
                   </p>
                   <p className="mt-1 text-[11px] text-amber-600">Solo productos vendidos por kilo</p>
                 </div>
@@ -429,6 +560,7 @@ function Ventas() {
                   <Table>
                     <TableHeader className="bg-slate-100/80">
                       <TableRow className="hover:bg-slate-100/80">
+                        <TableHead className="w-8" />
                         <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
                           Cliente
                         </TableHead>
@@ -448,30 +580,7 @@ function Ventas() {
                     </TableHeader>
                     <TableBody>
                       {(centro.clientesInactivos ?? []).map((c) => (
-                        <TableRow key={c.clienteRowId} className="hover:bg-slate-50/80">
-                          <TableCell className="text-xs font-semibold text-slate-800">
-                            {c.clienteNombre ?? "Cliente sin nombre"}
-                          </TableCell>
-                          <TableCell className="text-right text-xs">
-                            <span
-                              className={cn(
-                                "num font-semibold",
-                                c.severidad === "alta" ? "text-red-600" : "text-amber-600",
-                              )}
-                            >
-                              {c.diasInactivo} días
-                            </span>
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {money(c.promedioMensualNeto)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs font-bold text-slate-900">
-                            {money(c.ventaEstimadaPerdida)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {c.kilosEstimadosPerdidos > 0 ? `${compact(c.kilosEstimadosPerdidos)} kg` : "—"}
-                          </TableCell>
-                        </TableRow>
+                        <FilaClienteEnRiesgo key={c.clienteRowId} cliente={c} />
                       ))}
                     </TableBody>
                   </Table>

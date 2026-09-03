@@ -1,5 +1,6 @@
 import type { PronosticoProductoSiesa } from "./demanda-siesa";
 import type { ExistenciaItemSiesa } from "../modules/integraciones-siesa/siesa-inventario.service";
+import { confianzaPorHistorial, type Confianza } from "../domain/planeacion/decisiones";
 
 /**
  * Producción recomendada — Bloque 4 del módulo Producción & Inventario.
@@ -42,6 +43,14 @@ export interface RecomendacionProduccionSiesa {
   inventarioDisponible: number;
   cantidadPendienteEntrar: number;
   produccionRecomendada: number;
+  /** Venta promedio mensual real (antes de aplicar la tendencia) — la base del "por qué". */
+  ventaPromedioMensual: number;
+  /** % de variación reciente aplicado a la demanda proyectada; null si no hay base de comparación. */
+  tendenciaPct: number | null;
+  /** Cuántos de los últimos 12 meses tuvieron venta real — la base de la confianza, nunca inventada. */
+  mesesConVenta: number;
+  /** Misma regla que el Centro de Decisiones (confianzaPorHistorial): ninguna cifra nueva, solo reutilizada. */
+  confianza: Confianza;
 }
 
 function clamp(valor: number, min: number, max: number): number {
@@ -87,6 +96,10 @@ export function calcularProduccionRecomendadaSiesa(
       inventarioDisponible: e.cantidadExistente,
       cantidadPendienteEntrar: e.cantidadPendienteEntrar,
       produccionRecomendada,
+      ventaPromedioMensual: p.ventaPromedioMensual,
+      tendenciaPct: p.tendenciaPct,
+      mesesConVenta: p.mesesConVenta,
+      confianza: confianzaPorHistorial(p.mesesConVenta),
     });
   }
 

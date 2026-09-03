@@ -10,8 +10,11 @@ import {
 import {
   listarSolicitudes,
   listarHistorialCompras,
+  listarSolicitudesDisponiblesParaFactura,
+  obtenerSolicitud,
   crearSolicitud,
   cambiarEstadoSolicitud,
+  confirmarRecepcionSolicitud,
   eliminarSolicitud,
   subirCotizacionSolicitud,
   obtenerCotizacionSolicitud,
@@ -33,9 +36,24 @@ router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("solicitudes.ver"), listarSolicitudes);
 router.get("/historial", requirePermission("solicitudes.ver"), listarHistorialCompras);
+// Selector "Solicitud de compra relacionada" en Recepcionar Factura — mismo
+// permiso que el resto de lecturas de este módulo, sin permiso nuevo.
+router.get(
+  "/disponibles-para-factura",
+  requirePermission("solicitudes.ver"),
+  listarSolicitudesDisponiblesParaFactura,
+);
 router.post("/", requirePermission("solicitudes.crear"), crearSolicitud);
+// Detalle de una solicitud puntual (página /solicitudes-compra/:id) — debe
+// ir DESPUÉS de "/historial" y "/disponibles-para-factura" (rutas literales
+// de un solo segmento, como :id) para que Express no las confunda con un id.
+router.get("/:id", requirePermission("solicitudes.ver"), obtenerSolicitud);
 // El permiso específico (aprobar/rechazar/comprar) se valida en el controlador según el estado destino.
 router.patch("/:id/estado", cambiarEstadoSolicitud);
+// Self-service: la propia validación de "solo el solicitante" vive en el
+// controlador (no se puede resolver con requirePermission, es dueño-de-fila,
+// no un permiso de catálogo).
+router.post("/:id/confirmar-recepcion", confirmarRecepcionSolicitud);
 
 router.get("/:id/archivo", requirePermission("solicitudes.ver"), obtenerCotizacionSolicitud);
 router.post(

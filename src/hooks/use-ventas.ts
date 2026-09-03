@@ -130,6 +130,45 @@ export function useCentroComercial() {
   return { centro, loading, error, refresh };
 }
 
+export interface ProductoHistoricoCliente {
+  itemRowId: number;
+  descripcion: string | null;
+  referencia: string | null;
+  unidadMedida: string | null;
+  cantidadHistorica: number;
+  netoHistorico: number;
+  numCompras: number;
+  /** ISO string. */
+  ultimaCompra: string;
+}
+
+export interface RespuestaHistoricoCliente {
+  disponible: boolean;
+  motivo?: string;
+  productos?: ProductoHistoricoCliente[];
+}
+
+/** "¿Qué dejó de comprar este cliente?" — consulta bajo demanda (drill-down de Clientes en riesgo). */
+export function useHistoricoComprasCliente() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const consultar = useCallback(async (clienteRowId: number): Promise<RespuestaHistoricoCliente> => {
+    setLoading(true);
+    setError("");
+    try {
+      return await fetchAuth(`/ventas/clientes/${clienteRowId}/historico`);
+    } catch (err: any) {
+      setError(err.message || "Error cargando el histórico de compras del cliente.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { consultar, loading, error };
+}
+
 export interface ItemBusqueda {
   itemRowId: number;
   descripcion: string | null;

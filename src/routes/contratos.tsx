@@ -50,7 +50,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTenant } from "@/lib/tenant-context";
+import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import { useContratos } from "@/hooks/use-contratos";
 import { useProveedorBusqueda } from "@/hooks/use-proveedores";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
@@ -107,6 +107,8 @@ function Contratos() {
   >();
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
+  const empresaBloqueada =
+    empresaIdDeTenant(user?.tenantNombre) || (empresaActiva !== "ALL" ? empresaActiva : null);
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.CONTRATOS_ELIMINAR);
   const [modalOpen, setModalOpen] = useState(false);
   const [contratoAEliminar, setContratoAEliminar] = useState<{
@@ -131,7 +133,7 @@ function Contratos() {
   };
 
   const [form, setForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+    empresaId: empresaBloqueada || "RC",
     proveedorId: "",
     responsableId: "",
     area: "Compras",
@@ -177,7 +179,7 @@ function Contratos() {
     setModalOpen(false);
     setProveedorSeleccionadoNombre(undefined);
     setForm({
-      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+      empresaId: empresaBloqueada || "RC",
       proveedorId: "",
       responsableId: "",
       area: "Compras",
@@ -210,7 +212,7 @@ function Contratos() {
             onChange={setAgrupacion}
             opciones={[
               OPCION_SIN_AGRUPAR,
-              { value: "area", label: "Área" },
+              { value: "area", label: "Departamento" },
               { value: "proveedor", label: "Proveedor" },
               { value: "estado", label: "Estado" },
             ]}
@@ -229,7 +231,7 @@ function Contratos() {
                 Responsable
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Área
+                Departamento
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
                 Valor
@@ -261,7 +263,7 @@ function Contratos() {
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
                       >
-                        {c.empresaId}
+                        {siglaEmpresa(c.empresaId)}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">
@@ -378,21 +380,29 @@ function Contratos() {
                 <Label htmlFor="empresaId" className="text-xs font-semibold">
                   Empresa
                 </Label>
-                <Select
-                  value={form.empresaId}
-                  onValueChange={(val) => setForm({ ...form, empresaId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id} className="text-xs">
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {empresaBloqueada ? (
+                  <Input
+                    disabled
+                    value={siglaEmpresa(empresaBloqueada)}
+                    className="h-9 text-xs bg-slate-50 text-slate-500 font-semibold"
+                  />
+                ) : (
+                  <Select
+                    value={form.empresaId}
+                    onValueChange={(val) => setForm({ ...form, empresaId: val })}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.sigla}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="proveedor" className="text-xs font-semibold">
@@ -429,7 +439,7 @@ function Contratos() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold">
-                  Área
+                  Departamento
                 </Label>
                 <Select
                   value={form.area}
@@ -464,7 +474,7 @@ function Contratos() {
                         cargandoUsuariosArea
                           ? "Cargando usuarios..."
                           : usuariosArea.length === 0
-                            ? "Sin usuarios en esta área"
+                            ? "Sin usuarios en este departamento"
                             : "Selecciona un responsable"
                       }
                     />

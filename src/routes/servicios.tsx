@@ -50,7 +50,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTenant } from "@/lib/tenant-context";
+import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import { useServicios } from "@/hooks/use-servicios";
 import { useProveedorBusqueda } from "@/hooks/use-proveedores";
 import { useContratos } from "@/hooks/use-contratos";
@@ -68,7 +68,7 @@ export const Route = createFileRoute("/servicios")({
       {
         name: "description",
         content:
-          "Inventario y control de suscripciones y servicios activos categorizados por área y empresa.",
+          "Inventario y control de suscripciones y servicios activos categorizados por departamento y empresa.",
       },
     ],
   }),
@@ -97,6 +97,8 @@ function ServiciosPage() {
   const contratosActivos = contratos.filter((c) => c.estado === "Activo");
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
+  const empresaBloqueada =
+    empresaIdDeTenant(user?.tenantNombre) || (empresaActiva !== "ALL" ? empresaActiva : null);
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.SERVICIOS_ELIMINAR);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -121,7 +123,7 @@ function ServiciosPage() {
   };
 
   const [form, setForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+    empresaId: empresaBloqueada || "RC",
     area: "Sistemas",
     nombreServicio: "",
     proveedorId: "",
@@ -175,7 +177,7 @@ function ServiciosPage() {
     e.preventDefault();
     if (!form.nombreServicio || !form.proveedorId) return;
     if (!form.responsableId) {
-      toast.error("Selecciona el responsable del área.");
+      toast.error("Selecciona el responsable del departamento.");
       return;
     }
     try {
@@ -198,7 +200,7 @@ function ServiciosPage() {
     setModalOpen(false);
     setProveedorSeleccionadoNombre(undefined);
     setForm({
-      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+      empresaId: empresaBloqueada || "RC",
       area: "Sistemas",
       nombreServicio: "",
       proveedorId: "",
@@ -214,7 +216,7 @@ function ServiciosPage() {
   return (
     <AppShell
       title="Servicios y Suscripciones Activas"
-      description="Inventario de licencias SaaS, infraestructura y servicios recurrentes categorizados por área."
+      description="Inventario de licencias SaaS, infraestructura y servicios recurrentes categorizados por departamento."
       actions={
         <Button onClick={() => setModalOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" /> Registrar Servicio / Suscripción
@@ -243,7 +245,7 @@ function ServiciosPage() {
             Empresa Activa
           </p>
           <p className="text-sm font-bold text-slate-900 mt-2">
-            {empresaActiva === "ALL" ? "Todas las empresas (Consolidado)" : empresaActiva}
+            {empresaActiva === "ALL" ? "Todas las empresas (Consolidado)" : siglaEmpresa(empresaActiva)}
           </p>
         </div>
       </div>
@@ -255,7 +257,7 @@ function ServiciosPage() {
               Inventario de Servicios Recurrentes
             </h3>
             <p className="text-xs text-slate-500 font-medium">
-              Software, licencias, conectividad y servicios públicos activos por área.
+              Software, licencias, conectividad y servicios públicos activos por departamento.
             </p>
           </div>
           <SelectorAgrupacion
@@ -263,7 +265,7 @@ function ServiciosPage() {
             onChange={setAgrupacion}
             opciones={[
               OPCION_SIN_AGRUPAR,
-              { value: "area", label: "Área" },
+              { value: "area", label: "Departamento" },
               { value: "proveedor", label: "Proveedor" },
               { value: "estado", label: "Estado" },
             ]}
@@ -279,7 +281,7 @@ function ServiciosPage() {
                 Empresa
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Área Categorizada
+                Departamento Categorizado
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Proveedor
@@ -326,7 +328,7 @@ function ServiciosPage() {
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
                       >
-                        {sub.empresaId}
+                        {siglaEmpresa(sub.empresaId)}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -347,7 +349,9 @@ function ServiciosPage() {
                       {money(sub.costo, sub.moneda)}
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <p className="font-mono text-xs text-slate-500">{sub.fechaRenovacion}</p>
+                      <p className="font-mono text-xs text-slate-500">
+                        {new Date(sub.fechaRenovacion).toLocaleDateString("es-CO")}
+                      </p>
                       {sub.estado === "Activo" && (
                         <BarraVencimiento
                           fecha={sub.fechaRenovacion}
@@ -428,7 +432,7 @@ function ServiciosPage() {
               Registrar Servicio o Suscripción Activa
             </DialogTitle>
             <DialogDescription className="text-slate-500">
-              Control de costos recurrentes y licencias por área.
+              Control de costos recurrentes y licencias por departamento.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-2">
@@ -437,25 +441,33 @@ function ServiciosPage() {
                 <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
                   Empresa
                 </Label>
-                <Select
-                  value={form.empresaId}
-                  onValueChange={(val) => setForm({ ...form, empresaId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id} className="text-xs">
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {empresaBloqueada ? (
+                  <Input
+                    disabled
+                    value={siglaEmpresa(empresaBloqueada)}
+                    className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500 font-semibold"
+                  />
+                ) : (
+                  <Select
+                    value={form.empresaId}
+                    onValueChange={(val) => setForm({ ...form, empresaId: val })}
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.sigla}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
-                  Área Categorizada *
+                  Departamento Categorizado *
                 </Label>
                 <Select
                   value={form.area}
@@ -612,7 +624,7 @@ function ServiciosPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="responsable" className="text-xs font-semibold text-slate-700">
-                  Responsable del Área *
+                  Responsable del Departamento *
                 </Label>
                 <Select
                   value={form.responsableId}
@@ -627,7 +639,7 @@ function ServiciosPage() {
                         cargandoUsuariosArea
                           ? "Cargando usuarios..."
                           : usuariosArea.length === 0
-                            ? "Sin usuarios en esta área"
+                            ? "Sin usuarios en este departamento"
                             : "Selecciona un responsable"
                       }
                     />

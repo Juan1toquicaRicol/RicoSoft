@@ -45,6 +45,10 @@ export interface Factura {
   responsable: string;
   fecha: string;
   vence: string;
+  // Condiciones/datos de pago del proveedor (snapshot al recibir la
+  // factura, editable después vía PATCH /:id/condiciones-pago).
+  condicionesPago: string | null;
+  datosPago: string | null;
   subtotal: number;
   iva: number;
   total: number;
@@ -125,7 +129,33 @@ export interface FaltaStrike {
 }
 
 export type EstadoSolicitudCompra =
-  "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado" | "Facturada";
+  | "Pendiente"
+  | "En Cotización"
+  | "Aprobada"
+  | "Rechazada"
+  | "Comprado"
+  | "Facturada"
+  | "Recibida";
+
+/**
+ * Solicitud de compra que todavía puede recibir una factura (ver GET
+ * /solicitudes-compra/disponibles-para-factura) — no es SolicitudCompra
+ * completa, solo lo que necesita el selector de Recepcionar Factura, con
+ * el saldo pendiente ya calculado en el backend.
+ */
+export interface SolicitudDisponibleParaFactura {
+  id: string;
+  empresaId: string;
+  item: string;
+  descripcion: string | null;
+  proveedorId: string | null;
+  proveedor: string | null;
+  valorEstimado: number;
+  estado: string;
+  fechaSolicitud: string;
+  facturado: number;
+  saldoPendiente: number;
+}
 
 export interface SolicitudCompra {
   id: string;
@@ -154,14 +184,24 @@ export interface SolicitudCompra {
     subidoEn: string | null;
   } | null;
   // Resumen del cuadro comparativo de cotizaciones de proveedor: cuántas hay
-  // registradas (máx. 3) y si ya hay una elegida como ganadora. Se requieren
-  // las 3 completas + ganadora antes de poder aprobar la solicitud.
+  // registradas (mín. `minimo`, máx. `maximo`) y si ya hay una elegida como
+  // ganadora. Se requieren al menos `minimo` cotización(es) + ganadora antes
+  // de poder aprobar la solicitud (antes se exigían exactamente 3).
   cotizacionesResumen: {
     total: number;
-    requeridas: number;
+    minimo: number;
+    maximo: number;
     tieneGanadora: boolean;
   };
   factura?: { id: string; numero: string; estado: string } | null;
+  // Confirmación del solicitante original de que recibió físicamente el
+  // producto/servicio (ver confirmarRecepcionSolicitud). Solo se llena
+  // cuando estado === "Recibida".
+  recepcion?: {
+    confirmadaPor: string | null;
+    confirmadaEn: string;
+    comentario: string | null;
+  } | null;
 }
 
 /** Una de las (hasta 3) cotizaciones de proveedor del cuadro comparativo de

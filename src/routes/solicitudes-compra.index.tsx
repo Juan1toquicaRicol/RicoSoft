@@ -62,7 +62,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTenant } from "@/lib/tenant-context";
+import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import {
   useSolicitudes,
   useCotizacionesProveedor,
@@ -90,13 +90,13 @@ const busquedaSolicitudSchema = z.object({
   cantidad: z.number().positive().optional(),
 });
 
-export const Route = createFileRoute("/solicitudes-compra")({
+export const Route = createFileRoute("/solicitudes-compra/")({
   head: () => ({
     meta: [
       { title: "Solicitudes de Compra | RicoSoft" },
       {
         name: "description",
-        content: "Requerimientos y solicitudes internas de compra por área y empresa.",
+        content: "Requerimientos y solicitudes internas de compra por departamento y empresa.",
       },
     ],
   }),
@@ -111,6 +111,7 @@ function SolicitudesCompraPage() {
     solicitudesCompra,
     loading,
     error,
+    refresh: refrescarSolicitudes,
     addSolicitudCompra,
     subirCotizacionSolicitud,
     updateEstadoSolicitudCompra,
@@ -123,6 +124,8 @@ function SolicitudesCompraPage() {
   const [proveedorCotizacionSeleccionado, setProveedorCotizacionSeleccionado] =
     useState<ProveedorOpcion | null>(null);
   const { user } = useSession();
+  const empresaBloqueada =
+    empresaIdDeTenant(user?.tenantNombre) || (empresaActiva !== "ALL" ? empresaActiva : null);
 
   const puedeCrear = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_CREAR);
   const puedeAprobar = hasPermission(user, PERMISOS_SISTEMA.SOLICITUDES_APROBAR);
@@ -158,7 +161,7 @@ function SolicitudesCompraPage() {
     agregarCotizacion,
     eliminarCotizacion,
     seleccionarGanadora,
-  } = useCotizacionesProveedor(cotizacionesModal?.id ?? null);
+  } = useCotizacionesProveedor(cotizacionesModal?.id ?? null, refrescarSolicitudes);
   // Mismo filtro por departamento que el formulario de la solicitud: cada
   // área solo cotiza con sus proveedores asignados + los generales. La
   // búsqueda ahora es server-side (ver useProveedorBusqueda) — el filtro por
@@ -334,7 +337,7 @@ function SolicitudesCompraPage() {
   };
 
   const [form, setForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+    empresaId: empresaBloqueada || "RC",
     area: "Sistemas",
     solicitanteId: "",
     proveedorId: "",
@@ -390,7 +393,7 @@ function SolicitudesCompraPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.item || !form.solicitanteId) {
-      if (form.item && !form.solicitanteId) toast.error("Selecciona el responsable del área.");
+      if (form.item && !form.solicitanteId) toast.error("Selecciona el responsable del departamento.");
       return;
     }
     setGuardando(true);
@@ -424,7 +427,7 @@ function SolicitudesCompraPage() {
     setModalOpen(false);
     setProveedorSeleccionadoNombre(undefined);
     setForm({
-      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+      empresaId: empresaBloqueada || "RC",
       area: "Sistemas",
       solicitanteId: "",
       proveedorId: "",
@@ -468,7 +471,7 @@ function SolicitudesCompraPage() {
             onChange={setAgrupacion}
             opciones={[
               OPCION_SIN_AGRUPAR,
-              { value: "area", label: "Área" },
+              { value: "area", label: "Departamento" },
               { value: "proveedor", label: "Proveedor" },
               { value: "estado", label: "Estado" },
               { value: "empresa", label: "Empresa" },
@@ -491,7 +494,7 @@ function SolicitudesCompraPage() {
                 Proveedor
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Área / Solicitante
+                Departamento / Solicitante
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
                 Cant.
@@ -530,12 +533,18 @@ function SolicitudesCompraPage() {
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
                       >
-                        {sol.empresaId}
+                        {siglaEmpresa(sol.empresaId)}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-slate-900 text-xs">{sol.item}</p>
+                        <Link
+                          to="/solicitudes-compra/$id"
+                          params={{ id: sol.id }}
+                          className="font-bold text-slate-900 text-xs hover:text-blue-800 hover:underline"
+                        >
+                          {sol.item}
+                        </Link>
                         {sol.cotizacion && (
                           <button
                             type="button"
@@ -572,7 +581,7 @@ function SolicitudesCompraPage() {
                       <EstadoBadge estado={sol.estado} />
                       {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
                         <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                          {sol.cotizacionesResumen.total}/{sol.cotizacionesResumen.requeridas}{" "}
+                          {sol.cotizacionesResumen.total}/{sol.cotizacionesResumen.maximo}{" "}
                           cotizaciones
                           {sol.cotizacionesResumen.tieneGanadora ? " · ganadora elegida" : ""}
                         </p>
@@ -598,14 +607,14 @@ function SolicitudesCompraPage() {
                                 variant="success"
                                 disabled={
                                   sol.cotizacionesResumen.total <
-                                    sol.cotizacionesResumen.requeridas ||
+                                    sol.cotizacionesResumen.minimo ||
                                   !sol.cotizacionesResumen.tieneGanadora
                                 }
                                 title={
                                   sol.cotizacionesResumen.total <
-                                    sol.cotizacionesResumen.requeridas ||
+                                    sol.cotizacionesResumen.minimo ||
                                   !sol.cotizacionesResumen.tieneGanadora
-                                    ? `Se requieren ${sol.cotizacionesResumen.requeridas} cotizaciones y una ganadora elegida.`
+                                    ? `Se requiere al menos ${sol.cotizacionesResumen.minimo} cotización y una ganadora elegida.`
                                     : undefined
                                 }
                                 onClick={() => abrirConfirmacion(sol.id, sol.item, "Aprobada")}
@@ -688,7 +697,7 @@ function SolicitudesCompraPage() {
               Nueva Solicitud de Compra Interna
             </DialogTitle>
             <DialogDescription className="text-slate-500">
-              Requerimiento de compra por área empresarial.
+              Requerimiento de compra por departamento empresarial.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-2">
@@ -697,25 +706,33 @@ function SolicitudesCompraPage() {
                 <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
                   Empresa
                 </Label>
-                <Select
-                  value={form.empresaId}
-                  onValueChange={(val) => setForm({ ...form, empresaId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id} className="text-xs">
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {empresaBloqueada ? (
+                  <Input
+                    disabled
+                    value={siglaEmpresa(empresaBloqueada)}
+                    className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500 font-semibold"
+                  />
+                ) : (
+                  <Select
+                    value={form.empresaId}
+                    onValueChange={(val) => setForm({ ...form, empresaId: val })}
+                  >
+                    <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.sigla}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
-                  Área Solicitante
+                  Departamento Solicitante
                 </Label>
                 <Select
                   value={form.area}
@@ -756,7 +773,7 @@ function SolicitudesCompraPage() {
                         cargandoUsuariosArea
                           ? "Cargando usuarios..."
                           : usuariosArea.length === 0
-                            ? "Sin usuarios en esta área"
+                            ? "Sin usuarios en este departamento"
                             : "Selecciona un responsable"
                       }
                     />
@@ -810,7 +827,7 @@ function SolicitudesCompraPage() {
               />
               {proveedoresDelArea.length === 0 && !buscandoProveedoresArea && (
                 <p className="text-[11px] font-semibold text-slate-600">
-                  {`No hay proveedores asignados al área "${form.area}" (o disponibles en general).`}{" "}
+                  {`No hay proveedores asignados al departamento "${form.area}" (o disponibles en general).`}{" "}
                   <Link to="/configuracion/proveedores" className="font-semibold underline">
                     Créalos en Configuración
                   </Link>{" "}
@@ -930,8 +947,8 @@ function SolicitudesCompraPage() {
               Cotizaciones de proveedor — {cotizacionesModal?.item}
             </DialogTitle>
             <DialogDescription className="text-slate-500">
-              Se requieren exactamente 3 cotizaciones completas y una elegida como ganadora para
-              poder aprobar la solicitud.
+              Se requiere al menos 1 cotización completa y una elegida como ganadora para poder
+              aprobar la solicitud (hasta un máximo de 3).
             </DialogDescription>
           </DialogHeader>
 
@@ -991,7 +1008,7 @@ function SolicitudesCompraPage() {
                           <Button
                             size="xs"
                             variant="outline"
-                            disabled={cotizaciones.length < 3 || accionCotizacionId === c.id}
+                            disabled={cotizaciones.length < 1 || accionCotizacionId === c.id}
                             onClick={() => handleSeleccionarGanadora(c.id)}
                             className="h-6 text-[10px]"
                           >
@@ -1025,7 +1042,7 @@ function SolicitudesCompraPage() {
               </TableBody>
             </Table>
 
-            {puedeCrear && cotizaciones.length < 3 && (
+            {puedeCrear && cotizaciones.length < 3 && !cotizaciones.some((c) => c.esGanadora) && (
               <form
                 onSubmit={handleAgregarCotizacion}
                 className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3"

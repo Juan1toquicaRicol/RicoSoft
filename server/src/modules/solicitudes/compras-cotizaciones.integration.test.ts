@@ -126,6 +126,7 @@ describe.skipIf(!RUN)(
       });
       await prisma.auditoria.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
       await prisma.notificacion.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
+      await prisma.inboxItem.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
       await prisma.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
       await prisma.$disconnect();
@@ -173,7 +174,29 @@ describe.skipIf(!RUN)(
         .set("Authorization", `Bearer ${tokenAAprobador}`)
         .send({ estado: "Aprobada" });
       expect(res.status).toBe(409);
-      expect(res.body.message).toMatch(/3 cotizaciones/);
+      expect(res.body.message).toMatch(/al menos 1 cotización/);
+    });
+
+    it("permite aprobar con solo 1 o 2 cotizaciones (ya no exige exactamente 3), si hay ganadora elegida", async () => {
+      const id = await crearSolicitud(`Item con 2 cotizaciones ${sufijo}`);
+      const ids: string[] = [];
+      for (let i = 1; i <= 2; i++) {
+        const res = await agregarCotizacion(id, tokenAAdmin, i);
+        expect(res.status).toBe(201);
+        ids.push(res.body.id);
+      }
+
+      const seleccion = await request(app)
+        .post(`/api/solicitudes-compra/${id}/cotizaciones/${ids[0]}/seleccionar`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`);
+      expect(seleccion.status).toBe(200);
+
+      const aprobar = await request(app)
+        .patch(`/api/solicitudes-compra/${id}/estado`)
+        .set("Authorization", `Bearer ${tokenAAprobador}`)
+        .send({ estado: "Aprobada" });
+      expect(aprobar.status).toBe(200);
+      expect(aprobar.body.estado).toBe("Aprobada");
     });
 
     it("la primera cotización mueve la solicitud de Pendiente a En Cotización", async () => {
@@ -210,7 +233,7 @@ describe.skipIf(!RUN)(
       expect(altaCruzada.status).toBe(404);
     });
 
-    it("exige exactamente 3 cotizaciones y una ganadora antes de aprobar, y factura vinculada aprueba todo atómicamente", async () => {
+    it("exige exactamente 3 cotizaciones y una ganadora antes de aprobar, y factura vinculada aprueba todo atómicamente (permite una segunda factura de la misma SC)", async () => {
       const id = await crearSolicitud(`Item flujo completo ${sufijo}`);
       const ids: string[] = [];
       for (let i = 1; i <= 3; i++) {
@@ -286,7 +309,9 @@ describe.skipIf(!RUN)(
       const solicitudFinal = await prisma.solicitudCompra.findUnique({ where: { id } });
       expect(solicitudFinal?.estado).toBe("Facturada");
 
-      // No se puede vincular una segunda factura a una SC ya Facturada.
+      // Una SC puede facturarse en varios documentos (facturación parcial):
+      // sí se puede vincular una segunda factura a una SC ya "Facturada" —
+      // ver ESTADOS_SC_VINCULABLES_A_FACTURA en facturas.controller.ts.
       const segundaFactura = await request(app)
         .post("/api/facturas")
         .set("Authorization", `Bearer ${tokenAAdmin}`)
@@ -302,7 +327,12 @@ describe.skipIf(!RUN)(
           subtotal: 1,
           iva: 0,
         });
-      expect(segundaFactura.status).toBe(409);
+      expect(segundaFactura.status).toBe(201);
+      expect(segundaFactura.body.estado).toBe("Aprobada");
+
+      // La SC sigue "Facturada" (no hay una transición adicional que hacer).
+      const solicitudTrasSegunda = await prisma.solicitudCompra.findUnique({ where: { id } });
+      expect(solicitudTrasSegunda?.estado).toBe("Facturada");
     });
   },
 );

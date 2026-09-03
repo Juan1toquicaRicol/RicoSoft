@@ -8,6 +8,13 @@ import {
   UPLOADS_DIR_VISTOS_BUENOS,
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
+import {
+  calcularActividadesVencidas,
+  generarNovedadesSugeridas,
+  calcularSituacionActual,
+  type ActividadSeguimiento,
+} from "../../domain/importaciones/motor-seguimiento";
+import { evaluarCondicionesCierre } from "../../domain/importaciones/condiciones-cierre";
 
 const INCOTERMS_VALIDOS = [
   "EXW",
@@ -66,6 +73,114 @@ const TIPOS_DOCUMENTO_EXPEDIENTE: Record<
 // (crear costeo provisional / costeo definitivo).
 const ESTADOS_TRANSITO_MANUAL = ["En tránsito", "En puerto", "En inspección"];
 const ESTADOS_LOTE_LIQUIDABLES = ["En puerto", "En inspección", "Liberado pre-compra"];
+
+// --- Expediente vivo: actividades / eventos / novedades / pagos / cierre ---
+const ETAPAS_VALIDAS = [
+  "Orden",
+  "Documentación",
+  "Embarque",
+  "Tránsito",
+  "Aduana",
+  "Nacionalización",
+  "Pagos",
+  "Recepción",
+  "Cierre",
+];
+const RESPONSABLE_TIPOS_VALIDOS = [
+  "Interno",
+  "Proveedor",
+  "AgenciaAduana",
+  "Transportador",
+  "Naviera",
+  "Otro",
+];
+const ESTADOS_ACTIVIDAD_VALIDOS = ["Pendiente", "EnCurso", "Completada", "Bloqueada", "Omitida"];
+const TIPOS_NOVEDAD_VALIDOS = [
+  "Retraso",
+  "DocumentoFaltante",
+  "Inconsistencia",
+  "Dano",
+  "Faltante",
+  "ProblemaAduanero",
+  "ProblemaProveedor",
+  "ProblemaTransporte",
+  "ProblemaFinanciero",
+  "Bloqueo",
+  "Otro",
+];
+const ORIGENES_NOVEDAD_VALIDOS = ["Interno", "Externo", "PorDeterminar"];
+const PRIORIDADES_NOVEDAD_VALIDAS = ["Alta", "Media", "Baja"];
+const ESTADOS_NOVEDAD_VALIDOS = ["Abierta", "EnGestion", "Resuelta"];
+const ESTADOS_PAGO_VALIDOS = ["Pendiente", "Pagado", "Anulado"];
+
+/**
+ * IMP-{año}-{consecutivo de 3 dígitos por tenant y año}, ej. "IMP-2026-004".
+ * No se garantiza único a nivel de BD (mismo principio que numeroOrden: una
+ * orden anulada no debe bloquear el consecutivo para siempre) — se calcula
+ * contando órdenes YA con código de ese tenant+año, sin importar su estado.
+ */
+async function generarCodigoImportacion(tenantId: string): Promise<string> {
+  const anio = new Date().getUTCFullYear();
+  const inicioAnio = new Date(Date.UTC(anio, 0, 1));
+  const conteo = await prisma.ordenCompraIntl.count({
+    where: { tenantId, createdAt: { gte: inicioAnio }, codigo: { not: null } },
+  });
+  const consecutivo = String(conteo + 1).padStart(3, "0");
+  return `IMP-${anio}-${consecutivo}`;
+}
+
+const serializarActividad = (a: any) => ({
+  id: a.id,
+  ordenCompraId: a.ordenCompraId,
+  loteId: a.loteId,
+  nombre: a.nombre,
+  etapa: a.etapa,
+  responsableTipo: a.responsableTipo,
+  responsableNombre: a.responsableNombre,
+  fechaPlanificada: a.fechaPlanificada,
+  fechaLimite: a.fechaLimite,
+  fechaReal: a.fechaReal,
+  estado: a.estado,
+  dependeDeId: a.dependeDeId,
+  observacion: a.observacion,
+});
+
+const serializarNovedad = (n: any) => ({
+  id: n.id,
+  ordenCompraId: n.ordenCompraId,
+  tipo: n.tipo,
+  descripcion: n.descripcion,
+  origen: n.origen,
+  responsable: n.responsable,
+  prioridad: n.prioridad,
+  impacto: n.impacto,
+  fechaDeteccion: n.fechaDeteccion,
+  fechaLimite: n.fechaLimite,
+  estado: n.estado,
+  accionRequerida: n.accionRequerida,
+  responsableResolucion: n.responsableResolucionNombre,
+  fechaResolucion: n.fechaResolucion,
+  automatica: n.automatica,
+  creadoPor: n.creadoPorNombre,
+  createdAt: n.createdAt,
+});
+
+const serializarPago = (p: any) => ({
+  id: p.id,
+  ordenCompraId: p.ordenCompraId,
+  concepto: p.concepto,
+  valor: numero(p.valor),
+  moneda: p.moneda,
+  fechaVencimiento: p.fechaVencimiento,
+  estado: p.estado,
+  fechaPago: p.fechaPago,
+  responsable: p.responsableNombre,
+  comprobante: p.comprobanteNombre
+    ? { nombre: p.comprobanteNombre, mime: p.comprobanteMime, tamano: p.comprobanteTamano }
+    : null,
+  observaciones: p.observaciones,
+  createdAt: p.createdAt,
+});
 
 const numero = (valor: unknown): number => Number(valor ?? 0);
 
@@ -171,6 +286,7 @@ const serializarLote = (l: any) => ({
 
 const serializarOrden = (o: any) => ({
   id: o.id,
+  codigo: o.codigo ?? `IMP-${o.id.slice(0, 8)}`, // fallback legible para órdenes anteriores a esta migración
   numeroOrden: o.numeroOrden,
   incoterm: o.incoterm,
   proveedorExtranjero: o.proveedorExtranjero,
@@ -179,6 +295,8 @@ const serializarOrden = (o: any) => ({
   trmPactada: numero(o.trmPactada),
   valorEstimadoTotal: numero(o.valorEstimadoTotal),
   estado: o.estado,
+  fechaEstimadaCierre: o.fechaEstimadaCierre,
+  fechaCierre: o.fechaCierre,
   observaciones: o.observaciones,
   responsable: o.responsableUsuario
     ? { id: o.responsableUsuario.id, nombre: o.responsableUsuario.nombre }
@@ -191,8 +309,38 @@ const serializarOrden = (o: any) => ({
     actor: h.actor,
     accion: h.accion,
     detalle: h.detalle,
+    origen: h.origen,
+    responsable: h.responsable,
+    etapa: h.etapa,
+    evidencia: h.evidenciaNombre
+      ? { nombre: h.evidenciaNombre, mime: h.evidenciaMime, tamano: h.evidenciaTamano }
+      : null,
   })),
+  actividades: (o.actividades ?? []).map(serializarActividad),
+  novedades: (o.novedades ?? []).map(serializarNovedad),
+  pagos: (o.pagos ?? []).map(serializarPago),
+  // "Situación actual" en lenguaje de negocio — ver domain/importaciones/motor-seguimiento.ts.
+  // Se calcula siempre en el servidor, nunca en frontend.
+  situacionActual: calcularSituacionActual(
+    (o.actividades ?? []).map(aParaSeguimiento),
+    new Date(),
+  ),
 });
+
+function aParaSeguimiento(a: any): ActividadSeguimiento {
+  return {
+    id: a.id,
+    ordenCompraId: a.ordenCompraId,
+    nombre: a.nombre,
+    etapa: a.etapa,
+    responsableTipo: a.responsableTipo,
+    responsableNombre: a.responsableNombre,
+    fechaLimite: a.fechaLimite,
+    fechaReal: a.fechaReal,
+    estado: a.estado,
+    dependeDeId: a.dependeDeId,
+  };
+}
 
 const INCLUDE_ORDEN_DETALLE = {
   responsableUsuario: { select: { id: true, nombre: true } },
@@ -204,6 +352,9 @@ const INCLUDE_ORDEN_DETALLE = {
     },
   },
   historial: { orderBy: { createdAt: "asc" as const } },
+  actividades: { orderBy: { fechaLimite: "asc" as const } },
+  novedades: { orderBy: { createdAt: "desc" as const } },
+  pagos: { orderBy: { fechaVencimiento: "asc" as const } },
 };
 
 export const listarOrdenesCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
@@ -223,6 +374,10 @@ export const listarOrdenesCompraIntl = async (req: AuthenticatedRequest, res: Re
       include: {
         responsableUsuario: { select: { id: true, nombre: true } },
         lotes: { include: { expediente: true } },
+        // Solo lo necesario para "situación actual" + alertas de la lista
+        // (nunca el timeline/costeo completo aquí, eso es del detalle).
+        actividades: true,
+        novedades: { where: { estado: { not: "Resuelta" } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -236,11 +391,83 @@ export const listarOrdenesCompraIntl = async (req: AuthenticatedRequest, res: Re
   }
 };
 
+/**
+ * Sincroniza las novedades automáticas de una orden contra su situación
+ * real de actividades — idempotente vía el índice único
+ * (ordenCompraId, reglaOrigen): si la novedad ya existe, no la duplica; si
+ * la condición que la generó ya no aplica, la resuelve automáticamente
+ * (nunca borra el registro, queda como historial). Se corre en cada
+ * consulta de detalle en vez de un cron/job — el volumen (una orden a la
+ * vez, pocas actividades) lo permite sin necesitar infraestructura nueva.
+ */
+async function sincronizarNovedadesAutomaticas(tenantId: string, ordenCompraId: string) {
+  const [actividades, novedadesAutomaticasAbiertas] = await Promise.all([
+    prisma.importacionActividad.findMany({ where: { ordenCompraId } }),
+    prisma.importacionNovedad.findMany({
+      where: { ordenCompraId, automatica: true, estado: { not: "Resuelta" } },
+    }),
+  ]);
+
+  const sugeridas = generarNovedadesSugeridas(actividades.map(aParaSeguimiento), new Date());
+  const reglasSugeridas = new Set(sugeridas.map((s) => s.reglaOrigen));
+  const reglasExistentes = new Set(novedadesAutomaticasAbiertas.map((n) => n.reglaOrigen));
+
+  const operaciones = [];
+
+  for (const s of sugeridas) {
+    if (reglasExistentes.has(s.reglaOrigen)) continue; // ya existe abierta, no se duplica
+    operaciones.push(
+      prisma.importacionNovedad.create({
+        data: {
+          tenantId,
+          ordenCompraId,
+          tipo: s.tipo,
+          descripcion: s.descripcion,
+          origen: s.origen,
+          responsable: s.responsable,
+          prioridad: s.prioridad,
+          fechaLimite: s.fechaLimite,
+          accionRequerida: s.accionRequerida,
+          automatica: true,
+          reglaOrigen: s.reglaOrigen,
+          creadoPorNombre: "Sistema",
+        },
+      }),
+    );
+  }
+
+  for (const n of novedadesAutomaticasAbiertas) {
+    if (n.reglaOrigen && !reglasSugeridas.has(n.reglaOrigen)) {
+      operaciones.push(
+        prisma.importacionNovedad.update({
+          where: { id: n.id },
+          data: {
+            estado: "Resuelta",
+            fechaResolucion: new Date(),
+            responsableResolucionNombre: "Sistema (condición resuelta)",
+          },
+        }),
+      );
+    }
+  }
+
+  if (operaciones.length > 0) await prisma.$transaction(operaciones);
+}
+
 export const obtenerOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const orden = await prisma.ordenCompraIntl.findFirst({
+    const existe = await prisma.ordenCompraIntl.findFirst({
       where: { id: req.params.id, tenantId, eliminado: false },
+      select: { id: true },
+    });
+    if (!existe)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+
+    await sincronizarNovedadesAutomaticas(tenantId, existe.id);
+
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: existe.id, tenantId, eliminado: false },
       include: INCLUDE_ORDEN_DETALLE,
     });
     if (!orden)
@@ -323,9 +550,12 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
       valorEstimadoTotal += fobCop + fobCop * (tarifa / 100);
     }
 
+    const codigo = await generarCodigoImportacion(tenantId);
+
     const orden = await prisma.ordenCompraIntl.create({
       data: {
         tenantId,
+        codigo,
         numeroOrden,
         incoterm,
         proveedorExtranjero,
@@ -345,12 +575,28 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
             valorUnitarioFob: numero(item.valorUnitarioFob),
           })),
         },
+        // Actividad sembrada por defecto al nacer la orden — el resto de
+        // actividades (documentos, booking, pagos...) se siembran cuando
+        // corresponde en cada paso posterior (crearLoteImportacion,
+        // liquidarCosteoImportacion), no todas de una vez aquí: muchas
+        // dependen de datos que todavía no existen (BL, fechas de embarque).
+        actividades: {
+          create: [
+            {
+              tenantId,
+              nombre: "Confirmar orden con el proveedor",
+              etapa: "Orden",
+              responsableTipo: "Proveedor",
+            },
+          ],
+        },
         historial: {
           create: [
             {
               actor: req.user!.nombre,
               accion: "Orden creada",
               detalle: `Landed cost estimado: $${valorEstimadoTotal.toLocaleString("es-CO")}`,
+              etapa: "Orden",
             },
           ],
         },
@@ -407,21 +653,45 @@ export const crearLoteImportacion = async (req: AuthenticatedRequest, res: Respo
       },
     });
 
-    await prisma.importacionHistorial.create({
-      data: {
-        ordenCompraId: orden.id,
-        actor: req.user!.nombre,
-        accion: "Lote registrado",
-        detalle: `BL/AWB ${blAwb}`,
-      },
-    });
-
-    if (orden.estado === "Borrador") {
-      await prisma.ordenCompraIntl.update({
-        where: { id: orden.id },
-        data: { estado: "Confirmada" },
-      });
-    }
+    await prisma.$transaction([
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: orden.id,
+          actor: req.user!.nombre,
+          accion: "Lote registrado",
+          detalle: `BL/AWB ${blAwb}`,
+          etapa: "Embarque",
+        },
+      }),
+      // Actividades sembradas por defecto al nacer el lote — plantilla
+      // mínima del proceso de embarque; el usuario puede agregar más a
+      // mano si el caso lo requiere (ver crearActividad).
+      prisma.importacionActividad.createMany({
+        data: [
+          {
+            tenantId,
+            ordenCompraId: orden.id,
+            loteId: lote.id,
+            nombre: "Enviar documentos de embarque",
+            etapa: "Documentación",
+            responsableTipo: "Proveedor",
+            fechaLimite: fechaEmbarque ? new Date(fechaEmbarque) : null,
+          },
+          {
+            tenantId,
+            ordenCompraId: orden.id,
+            loteId: lote.id,
+            nombre: "Confirmar arribo del embarque",
+            etapa: "Tránsito",
+            responsableTipo: "Naviera",
+            fechaLimite: fechaLlegadaEstimada ? new Date(fechaLlegadaEstimada) : null,
+          },
+        ],
+      }),
+      ...(orden.estado === "Borrador"
+        ? [prisma.ordenCompraIntl.update({ where: { id: orden.id }, data: { estado: "Confirmada" } })]
+        : []),
+    ]);
 
     return res.status(201).json(serializarLote(lote));
   } catch (error) {
@@ -1100,5 +1370,391 @@ export const obtenerDocumentoVistoBueno = async (req: AuthenticatedRequest, res:
   } catch (error) {
     console.error("Error al obtener documento de visto bueno:", error);
     return res.status(500).json({ message: "Error al obtener el documento." });
+  }
+};
+
+// --- Actividades esperadas ---
+
+/**
+ * Actividad manual — complementa las sembradas por defecto (ver
+ * crearOrdenCompraIntl/crearLoteImportacion) para casos que la plantilla no
+ * cubre. loteId es opcional: una actividad puede ser de la orden completa.
+ */
+export const crearActividadImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+
+    const { nombre, etapa, responsableTipo, responsableNombre, fechaPlanificada, fechaLimite, loteId, dependeDeId } =
+      req.body;
+
+    if (!nombre || typeof nombre !== "string" || !nombre.trim()) {
+      return res.status(400).json({ message: "El nombre de la actividad es obligatorio." });
+    }
+    if (!ETAPAS_VALIDAS.includes(etapa)) {
+      return res.status(400).json({ message: `Etapa inválida. Valores permitidos: ${ETAPAS_VALIDAS.join(", ")}.` });
+    }
+    if (!RESPONSABLE_TIPOS_VALIDOS.includes(responsableTipo)) {
+      return res.status(400).json({
+        message: `Tipo de responsable inválido. Valores permitidos: ${RESPONSABLE_TIPOS_VALIDOS.join(", ")}.`,
+      });
+    }
+    if (loteId) {
+      const lote = await prisma.loteImportacion.findFirst({ where: { id: loteId, tenantId, ordenCompraId: orden.id } });
+      if (!lote) return res.status(404).json({ message: "El lote indicado no existe en esta orden." });
+    }
+    if (dependeDeId) {
+      const dependencia = await prisma.importacionActividad.findFirst({
+        where: { id: dependeDeId, tenantId, ordenCompraId: orden.id },
+      });
+      if (!dependencia)
+        return res.status(404).json({ message: "La actividad de la que depende no existe en esta orden." });
+    }
+
+    const actividad = await prisma.importacionActividad.create({
+      data: {
+        tenantId,
+        ordenCompraId: orden.id,
+        loteId: loteId ?? null,
+        nombre: nombre.trim(),
+        etapa,
+        responsableTipo,
+        responsableNombre: responsableNombre?.trim() || null,
+        fechaPlanificada: fechaPlanificada ? new Date(fechaPlanificada) : null,
+        fechaLimite: fechaLimite ? new Date(fechaLimite) : null,
+        dependeDeId: dependeDeId ?? null,
+      },
+    });
+
+    return res.status(201).json(serializarActividad(actividad));
+  } catch (error) {
+    console.error("Error al crear actividad de importación:", error);
+    return res.status(500).json({ message: "Error al registrar la actividad." });
+  }
+};
+
+/**
+ * Marca una actividad como Completada (o cambia su estado) — al completar,
+ * registra un EVENTO real en ImportacionHistorial (origen=Manual), que es
+ * exactamente lo que pide el motor de seguimiento para dejar de considerarla
+ * vencida/bloqueante en la próxima sincronización.
+ */
+export const actualizarActividadImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const actividad = await prisma.importacionActividad.findFirst({
+      where: { id: req.params.id, tenantId },
+    });
+    if (!actividad) return res.status(404).json({ message: "Actividad no encontrada." });
+
+    const { estado, observacion, fechaReal } = req.body;
+    if (estado && !ESTADOS_ACTIVIDAD_VALIDOS.includes(estado)) {
+      return res.status(400).json({
+        message: `Estado inválido. Valores permitidos: ${ESTADOS_ACTIVIDAD_VALIDOS.join(", ")}.`,
+      });
+    }
+
+    const seCompleta = estado === "Completada" && actividad.estado !== "Completada";
+
+    const [actualizada] = await prisma.$transaction([
+      prisma.importacionActividad.update({
+        where: { id: actividad.id },
+        data: {
+          ...(estado ? { estado } : {}),
+          ...(observacion !== undefined ? { observacion: observacion || null } : {}),
+          ...(seCompleta ? { fechaReal: fechaReal ? new Date(fechaReal) : new Date() } : {}),
+        },
+      }),
+      ...(seCompleta
+        ? [
+            prisma.importacionHistorial.create({
+              data: {
+                ordenCompraId: actividad.ordenCompraId,
+                actor: req.user!.nombre,
+                accion: `Actividad completada: ${actividad.nombre}`,
+                detalle: observacion || null,
+                origen: "Manual",
+                etapa: actividad.etapa,
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    return res.json(serializarActividad(actualizada));
+  } catch (error) {
+    console.error("Error al actualizar actividad de importación:", error);
+    return res.status(500).json({ message: "Error al actualizar la actividad." });
+  }
+};
+
+// --- Novedades ---
+
+export const crearNovedadImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+
+    const { tipo, descripcion, origen, responsable, prioridad, impacto, fechaLimite, accionRequerida } = req.body;
+
+    if (!TIPOS_NOVEDAD_VALIDOS.includes(tipo)) {
+      return res.status(400).json({ message: `Tipo de novedad inválido. Valores permitidos: ${TIPOS_NOVEDAD_VALIDOS.join(", ")}.` });
+    }
+    if (!descripcion || typeof descripcion !== "string" || !descripcion.trim()) {
+      return res.status(400).json({ message: "La descripción de la novedad es obligatoria." });
+    }
+    const origenFinal = origen && ORIGENES_NOVEDAD_VALIDOS.includes(origen) ? origen : "PorDeterminar";
+    const prioridadFinal =
+      prioridad && PRIORIDADES_NOVEDAD_VALIDAS.includes(prioridad) ? prioridad : "Media";
+
+    const novedad = await prisma.importacionNovedad.create({
+      data: {
+        tenantId,
+        ordenCompraId: orden.id,
+        tipo,
+        descripcion: descripcion.trim(),
+        origen: origenFinal,
+        responsable: responsable?.trim() || null,
+        prioridad: prioridadFinal,
+        impacto: impacto?.trim() || null,
+        fechaLimite: fechaLimite ? new Date(fechaLimite) : null,
+        accionRequerida: accionRequerida?.trim() || null,
+        automatica: false,
+        creadoPorId: req.user!.id,
+        creadoPorNombre: req.user!.nombre,
+      },
+    });
+
+    await prisma.importacionHistorial.create({
+      data: {
+        ordenCompraId: orden.id,
+        actor: req.user!.nombre,
+        accion: `Novedad registrada: ${tipo}`,
+        detalle: descripcion.trim(),
+        origen: "Manual",
+      },
+    });
+
+    return res.status(201).json(serializarNovedad(novedad));
+  } catch (error) {
+    console.error("Error al crear novedad de importación:", error);
+    return res.status(500).json({ message: "Error al registrar la novedad." });
+  }
+};
+
+export const resolverNovedadImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const novedad = await prisma.importacionNovedad.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!novedad) return res.status(404).json({ message: "Novedad no encontrada." });
+    if (novedad.estado === "Resuelta") {
+      return res.status(400).json({ message: "Esta novedad ya está resuelta." });
+    }
+
+    const { comentario } = req.body;
+
+    const [actualizada] = await prisma.$transaction([
+      prisma.importacionNovedad.update({
+        where: { id: novedad.id },
+        data: {
+          estado: "Resuelta",
+          fechaResolucion: new Date(),
+          responsableResolucionId: req.user!.id,
+          responsableResolucionNombre: req.user!.nombre,
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: novedad.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Novedad resuelta: ${novedad.tipo}`,
+          detalle: comentario || null,
+          origen: "Manual",
+        },
+      }),
+    ]);
+
+    return res.json(serializarNovedad(actualizada));
+  } catch (error) {
+    console.error("Error al resolver novedad de importación:", error);
+    return res.status(500).json({ message: "Error al resolver la novedad." });
+  }
+};
+
+// --- Pagos ---
+
+export const crearPagoImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+
+    const { concepto, valor, moneda, fechaVencimiento, observaciones } = req.body;
+    const valorNum = numero(valor);
+    if (!concepto || typeof concepto !== "string" || !concepto.trim()) {
+      return res.status(400).json({ message: "El concepto del pago es obligatorio." });
+    }
+    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+      return res.status(400).json({ message: "El valor del pago debe ser un número mayor a cero." });
+    }
+
+    const pago = await prisma.importacionPago.create({
+      data: {
+        tenantId,
+        ordenCompraId: orden.id,
+        concepto: concepto.trim(),
+        valor: valorNum,
+        moneda: typeof moneda === "string" && moneda.trim() ? moneda.trim() : "COP",
+        fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+        responsableId: req.user!.id,
+        responsableNombre: req.user!.nombre,
+        observaciones: observaciones?.trim() || null,
+      },
+    });
+
+    await prisma.importacionHistorial.create({
+      data: {
+        ordenCompraId: orden.id,
+        actor: req.user!.nombre,
+        accion: `Obligación registrada: ${concepto}`,
+        detalle: `$${valorNum.toLocaleString("es-CO")} ${pago.moneda}`,
+        etapa: "Pagos",
+      },
+    });
+
+    return res.status(201).json(serializarPago(pago));
+  } catch (error) {
+    console.error("Error al crear pago de importación:", error);
+    return res.status(500).json({ message: "Error al registrar el pago." });
+  }
+};
+
+export const actualizarEstadoPagoImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const pago = await prisma.importacionPago.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!pago) return res.status(404).json({ message: "Pago no encontrado." });
+
+    const { estado } = req.body;
+    if (!ESTADOS_PAGO_VALIDOS.includes(estado)) {
+      return res.status(400).json({ message: `Estado inválido. Valores permitidos: ${ESTADOS_PAGO_VALIDOS.join(", ")}.` });
+    }
+    if (pago.estado === "Anulado") {
+      return res.status(400).json({ message: "Este pago ya está anulado." });
+    }
+
+    const [actualizado] = await prisma.$transaction([
+      prisma.importacionPago.update({
+        where: { id: pago.id },
+        data: {
+          estado,
+          fechaPago: estado === "Pagado" ? new Date() : pago.fechaPago,
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: pago.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Pago ${estado.toLowerCase()}: ${pago.concepto}`,
+          etapa: "Pagos",
+        },
+      }),
+    ]);
+
+    return res.json(serializarPago(actualizado));
+  } catch (error) {
+    console.error("Error al actualizar pago de importación:", error);
+    return res.status(500).json({ message: "Error al actualizar el pago." });
+  }
+};
+
+// --- Cierre ---
+
+/**
+ * Cierra el expediente si se cumplen las condiciones evaluadas por
+ * domain/importaciones/condiciones-cierre.ts. `forzar:true` + `justificacion`
+ * permite cerrar de todos modos (queda registrado en el historial quién y
+ * por qué) — la regla de negocio real de cuándo cerrar sigue sin definirse
+ * con certeza (ver PENDIENTES_CONSOLIDADO.md #1/#13), así que el sistema
+ * informa en vez de bloquear de forma absoluta.
+ */
+export const cerrarOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+      include: { lotes: true, items: { include: { costeos: true } }, novedades: true },
+    });
+    if (!orden)
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    if (orden.estado === "Cerrada" || orden.estado === "Anulada") {
+      return res.status(400).json({ message: `La orden ya está en estado "${orden.estado}".` });
+    }
+
+    const { forzar, justificacion } = req.body;
+
+    const resultado = evaluarCondicionesCierre(
+      orden.lotes.map((l) => ({ id: l.id, estado: l.estado })),
+      orden.items.map((i) => ({
+        itemId: i.id,
+        tieneCosteoDefinitivo: i.costeos.some((c) => !c.esProvisional),
+      })),
+      orden.novedades.map((n) => ({ id: n.id, prioridad: n.prioridad, estado: n.estado })),
+    );
+
+    if (!resultado.puedeCerrarse && !forzar) {
+      // El mensaje incluye la lista textual (no solo el array `faltantes`)
+      // porque el cliente HTTP genérico del frontend (fetchApi) solo
+      // propaga `message` al lanzar el error — así el usuario ve el detalle
+      // sin que cada pantalla tenga que leer `faltantes` por separado.
+      return res.status(409).json({
+        message: `No se cumplen las condiciones de cierre: ${resultado.faltantes.join(" ")}`,
+        faltantes: resultado.faltantes,
+      });
+    }
+    if (!resultado.puedeCerrarse && forzar && !justificacion?.trim()) {
+      return res.status(400).json({ message: "Cerrar sin cumplir las condiciones requiere una justificación." });
+    }
+
+    // El historial se crea PRIMERO en la transacción: el update de abajo
+    // trae `include: INCLUDE_ORDEN_DETALLE` y necesita ver esta fila nueva
+    // en su propia respuesta (Prisma resuelve cada `include` en el momento
+    // de esa operación puntual, no al final de todo el array).
+    await prisma.$transaction([
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: orden.id,
+          actor: req.user!.nombre,
+          accion: resultado.puedeCerrarse ? "Importación cerrada" : "Importación cerrada (forzado)",
+          detalle: resultado.puedeCerrarse ? null : `Justificación: ${justificacion.trim()}`,
+          etapa: "Cierre",
+        },
+      }),
+      prisma.ordenCompraIntl.update({
+        where: { id: orden.id },
+        data: { estado: "Cerrada", fechaCierre: new Date() },
+      }),
+    ]);
+
+    const actualizada = await prisma.ordenCompraIntl.findUnique({
+      where: { id: orden.id },
+      include: INCLUDE_ORDEN_DETALLE,
+    });
+
+    return res.json(serializarOrden(actualizada));
+  } catch (error) {
+    console.error("Error al cerrar orden de compra internacional:", error);
+    return res.status(500).json({ message: "Error al cerrar la orden de compra internacional." });
   }
 };

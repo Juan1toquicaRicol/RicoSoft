@@ -1,14 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Package, Plus, Ship, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Lock, Package, Plus, Ship, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { EstadoBadge } from "@/components/ui/badge";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { PanelColapsable } from "@/components/ui/panel-colapsable";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -22,13 +24,21 @@ import {
 import {
   useOrdenCompraIntl,
   usePollingOrdenCompraIntl,
+  ETIQUETA_RESPONSABLE_TIPO,
+  ETIQUETA_TIPO_NOVEDAD,
   type ActualizarExpedienteInput,
   type ActualizarVistoBuenoInput,
+  type CrearActividadInput,
   type CrearLoteInput,
+  type CrearNovedadInput,
+  type CrearPagoInput,
   type CrearVistoBuenoInput,
+  type EtapaImportacion,
   type LiquidarCosteoInput,
   type LoteImportacion,
+  type ResponsableTipo,
   type TipoDocumentoExpediente,
+  type TipoNovedad,
   type VistoBuenoAduanero,
 } from "@/hooks/use-importaciones";
 import { useSession } from "@/lib/session-context";
@@ -61,6 +71,47 @@ const DOC_KEY: Record<TipoDocumentoExpediente, "dim" | "facturaComercial" | "cer
 };
 
 const ESTADOS_VISTO_BUENO = ["Pendiente", "Aprobado", "Rechazado"];
+
+const ETAPAS_IMPORTACION: EtapaImportacion[] = [
+  "Orden",
+  "Documentación",
+  "Embarque",
+  "Tránsito",
+  "Aduana",
+  "Nacionalización",
+  "Pagos",
+  "Recepción",
+  "Cierre",
+];
+const RESPONSABLE_TIPOS: ResponsableTipo[] = [
+  "Interno",
+  "Proveedor",
+  "AgenciaAduana",
+  "Transportador",
+  "Naviera",
+  "Otro",
+];
+const TIPOS_NOVEDAD: TipoNovedad[] = [
+  "Retraso",
+  "DocumentoFaltante",
+  "Inconsistencia",
+  "Dano",
+  "Faltante",
+  "ProblemaAduanero",
+  "ProblemaProveedor",
+  "ProblemaTransporte",
+  "ProblemaFinanciero",
+  "Bloqueo",
+  "Otro",
+];
+
+const actividadVacia: CrearActividadInput = {
+  nombre: "",
+  etapa: "Documentación",
+  responsableTipo: "Proveedor",
+};
+const novedadVacia: CrearNovedadInput = { tipo: "Otro", descripcion: "" };
+const pagoVacio: CrearPagoInput = { concepto: "", valor: 0, moneda: "COP" };
 
 const ESTADOS_TRANSITO_MANUAL = ["En tránsito", "En puerto", "En inspección"];
 const ESTADOS_LOTE_LIQUIDABLES = ["En puerto", "En inspección", "Liberado pre-compra"];
@@ -104,6 +155,13 @@ function DetalleOrdenIntl() {
     actualizarVistoBueno,
     subirDocumentoVistoBueno,
     descargarDocumentoVistoBueno,
+    crearActividad,
+    completarActividad,
+    crearNovedad,
+    resolverNovedad,
+    crearPago,
+    marcarPagoPagado,
+    cerrarOrden,
   } = useOrdenCompraIntl(id);
   const { user } = useSession();
 
@@ -123,6 +181,23 @@ function DetalleOrdenIntl() {
   const [liquidando, setLiquidando] = useState(false);
 
   const [accionEnCurso, setAccionEnCurso] = useState<string | null>(null);
+
+  const [modalActividadOpen, setModalActividadOpen] = useState(false);
+  const [actividadForm, setActividadForm] = useState<CrearActividadInput>({ ...actividadVacia });
+  const [guardandoActividad, setGuardandoActividad] = useState(false);
+
+  const [modalNovedadOpen, setModalNovedadOpen] = useState(false);
+  const [novedadForm, setNovedadForm] = useState<CrearNovedadInput>({ ...novedadVacia });
+  const [guardandoNovedad, setGuardandoNovedad] = useState(false);
+
+  const [modalPagoOpen, setModalPagoOpen] = useState(false);
+  const [pagoForm, setPagoForm] = useState<CrearPagoInput>({ ...pagoVacio });
+  const [guardandoPago, setGuardandoPago] = useState(false);
+
+  const [modalCerrarOpen, setModalCerrarOpen] = useState(false);
+  const [justificacionCierre, setJustificacionCierre] = useState("");
+  const [cerrando, setCerrando] = useState(false);
+  const [errorCierre, setErrorCierre] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -198,19 +273,166 @@ function DetalleOrdenIntl() {
     }
   };
 
+  const handleAgregarActividad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actividadForm.nombre.trim()) return;
+    setGuardandoActividad(true);
+    try {
+      await crearActividad(actividadForm);
+      toast.success("Actividad registrada.");
+      setModalActividadOpen(false);
+      setActividadForm({ ...actividadVacia });
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible registrar la actividad.");
+    } finally {
+      setGuardandoActividad(false);
+    }
+  };
+
+  const handleCompletarActividad = async (actividadId: string) => {
+    setAccionEnCurso(actividadId);
+    try {
+      await completarActividad(actividadId);
+      toast.success("Actividad completada.");
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible completar la actividad.");
+    } finally {
+      setAccionEnCurso(null);
+    }
+  };
+
+  const handleAgregarNovedad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novedadForm.descripcion.trim()) return;
+    setGuardandoNovedad(true);
+    try {
+      await crearNovedad(novedadForm);
+      toast.success("Novedad registrada.");
+      setModalNovedadOpen(false);
+      setNovedadForm({ ...novedadVacia });
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible registrar la novedad.");
+    } finally {
+      setGuardandoNovedad(false);
+    }
+  };
+
+  const handleResolverNovedad = async (novedadId: string) => {
+    setAccionEnCurso(novedadId);
+    try {
+      await resolverNovedad(novedadId);
+      toast.success("Novedad resuelta.");
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible resolver la novedad.");
+    } finally {
+      setAccionEnCurso(null);
+    }
+  };
+
+  const handleAgregarPago = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pagoForm.concepto.trim() || pagoForm.valor <= 0) return;
+    setGuardandoPago(true);
+    try {
+      await crearPago(pagoForm);
+      toast.success("Obligación registrada.");
+      setModalPagoOpen(false);
+      setPagoForm({ ...pagoVacio });
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible registrar el pago.");
+    } finally {
+      setGuardandoPago(false);
+    }
+  };
+
+  const handleMarcarPagado = async (pagoId: string) => {
+    setAccionEnCurso(pagoId);
+    try {
+      await marcarPagoPagado(pagoId);
+      toast.success("Pago marcado como pagado.");
+    } catch (err: any) {
+      toast.error(err.message || "No fue posible actualizar el pago.");
+    } finally {
+      setAccionEnCurso(null);
+    }
+  };
+
+  const handleCerrar = async (forzar: boolean) => {
+    setCerrando(true);
+    setErrorCierre(null);
+    try {
+      await cerrarOrden(forzar ? { forzar: true, justificacion: justificacionCierre } : undefined);
+      toast.success("Importación cerrada.");
+      setModalCerrarOpen(false);
+      setJustificacionCierre("");
+    } catch (err: any) {
+      setErrorCierre(err.message || "No fue posible cerrar la importación.");
+    } finally {
+      setCerrando(false);
+    }
+  };
+
+  const puedeCerrar =
+    puedeGestionarTransito && orden.estado !== "Cerrada" && orden.estado !== "Anulada";
+
   return (
     <AppShell
-      title={`Orden ${orden.numeroOrden}`}
-      description={`${orden.proveedorExtranjero} · ${orden.paisOrigen} · Incoterm ${orden.incoterm}`}
+      title={orden.codigo}
+      description={`${orden.proveedorExtranjero} · ${orden.paisOrigen} · Incoterm ${orden.incoterm} · Orden ${orden.numeroOrden}`}
       actions={
-        <Link to="/importaciones">
-          <Button size="sm" variant="outline" className="gap-2">
-            <ArrowLeft className="h-4 w-4" /> Volver al listado
-          </Button>
-        </Link>
+        <>
+          <Link to="/importaciones">
+            <Button size="sm" variant="outline" className="gap-2">
+              <ArrowLeft className="h-4 w-4" /> Volver al listado
+            </Button>
+          </Link>
+          {puedeCerrar && (
+            <Button size="sm" onClick={() => setModalCerrarOpen(true)} className="gap-2">
+              <Lock className="h-4 w-4" /> Cerrar importación
+            </Button>
+          )}
+        </>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-4">
+      {/* "Situación actual" — lo primero que el usuario debe ver, en lenguaje de negocio. */}
+      <div
+        className={`panel rounded-lg p-5 shadow-2xs ${orden.situacionActual.atencion ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"}`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              {orden.situacionActual.atencion ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 text-blue-700" />
+              )}
+              Situación actual
+            </p>
+            <p className="mt-1 text-base font-bold text-slate-900">{orden.situacionActual.etapaActual}</p>
+          </div>
+          {orden.situacionActual.atencion && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Atención</p>
+              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.atencion}</p>
+              <p className="text-[11px] text-amber-700">{orden.situacionActual.diasRetraso} día(s) de retraso</p>
+            </div>
+          )}
+          {orden.situacionActual.responsable && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Responsable</p>
+              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.responsable}</p>
+            </div>
+          )}
+          {orden.situacionActual.proximaAccion && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Próxima acción</p>
+              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.proximaAccion}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-4">
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">Estado</p>
           <div className="mt-1"><EstadoBadge estado={orden.estado} /></div>
@@ -224,7 +446,7 @@ function DetalleOrdenIntl() {
           <p className="num mt-1 text-sm font-bold text-slate-900">{money(orden.valorEstimadoTotal, "COP")}</p>
         </div>
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Responsable</p>
+          <p className="text-[10px] uppercase font-bold text-slate-500">Responsable de la orden</p>
           <p className="mt-1 text-sm font-bold text-slate-900">{orden.responsable?.nombre ?? "—"}</p>
         </div>
       </div>
@@ -388,6 +610,192 @@ function DetalleOrdenIntl() {
         )}
       </div>
 
+      {/* Actividades esperadas — el motor de seguimiento en lenguaje de negocio. */}
+      <PanelColapsable
+        className="mt-4"
+        title="Seguimiento"
+        description="Actividades esperadas del proceso — quién debe hacer qué, y para cuándo"
+        actions={
+          puedeGestionarTransito && (
+            <Button size="xs" onClick={() => setModalActividadOpen(true)} className="h-7 text-[11px]">
+              <Plus className="h-3 w-3 mr-1" /> Agregar actividad
+            </Button>
+          )
+        }
+      >
+        {orden.actividades.length === 0 ? (
+          <p className="text-xs text-slate-500">Sin actividades registradas.</p>
+        ) : (
+          <div className="space-y-2">
+            {orden.actividades.map((a) => {
+              const vencida =
+                a.fechaLimite &&
+                new Date(a.fechaLimite).getTime() < Date.now() &&
+                (a.estado === "Pendiente" || a.estado === "EnCurso");
+              return (
+                <div
+                  key={a.id}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${
+                    a.estado === "Completada"
+                      ? "border-slate-200 bg-slate-50"
+                      : vencida
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-slate-200"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className={`font-bold ${a.estado === "Completada" ? "text-slate-500 line-through" : "text-slate-800"}`}>
+                      {a.nombre}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {a.etapa} · {ETIQUETA_RESPONSABLE_TIPO[a.responsableTipo]}
+                      {a.responsableNombre ? ` (${a.responsableNombre})` : ""}
+                      {a.fechaLimite && (
+                        <> · límite {new Date(a.fechaLimite).toLocaleDateString("es-CO")}</>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <EstadoBadge estado={vencida ? "Vencida" : a.estado} />
+                    {puedeGestionarTransito && a.estado !== "Completada" && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={accionEnCurso === a.id}
+                        onClick={() => handleCompletarActividad(a.id)}
+                        className="h-7 text-[11px]"
+                      >
+                        Marcar completada
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </PanelColapsable>
+
+      {/* Novedades — reales, no comentarios; automáticas + manuales. */}
+      <PanelColapsable
+        className="mt-4"
+        title="Novedades"
+        description="Retrasos, documentos faltantes, bloqueos y otros problemas — automáticos o registrados a mano"
+        actions={
+          puedeGestionarTransito && (
+            <Button size="xs" onClick={() => setModalNovedadOpen(true)} className="h-7 text-[11px]">
+              <Plus className="h-3 w-3 mr-1" /> Registrar novedad
+            </Button>
+          )
+        }
+      >
+        {orden.novedades.length === 0 ? (
+          <p className="text-xs text-slate-500">Sin novedades registradas.</p>
+        ) : (
+          <div className="space-y-2">
+            {orden.novedades.map((n) => (
+              <div
+                key={n.id}
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  n.estado === "Resuelta"
+                    ? "border-slate-200 bg-slate-50"
+                    : n.prioridad === "Alta"
+                      ? "border-red-300 bg-red-50"
+                      : "border-amber-200 bg-amber-50"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-bold text-slate-800">
+                    {ETIQUETA_TIPO_NOVEDAD[n.tipo]}
+                    {n.automatica && (
+                      <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                        Automática
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <EstadoBadge estado={n.estado} />
+                    {puedeGestionarTransito && n.estado !== "Resuelta" && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={accionEnCurso === n.id}
+                        onClick={() => handleResolverNovedad(n.id)}
+                        className="h-7 text-[11px]"
+                      >
+                        Resolver
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-1 text-slate-600">{n.descripcion}</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Origen: {n.origen === "PorDeterminar" ? "Por determinar" : n.origen}
+                  {n.responsable ? ` · ${n.responsable}` : ""} · Prioridad {n.prioridad}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </PanelColapsable>
+
+      {/* Pagos / obligaciones. */}
+      <PanelColapsable
+        className="mt-4"
+        title="Pagos"
+        description="Anticipos, saldos, impuestos y demás obligaciones asociadas a esta importación"
+        actions={
+          puedeLiquidar && (
+            <Button size="xs" onClick={() => setModalPagoOpen(true)} className="h-7 text-[11px]">
+              <Plus className="h-3 w-3 mr-1" /> Registrar pago
+            </Button>
+          )
+        }
+      >
+        {orden.pagos.length === 0 ? (
+          <p className="text-xs text-slate-500">Sin pagos registrados.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-100/80">
+                <TableRow className="hover:bg-slate-100/80">
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Concepto</TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">Valor</TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Vencimiento</TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Estado</TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orden.pagos.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-xs font-semibold text-slate-800">{p.concepto}</TableCell>
+                    <TableCell className="num text-right text-xs text-slate-700">{money(p.valor, p.moneda)}</TableCell>
+                    <TableCell className="text-xs text-slate-500">
+                      {p.fechaVencimiento ? new Date(p.fechaVencimiento).toLocaleDateString("es-CO") : "—"}
+                    </TableCell>
+                    <TableCell><EstadoBadge estado={p.estado} /></TableCell>
+                    <TableCell className="text-right">
+                      {puedeLiquidar && p.estado === "Pendiente" && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={accionEnCurso === p.id}
+                          onClick={() => handleMarcarPagado(p.id)}
+                          className="h-7 text-[11px]"
+                        >
+                          Marcar pagado
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </PanelColapsable>
+
       <div className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs mt-4">
         <h2 className="text-sm font-semibold mb-4">Trazabilidad y Auditoría</h2>
         <ol className="space-y-4">
@@ -397,9 +805,17 @@ function DetalleOrdenIntl() {
               {i < orden.historial.length - 1 && (
                 <span className="absolute left-[4.5px] top-5 h-[calc(100%+0.5rem)] w-px bg-border" />
               )}
-              <p className="text-xs font-semibold">{h.accion}</p>
+              <p className="text-xs font-semibold">
+                {h.accion}
+                {h.etapa && (
+                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                    {h.etapa}
+                  </span>
+                )}
+              </p>
               <p className="text-[10px] text-slate-500">
-                {new Date(h.fecha).toLocaleString("es-CO")} · {h.actor}
+                {new Date(h.fecha).toLocaleString("es-CO")} · {h.responsable ?? h.actor}
+                {h.origen === "Manual" && h.responsable ? ` (registrado por ${h.actor})` : ""}
               </p>
               {h.detalle && <p className="mt-1 text-xs text-slate-500 italic">{h.detalle}</p>}
             </li>
@@ -514,6 +930,281 @@ function DetalleOrdenIntl() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL AGREGAR ACTIVIDAD */}
+      <Dialog
+        open={modalActividadOpen}
+        onOpenChange={(open) => {
+          setModalActividadOpen(open);
+          if (!open) setActividadForm({ ...actividadVacia });
+        }}
+      >
+        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Agregar actividad esperada</DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Complementa la plantilla automática para un caso puntual de esta importación.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAgregarActividad} className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Nombre *</Label>
+              <Input
+                required
+                value={actividadForm.nombre}
+                onChange={(e) => setActividadForm({ ...actividadForm, nombre: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Etapa</Label>
+                <Select
+                  value={actividadForm.etapa}
+                  onValueChange={(v) => setActividadForm({ ...actividadForm, etapa: v as EtapaImportacion })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-white">
+                    {ETAPAS_IMPORTACION.map((et) => (
+                      <SelectItem key={et} value={et} className="text-xs">{et}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Responsable</Label>
+                <Select
+                  value={actividadForm.responsableTipo}
+                  onValueChange={(v) => setActividadForm({ ...actividadForm, responsableTipo: v as ResponsableTipo })}
+                >
+                  <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-white">
+                    {RESPONSABLE_TIPOS.map((r) => (
+                      <SelectItem key={r} value={r} className="text-xs">{ETIQUETA_RESPONSABLE_TIPO[r]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Nombre del responsable (opcional)</Label>
+              <Input
+                value={actividadForm.responsableNombre ?? ""}
+                onChange={(e) => setActividadForm({ ...actividadForm, responsableNombre: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Fecha límite</Label>
+              <Input
+                type="date"
+                value={actividadForm.fechaLimite ?? ""}
+                onChange={(e) => setActividadForm({ ...actividadForm, fechaLimite: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => setModalActividadOpen(false)} disabled={guardandoActividad}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="sm" disabled={guardandoActividad}>
+                {guardandoActividad ? "Guardando..." : "Agregar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL REGISTRAR NOVEDAD */}
+      <Dialog
+        open={modalNovedadOpen}
+        onOpenChange={(open) => {
+          setModalNovedadOpen(open);
+          if (!open) setNovedadForm({ ...novedadVacia });
+        }}
+      >
+        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Registrar novedad</DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Un problema real del proceso — daño, faltante, inconsistencia, bloqueo, etc.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAgregarNovedad} className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Tipo</Label>
+              <Select
+                value={novedadForm.tipo}
+                onValueChange={(v) => setNovedadForm({ ...novedadForm, tipo: v as TipoNovedad })}
+              >
+                <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-white">
+                  {TIPOS_NOVEDAD.map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs">{ETIQUETA_TIPO_NOVEDAD[t]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Descripción *</Label>
+              <Textarea
+                required
+                value={novedadForm.descripcion}
+                onChange={(e) => setNovedadForm({ ...novedadForm, descripcion: e.target.value })}
+                rows={3}
+                className="text-xs border-slate-300"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Prioridad</Label>
+              <Select
+                value={novedadForm.prioridad ?? "Media"}
+                onValueChange={(v) => setNovedadForm({ ...novedadForm, prioridad: v as "Alta" | "Media" | "Baja" })}
+              >
+                <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="Alta" className="text-xs">Alta</SelectItem>
+                  <SelectItem value="Media" className="text-xs">Media</SelectItem>
+                  <SelectItem value="Baja" className="text-xs">Baja</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => setModalNovedadOpen(false)} disabled={guardandoNovedad}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="sm" disabled={guardandoNovedad}>
+                {guardandoNovedad ? "Guardando..." : "Registrar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL REGISTRAR PAGO */}
+      <Dialog
+        open={modalPagoOpen}
+        onOpenChange={(open) => {
+          setModalPagoOpen(open);
+          if (!open) setPagoForm({ ...pagoVacio });
+        }}
+      >
+        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Registrar pago / obligación</DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Anticipo, saldo, flete, agencia, impuestos u otra obligación de esta importación.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAgregarPago} className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Concepto *</Label>
+              <Input
+                required
+                value={pagoForm.concepto}
+                onChange={(e) => setPagoForm({ ...pagoForm, concepto: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Valor *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={pagoForm.valor}
+                  onChange={(e) => setPagoForm({ ...pagoForm, valor: Number(e.target.value) })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Moneda</Label>
+                <Input
+                  value={pagoForm.moneda ?? "COP"}
+                  onChange={(e) => setPagoForm({ ...pagoForm, moneda: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Fecha de vencimiento</Label>
+              <Input
+                type="date"
+                value={pagoForm.fechaVencimiento ?? ""}
+                onChange={(e) => setPagoForm({ ...pagoForm, fechaVencimiento: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => setModalPagoOpen(false)} disabled={guardandoPago}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="sm" disabled={guardandoPago}>
+                {guardandoPago ? "Guardando..." : "Registrar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL CERRAR IMPORTACIÓN */}
+      <Dialog
+        open={modalCerrarOpen}
+        onOpenChange={(open) => {
+          setModalCerrarOpen(open);
+          if (!open) {
+            setJustificacionCierre("");
+            setErrorCierre(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Cerrar importación</DialogTitle>
+            <DialogDescription className="text-slate-500">
+              El sistema verifica: todos los lotes nacionalizados, costeo definitivo en todos los
+              ítems, y sin novedades de prioridad alta abiertas.
+            </DialogDescription>
+          </DialogHeader>
+          {errorCierre && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+              {errorCierre}
+              <p className="mt-2 font-semibold">
+                Si de todos modos necesitas cerrarla, escribe una justificación abajo y usa "Forzar cierre".
+              </p>
+            </div>
+          )}
+          <div className="space-y-1 py-2">
+            <Label className="text-xs font-semibold text-slate-700">Justificación (solo si forzás el cierre)</Label>
+            <Textarea
+              value={justificacionCierre}
+              onChange={(e) => setJustificacionCierre(e.target.value)}
+              rows={3}
+              className="text-xs border-slate-300"
+            />
+          </div>
+          <DialogFooter className="mt-2 flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setModalCerrarOpen(false)} disabled={cerrando}>
+              Cancelar
+            </Button>
+            {errorCierre && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => handleCerrar(true)}
+                disabled={cerrando || !justificacionCierre.trim()}
+              >
+                {cerrando ? "Cerrando..." : "Forzar cierre"}
+              </Button>
+            )}
+            <Button type="button" size="sm" onClick={() => handleCerrar(false)} disabled={cerrando}>
+              {cerrando ? "Verificando..." : "Cerrar importación"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>

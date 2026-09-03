@@ -137,6 +137,7 @@ describe.skipIf(!RUN)(
       });
       await prisma.solicitudCompra.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.notificacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.inboxItem.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
       await prisma.$disconnect();
@@ -162,6 +163,35 @@ describe.skipIf(!RUN)(
       expect(res.status).toBe(200);
       expect(res.body.some((s: any) => s.id === solicitudBId)).toBe(false);
       expect(res.body.some((s: any) => s.id === creada.body.id)).toBe(true);
+    });
+
+    it("GET /:id devuelve el detalle de una solicitud propia de Tenant A", async () => {
+      const creada = await request(app)
+        .post("/api/solicitudes-compra")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({
+          empresaId: "001",
+          area: "Administración",
+          solicitanteId: solicitanteAId,
+          item: `Item detalle A ${sufijo}`,
+          cantidad: 1,
+          valorEstimado: 50000,
+        });
+      expect(creada.status).toBe(201);
+
+      const res = await request(app)
+        .get(`/api/solicitudes-compra/${creada.body.id}`)
+        .set("Authorization", `Bearer ${tokenA}`);
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(creada.body.id);
+      expect(res.body.item).toBe(`Item detalle A ${sufijo}`);
+    });
+
+    it("GET /:id de una solicitud de Tenant B devuelve 404 para Tenant A", async () => {
+      const res = await request(app)
+        .get(`/api/solicitudes-compra/${solicitudBId}`)
+        .set("Authorization", `Bearer ${tokenA}`);
+      expect(res.status).toBe(404);
     });
 
     it("Tenant A no puede cambiar el estado de una solicitud de Tenant B; la fila no cambia", async () => {
