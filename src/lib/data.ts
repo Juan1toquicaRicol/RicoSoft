@@ -129,13 +129,7 @@ export interface FaltaStrike {
 }
 
 export type EstadoSolicitudCompra =
-  | "Pendiente"
-  | "En Cotización"
-  | "Aprobada"
-  | "Rechazada"
-  | "Comprado"
-  | "Facturada"
-  | "Recibida";
+  "Pendiente" | "En Cotización" | "Aprobada" | "Rechazada" | "Comprado" | "Facturada" | "Recibida";
 
 /**
  * Solicitud de compra que todavía puede recibir una factura (ver GET
@@ -297,7 +291,16 @@ export interface CreditoCliente {
   id: string;
   cliente: string;
   cupo: number;
+  /** Total pendiente de cobro (vencido + porVencer + alDia). NO es "lo vencido". */
   saldo: number;
+  /** Solo la porción de `saldo` cuya fecha de vencimiento ya pasó. */
+  vencido: number;
+  /** Pendiente, no vencido, dentro de la ventana de alerta temprana. */
+  porVencer: number;
+  /** Pendiente, no vencido, fuera de la ventana de alerta. */
+  alDia: number;
+  /** Días de mora si está vencido; 0 en caso contrario. */
+  diasMora: number;
   vence: string;
   estado: EstadoCredito;
 }

@@ -14,7 +14,11 @@ import sql from "mssql";
  * propio del contenedor (cuya ruta de sqlcmd varía entre versiones de la
  * imagen) es más frágil que reintentar aquí directamente.
  */
-async function conectarConReintentos(config: sql.config, intentos = 20, esperaMs = 3000): Promise<sql.ConnectionPool> {
+async function conectarConReintentos(
+  config: sql.config,
+  intentos = 20,
+  esperaMs = 3000,
+): Promise<sql.ConnectionPool> {
   let ultimoError: unknown;
   for (let i = 0; i < intentos; i++) {
     try {

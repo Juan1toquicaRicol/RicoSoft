@@ -36,7 +36,8 @@ export function calcularLineasTomaFisica(
       return { ...l, diferencia: null, diferenciaPct: null, valorDiferencia: null };
     }
     const diferencia = l.conteoFisico - l.stockSistema;
-    const diferenciaPct = l.stockSistema !== 0 ? Math.round((diferencia / l.stockSistema) * 1000) / 10 : null;
+    const diferenciaPct =
+      l.stockSistema !== 0 ? Math.round((diferencia / l.stockSistema) * 1000) / 10 : null;
     const valorDiferencia = diferencia * l.valorUnitario;
     return { ...l, diferencia, diferenciaPct, valorDiferencia };
   });
@@ -124,5 +125,7 @@ export function detectarPatronesRecurrentes(
     });
   }
 
-  return patrones.sort((a, b) => Math.abs(b.diferenciaPromedioPct) - Math.abs(a.diferenciaPromedioPct));
+  return patrones.sort(
+    (a, b) => Math.abs(b.diferenciaPromedioPct) - Math.abs(a.diferenciaPromedioPct),
+  );
 }

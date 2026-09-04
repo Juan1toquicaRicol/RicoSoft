@@ -13,7 +13,9 @@ export const crearGestionLiquidacionSchema = z.object({
   cantidadExistente: z.number({ required_error: "cantidadExistente es requerida." }).min(0),
   valorTotal: z.number({ required_error: "valorTotal es requerido." }).min(0),
   score: z.number({ required_error: "score es requerido." }).int().min(0).max(100),
-  categoria: z.enum(["CRITICA", "ALTA", "MEDIA", "BAJA"], { required_error: "categoria es requerida." }),
+  categoria: z.enum(["CRITICA", "ALTA", "MEDIA", "BAJA"], {
+    required_error: "categoria es requerida.",
+  }),
   motivo: z.string().min(1).max(500),
 });
 

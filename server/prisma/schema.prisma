@@ -60,6 +60,7 @@ model Tenant {
   permisosCatalogo      Permiso[]
   sincronizacionesSiesa SincronizacionSiesaLog[]
   inboxItems            InboxItem[]
+  objetivos             Objetivo[]
 }
 
 model User {
@@ -928,6 +929,82 @@ model ProyeccionMensual {
 
   @@unique([tenantId, mes, anio])
   @@index([tenantId])
+}
+
+/// Meta comercial (Comercial → Objetivos). Fuente de la venta real SIEMPRE
+/// es Siesa (t461_cm_docto_factura_venta / v470_ventas) — este modelo solo
+/// guarda la META y su metadata, nunca cifras de venta calculadas (esas se
+/// leen en vivo en cada consulta, ver server/src/lib/objetivos-calculo.ts).
+model Objetivo {
+  id       String @id @default(uuid()) @db.UniqueIdentifier
+  tenantId String @db.UniqueIdentifier
+
+  /// "EMPRESA" = meta comercial global del tenant. "VENDEDOR" = meta
+  /// individual. La suma de objetivos VENDEDOR nunca se asume igual al
+  /// objetivo EMPRESA del mismo período — son entidades independientes.
+  nivel String @db.VarChar(20)
+
+  /// Solo poblado cuando nivel = "VENDEDOR". Referencia LIBRE a
+  /// t200_mm_terceros.f200_rowid en Siesa (el vendedor vive en Siesa, no en
+  /// RicoSoft) — no es una FK de Prisma. vendedorSiesaNombre es un snapshot
+  /// del nombre al momento de crear la meta, igual que Factura.responsable.
+  vendedorSiesaRowId  Int?
+  vendedorSiesaNombre String? @db.VarChar(255)
+
+  /// "MENSUAL" | "TRIMESTRAL" | "ANUAL" | "PERSONALIZADO" — solo clasifica
+  /// para la UI. El cumplimiento SIEMPRE se calcula contra
+  /// fechaInicio/fechaFin reales, nunca se re-derivan de tipoPeriodo.
+  tipoPeriodo String @db.VarChar(20)
+
+  fechaInicio DateTime @db.Date
+  /// Inclusive.
+  fechaFin    DateTime @db.Date
+  /// Denormalizado de fechaInicio, para filtrar por año fiscal (= año
+  /// calendario) sin tener que derivarlo de fechaInicio en cada query.
+  anio        Int
+
+  /// Meta en valor (COP), SIN IVA — mismo criterio que
+  /// f461_vlr_bruto - f461_vlr_dscto. Nullable: una meta puede ser solo de
+  /// volumen.
+  metaValor Decimal? @db.Decimal(18, 2)
+
+  /// Meta de volumen, siempre normalizada a KG (1 TON = 1000 KG convertido
+  /// antes de guardar). Nullable: una meta puede ser solo de valor.
+  metaVolumenKg Decimal? @db.Decimal(18, 3)
+
+  /// Campo preparado, SIN query ni UI activa hasta validar la fuente exacta
+  /// de inventario en Siesa (RicoSoft no es el sistema de inventario).
+  metaInventario     Decimal? @db.Decimal(18, 3)
+  /// "MINIMO" | "OBJETIVO" | "MAXIMO" | "A_MANTENER" | "A_VENDER" —
+  /// documentativo hasta que metaInventario se active.
+  tipoMetaInventario String?  @db.VarChar(20)
+
+  descripcion String? @db.Text
+
+  /// "BORRADOR" | "ACTIVO" | "CANCELADO". "CERRADO" NO se persiste: se
+  /// deriva en la capa de lectura cuando fechaFin < hoy, para no requerir
+  /// un job/cron que transicione estados.
+  estado String @db.VarChar(20) @default("ACTIVO")
+
+  /// Soft delete: el histórico de metas (incluidas las eliminadas) es
+  /// insumo para analizar qué decidió Gerencia y qué resultado tuvo.
+  eliminado Boolean @default(false)
+
+  creadoPorId     String  @db.UniqueIdentifier
+  creadoPorNombre String  @db.VarChar(255)
+  /// Quién asignó la meta, si es distinto de quién la creó (p. ej.
+  /// Gerencia General asigna una meta VENDEDOR preparada por un asistente).
+  asignadoPorId     String? @db.UniqueIdentifier
+  asignadoPorNombre String? @db.VarChar(255)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+
+  @@index([tenantId, fechaInicio, fechaFin])
+  @@index([tenantId, nivel, vendedorSiesaRowId])
+  @@index([tenantId, anio])
 }
 
 /// Capa ligera de seguimiento comercial sobre una Oportunidad (Fase de

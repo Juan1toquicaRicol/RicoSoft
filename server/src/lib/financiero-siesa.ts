@@ -17,8 +17,17 @@ export interface BucketsAntiguedadSiesa {
  * de ~10 líneas y este archivo debe poder probarse sin ninguna dependencia
  * de Express/Prisma.
  */
-function agruparPorAntiguedad(items: { vence: Date; saldo: number }[], ahora: Date): BucketsAntiguedadSiesa {
-  const buckets: BucketsAntiguedadSiesa = { vencido: 0, dias0a30: 0, dias31a60: 0, dias61a90: 0, mas90: 0 };
+function agruparPorAntiguedad(
+  items: { vence: Date; saldo: number }[],
+  ahora: Date,
+): BucketsAntiguedadSiesa {
+  const buckets: BucketsAntiguedadSiesa = {
+    vencido: 0,
+    dias0a30: 0,
+    dias31a60: 0,
+    dias61a90: 0,
+    mas90: 0,
+  };
   for (const item of items) {
     const dias = Math.floor((item.vence.getTime() - ahora.getTime()) / DIA_MS);
     if (dias < 0) buckets.vencido += item.saldo;

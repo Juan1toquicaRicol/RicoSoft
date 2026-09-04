@@ -3,11 +3,7 @@ import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
 
 export type EstadoOrdenIntl = "Borrador" | "Confirmada" | "Cerrada" | "Anulada";
 export type EstadoLoteImportacion =
-  | "En tránsito"
-  | "En puerto"
-  | "En inspección"
-  | "Liberado pre-compra"
-  | "Nacionalizado";
+  "En tránsito" | "En puerto" | "En inspección" | "Liberado pre-compra" | "Nacionalizado";
 
 export interface ItemOrdenCompraIntl {
   id: string;
@@ -93,7 +89,8 @@ export type EtapaImportacion =
   | "Recepción"
   | "Cierre";
 
-export type ResponsableTipo = "Interno" | "Proveedor" | "AgenciaAduana" | "Transportador" | "Naviera" | "Otro";
+export type ResponsableTipo =
+  "Interno" | "Proveedor" | "AgenciaAduana" | "Transportador" | "Naviera" | "Otro";
 
 export const ETIQUETA_RESPONSABLE_TIPO: Record<ResponsableTipo, string> = {
   Interno: "Interno (Ricol)",
@@ -338,8 +335,12 @@ export function useImportaciones() {
     try {
       const data = await fetchAuth("/importaciones");
       setOrdenes(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las órdenes de compra internacionales.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error cargando las órdenes de compra internacionales.",
+      );
     } finally {
       setLoading(false);
     }
@@ -380,8 +381,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
     try {
       const data = await fetchAuth(`/importaciones/${id}`);
       setOrden(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la orden de compra internacional.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error cargando la orden de compra internacional.",
+      );
     } finally {
       setLoading(false);
     }
@@ -432,7 +435,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
 
   const actualizarExpediente = useCallback(
     async (loteId: string, data: ActualizarExpedienteInput) => {
-      await fetchAuth(`/importaciones/lotes/${loteId}/expediente`, { method: "PUT", body: JSON.stringify(data) });
+      await fetchAuth(`/importaciones/lotes/${loteId}/expediente`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [refresh],
@@ -442,7 +448,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
     async (loteId: string, tipo: TipoDocumentoExpediente, file: File) => {
       const formData = new FormData();
       formData.append("archivo", file);
-      await fetchAuthUpload(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`, formData);
+      await fetchAuthUpload(
+        `/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`,
+        formData,
+      );
       await refresh();
     },
     [refresh],
@@ -450,15 +459,20 @@ export function useOrdenCompraIntl(id: string | undefined) {
 
   const eliminarDocumentoExpediente = useCallback(
     async (loteId: string, tipo: TipoDocumentoExpediente) => {
-      await fetchAuth(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`, { method: "DELETE" });
+      await fetchAuth(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`, {
+        method: "DELETE",
+      });
       await refresh();
     },
     [refresh],
   );
 
-  const descargarDocumentoExpediente = useCallback(async (loteId: string, tipo: TipoDocumentoExpediente) => {
-    return fetchAuthBlob(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`);
-  }, []);
+  const descargarDocumentoExpediente = useCallback(
+    async (loteId: string, tipo: TipoDocumentoExpediente) => {
+      return fetchAuthBlob(`/importaciones/lotes/${loteId}/expediente/documentos/${tipo}`);
+    },
+    [],
+  );
 
   const crearVistoBueno = useCallback(
     async (loteId: string, data: CrearVistoBuenoInput) => {
@@ -473,7 +487,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
 
   const actualizarVistoBueno = useCallback(
     async (vistoId: string, data: ActualizarVistoBuenoInput) => {
-      await fetchAuth(`/importaciones/vistos-buenos/${vistoId}`, { method: "PATCH", body: JSON.stringify(data) });
+      await fetchAuth(`/importaciones/vistos-buenos/${vistoId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [refresh],
@@ -496,7 +513,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
   const crearActividad = useCallback(
     async (data: CrearActividadInput) => {
       if (!id) return;
-      await fetchAuth(`/importaciones/${id}/actividades`, { method: "POST", body: JSON.stringify(data) });
+      await fetchAuth(`/importaciones/${id}/actividades`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [id, refresh],
@@ -516,7 +536,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
   const crearNovedad = useCallback(
     async (data: CrearNovedadInput) => {
       if (!id) return;
-      await fetchAuth(`/importaciones/${id}/novedades`, { method: "POST", body: JSON.stringify(data) });
+      await fetchAuth(`/importaciones/${id}/novedades`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [id, refresh],
@@ -556,7 +579,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
   const cerrarOrden = useCallback(
     async (opts?: { forzar?: boolean; justificacion?: string }) => {
       if (!id) return;
-      await fetchAuth(`/importaciones/${id}/cerrar`, { method: "POST", body: JSON.stringify(opts ?? {}) });
+      await fetchAuth(`/importaciones/${id}/cerrar`, {
+        method: "POST",
+        body: JSON.stringify(opts ?? {}),
+      });
       await refresh();
     },
     [id, refresh],

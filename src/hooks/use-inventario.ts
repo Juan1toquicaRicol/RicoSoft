@@ -50,8 +50,8 @@ export function useInventarioGerencial() {
     try {
       const data = await fetchAuth("/inventario/resumen");
       setInventario(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el inventario.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el inventario.");
     } finally {
       setLoading(false);
     }
@@ -97,8 +97,8 @@ export function usePronosticoDemanda() {
     try {
       const data = await fetchAuth("/inventario/demanda");
       setPronostico(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el pronóstico de demanda.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el pronóstico de demanda.");
     } finally {
       setLoading(false);
     }
@@ -145,8 +145,8 @@ export function useProduccionRecomendada() {
     try {
       const data = await fetchAuth("/inventario/produccion-recomendada");
       setProduccion(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la producción recomendada.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la producción recomendada.");
     } finally {
       setLoading(false);
     }
@@ -189,8 +189,8 @@ export function useCobertura() {
     try {
       const data = await fetchAuth("/inventario/cobertura");
       setCobertura(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la cobertura.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la cobertura.");
     } finally {
       setLoading(false);
     }
@@ -230,8 +230,10 @@ export function useAbastecimiento() {
     try {
       const data = await fetchAuth("/inventario/abastecimiento");
       setAbastecimiento(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las necesidades de abastecimiento.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error cargando las necesidades de abastecimiento.",
+      );
     } finally {
       setLoading(false);
     }
@@ -267,8 +269,10 @@ export function useConfiguracionInventario() {
     try {
       const data = await fetchAuth("/inventario/configuracion");
       setConfiguracion(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la configuración de inventario.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error cargando la configuración de inventario.",
+      );
     } finally {
       setLoading(false);
     }
@@ -383,8 +387,8 @@ export function useDecisionesPlaneacion() {
     try {
       const data = await fetchAuth("/inventario/decisiones");
       setDecisiones(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el Centro de Decisiones.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el Centro de Decisiones.");
     } finally {
       setLoading(false);
     }

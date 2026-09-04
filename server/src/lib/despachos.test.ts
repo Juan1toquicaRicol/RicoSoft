@@ -70,7 +70,10 @@ describe("esEstadoTerminalDespacho / estadosSiguientesDespacho", () => {
 
 describe("camposRequeridosParaTransicion", () => {
   it("exige vehículo y conductor para iniciar cargue", () => {
-    expect(camposRequeridosParaTransicion("CARGANDO")).toEqual(["vehiculoPlaca", "conductorNombre"]);
+    expect(camposRequeridosParaTransicion("CARGANDO")).toEqual([
+      "vehiculoPlaca",
+      "conductorNombre",
+    ]);
   });
 
   it("exige quién recibió para entregas totales y parciales", () => {

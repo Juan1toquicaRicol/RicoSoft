@@ -10,7 +10,10 @@ import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 export const listarNotificaciones = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const usuarioId = req.user!.id;
-    const limite = Math.min(50, Math.max(1, Number.parseInt(String(req.query.limite ?? "20"), 10) || 20));
+    const limite = Math.min(
+      50,
+      Math.max(1, Number.parseInt(String(req.query.limite ?? "20"), 10) || 20),
+    );
 
     const [data, noLeidas] = await Promise.all([
       prisma.notificacion.findMany({

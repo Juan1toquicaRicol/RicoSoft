@@ -5,7 +5,8 @@
  * existencias reales en Siesa (solo lectura). "EJECUTADA" significa que la
  * empresa realizó la acción comercial/operativa fuera de esta integración.
  */
-export type EstadoGestionLiquidacion = "PENDIENTE" | "EN_REVISION" | "APROBADA" | "RECHAZADA" | "EJECUTADA";
+export type EstadoGestionLiquidacion =
+  "PENDIENTE" | "EN_REVISION" | "APROBADA" | "RECHAZADA" | "EJECUTADA";
 
 const TRANSICIONES_VALIDAS: Record<EstadoGestionLiquidacion, EstadoGestionLiquidacion[]> = {
   PENDIENTE: ["EN_REVISION", "RECHAZADA"],

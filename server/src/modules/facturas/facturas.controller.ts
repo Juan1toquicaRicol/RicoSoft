@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { Response } from "express";
+import { Response, Request } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
@@ -36,11 +37,11 @@ const TRANSICIONES: Record<string, { desde: string[]; permiso: string }> = {
   Rechazada: { desde: ["Pendiente"], permiso: PERMISOS_SISTEMA.FACTURAS_RECHAZAR },
 };
 
-function serializar(f: any) {
+function serializar(f: FacturaConRelaciones) {
   const pagos = Array.isArray(f.pagos) ? f.pagos : [];
   const totalPagado = pagos
-    .filter((p: any) => p.estado === "Confirmado")
-    .reduce((acc: number, p: any) => acc + Number(p.valor), 0);
+    .filter((p) => p.estado === "Confirmado")
+    .reduce((acc: number, p) => acc + Number(p.valor), 0);
   const total = Number(f.total);
 
   // Alerta informativa (no bloqueante): si la factura está ligada a un
@@ -127,7 +128,7 @@ function serializar(f: any) {
           subidoEn: f.archivoSubidoEn,
         }
       : null,
-    historial: (f.historial ?? []).map((h: any) => ({
+    historial: (f.historial ?? []).map((h) => ({
       fecha: h.createdAt,
       actor: h.actor,
       accion: h.accion,
@@ -164,12 +165,14 @@ const INCLUDE_FACTURA = {
   pagos: { where: { estado: "Confirmado" as const }, select: { valor: true, estado: true } },
 };
 
+type FacturaConRelaciones = Prisma.FacturaGetPayload<{ include: typeof INCLUDE_FACTURA }>;
+
 export const listarFacturas = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId, estado, search, servicioId, solicitudCompraId, limit, page } = req.query;
 
-    const where: any = { tenantId, eliminado: false };
+    const where: Prisma.FacturaWhereInput = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && ESTADOS_VALIDOS.includes(estado)) where.estado = estado;
     if (typeof servicioId === "string" && servicioId) where.servicioId = servicioId;
@@ -345,9 +348,7 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
     // el body puede sobrescribirlos (p. ej. condiciones puntuales de esta
     // factura, distintas del default del proveedor).
     let condicionesPagoFinal: string | null =
-      typeof condicionesPago === "string" && condicionesPago.trim()
-        ? condicionesPago.trim()
-        : null;
+      typeof condicionesPago === "string" && condicionesPago.trim() ? condicionesPago.trim() : null;
     let datosPagoFinal: string | null =
       typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null;
     if (proveedorId) {
@@ -677,7 +678,7 @@ export const subirArchivoFactura = async (req: AuthenticatedRequest, res: Respon
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
-    const archivo = (req as any).file as Express.Multer.File | undefined;
+    const archivo = (req as Request & { file?: Express.Multer.File }).file;
 
     if (!archivo) {
       return res.status(400).json({ message: "No se recibió ningún archivo." });

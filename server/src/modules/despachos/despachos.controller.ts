@@ -24,7 +24,10 @@ import {
 } from "./despachos.schemas";
 
 async function resolverCiaSiesa(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
   return tenant?.siesaCiaId ?? null;
 }
 
@@ -47,7 +50,10 @@ async function buscarDespachoDelTenant(req: AuthenticatedRequest, id: string) {
  * motor que usa el histórico de Analítica. Ventana de 90 días: un despacho
  * se crea sobre una venta reciente, no sobre el histórico completo.
  */
-export const listarDocumentosVentaParaDespacho = async (req: AuthenticatedRequest, res: Response) => {
+export const listarDocumentosVentaParaDespacho = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
   const tenantId = req.user!.tenantId;
   const parseo = documentosVentaParaDespachoSchema.safeParse(req.query);
   if (!parseo.success) {
@@ -56,7 +62,10 @@ export const listarDocumentosVentaParaDespacho = async (req: AuthenticatedReques
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   if (!siesaCiaId) {
-    return res.json({ disponible: false, motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
   }
 
   const hasta = new Date();
@@ -68,10 +77,19 @@ export const listarDocumentosVentaParaDespacho = async (req: AuthenticatedReques
       leerHistoricoVentasSiesa(filtros, parseo.data.page, parseo.data.pageSize),
       contarHistoricoVentasSiesa(filtros),
     ]);
-    return res.json({ disponible: true, items, page: parseo.data.page, pageSize: parseo.data.pageSize, total });
+    return res.json({
+      disponible: true,
+      items,
+      page: parseo.data.page,
+      pageSize: parseo.data.pageSize,
+      total,
+    });
   } catch (error) {
     console.error("Error al leer documentos de venta desde Siesa:", error);
-    return res.json({ disponible: false, motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 };
 
@@ -92,7 +110,9 @@ export const crearDespacho = async (req: AuthenticatedRequest, res: Response) =>
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   if (!siesaCiaId) {
-    return res.status(400).json({ message: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res
+      .status(400)
+      .json({ message: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
   }
 
   let doc, lineas;
@@ -103,18 +123,27 @@ export const crearDespacho = async (req: AuthenticatedRequest, res: Response) =>
     ]);
   } catch (error) {
     console.error("Error al leer el documento de venta desde Siesa:", error);
-    return res.status(502).json({ message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.status(502).json({
+      message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
   if (!doc) {
-    return res.status(404).json({ message: "El documento de venta indicado no existe en Siesa para este tenant." });
+    return res
+      .status(404)
+      .json({ message: "El documento de venta indicado no existe en Siesa para este tenant." });
   }
   if (lineas.length === 0) {
-    return res.status(400).json({ message: "El documento de venta no tiene líneas de producto — no se puede crear un despacho vacío." });
+    return res.status(400).json({
+      message:
+        "El documento de venta no tiene líneas de producto — no se puede crear un despacho vacío.",
+    });
   }
 
   const yaExiste = await req.tenantPrisma!.despacho.findFirst({ where: { siesaDocRowId: doc.id } });
   if (yaExiste) {
-    return res.status(409).json({ message: `Ya existe un despacho para el documento ${doc.referencia ?? doc.id}.` });
+    return res
+      .status(409)
+      .json({ message: `Ya existe un despacho para el documento ${doc.referencia ?? doc.id}.` });
   }
 
   const despacho = await req.tenantPrisma!.despacho.create({
@@ -167,7 +196,8 @@ export const listarDespachos = async (req: AuthenticatedRequest, res: Response) 
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
-  const { page, pageSize, estado, clienteSearch, bodegaRowId, conductorSearch, desde, hasta } = parseo.data;
+  const { page, pageSize, estado, clienteSearch, bodegaRowId, conductorSearch, desde, hasta } =
+    parseo.data;
 
   const where: Record<string, unknown> = {};
   if (estado) where.estado = estado;
@@ -192,7 +222,13 @@ export const listarDespachos = async (req: AuthenticatedRequest, res: Response) 
     req.tenantPrisma!.despacho.count({ where }),
   ]);
 
-  return res.json({ items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+  return res.json({
+    items,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  });
 };
 
 /** Conteo por estado — para los indicadores clicables del listado (Sección 4). */
@@ -217,12 +253,27 @@ export const obtenerDespacho = async (req: AuthenticatedRequest, res: Response) 
   if (!despacho) return res.status(404).json({ message: "Despacho no encontrado." });
 
   const [lineas, novedades, eventos] = await Promise.all([
-    prisma.despachoLinea.findMany({ where: { despachoId: despacho.id }, orderBy: { descripcion: "asc" } }),
-    prisma.despachoNovedad.findMany({ where: { despachoId: despacho.id }, orderBy: { createdAt: "desc" } }),
+    prisma.despachoLinea.findMany({
+      where: { despachoId: despacho.id },
+      orderBy: { descripcion: "asc" },
+    }),
+    prisma.despachoNovedad.findMany({
+      where: { despachoId: despacho.id },
+      orderBy: { createdAt: "desc" },
+    }),
     prisma.auditoria.findMany({
       where: { tenantId: req.user!.tenantId, entidadTipo: "Despacho", entidadId: despacho.id },
       orderBy: { createdAt: "asc" },
-      select: { id: true, accion: true, detalle: true, datosAnteriores: true, datosNuevos: true, usuarioAfectado: true, createdAt: true, usuarioId: true },
+      select: {
+        id: true,
+        accion: true,
+        detalle: true,
+        datosAnteriores: true,
+        datosNuevos: true,
+        usuarioAfectado: true,
+        createdAt: true,
+        usuarioId: true,
+      },
     }),
   ]);
 
@@ -265,14 +316,20 @@ export const actualizarEstadoDespacho = async (req: AuthenticatedRequest, res: R
 
   const ahora = new Date();
   const dataActualizacion: Record<string, unknown> = { estado: siguiente };
-  if (parseo.data.vehiculoPlaca !== undefined) dataActualizacion.vehiculoPlaca = parseo.data.vehiculoPlaca;
-  if (parseo.data.vehiculoTipo !== undefined) dataActualizacion.vehiculoTipo = parseo.data.vehiculoTipo;
-  if (parseo.data.conductorNombre !== undefined) dataActualizacion.conductorNombre = parseo.data.conductorNombre;
-  if (parseo.data.conductorTelefono !== undefined) dataActualizacion.conductorTelefono = parseo.data.conductorTelefono;
-  if (parseo.data.recibidoPor !== undefined) dataActualizacion.recibidoPor = parseo.data.recibidoPor;
+  if (parseo.data.vehiculoPlaca !== undefined)
+    dataActualizacion.vehiculoPlaca = parseo.data.vehiculoPlaca;
+  if (parseo.data.vehiculoTipo !== undefined)
+    dataActualizacion.vehiculoTipo = parseo.data.vehiculoTipo;
+  if (parseo.data.conductorNombre !== undefined)
+    dataActualizacion.conductorNombre = parseo.data.conductorNombre;
+  if (parseo.data.conductorTelefono !== undefined)
+    dataActualizacion.conductorTelefono = parseo.data.conductorTelefono;
+  if (parseo.data.recibidoPor !== undefined)
+    dataActualizacion.recibidoPor = parseo.data.recibidoPor;
   if (siguiente === "CARGANDO") dataActualizacion.fechaCargue = ahora;
   if (siguiente === "DESPACHADO") dataActualizacion.fechaDespacho = ahora;
-  if (siguiente === "ENTREGADO" || siguiente === "ENTREGA_PARCIAL") dataActualizacion.fechaEntregaReal = ahora;
+  if (siguiente === "ENTREGADO" || siguiente === "ENTREGA_PARCIAL")
+    dataActualizacion.fechaEntregaReal = ahora;
 
   const [actualizado] = await prisma.$transaction([
     prisma.despacho.update({ where: { id: despacho.id }, data: dataActualizacion }),
@@ -317,7 +374,9 @@ export const actualizarLineaDespacho = async (req: AuthenticatedRequest, res: Re
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
 
-  const linea = await prisma.despachoLinea.findFirst({ where: { id: req.params.lineaId, despachoId: despacho.id } });
+  const linea = await prisma.despachoLinea.findFirst({
+    where: { id: req.params.lineaId, despachoId: despacho.id },
+  });
   if (!linea) return res.status(404).json({ message: "Línea no encontrada en este despacho." });
 
   const actualizada = await prisma.despachoLinea.update({
@@ -412,7 +471,8 @@ export const resolverNovedad = async (req: AuthenticatedRequest, res: Response) 
       tenantId: req.user!.tenantId,
       usuarioId: req.user!.id,
       accion: "NOVEDAD_RESUELTA",
-      detalle: parseo.data.observacionResolucion ?? `Novedad "${novedad.tipo}" marcada como resuelta.`,
+      detalle:
+        parseo.data.observacionResolucion ?? `Novedad "${novedad.tipo}" marcada como resuelta.`,
       entidadTipo: "Despacho",
       entidadId: despacho.id,
       datosAnteriores: JSON.stringify({ novedadId: novedad.id, estado: novedad.estado }),

@@ -81,7 +81,9 @@ export function calcularResumenCoberturaSiesa(
     });
   }
 
-  const conCobertura = items.filter((i): i is ItemCoberturaSiesa & { diasCobertura: number } => i.diasCobertura !== null);
+  const conCobertura = items.filter(
+    (i): i is ItemCoberturaSiesa & { diasCobertura: number } => i.diasCobertura !== null,
+  );
   const coberturaPromedioDias =
     conCobertura.length > 0
       ? Math.round(conCobertura.reduce((acc, i) => acc + i.diasCobertura, 0) / conCobertura.length)

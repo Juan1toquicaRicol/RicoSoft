@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
+import { CotizacionProveedor } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import {
   UPLOADS_DIR_COTIZACIONES_PROVEEDOR,
@@ -18,7 +19,7 @@ const MAX_COTIZACIONES = 3;
 // mismo — al menos 1 + ganadora — para aprobar la solicitud).
 const MIN_COTIZACIONES_PARA_GANADORA = 1;
 
-function serializarCotizacion(c: any) {
+function serializarCotizacion(c: CotizacionProveedor) {
   return {
     id: c.id,
     solicitudCompraId: c.solicitudCompraId,
@@ -71,7 +72,7 @@ export const crearCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
-    const archivo = (req as any).file as Express.Multer.File | undefined;
+    const archivo = req.file as Express.Multer.File | undefined;
     const { proveedorId, proveedorNombre, proveedorNit, valorTotalCOP, tiempoEntregaDias } =
       req.body;
 

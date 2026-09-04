@@ -68,8 +68,8 @@ function RolesConfigPage() {
     try {
       const data = await fetchAuth("/roles");
       setRoles(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando roles.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando roles.");
     } finally {
       setLoading(false);
     }
@@ -97,8 +97,8 @@ function RolesConfigPage() {
       setNuevoAlcance("TENANT");
       setCreando(false);
       fetchRoles();
-    } catch (err: any) {
-      toast.error(err.message || "Error al crear el rol.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al crear el rol.");
     }
   };
 
@@ -110,8 +110,8 @@ function RolesConfigPage() {
     setRoles((prev) => prev.map((r) => (r.id === rol.id ? { ...r, permisos } : r)));
     try {
       await fetchAuth(`/roles/${rol.id}`, { method: "PATCH", body: JSON.stringify({ permisos }) });
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar permisos.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar permisos.");
       fetchRoles();
     }
   };
@@ -123,8 +123,8 @@ function RolesConfigPage() {
         body: JSON.stringify({ activo: !rol.activo }),
       });
       fetchRoles();
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el rol.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el rol.");
     }
   };
 
@@ -141,8 +141,8 @@ function RolesConfigPage() {
         body: JSON.stringify({ alcance: nuevo }),
       });
       fetchRoles();
-    } catch (err: any) {
-      toast.error(err.message || "Error al cambiar el alcance del rol.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al cambiar el alcance del rol.");
     }
   };
 
@@ -151,8 +151,8 @@ function RolesConfigPage() {
     try {
       await fetchAuth(`/roles/${rol.id}`, { method: "DELETE" });
       fetchRoles();
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el rol.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el rol.");
     }
   };
 

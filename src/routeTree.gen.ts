@@ -32,6 +32,7 @@ import { Route as ServiciosRouteImport } from './routes/servicios'
 import { Route as TomaFisicaRouteImport } from './routes/toma-fisica'
 import { Route as VentasRouteImport } from './routes/ventas'
 import { Route as ComercialClientesRouteImport } from './routes/comercial.clientes'
+import { Route as ComercialObjetivosRouteImport } from './routes/comercial.objetivos'
 import { Route as ConfiguracionIndexRouteImport } from './routes/configuracion.index'
 import { Route as ConfiguracionClasificacionItemsRouteImport } from './routes/configuracion.clasificacion-items'
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
@@ -167,6 +168,11 @@ const ComercialClientesRoute = ComercialClientesRouteImport.update({
   path: '/comercial/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComercialObjetivosRoute = ComercialObjetivosRouteImport.update({
+  id: '/comercial/objetivos',
+  path: '/comercial/objetivos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfiguracionIndexRoute = ConfiguracionIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/objetivos': typeof ComercialObjetivosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
@@ -335,6 +342,7 @@ export interface FileRoutesByTo {
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/objetivos': typeof ComercialObjetivosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
@@ -380,6 +388,7 @@ export interface FileRoutesById {
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/objetivos': typeof ComercialObjetivosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
@@ -426,6 +435,7 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/objetivos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
@@ -469,6 +479,7 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/objetivos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
@@ -513,6 +524,7 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/objetivos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
@@ -558,6 +570,7 @@ export interface RootRouteChildren {
   TomaFisicaRoute: typeof TomaFisicaRouteWithChildren
   VentasRoute: typeof VentasRoute
   ComercialClientesRoute: typeof ComercialClientesRoute
+  ComercialObjetivosRoute: typeof ComercialObjetivosRoute
   FacturasIdRoute: typeof FacturasIdRoute
   LogisticaCumplimientoRoute: typeof LogisticaCumplimientoRoute
   LogisticaNovedadesAbiertasRoute: typeof LogisticaNovedadesAbiertasRoute
@@ -727,6 +740,13 @@ declare module '@tanstack/react-router' {
       path: '/comercial/clientes'
       fullPath: '/comercial/clientes'
       preLoaderRoute: typeof ComercialClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comercial/objetivos': {
+      id: '/comercial/objetivos'
+      path: '/comercial/objetivos'
+      fullPath: '/comercial/objetivos'
+      preLoaderRoute: typeof ComercialObjetivosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracion/': {
@@ -965,6 +985,7 @@ const rootRouteChildren: RootRouteChildren = {
   TomaFisicaRoute: TomaFisicaRouteWithChildren,
   VentasRoute: VentasRoute,
   ComercialClientesRoute: ComercialClientesRoute,
+  ComercialObjetivosRoute: ComercialObjetivosRoute,
   FacturasIdRoute: FacturasIdRoute,
   LogisticaCumplimientoRoute: LogisticaCumplimientoRoute,
   LogisticaNovedadesAbiertasRoute: LogisticaNovedadesAbiertasRoute,

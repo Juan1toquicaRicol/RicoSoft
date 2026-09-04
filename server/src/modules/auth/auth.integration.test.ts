@@ -22,6 +22,14 @@ import { prisma } from "../../config/prisma";
  * pruebas de rechazo/manipulación.
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
+
+interface ConIdDto {
+  id: string;
+}
+
+interface SolicitudCompraDto {
+  item: string;
+}
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
 describe.skipIf(!RUN)(
@@ -170,7 +178,7 @@ describe.skipIf(!RUN)(
       const res = await login(`juan-${sufijo}@test.ricosoft.local`);
       expect(res.status).toBe(200);
       expect(res.body.requiresTenantSelection).toBe(true);
-      expect(res.body.tenants.map((t: any) => t.id).sort()).toEqual(
+      expect(res.body.tenants.map((t: ConIdDto) => t.id).sort()).toEqual(
         [tenantRicolId, tenantFlexipackId, tenantGreenId].sort(),
       );
 
@@ -293,13 +301,13 @@ describe.skipIf(!RUN)(
       const listaFlexipack = await request(app)
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${tokenFlexipack}`);
-      expect(listaFlexipack.body.some((s: any) => s.item === itemUnico)).toBe(true);
+      expect(listaFlexipack.body.some((s: SolicitudCompraDto) => s.item === itemUnico)).toBe(true);
 
       // Invisible en Ricol, aunque sea el mismo usuario.
       const listaRicol = await request(app)
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${tokenRicol}`);
-      expect(listaRicol.body.some((s: any) => s.item === itemUnico)).toBe(false);
+      expect(listaRicol.body.some((s: SolicitudCompraDto) => s.item === itemUnico)).toBe(false);
 
       // Invisible en Green también.
       const aGreen = await request(app)
@@ -309,7 +317,7 @@ describe.skipIf(!RUN)(
       const listaGreen = await request(app)
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${aGreen.body.token}`);
-      expect(listaGreen.body.some((s: any) => s.item === itemUnico)).toBe(false);
+      expect(listaGreen.body.some((s: SolicitudCompraDto) => s.item === itemUnico)).toBe(false);
     });
 
     // TEST 7 y TEST 8 — permisos y rol cambian correctamente por empresa; el
@@ -394,7 +402,9 @@ describe.skipIf(!RUN)(
         const accesibles = await request(app)
           .get("/api/auth/tenants-accesibles")
           .set("Authorization", `Bearer ${tokenRicol}`);
-        expect(accesibles.body.tenants.some((t: any) => t.id === tenantFlexipackId)).toBe(false);
+        expect(accesibles.body.tenants.some((t: ConIdDto) => t.id === tenantFlexipackId)).toBe(
+          false,
+        );
 
         const cambio = await request(app)
           .post("/api/auth/switch-tenant")
@@ -403,7 +413,7 @@ describe.skipIf(!RUN)(
         expect(cambio.status).toBe(403);
 
         const login2 = await login(`juan-${sufijo}@test.ricosoft.local`);
-        expect(login2.body.tenants.some((t: any) => t.id === tenantFlexipackId)).toBe(false);
+        expect(login2.body.tenants.some((t: ConIdDto) => t.id === tenantFlexipackId)).toBe(false);
       } finally {
         await prisma.membresia.update({
           where: { id: membresiaFlexipackId },

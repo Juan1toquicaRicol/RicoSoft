@@ -45,12 +45,16 @@ async function main() {
   }
 
   if (usuario.tenantId === tenant.id) {
-    throw new Error(`${email} ya pertenece a ${tenant.nombre} como su empresa "hogar" — no necesita membresía.`);
+    throw new Error(
+      `${email} ya pertenece a ${tenant.nombre} como su empresa "hogar" — no necesita membresía.`,
+    );
   }
 
   let rolId: string | undefined;
   if (rolNombre) {
-    const rol = await prisma.rol.findFirst({ where: { tenantId: tenant.id, nombre: rolNombre, activo: true } });
+    const rol = await prisma.rol.findFirst({
+      where: { tenantId: tenant.id, nombre: rolNombre, activo: true },
+    });
     if (!rol) {
       throw new Error(`No existe un rol activo llamado "${rolNombre}" en ${tenant.nombre}.`);
     }
@@ -63,13 +67,21 @@ async function main() {
 
   const membresia = await prisma.membresia.upsert({
     where: { userId_tenantId: { userId: usuario.id, tenantId: tenant.id } },
-    create: { userId: usuario.id, tenantId: tenant.id, rolId, isSuperadmin: superadmin, activo: true },
+    create: {
+      userId: usuario.id,
+      tenantId: tenant.id,
+      rolId,
+      isSuperadmin: superadmin,
+      activo: true,
+    },
     update: { rolId, isSuperadmin: superadmin, activo: true },
   });
 
   console.log(`\n✅ ${usuario.nombre} (${email}) ahora tiene acceso a ${tenant.nombre}.`);
   console.log(`   Membresía: ${membresia.id}`);
-  console.log(`   Rol: ${rolNombre ?? (superadmin ? "Superadmin (acceso total)" : "(sin rol asignado)")}`);
+  console.log(
+    `   Rol: ${rolNombre ?? (superadmin ? "Superadmin (acceso total)" : "(sin rol asignado)")}`,
+  );
   console.log("\nLa próxima vez que inicie sesión, se le pedirá elegir entre sus empresas.");
 }
 

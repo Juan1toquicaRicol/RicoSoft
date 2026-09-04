@@ -1,5 +1,11 @@
 import { Layers } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface OpcionAgrupacion {
   value: string;
@@ -20,10 +26,21 @@ export const OPCION_SIN_AGRUPAR: OpcionAgrupacion = { value: "ninguno", label: "
  * agrupación activa. `clave === ""` (sin agrupar) no debe renderizarse: el
  * llamador decide eso antes de usar este componente.
  */
-export function FilaGrupo({ clave, cantidad, colSpan }: { clave: string; cantidad: number; colSpan: number }) {
+export function FilaGrupo({
+  clave,
+  cantidad,
+  colSpan,
+}: {
+  clave: string;
+  cantidad: number;
+  colSpan: number;
+}) {
   return (
     <tr className="bg-slate-50/80">
-      <td colSpan={colSpan} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-y border-slate-200">
+      <td
+        colSpan={colSpan}
+        className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-y border-slate-200"
+      >
         {clave} <span className="font-normal text-slate-400">({cantidad})</span>
       </td>
     </tr>

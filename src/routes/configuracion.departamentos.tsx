@@ -54,8 +54,8 @@ function DepartamentosConfigPage() {
     try {
       const data = await fetchAuth("/departamentos");
       setDepartamentos(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando departamentos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando departamentos.");
     } finally {
       setLoading(false);
     }
@@ -82,8 +82,8 @@ function DepartamentosConfigPage() {
       setNuevoAlcance("TENANT");
       setCreando(false);
       fetchDepartamentos();
-    } catch (err: any) {
-      toast.error(err.message || "Error al crear el departamento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al crear el departamento.");
     }
   };
 
@@ -94,8 +94,8 @@ function DepartamentosConfigPage() {
         body: JSON.stringify({ activo: !departamento.activo }),
       });
       fetchDepartamentos();
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el departamento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el departamento.");
     }
   };
 
@@ -112,8 +112,10 @@ function DepartamentosConfigPage() {
         body: JSON.stringify({ alcance: nuevo }),
       });
       fetchDepartamentos();
-    } catch (err: any) {
-      toast.error(err.message || "Error al cambiar el alcance del departamento.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al cambiar el alcance del departamento.",
+      );
     }
   };
 
@@ -122,8 +124,8 @@ function DepartamentosConfigPage() {
     try {
       await fetchAuth(`/departamentos/${departamento.id}`, { method: "DELETE" });
       fetchDepartamentos();
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el departamento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el departamento.");
     }
   };
 

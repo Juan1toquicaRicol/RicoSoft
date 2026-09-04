@@ -32,7 +32,9 @@ describe.skipIf(!RUN)("Fase G — acciones del Centro de Decisiones (multi-tenan
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -138,7 +140,8 @@ describe.skipIf(!RUN)("Fase G — acciones del Centro de Decisiones (multi-tenan
           fechaPlaneada: new Date().toISOString(),
           // Conserva la referencia a la recomendación que la originó, sin
           // ampliar el schema — reutiliza el campo `notas` ya existente.
-          notas: "Generado desde el Centro de Decisiones: capacidad real 67.466,67 (sin materia limitante), confianza alta.",
+          notas:
+            "Generado desde el Centro de Decisiones: capacidad real 67.466,67 (sin materia limitante), confianza alta.",
         });
 
       expect(res.status).toBe(201);

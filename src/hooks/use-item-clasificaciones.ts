@@ -38,8 +38,8 @@ export function useClasificacionesFuncionales() {
     try {
       const data = await fetchAuth("/item-clasificaciones");
       setClasificaciones(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las clasificaciones.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las clasificaciones.");
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,10 @@ export function useClasificacionesFuncionales() {
 
   const crearClasificacion = useCallback(
     async (data: { codigo: string; nombre: string; descripcion?: string; orden?: number }) => {
-      const creada = await fetchAuth("/item-clasificaciones", { method: "POST", body: JSON.stringify(data) });
+      const creada = await fetchAuth("/item-clasificaciones", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
       await refresh();
       return creada as ClasificacionFuncionalItem;
     },
@@ -60,7 +63,10 @@ export function useClasificacionesFuncionales() {
 
   const actualizarClasificacion = useCallback(
     async (id: string, data: { nombre?: string; descripcion?: string; orden?: number }) => {
-      await fetchAuth(`/item-clasificaciones/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+      await fetchAuth(`/item-clasificaciones/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [refresh],
@@ -68,13 +74,24 @@ export function useClasificacionesFuncionales() {
 
   const cambiarActivo = useCallback(
     async (id: string, activo: boolean) => {
-      await fetchAuth(`/item-clasificaciones/${id}/activo`, { method: "PATCH", body: JSON.stringify({ activo }) });
+      await fetchAuth(`/item-clasificaciones/${id}/activo`, {
+        method: "PATCH",
+        body: JSON.stringify({ activo }),
+      });
       await refresh();
     },
     [refresh],
   );
 
-  return { clasificaciones, loading, error, refresh, crearClasificacion, actualizarClasificacion, cambiarActivo };
+  return {
+    clasificaciones,
+    loading,
+    error,
+    refresh,
+    crearClasificacion,
+    actualizarClasificacion,
+    cambiarActivo,
+  };
 }
 
 /**
@@ -116,8 +133,8 @@ export function useItemsConClasificacion() {
         setTotal(data.total ?? 0);
         setTotalPages(data.totalPages ?? 1);
         setPage(data.page ?? 1);
-      } catch (err: any) {
-        setError(err.message || "Error cargando los ítems.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Error cargando los ítems.");
       } finally {
         setLoading(false);
       }

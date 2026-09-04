@@ -1,13 +1,27 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowDown, ArrowUp, Info, Minus } from "lucide-react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Info,
+  Minus,
+  Target,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { StatCard } from "@/components/ui/stat-card";
 import {
   useCentroGerencial,
   type CategoriaIndicador,
   type IndicadorGerencial,
   type NivelIndicador,
 } from "@/hooks/use-gerencial";
+import { useObjetivos, useResumenObjetivo } from "@/hooks/use-objetivos";
+import { useSession } from "@/lib/session-context";
+import { hasPermission } from "@/lib/session";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { compact, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +35,10 @@ export const Route = createFileRoute("/gerencial")({
           "Centro de Control Gerencial: finanzas, ventas, inventario, producción, compras y riesgos conectados en una sola vista, con drill-down a cada módulo.",
       },
       { property: "og:title", content: "Centro Gerencial | RicoSoft" },
-      { property: "og:description", content: "¿Cómo está la empresa? ¿Por qué? ¿Qué debemos hacer?" },
+      {
+        property: "og:description",
+        content: "¿Cómo está la empresa? ¿Por qué? ¿Qué debemos hacer?",
+      },
     ],
   }),
   component: CentroGerencialPage,
@@ -74,7 +91,9 @@ function TarjetaIndicador({ indicador }: { indicador: IndicadorGerencial }) {
     <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold text-slate-500">{indicador.titulo}</p>
-        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold", nivel.classes)}>
+        <span
+          className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold", nivel.classes)}
+        >
           {nivel.label}
         </span>
       </div>
@@ -142,7 +161,13 @@ function TarjetaIndicador({ indicador }: { indicador: IndicadorGerencial }) {
   );
 }
 
-function SeccionCategoria({ categoria, indicadores }: { categoria: CategoriaIndicador; indicadores: IndicadorGerencial[] }) {
+function SeccionCategoria({
+  categoria,
+  indicadores,
+}: {
+  categoria: CategoriaIndicador;
+  indicadores: IndicadorGerencial[];
+}) {
   if (indicadores.length === 0) return null;
   return (
     <div className="mb-6">
@@ -158,14 +183,135 @@ function SeccionCategoria({ categoria, indicadores }: { categoria: CategoriaIndi
   );
 }
 
+/**
+ * Resumen del objetivo comercial ACTIVO más reciente — primera cosa que ve
+ * Gerencia al entrar al Centro Gerencial (a petición explícita: "el
+ * objetivo es una decisión de Gerencia, debe verse de primero"). Solo
+ * lectura, igual que el resto de Centro Gerencial: el CRUD completo vive en
+ * /comercial/objetivos, acá solo se resume y se enlaza.
+ */
+function ResumenObjetivosGerencial() {
+  const anioActual = new Date().getFullYear();
+  const { objetivos, loading: cargandoLista } = useObjetivos({
+    nivel: "EMPRESA",
+    anio: anioActual,
+  });
+  const objetivoActivoId = objetivos[0]?.id ?? null;
+  const { resumen, loading: cargandoResumen } = useResumenObjetivo(objetivoActivoId);
+
+  if (cargandoLista) return null;
+  if (!objetivoActivoId) return null;
+  if (cargandoResumen)
+    return <p className="mb-4 text-xs text-slate-500">Cargando objetivo comercial...</p>;
+  if (!resumen.disponible || !resumen.objetivo || !resumen.cumplimiento) return null;
+
+  const { objetivo, cumplimiento, ritmo } = resumen;
+
+  return (
+    <div className="mb-6 space-y-3">
+      <Link to="/comercial/objetivos" className="block group">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-700">
+            <Target className="h-3.5 w-3.5" /> Objetivo comercial ·{" "}
+            {objetivo.tipoPeriodo.toLowerCase()}
+          </h2>
+          <span className="text-[11px] font-semibold text-blue-700 group-hover:underline">
+            Ver detalle →
+          </span>
+        </div>
+
+        {cumplimiento.metaValor != null && (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Meta"
+              value={money(cumplimiento.metaValor)}
+              icon={Target}
+              className="cursor-pointer transition-all hover:border-blue-400"
+            />
+            <StatCard
+              label="Venta acumulada"
+              value={money(cumplimiento.ventaRealValor ?? 0)}
+              icon={TrendingUp}
+              className="cursor-pointer transition-all hover:border-blue-400"
+            />
+            <StatCard
+              label="Cumplimiento"
+              value={`${cumplimiento.cumplimientoValorPct ?? 0}%`}
+              icon={TrendingUp}
+              enfasis={(cumplimiento.cumplimientoValorPct ?? 0) < 100 ? "default" : "atencion"}
+              className="cursor-pointer transition-all hover:border-blue-400"
+            />
+            <StatCard
+              label="Faltante"
+              value={money(cumplimiento.faltanteValor ?? 0)}
+              icon={TrendingDown}
+              className="cursor-pointer transition-all hover:border-blue-400"
+            />
+          </div>
+        )}
+      </Link>
+
+      {ritmo && (
+        <div className="panel bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-blue-600 transition-all"
+              style={{ width: `${Math.min(ritmo.pctMetaCumplida, 100)}%` }}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-slate-500">
+                Tiempo transcurrido
+              </p>
+              <p className="num text-sm font-bold text-slate-900">{ritmo.pctTiempoTranscurrido}%</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-slate-500">Meta cumplida</p>
+              <p className="num text-sm font-bold text-slate-900">{ritmo.pctMetaCumplida}%</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-slate-500">Ritmo</p>
+              <p
+                className={cn(
+                  "text-sm font-bold",
+                  ritmo.ritmo === "ADELANTADO" ? "text-blue-700" : "text-slate-600",
+                )}
+              >
+                {ritmo.ritmo}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-slate-500">
+                Proyección de cierre
+              </p>
+              <p className="num text-sm font-bold text-slate-900">
+                {money(ritmo.proyeccionLineal)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CentroGerencialPage() {
   const { centro, loading } = useCentroGerencial();
+  const { user } = useSession();
+  const puedeVerObjetivos = hasPermission(user, PERMISOS_SISTEMA.OBJETIVOS_VER);
 
   return (
     <AppShell
       title="Centro Gerencial"
       description="Cómo está la empresa, por qué, y qué debemos hacer — finanzas, ventas, inventario, producción, compras y riesgos conectados"
     >
+      {/* Objetivos comerciales NO se administran aquí — Centro Gerencial es
+          de solo lectura por diseño (ver gerencial.controller.ts). El CRUD
+          completo vive en /comercial/objetivos; esto es solo el resumen
+          ejecutivo, mostrado de primero a petición explícita de Gerencia. */}
+      {puedeVerObjetivos && <ResumenObjetivosGerencial />}
+
       {loading && <p className="text-xs text-slate-500">Cargando...</p>}
 
       {!loading && centro && !centro.disponibleSiesa && (
@@ -199,10 +345,11 @@ function CentroGerencialPage() {
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              Cada indicador declara su fuente real (Siesa o RicoSoft) y, cuando depende de historial
-              de ventas, su calidad de datos (ALTA/MEDIA/BAJA) — nunca se presenta una cifra como
-              verdad absoluta si el histórico es insuficiente. Ningún botón ejecuta una acción
-              automáticamente: siempre navega al módulo correspondiente para que decidas y confirmes.
+              Cada indicador declara su fuente real (Siesa o RicoSoft) y, cuando depende de
+              historial de ventas, su calidad de datos (ALTA/MEDIA/BAJA) — nunca se presenta una
+              cifra como verdad absoluta si el histórico es insuficiente. Ningún botón ejecuta una
+              acción automáticamente: siempre navega al módulo correspondiente para que decidas y
+              confirmes.
             </span>
           </div>
         </>

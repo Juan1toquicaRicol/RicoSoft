@@ -42,7 +42,12 @@ router.patch("/me/password", validarBody(cambiarPasswordPropioSchema), cambiarPa
 router.get("/por-departamento/:departamentoId", listarUsuariosPorDepartamento);
 
 router.get("/", requirePermission("usuarios.ver"), listarUsuarios);
-router.post("/", requirePermission("usuarios.crear"), validarBody(crearUsuarioSchema), crearUsuario);
+router.post(
+  "/",
+  requirePermission("usuarios.crear"),
+  validarBody(crearUsuarioSchema),
+  crearUsuario,
+);
 router.patch(
   "/:id/estado",
   requirePermission("usuarios.desactivar"),

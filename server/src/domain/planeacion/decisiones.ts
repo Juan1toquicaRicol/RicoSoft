@@ -3,7 +3,10 @@ import type { PronosticoProductoSiesa } from "../../lib/demanda-siesa";
 import type { RecomendacionProduccionSiesa } from "../../lib/produccion-siesa";
 import type { NecesidadAbastecimientoSiesa } from "../../lib/abastecimiento-siesa";
 import type { ItemCoberturaSiesa } from "../../lib/cobertura-siesa";
-import { calcularCapacidadProductivaSiesa, type CapacidadProductivaSiesa } from "./capacidad-productiva";
+import {
+  calcularCapacidadProductivaSiesa,
+  type CapacidadProductivaSiesa,
+} from "./capacidad-productiva";
 import { calcularCandidatosLiquidacionSiesa, type CandidatoLiquidacionSiesa } from "./liquidacion";
 import type { VentanasDemanda, CalidadDatos } from "./demanda";
 import type { InventarioObjetivoItem } from "./inventario-objetivo";
@@ -24,12 +27,7 @@ import type { ExistenciaItemSiesa } from "../../modules/integraciones-siesa/sies
  * una fecha de necesidad que Siesa no reporta, ver lib/produccion-siesa.ts),
  * el campo queda null en vez de simularse.
  */
-export type TipoDecision =
-  | "producir"
-  | "comprar"
-  | "liquidar"
-  | "no_producir"
-  | "riesgo_quiebre";
+export type TipoDecision = "producir" | "comprar" | "liquidar" | "no_producir" | "riesgo_quiebre";
 
 export type Prioridad = "alta" | "media" | "baja";
 export type Confianza = "alta" | "media" | "baja";
@@ -142,7 +140,9 @@ function decisionesProduccion(
     const ventana = ventanasPorItem.get(c.itemRowId);
     const objetivo = inventarioObjetivoPorItem.get(c.itemRowId);
     const cantidadAProducir =
-      c.capacidadMaxima !== null ? Math.min(c.produccionRecomendada, c.capacidadMaxima) : c.produccionRecomendada;
+      c.capacidadMaxima !== null
+        ? Math.min(c.produccionRecomendada, c.capacidadMaxima)
+        : c.produccionRecomendada;
 
     const motivo =
       c.deficitProductivo > 0
@@ -178,7 +178,12 @@ function decisionesProduccion(
         stockObjetivo: objetivo?.stockObjetivo,
         calidadDatos: ventana?.calidadDatos,
       },
-      accion: { tipo: "plan-produccion", itemRowId: c.itemRowId, descripcion: c.descripcion, cantidad: cantidadAProducir },
+      accion: {
+        tipo: "plan-produccion",
+        itemRowId: c.itemRowId,
+        descripcion: c.descripcion,
+        cantidad: cantidadAProducir,
+      },
     };
   });
 }
@@ -200,9 +205,19 @@ function decisionesCompra(
     prioridad: n.deficit > n.cantidadDisponible ? "alta" : "media",
     // Sin historial de compras de materia prima disponible todavía (solo se lee existencia) — confianza media por defecto.
     confianza: "media" as const,
-    fuente: "Siesa: t400_cm_existencia (existencia de materia prima) + t820_mf_lista_material (BOM) sobre la producción recomendada.",
-    detalle: { cantidadNecesaria: n.cantidadNecesaria, cantidadDisponible: n.cantidadDisponible, deficit: n.deficit },
-    accion: { tipo: "solicitud-compra", itemRowId: n.componenteRowId, descripcion: n.descripcion, cantidad: n.deficit },
+    fuente:
+      "Siesa: t400_cm_existencia (existencia de materia prima) + t820_mf_lista_material (BOM) sobre la producción recomendada.",
+    detalle: {
+      cantidadNecesaria: n.cantidadNecesaria,
+      cantidadDisponible: n.cantidadDisponible,
+      deficit: n.deficit,
+    },
+    accion: {
+      tipo: "solicitud-compra",
+      itemRowId: n.componenteRowId,
+      descripcion: n.descripcion,
+      cantidad: n.deficit,
+    },
   }));
 }
 
@@ -225,7 +240,12 @@ function decisionesLiquidacion(
           ? `Nunca ha registrado una venta — ${(c.valorTotal / 1_000_000).toFixed(1)}M de capital inmovilizado.`
           : `Sin vender hace ${c.diasSinVenta} días, con ${c.ventaPromedioMensual > 0 ? `demanda reciente baja (${Math.round(c.ventaPromedioMensual)}/mes)` : "sin demanda reciente"} — ${(c.valorTotal / 1_000_000).toFixed(1)}M de capital inmovilizado.`,
       impacto: c.valorTotal,
-      prioridad: c.prioridad === "CRITICA" || c.prioridad === "ALTA" ? "alta" : c.prioridad === "MEDIA" ? "media" : "baja",
+      prioridad:
+        c.prioridad === "CRITICA" || c.prioridad === "ALTA"
+          ? "alta"
+          : c.prioridad === "MEDIA"
+            ? "media"
+            : "baja",
       confianza: c.diasSinVenta !== null ? "alta" : "media",
       fuente: construirFuente(
         "Siesa: t400_cm_existencia (existencia/valor) + v470_ventas (última venta, demanda reciente)",
@@ -304,7 +324,8 @@ function decisionesRiesgoQuiebre(riesgoRuptura: ItemCoberturaSiesa[]): DecisionP
     impacto: 0,
     prioridad: "alta" as const,
     confianza: "alta" as const,
-    fuente: "Siesa: t400_cm_existencia (existencia) + v470_ventas (venta promedio mensual, 12 meses).",
+    fuente:
+      "Siesa: t400_cm_existencia (existencia) + v470_ventas (venta promedio mensual, 12 meses).",
     detalle: {
       cantidadExistente: it.existenciaDisponible,
       ventaPromedioMensual: it.ventaPromedioMensual,
@@ -342,11 +363,17 @@ export function construirDecisionesPlaneacion(params: {
       .filter((e) => e.cantidadExistente > 0)
       .map((e) => [e.itemRowId, e.valorTotal / e.cantidadExistente]),
   );
-  const mesesConVentaPorItem = new Map(params.pronostico.map((p) => [p.itemRowId, p.mesesConVenta]));
-  const ventaPromedioPorItem = new Map(params.pronostico.map((p) => [p.itemRowId, p.ventaPromedioMensual]));
+  const mesesConVentaPorItem = new Map(
+    params.pronostico.map((p) => [p.itemRowId, p.mesesConVenta]),
+  );
+  const ventaPromedioPorItem = new Map(
+    params.pronostico.map((p) => [p.itemRowId, p.ventaPromedioMensual]),
+  );
   const recomendacionPorItem = new Map(params.produccionRecomendada.map((r) => [r.itemRowId, r]));
   const ventanasPorItem = new Map((params.ventanasDemanda ?? []).map((v) => [v.itemRowId, v]));
-  const inventarioObjetivoPorItem = new Map((params.inventarioObjetivo ?? []).map((o) => [o.itemRowId, o]));
+  const inventarioObjetivoPorItem = new Map(
+    (params.inventarioObjetivo ?? []).map((o) => [o.itemRowId, o]),
+  );
 
   const capacidades = calcularCapacidadProductivaSiesa(
     params.produccionRecomendada,
@@ -369,7 +396,12 @@ export function construirDecisionesPlaneacion(params: {
     ),
     ...decisionesCompra(params.necesidadesAbastecimiento, costoUnitarioPorItem),
     ...decisionesLiquidacion(candidatosLiquidacion, ventanasPorItem),
-    ...decisionesNoProducir(params.resumenInventario.topRiesgo, ventaPromedioPorItem, ventanasPorItem, inventarioObjetivoPorItem),
+    ...decisionesNoProducir(
+      params.resumenInventario.topRiesgo,
+      ventaPromedioPorItem,
+      ventanasPorItem,
+      inventarioObjetivoPorItem,
+    ),
     ...decisionesRiesgoQuiebre(params.riesgoRuptura),
   ];
 
@@ -384,7 +416,10 @@ export function construirDecisionesPlaneacion(params: {
   return { decisiones, resumen };
 }
 
-function reducirGrupo(decisiones: DecisionPlaneacion[], tipo: TipoDecision): ResumenGrupoDecisiones {
+function reducirGrupo(
+  decisiones: DecisionPlaneacion[],
+  tipo: TipoDecision,
+): ResumenGrupoDecisiones {
   const grupo = decisiones.filter((d) => d.tipo === tipo);
   return {
     cantidad: grupo.length,

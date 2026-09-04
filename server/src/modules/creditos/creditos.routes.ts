@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
 import {
   listarCreditos,
+  obtenerResumenCreditos,
   listarCarteraSiesa,
   crearCredito,
   actualizarCredito,
@@ -15,8 +16,9 @@ const router = Router();
 router.use(authenticateJWT);
 
 router.get("/", requirePermission("creditos.ver"), listarCreditos);
-// Ruta literal, se declara antes de cualquier /:id para que Express no la
-// confunda con un id — mismo criterio ya usado en otros módulos de esta app.
+// Rutas literales, se declaran antes de cualquier /:id para que Express no
+// las confunda con un id — mismo criterio ya usado en otros módulos.
+router.get("/resumen", requirePermission("creditos.ver"), obtenerResumenCreditos);
 router.get("/cartera-siesa", requirePermission("creditos.ver"), listarCarteraSiesa);
 router.post("/", requirePermission("creditos.gestionar"), crearCredito);
 router.patch("/:id", requirePermission("creditos.gestionar"), actualizarCredito);

@@ -31,6 +31,7 @@ import ventasRoutes from "./modules/ventas/ventas.routes";
 import despachosRoutes from "./modules/despachos/despachos.routes";
 import logisticaRoutes from "./modules/logistica/logistica.routes";
 import oportunidadesRoutes from "./modules/oportunidades/oportunidades.routes";
+import objetivosRoutes from "./modules/objetivos/objetivos.routes";
 
 export const isProduction = process.env.NODE_ENV === "production";
 
@@ -114,6 +115,7 @@ export function createApp() {
   app.use("/api/despachos", despachosRoutes);
   app.use("/api/logistica", logisticaRoutes);
   app.use("/api/oportunidades", oportunidadesRoutes);
+  app.use("/api/objetivos", objetivosRoutes);
 
   // 404 para cualquier ruta no reconocida bajo /api
   app.use("/api", (_req, res) => {

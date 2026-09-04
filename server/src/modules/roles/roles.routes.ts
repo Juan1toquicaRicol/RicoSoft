@@ -10,7 +10,12 @@ router.use(authenticateJWT);
 
 router.get("/", requirePermission("roles.ver"), listarRoles);
 router.post("/", requirePermission("roles.crear"), validarBody(crearRolSchema), crearRol);
-router.patch("/:id", requirePermission("roles.editar"), validarBody(actualizarRolSchema), actualizarRol);
+router.patch(
+  "/:id",
+  requirePermission("roles.editar"),
+  validarBody(actualizarRolSchema),
+  actualizarRol,
+);
 router.delete("/:id", requirePermission("roles.eliminar"), eliminarRol);
 
 export default router;

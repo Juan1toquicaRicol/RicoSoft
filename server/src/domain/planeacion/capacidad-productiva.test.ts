@@ -42,7 +42,19 @@ describe("calcularCapacidadProductivaSiesa", () => {
     const bom = [componente(1, 10, 200, 100), componente(1, 11, 100, 100)];
     const existencias = [existencia(10, 800), existencia(11, 250)];
     const [r] = calcularCapacidadProductivaSiesa(
-      [{ itemRowId: 1, descripcion: "Producto A", referencia: null, unidadMedida: "UND", demandaProyectada: 0, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 400 }],
+      [
+        {
+          itemRowId: 1,
+          descripcion: "Producto A",
+          referencia: null,
+          unidadMedida: "UND",
+          demandaProyectada: 0,
+          pedidosComprometidos: 0,
+          inventarioDisponible: 0,
+          cantidadPendienteEntrar: 0,
+          produccionRecomendada: 400,
+        },
+      ],
       bom,
       existencias,
     );
@@ -53,7 +65,19 @@ describe("calcularCapacidadProductivaSiesa", () => {
 
   it("capacidad null (sin restricción) cuando el producto no tiene receta", () => {
     const [r] = calcularCapacidadProductivaSiesa(
-      [{ itemRowId: 2, descripcion: "Sin receta", referencia: null, unidadMedida: null, demandaProyectada: 0, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 100 }],
+      [
+        {
+          itemRowId: 2,
+          descripcion: "Sin receta",
+          referencia: null,
+          unidadMedida: null,
+          demandaProyectada: 0,
+          pedidosComprometidos: 0,
+          inventarioDisponible: 0,
+          cantidadPendienteEntrar: 0,
+          produccionRecomendada: 100,
+        },
+      ],
       [],
       [],
     );
@@ -65,7 +89,19 @@ describe("calcularCapacidadProductivaSiesa", () => {
     const bom = [componente(1, 10, 100, 100)];
     const existencias = [existencia(10, 1000)];
     const [r] = calcularCapacidadProductivaSiesa(
-      [{ itemRowId: 1, descripcion: null, referencia: null, unidadMedida: null, demandaProyectada: 0, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 200 }],
+      [
+        {
+          itemRowId: 1,
+          descripcion: null,
+          referencia: null,
+          unidadMedida: null,
+          demandaProyectada: 0,
+          pedidosComprometidos: 0,
+          inventarioDisponible: 0,
+          cantidadPendienteEntrar: 0,
+          produccionRecomendada: 200,
+        },
+      ],
       bom,
       existencias,
     );
@@ -76,7 +112,19 @@ describe("calcularCapacidadProductivaSiesa", () => {
   it("componente sin existencia registrada se trata como 0 disponible", () => {
     const bom = [componente(1, 10, 100, 100)];
     const [r] = calcularCapacidadProductivaSiesa(
-      [{ itemRowId: 1, descripcion: null, referencia: null, unidadMedida: null, demandaProyectada: 0, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 50 }],
+      [
+        {
+          itemRowId: 1,
+          descripcion: null,
+          referencia: null,
+          unidadMedida: null,
+          demandaProyectada: 0,
+          pedidosComprometidos: 0,
+          inventarioDisponible: 0,
+          cantidadPendienteEntrar: 0,
+          produccionRecomendada: 50,
+        },
+      ],
       bom,
       [],
     );

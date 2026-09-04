@@ -3,7 +3,10 @@ import { calcularDisponibilidadComercial } from "./disponibilidad";
 import type { ExistenciaItemSiesa } from "../../modules/integraciones-siesa/siesa-inventario.service";
 import type { ComponenteBomSiesa } from "../../modules/integraciones-siesa/siesa-manufactura.service";
 
-function existencia(itemRowId: number, overrides: Partial<ExistenciaItemSiesa> = {}): ExistenciaItemSiesa {
+function existencia(
+  itemRowId: number,
+  overrides: Partial<ExistenciaItemSiesa> = {},
+): ExistenciaItemSiesa {
   return {
     itemRowId,
     descripcion: `Item ${itemRowId}`,
@@ -55,7 +58,10 @@ describe("calcularDisponibilidadComercial", () => {
     const r = calcularDisponibilidadComercial(
       1,
       5000,
-      [existencia(1, { cantidadExistente: 1800, cantidadComprometida: 500 }), existencia(10, { cantidadExistente: 10000 })],
+      [
+        existencia(1, { cantidadExistente: 1800, cantidadComprometida: 500 }),
+        existencia(10, { cantidadExistente: 10000 }),
+      ],
       bom,
     );
     // disponibleLibre=1300, deficit=3700; capacidad = 10000kg materia / 1kg por unidad = 10000 >= 3700
@@ -71,7 +77,10 @@ describe("calcularDisponibilidadComercial", () => {
     const r = calcularDisponibilidadComercial(
       1,
       5000,
-      [existencia(1, { cantidadExistente: 1800, cantidadComprometida: 500 }), existencia(10, { cantidadExistente: 800 })],
+      [
+        existencia(1, { cantidadExistente: 1800, cantidadComprometida: 500 }),
+        existencia(10, { cantidadExistente: 800 }),
+      ],
       bom,
     );
     // deficit=3700; capacidad=800kg (1kg/unidad) -> alcanza para 800 unidades, faltan 2900

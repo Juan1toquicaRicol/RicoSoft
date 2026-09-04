@@ -21,7 +21,11 @@ router.use(authenticateJWT);
 // Empleados
 router.get("/empleados", requirePermission("empleados.ver"), listarEmpleados);
 router.post("/empleados", requirePermission("empleados.crear"), crearEmpleado);
-router.patch("/empleados/:id/salario", requirePermission("empleados.editar_salario"), actualizarSalario);
+router.patch(
+  "/empleados/:id/salario",
+  requirePermission("empleados.editar_salario"),
+  actualizarSalario,
+);
 router.patch("/empleados/:id/liquidar", requirePermission("empleados.liquidar"), liquidarEmpleado);
 router.delete("/empleados/:id", requirePermission("empleados.eliminar"), eliminarEmpleado);
 

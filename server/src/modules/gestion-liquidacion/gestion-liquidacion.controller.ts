@@ -1,6 +1,9 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { esTransicionValidaLiquidacion, type EstadoGestionLiquidacion } from "../../lib/gestion-liquidacion";
+import {
+  esTransicionValidaLiquidacion,
+  type EstadoGestionLiquidacion,
+} from "../../lib/gestion-liquidacion";
 import {
   crearGestionLiquidacionSchema,
   actualizarEstadoGestionLiquidacionSchema,
@@ -55,7 +58,11 @@ export const crearGestionLiquidacion = async (req: AuthenticatedRequest, res: Re
       detalle: `${req.user!.nombre} registró una gestión de liquidación para "${parseo.data.descripcion ?? gestion.itemRowId}" (categoría ${gestion.categoria}, valor $${Number(gestion.valorTotal).toLocaleString("es-CO")}).`,
       entidadTipo: "GestionLiquidacion",
       entidadId: gestion.id,
-      datosNuevos: JSON.stringify({ estado: gestion.estado, categoria: gestion.categoria, valorTotal: Number(gestion.valorTotal) }),
+      datosNuevos: JSON.stringify({
+        estado: gestion.estado,
+        categoria: gestion.categoria,
+        valorTotal: Number(gestion.valorTotal),
+      }),
     },
   });
 
@@ -69,13 +76,18 @@ export const crearGestionLiquidacion = async (req: AuthenticatedRequest, res: Re
  * ejecuta nada contra Siesa — "EJECUTADA" es solo un registro de que la
  * empresa ya actuó por su cuenta.
  */
-export const actualizarEstadoGestionLiquidacion = async (req: AuthenticatedRequest, res: Response) => {
+export const actualizarEstadoGestionLiquidacion = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
   const parseo = actualizarEstadoGestionLiquidacionSchema.safeParse(req.body);
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
 
-  const gestion = await req.tenantPrisma!.gestionLiquidacion.findUnique({ where: { id: req.params.id } });
+  const gestion = await req.tenantPrisma!.gestionLiquidacion.findUnique({
+    where: { id: req.params.id },
+  });
   if (!gestion) return res.status(404).json({ message: "Gestión de liquidación no encontrada." });
 
   const actual = gestion.estado as EstadoGestionLiquidacion;

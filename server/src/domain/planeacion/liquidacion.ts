@@ -94,7 +94,9 @@ export function calcularCandidatosLiquidacionSiesa(
     .map((it) => {
       const ventaPromedioMensual = ventaPromedioPorItem.get(it.itemRowId) ?? 0;
       const score =
-        puntajeAntiguedad(it.diasSinVenta) + puntajeValor(it.valorTotal) + puntajeDemanda(ventaPromedioMensual);
+        puntajeAntiguedad(it.diasSinVenta) +
+        puntajeValor(it.valorTotal) +
+        puntajeDemanda(ventaPromedioMensual);
 
       return {
         itemRowId: it.itemRowId,

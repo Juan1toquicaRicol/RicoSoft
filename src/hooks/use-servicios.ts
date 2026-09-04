@@ -13,8 +13,8 @@ export function useServicios() {
     try {
       const data = await fetchAuth("/servicios");
       setSuscripciones(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando servicios.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando servicios.");
     } finally {
       setLoading(false);
     }
@@ -88,8 +88,8 @@ export function useServicio(id: string | undefined) {
     try {
       const data = await fetchAuth(`/servicios/${id}`);
       setServicio(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el servicio.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el servicio.");
     } finally {
       setLoading(false);
     }

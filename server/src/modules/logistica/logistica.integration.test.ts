@@ -160,7 +160,9 @@ describe.skipIf(!RUN)("Logística — Motor de Decisiones (multi-tenant real)", 
 
   afterAll(async () => {
     const tenantIds = [tenantAId, tenantBId];
-    await prisma.despachoNovedad.deleteMany({ where: { despacho: { tenantId: { in: tenantIds } } } });
+    await prisma.despachoNovedad.deleteMany({
+      where: { despacho: { tenantId: { in: tenantIds } } },
+    });
     await prisma.despachoLinea.deleteMany({ where: { despacho: { tenantId: { in: tenantIds } } } });
     await prisma.despacho.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });

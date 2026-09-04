@@ -140,8 +140,8 @@ function DetalleFactura() {
       await updateEstadoFactura(factura.id, confirmAccion.estado, confirmAccion.detalle);
       toast.success(`Factura actualizada a "${confirmAccion.estado}".`);
       setConfirmAccion(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar la factura.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible actualizar la factura.");
     } finally {
       setAplicandoAccion(false);
     }
@@ -544,21 +544,21 @@ function RegistrarPagoModal({
     }
     setGuardando(true);
     try {
-      const resultado: any = await onRegistrar({
+      const resultado = (await onRegistrar({
         fecha: form.fecha,
         valor: Number(form.valor),
         metodoPago: form.metodoPago,
         referencia: form.referencia.trim() || undefined,
         observaciones: form.observaciones.trim() || undefined,
-      });
+      })) as { pago: Pago; factura: { id: string; estado: string } | null } | undefined;
       if (resultado?.factura?.estado === "Pagada") {
         toast.success("Pago registrado. La factura quedó completamente pagada.");
       } else {
         toast.success("Pago registrado. Queda saldo pendiente.");
       }
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el pago.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el pago.");
     } finally {
       setGuardando(false);
     }
@@ -719,8 +719,10 @@ function CondicionesPagoFactura({
       await onGuardar(facturaId, form);
       toast.success("Condiciones de pago actualizadas.");
       setEditando(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar las condiciones de pago.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al actualizar las condiciones de pago.",
+      );
     } finally {
       setGuardando(false);
     }
@@ -733,7 +735,13 @@ function CondicionesPagoFactura({
           <CreditCard className="h-4 w-4 text-slate-500" /> Datos y Condiciones de Pago
         </h2>
         {canManage && !editando && (
-          <Button type="button" variant="outline" size="xs" className="gap-1.5" onClick={handleAbrir}>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="gap-1.5"
+            onClick={handleAbrir}
+          >
             <Pencil className="h-3.5 w-3.5" /> Editar
           </Button>
         )}
@@ -832,8 +840,8 @@ function PagosFactura({
     try {
       await onAnular(pago.id);
       toast.success("Pago anulado.");
-    } catch (err: any) {
-      toast.error(err.message || "Error al anular el pago.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al anular el pago.");
     } finally {
       setAnulandoId(null);
     }
@@ -843,8 +851,8 @@ function PagosFactura({
     setSubiendoId(pago.id);
     try {
       await onSubirComprobante(pago.id, file);
-    } catch (err: any) {
-      toast.error(err.message || "Error al subir el comprobante.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al subir el comprobante.");
     } finally {
       setSubiendoId(null);
     }
@@ -854,8 +862,8 @@ function PagosFactura({
     try {
       const blob = await onDescargarComprobante(pago.id);
       window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir el comprobante.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el comprobante.");
     }
   };
 
@@ -1023,8 +1031,8 @@ function DocumentoFactura({
     setSubiendo(true);
     try {
       await subirArchivoFactura(facturaId, file);
-    } catch (err: any) {
-      setErrorArchivo(err.message || "Error al subir el archivo.");
+    } catch (err: unknown) {
+      setErrorArchivo(err instanceof Error ? err.message : "Error al subir el archivo.");
     } finally {
       setSubiendo(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1035,8 +1043,8 @@ function DocumentoFactura({
     if (!confirm("¿Eliminar el documento adjunto de esta factura?")) return;
     try {
       await eliminarArchivoFactura(facturaId);
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el archivo.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el archivo.");
     }
   };
 
@@ -1201,8 +1209,8 @@ function ComentariosFactura({
     try {
       await onEnviar(valor);
       setTexto("");
-    } catch (err: any) {
-      setErrorComentario(err.message || "Error al enviar el comentario.");
+    } catch (err: unknown) {
+      setErrorComentario(err instanceof Error ? err.message : "Error al enviar el comentario.");
     } finally {
       setEnviando(false);
     }

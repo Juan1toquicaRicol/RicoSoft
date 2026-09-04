@@ -13,6 +13,10 @@ import { prisma } from "../../config/prisma";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
+interface ConIdDto {
+  id: string;
+}
+
 describe.skipIf(!RUN)(
   "Contratos + Servicios/Suscripciones — piloto tenant-prisma (multi-tenant real)",
   () => {
@@ -143,8 +147,8 @@ describe.skipIf(!RUN)(
 
       const res = await request(app).get("/api/contratos").set("Authorization", `Bearer ${tokenA}`);
       expect(res.status).toBe(200);
-      expect(res.body.some((c: any) => c.id === contratoBId)).toBe(false);
-      expect(res.body.some((c: any) => c.id === creado.body.id)).toBe(true);
+      expect(res.body.some((c: ConIdDto) => c.id === contratoBId)).toBe(false);
+      expect(res.body.some((c: ConIdDto) => c.id === creado.body.id)).toBe(true);
     });
 
     it("Contratos: Tenant A no puede actualizar un contrato de Tenant B; la fila no cambia", async () => {
@@ -211,7 +215,7 @@ describe.skipIf(!RUN)(
       const listado = await request(app)
         .get("/api/contratos")
         .set("Authorization", `Bearer ${tokenA}`);
-      expect(listado.body.some((c: any) => c.id === contratoBId)).toBe(false);
+      expect(listado.body.some((c: ConIdDto) => c.id === contratoBId)).toBe(false);
     });
 
     // ---- Servicios ----
@@ -233,8 +237,8 @@ describe.skipIf(!RUN)(
 
       const res = await request(app).get("/api/servicios").set("Authorization", `Bearer ${tokenA}`);
       expect(res.status).toBe(200);
-      expect(res.body.some((s: any) => s.id === servicioBId)).toBe(false);
-      expect(res.body.some((s: any) => s.id === creado.body.id)).toBe(true);
+      expect(res.body.some((s: ConIdDto) => s.id === servicioBId)).toBe(false);
+      expect(res.body.some((s: ConIdDto) => s.id === creado.body.id)).toBe(true);
     });
 
     it("Servicios: Tenant A no puede obtener el detalle de un servicio de Tenant B (404)", async () => {
@@ -371,7 +375,7 @@ describe.skipIf(!RUN)(
       expect(pagina1.body.items).toHaveLength(2);
       expect(pagina1.body.total).toBe(3);
       expect(pagina1.body.totalPages).toBe(2);
-      expect(pagina1.body.items.every((c: any) => c.id !== contratoBId)).toBe(true);
+      expect(pagina1.body.items.every((c: ConIdDto) => c.id !== contratoBId)).toBe(true);
 
       const sinPage = await request(app)
         .get("/api/contratos")
@@ -407,7 +411,7 @@ describe.skipIf(!RUN)(
       expect(pagina1.body.items).toHaveLength(2);
       expect(pagina1.body.total).toBe(3);
       expect(pagina1.body.totalPages).toBe(2);
-      expect(pagina1.body.items.every((s: any) => s.id !== servicioBId)).toBe(true);
+      expect(pagina1.body.items.every((s: ConIdDto) => s.id !== servicioBId)).toBe(true);
 
       const sinPage = await request(app)
         .get("/api/servicios")

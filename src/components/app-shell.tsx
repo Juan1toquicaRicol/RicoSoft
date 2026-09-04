@@ -109,8 +109,8 @@ export function AppShell({ children, title, description, actions }: AppShellProp
       await switchTenant(tenantId);
       toast.success("Empresa cambiada correctamente.");
       navigate({ to: "/" });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible cambiar de empresa.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible cambiar de empresa.");
     } finally {
       setCambiandoTenant(false);
     }
@@ -485,7 +485,8 @@ export function AppShell({ children, title, description, actions }: AppShellProp
             ) : (
               !cargandoTenants && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                  <Building2 className="h-3.5 w-3.5" /> Estás en {abreviarNombreTenant(user.tenantNombre)}
+                  <Building2 className="h-3.5 w-3.5" /> Estás en{" "}
+                  {abreviarNombreTenant(user.tenantNombre)}
                 </span>
               )
             )}

@@ -98,13 +98,7 @@ const BUCKET_INFO: {
   },
 ];
 
-function FilaProducto({
-  p,
-  expandible = false,
-}: {
-  p: PronosticoProducto;
-  expandible?: boolean;
-}) {
+function FilaProducto({ p, expandible = false }: { p: PronosticoProducto; expandible?: boolean }) {
   const [abierto, setAbierto] = useState(false);
   const { consultar, loading } = useContextoProducto();
   const [contexto, setContexto] = useState<Awaited<ReturnType<typeof consultar>> | null>(null);
@@ -181,21 +175,27 @@ function FilaProducto({
               </p>
             )}
             {contexto && !contexto.disponible && (
-              <p className="mt-2 text-xs text-slate-500">{contexto.motivo ?? "Sin datos disponibles."}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {contexto.motivo ?? "Sin datos disponibles."}
+              </p>
             )}
             {contexto?.disponible && (
               <div className="mt-2 space-y-2 text-xs text-slate-700">
                 <p>
                   Precio promedio de venta últimos {contexto.ventanaPrecioDias ?? 90} días:{" "}
                   <span className="num font-semibold">
-                    {contexto.precioPromedioVenta != null ? money(contexto.precioPromedioVenta) : "sin ventas recientes"}
+                    {contexto.precioPromedioVenta != null
+                      ? money(contexto.precioPromedioVenta)
+                      : "sin ventas recientes"}
                   </span>{" "}
                   ({contexto.lineasVentaRecientes ?? 0} líneas de venta)
                 </p>
                 <div>
                   <p className="font-semibold text-slate-500">Clientes que lo compraban:</p>
                   {(contexto.clientes ?? []).length === 0 ? (
-                    <p className="mt-1 text-slate-500">Sin compradores registrados recientemente.</p>
+                    <p className="mt-1 text-slate-500">
+                      Sin compradores registrados recientemente.
+                    </p>
                   ) : (
                     <ul className="mt-1 space-y-1">
                       {(contexto.clientes ?? []).map((c) => (
@@ -203,9 +203,12 @@ function FilaProducto({
                           key={c.clienteRowId ?? c.clienteNombre}
                           className="flex items-center justify-between gap-3"
                         >
-                          <span className="min-w-0 truncate">{c.clienteNombre ?? "Cliente sin nombre"}</span>
+                          <span className="min-w-0 truncate">
+                            {c.clienteNombre ?? "Cliente sin nombre"}
+                          </span>
                           <span className="num shrink-0 text-slate-500">
-                            {formatCantidad(c.cantidadHistorica, p.unidadMedida)} · {money(c.netoHistorico)}
+                            {formatCantidad(c.cantidadHistorica, p.unidadMedida)} ·{" "}
+                            {money(c.netoHistorico)}
                           </span>
                         </li>
                       ))}
@@ -282,10 +285,16 @@ function FilaProduccionRecomendada({ r }: { r: RecomendacionProduccion }) {
 
   return (
     <>
-      <TableRow className="cursor-pointer hover:bg-slate-50/80" onClick={() => setAbierto((a) => !a)}>
+      <TableRow
+        className="cursor-pointer hover:bg-slate-50/80"
+        onClick={() => setAbierto((a) => !a)}
+      >
         <TableCell className="w-8">
           <ChevronDown
-            className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", abierto && "rotate-180")}
+            className={cn(
+              "h-3.5 w-3.5 text-slate-400 transition-transform",
+              abierto && "rotate-180",
+            )}
           />
         </TableCell>
         <TableCell className="text-xs text-slate-600">{r.referencia ?? "—"}</TableCell>
@@ -358,8 +367,9 @@ function FilaProduccionRecomendada({ r }: { r: RecomendacionProduccion }) {
                   " (pocos meses de historia real todavía respaldan esta proyección)."}
               </p>
               <p className="text-slate-500">
-                Cuenta de vuelta: demanda proyectada ({formatCantidad(r.demandaProyectada, r.unidadMedida)})
-                + comprometido ({formatCantidad(r.pedidosComprometidos, r.unidadMedida)}) − disponible (
+                Cuenta de vuelta: demanda proyectada (
+                {formatCantidad(r.demandaProyectada, r.unidadMedida)}) + comprometido (
+                {formatCantidad(r.pedidosComprometidos, r.unidadMedida)}) − disponible (
                 {formatCantidad(r.inventarioDisponible, r.unidadMedida)}) − ya en camino (
                 {formatCantidad(r.cantidadPendienteEntrar, r.unidadMedida)}) ={" "}
                 <span className="font-semibold text-slate-900">
@@ -413,8 +423,8 @@ function PanelConfiguracion() {
       await guardar(valores);
       toast.success("Umbrales actualizados.");
       setAbierto(false);
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo guardar la configuración.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
     } finally {
       setGuardando(false);
     }
@@ -537,18 +547,20 @@ function Inventario() {
           {/* "Top demanda" priorizado más arriba en la jerarquía visual —
               representa demanda real y orienta decisiones comerciales/
               operativas antes que el detalle de antigüedad/liquidación. */}
-          {!cargandoPronostico && pronostico.disponible && (pronostico.topDemanda ?? []).length > 0 && (
-            <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs">
-              <h2 className="text-sm font-bold text-slate-900">Top demanda</h2>
-              <p className="text-xs text-slate-500">
-                Los productos que más se venden en promedio por mes — el núcleo de la demanda. Haz
-                clic en un producto para ver su registro histórico de ventas (clientes y monto).
-              </p>
-              <div className="mt-4 overflow-x-auto">
-                <TablaProductos productos={pronostico.topDemanda ?? []} expandible />
+          {!cargandoPronostico &&
+            pronostico.disponible &&
+            (pronostico.topDemanda ?? []).length > 0 && (
+              <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs">
+                <h2 className="text-sm font-bold text-slate-900">Top demanda</h2>
+                <p className="text-xs text-slate-500">
+                  Los productos que más se venden en promedio por mes — el núcleo de la demanda. Haz
+                  clic en un producto para ver su registro histórico de ventas (clientes y monto).
+                </p>
+                <div className="mt-4 overflow-x-auto">
+                  <TablaProductos productos={pronostico.topDemanda ?? []} expandible />
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs">
             <h2 className="text-sm font-bold text-slate-900">Inventario por antigüedad de venta</h2>
@@ -702,16 +714,16 @@ function Inventario() {
             <span>
               Producción &amp; Planeación (motor determinístico, sin IA todavía): inventario, Centro
               de Decisiones, demanda y producción recomendada (vía receta real/BOM). La producción
-              recomendada NO incluye stock de seguridad ni producción en
-              proceso: Siesa no tiene esos datos configurados (verificado en vivo — 0 de 8.175 ítems
-              con nivel mínimo, 0 órdenes de producción abiertas). El "CUÁNDO" de cada decisión
-              queda vacío: Siesa no reporta una fecha de necesidad calculable con los datos
-              actuales. El score de liquidación no incluye un "ahorro" en pesos: requeriría asumir
-              una tasa de costo de capital que Siesa no reporta. La redistribución de inventario
-              entre empresas del grupo (multi-tenant) todavía no está implementada: requiere definir
-              con el equipo qué información puede compartirse entre tenants sin violar el
-              aislamiento actual. Toma física, Plan de producción y Oportunidades comerciales viven
-              en sus propios módulos (ver menú lateral).
+              recomendada NO incluye stock de seguridad ni producción en proceso: Siesa no tiene
+              esos datos configurados (verificado en vivo — 0 de 8.175 ítems con nivel mínimo, 0
+              órdenes de producción abiertas). El "CUÁNDO" de cada decisión queda vacío: Siesa no
+              reporta una fecha de necesidad calculable con los datos actuales. El score de
+              liquidación no incluye un "ahorro" en pesos: requeriría asumir una tasa de costo de
+              capital que Siesa no reporta. La redistribución de inventario entre empresas del grupo
+              (multi-tenant) todavía no está implementada: requiere definir con el equipo qué
+              información puede compartirse entre tenants sin violar el aislamiento actual. Toma
+              física, Plan de producción y Oportunidades comerciales viven en sus propios módulos
+              (ver menú lateral).
             </span>
           </div>
         </>

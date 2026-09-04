@@ -3,19 +3,36 @@ import { z } from "zod";
 // required_error/invalid_type_error reemplazan los mensajes técnicos por
 // defecto de zod ("Required", "Expected string, received number") por texto
 // en español apto para mostrar al usuario.
-const textoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
-const booleanoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
+const textoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
+const booleanoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
 
 export const crearUsuarioSchema = z.object({
-  nombre: z.string(textoObligatorio("El nombre es obligatorio.")).trim().min(1, "El nombre es obligatorio."),
-  email: z.string(textoObligatorio("El correo es obligatorio.")).trim().min(1, "El correo es obligatorio."),
-  password: z.string(textoObligatorio("La contraseña es obligatoria.")).min(1, "La contraseña es obligatoria."),
+  nombre: z
+    .string(textoObligatorio("El nombre es obligatorio."))
+    .trim()
+    .min(1, "El nombre es obligatorio."),
+  email: z
+    .string(textoObligatorio("El correo es obligatorio."))
+    .trim()
+    .min(1, "El correo es obligatorio."),
+  password: z
+    .string(textoObligatorio("La contraseña es obligatoria."))
+    .min(1, "La contraseña es obligatoria."),
   departamentoId: z.string().nullish(),
   rolId: z.string().nullish(),
 });
 
 export const actualizarPerfilPropioSchema = z.object({
-  nombre: z.string(textoObligatorio("El nombre es obligatorio.")).trim().min(1, "El nombre es obligatorio."),
+  nombre: z
+    .string(textoObligatorio("El nombre es obligatorio."))
+    .trim()
+    .min(1, "El nombre es obligatorio."),
   // El formato del teléfono (si viene) se valida en el controlador, no aquí.
   telefono: z.string().nullish(),
 });
@@ -53,7 +70,10 @@ export const asignarDepartamentoSchema = z.object({
 });
 
 export const cambiarEmailSchema = z.object({
-  email: z.string(textoObligatorio("El correo es obligatorio.")).trim().min(1, "El correo es obligatorio."),
+  email: z
+    .string(textoObligatorio("El correo es obligatorio."))
+    .trim()
+    .min(1, "El correo es obligatorio."),
 });
 
 export const resetPasswordSchema = z.object({

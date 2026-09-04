@@ -35,8 +35,8 @@ export function usePagosFactura(facturaId: string | undefined) {
       setPagos(data.data ?? []);
       setTotalPagado(data.totalPagado ?? 0);
       setSaldoPendiente(data.saldoPendiente ?? 0);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los pagos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los pagos.");
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,9 @@ export function usePagosFactura(facturaId: string | undefined) {
   const anularPago = useCallback(
     async (pagoId: string) => {
       if (!facturaId) throw new Error("Falta el id de la factura.");
-      const resultado = await fetchAuth(`/facturas/${facturaId}/pagos/${pagoId}/anular`, { method: "PATCH" });
+      const resultado = await fetchAuth(`/facturas/${facturaId}/pagos/${pagoId}/anular`, {
+        method: "PATCH",
+      });
       await refresh();
       return resultado as { pago: Pago; factura: { id: string; estado: string } | null };
     },

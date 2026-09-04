@@ -97,7 +97,9 @@ describe("calcularOportunidadComercialSiesa", () => {
   });
 
   it("limita a 10 clientes, ordenados por potencial total descendente", () => {
-    const compras = Array.from({ length: 15 }, (_, i) => compra(i, `Cliente ${i}`, i, 120, (i + 1) * 100_000));
+    const compras = Array.from({ length: 15 }, (_, i) =>
+      compra(i, `Cliente ${i}`, i, 120, (i + 1) * 100_000),
+    );
     const existencias = Array.from({ length: 15 }, (_, i) => existencia(i, 100));
     const r = calcularOportunidadComercialSiesa(compras, existencias);
     expect(r.clientes).toHaveLength(10);
@@ -105,7 +107,9 @@ describe("calcularOportunidadComercialSiesa", () => {
   });
 
   it("totalPotencialVenta suma sobre TODOS los clientes, no solo los 10 mostrados", () => {
-    const compras = Array.from({ length: 15 }, (_, i) => compra(i, `Cliente ${i}`, i, 120, (i + 1) * 100_000));
+    const compras = Array.from({ length: 15 }, (_, i) =>
+      compra(i, `Cliente ${i}`, i, 120, (i + 1) * 100_000),
+    );
     const existencias = Array.from({ length: 15 }, (_, i) => existencia(i, 100));
     const r = calcularOportunidadComercialSiesa(compras, existencias);
     const sumaMostrados = r.clientes.reduce((a, c) => a + c.potencialTotal, 0);

@@ -44,7 +44,10 @@ describe.skipIf(!RUN)("Analítica Comercial — /analitica/ventas* (multi-tenant
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
     const tenant = await prisma.tenant.create({
-      data: { nombre: `Analitica Ventas Tenant ${sufijo}`, subdomain: `test-analitica-v-${sufijo}` },
+      data: {
+        nombre: `Analitica Ventas Tenant ${sufijo}`,
+        subdomain: `test-analitica-v-${sufijo}`,
+      },
     });
     tenantId = tenant.id;
 

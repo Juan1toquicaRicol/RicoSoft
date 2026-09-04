@@ -18,20 +18,20 @@ async function main() {
   console.log("\n📋 Tablas en UnoEE_Ricol_Real:\n");
   const { recordset: tablas } = await pool
     .request()
-    .query(
+    .query<{ TABLE_NAME: string }>(
       `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME`,
     );
 
-  const tablasFiltradasPalabrasClave = tablas.filter((t: any) =>
+  const tablasFiltradasPalabrasClave = tablas.filter((t) =>
     /tercero|provider|vendor|proveedor|supplier|cliente|customer/.test(t.TABLE_NAME.toLowerCase()),
   );
 
   if (tablasFiltradasPalabrasClave.length > 0) {
     console.log("Tablas que coinciden con 'tercero/proveedor/cliente/vendor':");
-    tablasFiltradasPalabrasClave.forEach((t: any) => console.log(`  - ${t.TABLE_NAME}`));
+    tablasFiltradasPalabrasClave.forEach((t) => console.log(`  - ${t.TABLE_NAME}`));
   } else {
     console.log("Sin coincidencias obvias. Mostrando primeras 50 tablas:");
-    tablas.slice(0, 50).forEach((t: any) => console.log(`  - ${t.TABLE_NAME}`));
+    tablas.slice(0, 50).forEach((t) => console.log(`  - ${t.TABLE_NAME}`));
   }
 
   // Si pasaste --table=XX, inspecciona esa tabla
@@ -41,12 +41,12 @@ async function main() {
     // Columnas
     const { recordset: columnas } = await pool
       .request()
-      .query(
+      .query<{ COLUMN_NAME: string; DATA_TYPE: string }>(
         `SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='${tableFilter}' ORDER BY ORDINAL_POSITION`,
       );
 
     console.log(`Columnas (${columnas.length}):`);
-    columnas.forEach((c: any) => console.log(`  - ${c.COLUMN_NAME} (${c.DATA_TYPE})`));
+    columnas.forEach((c) => console.log(`  - ${c.COLUMN_NAME} (${c.DATA_TYPE})`));
 
     // Sample
     console.log(`\nSample de 5 filas:`);

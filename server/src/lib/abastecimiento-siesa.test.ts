@@ -5,7 +5,10 @@ import type { RecomendacionProduccionSiesa } from "./produccion-siesa";
 import type { ExistenciaItemSiesa } from "../modules/integraciones-siesa/siesa-inventario.service";
 
 describe("calcularNecesidadesAbastecimientoSiesa", () => {
-  const prod = (itemRowId: number, produccionRecomendada: number): RecomendacionProduccionSiesa => ({
+  const prod = (
+    itemRowId: number,
+    produccionRecomendada: number,
+  ): RecomendacionProduccionSiesa => ({
     itemRowId,
     descripcion: `Producto ${itemRowId}`,
     referencia: `REF${itemRowId}`,
@@ -110,7 +113,7 @@ describe("calcularNecesidadesAbastecimientoSiesa", () => {
 
   it("ordena por déficit descendente y limita a 20 resultados", () => {
     const productos = Array.from({ length: 25 }, (_, i) => prod(i, 100));
-    const bom = Array.from({ length: 25 }, (_, i) => bomLinea(i, i, 100, (i + 1)));
+    const bom = Array.from({ length: 25 }, (_, i) => bomLinea(i, i, 100, i + 1));
     const existencias = Array.from({ length: 25 }, (_, i) => existencia(i, 0));
     const r = calcularNecesidadesAbastecimientoSiesa(productos, bom, existencias);
     expect(r).toHaveLength(20);

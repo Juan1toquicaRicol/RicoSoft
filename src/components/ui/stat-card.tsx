@@ -26,16 +26,35 @@ export interface StatCardProps {
  * con tonos ámbar/esmeralda — acá el único acento es azul, y "atención" se
  * expresa con contorno negro + ícono, no con un semáforo de colores.
  */
-export function StatCard({ label, value, hint, icon: Icon, enfasis = "default", tendencia, tendenciaEtiqueta, className }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  enfasis = "default",
+  tendencia,
+  tendenciaEtiqueta,
+  className,
+}: StatCardProps) {
   const iconoClasses =
-    enfasis === "atencion" ? "bg-slate-900 text-white border-slate-900" : "bg-blue-50 text-blue-700 border-blue-200";
+    enfasis === "atencion"
+      ? "bg-slate-900 text-white border-slate-900"
+      : "bg-blue-50 text-blue-700 border-blue-200";
 
   return (
-    <div className={cn("panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm", className)}>
+    <div
+      className={cn("panel bg-white border border-slate-200 rounded-xl p-5 shadow-sm", className)}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
+          {/* break-words: una cifra en pesos ("$ 20.154.594.558") no tiene
+              espacios internos con los que el navegador pueda envolver el
+              texto por defecto — sin esto, en tarjetas angostas el número
+              se desborda por encima del ícono en vez de bajar de línea. */}
+          <p className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums break-words">
+            {value}
+          </p>
           {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
           {typeof tendencia === "number" && (
             <p
@@ -44,7 +63,11 @@ export function StatCard({ label, value, hint, icon: Icon, enfasis = "default", 
                 tendencia >= 0 ? "text-blue-700" : "text-slate-600",
               )}
             >
-              {tendencia >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+              {tendencia >= 0 ? (
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowDownRight className="h-3.5 w-3.5" />
+              )}
               {tendencia >= 0 ? "+" : ""}
               {tendencia.toFixed(1)}%{tendenciaEtiqueta ? ` ${tendenciaEtiqueta}` : ""}
             </p>

@@ -21,8 +21,8 @@ export function useGestionHumana() {
       setEmpleados(emp);
       setPermisos(perm);
       setFaltas(flt);
-    } catch (err: any) {
-      setError(err.message || "Error cargando datos de Gestión Humana.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando datos de Gestión Humana.");
     } finally {
       setLoading(false);
     }

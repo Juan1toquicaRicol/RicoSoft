@@ -30,7 +30,9 @@ describe.skipIf(!RUN)("Centro Gerencial — /api/gerencial/resumen (multi-tenant
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -126,19 +128,25 @@ describe.skipIf(!RUN)("Centro Gerencial — /api/gerencial/resumen (multi-tenant
   });
 
   it("responde 200 con disponibleSiesa:false cuando el tenant no tiene siesaCiaId (nunca 500)", async () => {
-    const res = await request(app).get("/api/gerencial/resumen").set("Authorization", `Bearer ${tokenAdminA}`);
+    const res = await request(app)
+      .get("/api/gerencial/resumen")
+      .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
     expect(res.body.disponibleSiesa).toBe(false);
     expect(Array.isArray(res.body.indicadores)).toBe(true);
   });
 
   it("un usuario sin permiso analitica.ver no puede consultar el Centro Gerencial", async () => {
-    const res = await request(app).get("/api/gerencial/resumen").set("Authorization", `Bearer ${tokenSinPermisoA}`);
+    const res = await request(app)
+      .get("/api/gerencial/resumen")
+      .set("Authorization", `Bearer ${tokenSinPermisoA}`);
     expect(res.status).toBe(403);
   });
 
   it("Tenant A NUNCA ve las cuentas por pagar ni las solicitudes pendientes de Tenant B (aislamiento)", async () => {
-    const res = await request(app).get("/api/gerencial/resumen").set("Authorization", `Bearer ${tokenAdminA}`);
+    const res = await request(app)
+      .get("/api/gerencial/resumen")
+      .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
 
     const finanzas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_total");
@@ -146,24 +154,34 @@ describe.skipIf(!RUN)("Centro Gerencial — /api/gerencial/resumen (multi-tenant
     const vencidas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_vencida");
     expect(vencidas).toBeUndefined(); // Tenant A no tiene facturas vencidas propias
 
-    const compras = res.body.indicadores.find((i: any) => i.id === "compras.solicitudes_pendientes");
+    const compras = res.body.indicadores.find(
+      (i: any) => i.id === "compras.solicitudes_pendientes",
+    );
     expect(compras.valor).toBe(0);
   });
 
   it("Tenant B sí ve su propia factura vencida y solicitud pendiente (verificado también contra Prisma base)", async () => {
-    const res = await request(app).get("/api/gerencial/resumen").set("Authorization", `Bearer ${tokenAdminB}`);
+    const res = await request(app)
+      .get("/api/gerencial/resumen")
+      .set("Authorization", `Bearer ${tokenAdminB}`);
     expect(res.status).toBe(200);
 
     const vencidas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_vencida");
     expect(vencidas?.valor).toBe(1_000_000);
-    const compras = res.body.indicadores.find((i: any) => i.id === "compras.solicitudes_pendientes");
+    const compras = res.body.indicadores.find(
+      (i: any) => i.id === "compras.solicitudes_pendientes",
+    );
     expect(compras.valor).toBe(1);
 
     // Confirmación independiente contra el cliente Prisma base — no se
     // valida el aislamiento usando el mismo tenantPrisma que se prueba.
-    const facturaEnDb = await prisma.factura.findFirst({ where: { tenantId: tenantBId, numero: `FE-GER-${sufijo}` } });
+    const facturaEnDb = await prisma.factura.findFirst({
+      where: { tenantId: tenantBId, numero: `FE-GER-${sufijo}` },
+    });
     expect(facturaEnDb).not.toBeNull();
-    const facturaEnTenantA = await prisma.factura.findFirst({ where: { tenantId: tenantAId, numero: `FE-GER-${sufijo}` } });
+    const facturaEnTenantA = await prisma.factura.findFirst({
+      where: { tenantId: tenantAId, numero: `FE-GER-${sufijo}` },
+    });
     expect(facturaEnTenantA).toBeNull();
   });
 });

@@ -35,7 +35,9 @@ export function BarraVencimiento({
   const diasRestantes = diasEntre(hoy, fechaLimite);
 
   const vencido = diasRestantes < 0;
-  const progreso = vencido ? 100 : Math.max(0, Math.min(100, ((ventanaDias - diasRestantes) / ventanaDias) * 100));
+  const progreso = vencido
+    ? 100
+    : Math.max(0, Math.min(100, ((ventanaDias - diasRestantes) / ventanaDias) * 100));
 
   const urgencia: "lejos" | "cerca" | "vencido" = vencido
     ? "vencido"
@@ -43,7 +45,9 @@ export function BarraVencimiento({
       ? "cerca"
       : "lejos";
 
-  const colorRelleno = { lejos: "bg-slate-300", cerca: "bg-slate-600", vencido: "bg-slate-900" }[urgencia];
+  const colorRelleno = { lejos: "bg-slate-300", cerca: "bg-slate-600", vencido: "bg-slate-900" }[
+    urgencia
+  ];
   const Icon = urgencia === "vencido" ? AlertTriangle : Clock;
 
   const texto = vencido
@@ -55,7 +59,10 @@ export function BarraVencimiento({
   return (
     <div className={cn("flex items-center gap-1.5 min-w-[110px]", className)}>
       <div className="h-1.5 w-16 rounded-full bg-slate-100 overflow-hidden shrink-0">
-        <div className={cn("h-full rounded-full transition-all", colorRelleno)} style={{ width: `${progreso}%` }} />
+        <div
+          className={cn("h-full rounded-full transition-all", colorRelleno)}
+          style={{ width: `${progreso}%` }}
+        />
       </div>
       <span
         className={cn(

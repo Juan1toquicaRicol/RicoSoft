@@ -20,8 +20,10 @@ export const registerController = async (req: Request, res: Response) => {
       message: "Usuario registrado exitosamente en la base de datos.",
       user: nuevoUsuario,
     });
-  } catch (error: any) {
-    return res.status(400).json({ message: error.message || "Error al registrar el usuario." });
+  } catch (error) {
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : "Error al registrar el usuario.",
+    });
   }
 };
 
@@ -45,8 +47,10 @@ export const loginController = async (req: Request, res: Response) => {
       token: resultado.token,
       user: resultado.user,
     });
-  } catch (error: any) {
-    return res.status(401).json({ message: error.message || "Error al iniciar sesión." });
+  } catch (error) {
+    return res
+      .status(401)
+      .json({ message: error instanceof Error ? error.message : "Error al iniciar sesión." });
   }
 };
 
@@ -67,10 +71,11 @@ export const selectTenantController = async (req: Request, res: Response) => {
       token: resultado.token,
       user: resultado.user,
     });
-  } catch (error: any) {
-    return res
-      .status(401)
-      .json({ message: error.message || "No se pudo iniciar sesión con esa empresa." });
+  } catch (error) {
+    return res.status(401).json({
+      message:
+        error instanceof Error ? error.message : "No se pudo iniciar sesión con esa empresa.",
+    });
   }
 };
 
@@ -105,7 +110,9 @@ export const switchTenantController = async (req: AuthenticatedRequest, res: Res
       token: resultado.token,
       user: resultado.user,
     });
-  } catch (error: any) {
-    return res.status(403).json({ message: error.message || "No se pudo cambiar de empresa." });
+  } catch (error) {
+    return res
+      .status(403)
+      .json({ message: error instanceof Error ? error.message : "No se pudo cambiar de empresa." });
   }
 };

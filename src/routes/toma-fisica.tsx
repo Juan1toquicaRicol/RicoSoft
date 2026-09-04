@@ -14,8 +14,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useBodegasSiesa, useTomasFisicas, usePatronesTomaFisica } from "@/hooks/use-toma-fisica";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -30,7 +43,8 @@ export const Route = createFileRoute("/toma-fisica")({
       { title: "Toma Física | RicoSoft" },
       {
         name: "description",
-        content: "Toma física mensual de inventario por bodega, contra la existencia real de Siesa.",
+        content:
+          "Toma física mensual de inventario por bodega, contra la existencia real de Siesa.",
       },
     ],
   }),
@@ -60,8 +74,8 @@ function DialogoNuevaToma({
       onOpenChange(false);
       setBodegaRowId("");
       onCreada(toma.id);
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo crear la toma física.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear la toma física.");
     } finally {
       setCreando(false);
     }
@@ -73,8 +87,8 @@ function DialogoNuevaToma({
         <DialogHeader>
           <DialogTitle>Nueva toma física</DialogTitle>
           <DialogDescription>
-            Se toma un snapshot en vivo de la existencia real de la bodega elegida (Siesa) —
-            el conteo físico se registra después, línea por línea.
+            Se toma un snapshot en vivo de la existencia real de la bodega elegida (Siesa) — el
+            conteo físico se registra después, línea por línea.
           </DialogDescription>
         </DialogHeader>
         {!loading && !bodegas.disponible && (
@@ -139,8 +153,8 @@ function TomaFisicaPage() {
             <h2 className="text-sm font-bold text-slate-900">Diferencias recurrentes</h2>
           </div>
           <p className="text-xs text-slate-500">
-            Ítems cuyas últimas 3 tomas físicas cerradas tuvieron diferencia del mismo signo —
-            señal de un problema operativo real, no ruido de conteo
+            Ítems cuyas últimas 3 tomas físicas cerradas tuvieron diferencia del mismo signo — señal
+            de un problema operativo real, no ruido de conteo
           </p>
           <ul className="mt-3 space-y-2">
             {patrones.slice(0, 10).map((p) => (
@@ -227,9 +241,9 @@ function TomaFisicaPage() {
       <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500">
         <ClipboardList className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          Cerrar una toma física es un registro interno de RicoSoft — nunca un ajuste contable
-          real en Siesa. Cualquier ajuste que corresponda por la diferencia se hace directamente
-          en Siesa, manualmente, por un usuario con criterio sobre el caso.
+          Cerrar una toma física es un registro interno de RicoSoft — nunca un ajuste contable real
+          en Siesa. Cualquier ajuste que corresponda por la diferencia se hace directamente en
+          Siesa, manualmente, por un usuario con criterio sobre el caso.
         </span>
       </div>
     </AppShell>

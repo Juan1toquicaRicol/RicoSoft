@@ -16,7 +16,12 @@ import {
 import { fetchApi } from "@/config/api"; // Tu cliente de API
 import { esDominioCorporativoValido } from "@/lib/dominios";
 import { validarPasswordSegura } from "@/lib/password";
-import { setToken, setUltimaEmpresaPreferida, getUltimaEmpresaPreferida } from "@/lib/session";
+import {
+  setToken,
+  setUltimaEmpresaPreferida,
+  getUltimaEmpresaPreferida,
+  type SessionUser,
+} from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 
 export const Route = createFileRoute("/login")({
@@ -101,7 +106,7 @@ function Login() {
   } | null>(null);
   const [tenantSeleccionando, setTenantSeleccionando] = useState<string | null>(null);
 
-  const finalizarSesion = async (response: { token: string; user: any }) => {
+  const finalizarSesion = async (response: { token: string; user: SessionUser }) => {
     setToken(response.token);
 
     // Se cachea localmente solo para hidratar la UI mientras carga /auth/me;
@@ -133,8 +138,8 @@ function Login() {
         body: JSON.stringify({ selectionToken: tenantSelection.selectionToken, tenantId }),
       });
       await finalizarSesion(response);
-    } catch (err: any) {
-      setError(err.message || "No se pudo iniciar sesión con esa empresa.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión con esa empresa.");
       setTenantSeleccionando(null);
     }
   };
@@ -180,8 +185,10 @@ function Login() {
         setNombre("");
         setPassword("");
         setDepartamentoId("");
-      } catch (err: any) {
-        setError(err.message || "Ocurrió un error al intentar registrar la cuenta.");
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Ocurrió un error al intentar registrar la cuenta.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -202,8 +209,8 @@ function Login() {
         }
 
         await finalizarSesion(response);
-      } catch (err: any) {
-        setError(err.message || "Correo o contraseña incorrectos.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Correo o contraseña incorrectos.");
       } finally {
         setIsLoading(false);
       }

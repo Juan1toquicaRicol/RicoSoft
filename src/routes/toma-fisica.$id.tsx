@@ -7,7 +7,14 @@ import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useTomaFisica } from "@/hooks/use-toma-fisica";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -54,8 +61,8 @@ function FilaConteo({
     setGuardando(true);
     try {
       await onRegistrar(linea.id, n);
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo registrar el conteo.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo registrar el conteo.");
     } finally {
       setGuardando(false);
     }
@@ -121,13 +128,14 @@ function DetalleTomaFisica() {
   const [cerrando, setCerrando] = useState(false);
 
   const handleCerrar = async () => {
-    if (!confirm("¿Cerrar esta toma física? Después de cerrarla no se podrá modificar el conteo.")) return;
+    if (!confirm("¿Cerrar esta toma física? Después de cerrarla no se podrá modificar el conteo."))
+      return;
     setCerrando(true);
     try {
       await cerrar();
       toast.success("Toma física cerrada.");
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo cerrar la toma física.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo cerrar la toma física.");
     } finally {
       setCerrando(false);
     }
@@ -138,7 +146,10 @@ function DetalleTomaFisica() {
       title="Detalle de Toma Física"
       description="Conteo físico contra el snapshot de existencia real tomado en el momento de crear la toma"
     >
-      <Link to="/toma-fisica" className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
+      <Link
+        to="/toma-fisica"
+        className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+      >
         <ArrowLeft className="h-3.5 w-3.5" /> Volver a Toma Física
       </Link>
 

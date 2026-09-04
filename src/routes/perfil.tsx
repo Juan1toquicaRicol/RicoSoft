@@ -59,8 +59,8 @@ function PerfilPage() {
       });
       await refresh();
       setOkPerfil(true);
-    } catch (err: any) {
-      setErrorPerfil(err.message || "Error al actualizar el perfil.");
+    } catch (err: unknown) {
+      setErrorPerfil(err instanceof Error ? err.message : "Error al actualizar el perfil.");
     } finally {
       setGuardando(false);
     }
@@ -99,15 +99,18 @@ function PerfilPage() {
       setPasswordActual("");
       setPasswordNueva("");
       setConfirmarPassword("");
-    } catch (err: any) {
-      setErrorPassword(err.message || "Error al cambiar la contraseña.");
+    } catch (err: unknown) {
+      setErrorPassword(err instanceof Error ? err.message : "Error al cambiar la contraseña.");
     } finally {
       setCambiandoPassword(false);
     }
   };
 
   return (
-    <AppShell title="Mi Perfil" description="Consulta y edita tu información personal. Los datos administrativos (rol, área, permisos) solo puede modificarlos un administrador.">
+    <AppShell
+      title="Mi Perfil"
+      description="Consulta y edita tu información personal. Los datos administrativos (rol, área, permisos) solo puede modificarlos un administrador."
+    >
       <div className="max-w-3xl space-y-6">
         {/* ── Encabezado de cuenta (solo lectura) ── */}
         <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
@@ -166,7 +169,11 @@ function PerfilPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-400">Correo (no editable)</Label>
-              <Input value={user.email} disabled className="h-9 text-sm border-slate-200 bg-slate-50 text-slate-500" />
+              <Input
+                value={user.email}
+                disabled
+                className="h-9 text-sm border-slate-200 bg-slate-50 text-slate-500"
+              />
             </div>
 
             {errorPerfil && (
@@ -222,7 +229,9 @@ function PerfilPage() {
                 onChange={(e) => setPasswordNueva(e.target.value)}
                 className="h-9 text-sm border-slate-300"
               />
-              <p className="text-[11px] text-slate-400">Mínimo 8 caracteres, con mayúscula, minúscula y número.</p>
+              <p className="text-[11px] text-slate-400">
+                Mínimo 8 caracteres, con mayúscula, minúscula y número.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirmarPassword" className="text-xs font-semibold text-slate-700">
@@ -252,8 +261,15 @@ function PerfilPage() {
             )}
 
             <div className="flex justify-end pt-1">
-              <Button type="submit" size="sm" variant="destructive" disabled={cambiandoPassword} className="gap-2 font-bold">
-                <KeyRound className="h-4 w-4" /> {cambiandoPassword ? "Cambiando..." : "Cambiar contraseña"}
+              <Button
+                type="submit"
+                size="sm"
+                variant="destructive"
+                disabled={cambiandoPassword}
+                className="gap-2 font-bold"
+              >
+                <KeyRound className="h-4 w-4" />{" "}
+                {cambiandoPassword ? "Cambiando..." : "Cambiar contraseña"}
               </Button>
             </div>
           </form>

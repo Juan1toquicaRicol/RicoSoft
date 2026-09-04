@@ -90,6 +90,11 @@ export const PERMISOS_SISTEMA = {
   VENTAS_VER: "ventas.ver",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
+  OBJETIVOS_VER: "objetivos.ver",
+  OBJETIVOS_CREAR: "objetivos.crear",
+  OBJETIVOS_EDITAR: "objetivos.editar",
+  OBJETIVOS_ELIMINAR: "objetivos.eliminar",
+  OBJETIVOS_ASIGNAR: "objetivos.asignar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];

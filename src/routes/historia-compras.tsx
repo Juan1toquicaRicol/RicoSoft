@@ -193,7 +193,9 @@ function HistoriaComprasPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Departamento</Label>
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">
+                Departamento
+              </Label>
               <Select
                 value={area}
                 onValueChange={(val) => {
@@ -435,7 +437,6 @@ function HistoriaComprasPage() {
           </div>
         )}
       </div>
-
     </AppShell>
   );
 }

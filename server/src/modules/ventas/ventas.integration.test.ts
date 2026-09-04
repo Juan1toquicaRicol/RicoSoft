@@ -26,7 +26,9 @@ describe.skipIf(!RUN)("Ventas — Centro Operativo Comercial (multi-tenant real)
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -71,7 +73,9 @@ describe.skipIf(!RUN)("Ventas — Centro Operativo Comercial (multi-tenant real)
   });
 
   it("GET /ventas/centro responde 200 con disponible:false cuando el tenant no tiene siesaCiaId (nunca 500)", async () => {
-    const res = await request(app).get("/api/ventas/centro").set("Authorization", `Bearer ${tokenAdmin}`);
+    const res = await request(app)
+      .get("/api/ventas/centro")
+      .set("Authorization", `Bearer ${tokenAdmin}`);
     expect(res.status).toBe(200);
     expect(res.body.disponible).toBe(false);
     expect(typeof res.body.motivo).toBe("string");
@@ -103,7 +107,9 @@ describe.skipIf(!RUN)("Ventas — Centro Operativo Comercial (multi-tenant real)
   });
 
   it("un usuario sin permiso ventas.ver no puede consultar el Centro Comercial ni disponibilidad", async () => {
-    const centro = await request(app).get("/api/ventas/centro").set("Authorization", `Bearer ${tokenSinPermiso}`);
+    const centro = await request(app)
+      .get("/api/ventas/centro")
+      .set("Authorization", `Bearer ${tokenSinPermiso}`);
     expect(centro.status).toBe(403);
 
     const disp = await request(app)
@@ -116,7 +122,9 @@ describe.skipIf(!RUN)("Ventas — Centro Operativo Comercial (multi-tenant real)
   it("sin token de autenticación, ambos endpoints responden 401", async () => {
     const centro = await request(app).get("/api/ventas/centro");
     expect(centro.status).toBe(401);
-    const disp = await request(app).get("/api/ventas/disponibilidad").query({ itemRowId: 1, cantidad: 10 });
+    const disp = await request(app)
+      .get("/api/ventas/disponibilidad")
+      .query({ itemRowId: 1, cantidad: 10 });
     expect(disp.status).toBe(401);
   });
 

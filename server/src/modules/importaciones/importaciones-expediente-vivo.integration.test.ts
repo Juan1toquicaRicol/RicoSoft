@@ -29,7 +29,9 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -93,7 +95,9 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
         items: [{ descripcion: "Ítem EV", cantidad: 10, valorUnitarioFob: 100 }],
       });
     if (ordenRes.status !== 201) {
-      throw new Error(`No se pudo crear la orden fixture: ${ordenRes.status} ${JSON.stringify(ordenRes.body)}`);
+      throw new Error(
+        `No se pudo crear la orden fixture: ${ordenRes.status} ${JSON.stringify(ordenRes.body)}`,
+      );
     }
     ordenAId = ordenRes.body.id;
 
@@ -102,7 +106,9 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
       .set("Authorization", `Bearer ${tokenAAdmin}`)
       .send({ blAwb: `BL-EV-A-${sufijo}`, puertoOrigen: "Shanghai", puertoDestino: "Cartagena" });
     if (loteRes.status !== 201) {
-      throw new Error(`No se pudo crear el lote fixture: ${loteRes.status} ${JSON.stringify(loteRes.body)}`);
+      throw new Error(
+        `No se pudo crear el lote fixture: ${loteRes.status} ${JSON.stringify(loteRes.body)}`,
+      );
     }
     loteAId = loteRes.body.id;
   });
@@ -159,7 +165,9 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
   });
 
   it("consultar el detalle dos veces no duplica la novedad automática (idempotencia por reglaOrigen)", async () => {
-    await request(app).get(`/api/importaciones/${ordenAId}`).set("Authorization", `Bearer ${tokenAAdmin}`);
+    await request(app)
+      .get(`/api/importaciones/${ordenAId}`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`);
     const detalle = await request(app)
       .get(`/api/importaciones/${ordenAId}`)
       .set("Authorization", `Bearer ${tokenAAdmin}`);
@@ -255,7 +263,9 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     expect(res.body.estado).toBe("Cerrada");
     expect(res.body.fechaCierre).toBeTruthy();
     expect(
-      res.body.historial.some((h: any) => h.accion.includes("cerrada") && h.detalle?.includes("Cierre de prueba")),
+      res.body.historial.some(
+        (h: any) => h.accion.includes("cerrada") && h.detalle?.includes("Cierre de prueba"),
+      ),
     ).toBe(true);
 
     const denuevo = await request(app)

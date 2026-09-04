@@ -185,8 +185,8 @@ function FacturasPage() {
       await updateEstadoFactura(confirmAccion.id, confirmAccion.estado);
       toast.success(`Factura ${confirmAccion.numero} actualizada a "${confirmAccion.estado}".`);
       setConfirmAccion(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar la factura.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible actualizar la factura.");
     } finally {
       setAplicandoAccion(false);
     }
@@ -199,8 +199,8 @@ function FacturasPage() {
       await eliminarFactura(facturaAEliminar.id);
       toast.success(`Factura ${facturaAEliminar.numero} eliminada.`);
       setFacturaAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar la factura.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar la factura.");
     } finally {
       setEliminando(false);
     }
@@ -325,8 +325,8 @@ function FacturasPage() {
         prioridad: form.prioridad,
         origen: form.origen,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar la factura.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar la factura.");
       return;
     }
 
@@ -335,10 +335,11 @@ function FacturasPage() {
     if (archivoFactura) {
       try {
         await subirArchivoFactura(creada.id, archivoFactura);
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error(
-          err.message ||
-            "La factura se registró, pero no fue posible adjuntar el documento. Puedes subirlo desde el detalle.",
+          err instanceof Error
+            ? err.message
+            : "La factura se registró, pero no fue posible adjuntar el documento. Puedes subirlo desde el detalle.",
         );
       }
     }

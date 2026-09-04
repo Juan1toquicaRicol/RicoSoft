@@ -40,7 +40,10 @@ const TRANSICIONES_VALIDAS: Record<EstadoDespacho, EstadoDespacho[]> = {
   CANCELADO: [],
 };
 
-export function esTransicionValidaDespacho(actual: EstadoDespacho, siguiente: EstadoDespacho): boolean {
+export function esTransicionValidaDespacho(
+  actual: EstadoDespacho,
+  siguiente: EstadoDespacho,
+): boolean {
   return TRANSICIONES_VALIDAS[actual].includes(siguiente);
 }
 

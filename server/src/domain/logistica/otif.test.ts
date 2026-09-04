@@ -31,7 +31,10 @@ describe("calcularOtif", () => {
   });
 
   it("ignora despachos que no están ENTREGADO ni ENTREGA_PARCIAL", () => {
-    const r = calcularOtif([despacho({ estado: "EN_TRANSITO" }), despacho({ estado: "CANCELADO" })]);
+    const r = calcularOtif([
+      despacho({ estado: "EN_TRANSITO" }),
+      despacho({ estado: "CANCELADO" }),
+    ]);
     expect(r.totalEvaluable).toBe(0);
     expect(r.otifPct).toBeNull();
   });

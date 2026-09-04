@@ -16,11 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  useOportunidadComercial,
-  type OportunidadCliente,
-} from "@/hooks/use-oportunidades";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useOportunidadComercial, type OportunidadCliente } from "@/hooks/use-oportunidades";
 import { useHistoricoComprasCliente } from "@/hooks/use-ventas";
 import {
   useSeguimientoOportunidad,
@@ -44,7 +48,10 @@ export const Route = createFileRoute("/oportunidades")({
           "Oportunidad comercial: qué le podemos vender a cada cliente con el inventario disponible hoy, según su historial real de compras — con seguimiento comercial.",
       },
       { property: "og:title", content: "Oportunidades | RicoSoft" },
-      { property: "og:description", content: "A quién le podemos vender el inventario disponible." },
+      {
+        property: "og:description",
+        content: "A quién le podemos vender el inventario disponible.",
+      },
     ],
   }),
   component: Oportunidades,
@@ -52,8 +59,11 @@ export const Route = createFileRoute("/oportunidades")({
 
 function Oportunidades() {
   const { oportunidad, loading } = useOportunidadComercial();
-  const { pendientes, loading: cargandoPendientes, refresh: refrescarPendientes } =
-    useProximosSeguimientos();
+  const {
+    pendientes,
+    loading: cargandoPendientes,
+    refresh: refrescarPendientes,
+  } = useProximosSeguimientos();
 
   return (
     <AppShell
@@ -79,7 +89,9 @@ function Oportunidades() {
                 </div>
                 <span className="num shrink-0 font-semibold text-slate-600">
                   {s.proximoSeguimientoFecha
-                    ? new Date(s.proximoSeguimientoFecha).toLocaleDateString("es-CO", { timeZone: "UTC" })
+                    ? new Date(s.proximoSeguimientoFecha).toLocaleDateString("es-CO", {
+                        timeZone: "UTC",
+                      })
                     : "—"}
                 </span>
               </li>
@@ -136,9 +148,9 @@ function Oportunidades() {
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               Cruza qué le compra cada cliente (últimos 12 meses reales) contra qué hay disponible
-              hoy — la cantidad ofertable se limita a ~1 mes de ritmo histórico de compra, nunca más.
-              El seguimiento comercial (llamadas, cotizaciones, próxima acción) es una capa ligera de
-              gestión de contacto, no un CRM completo.
+              hoy — la cantidad ofertable se limita a ~1 mes de ritmo histórico de compra, nunca
+              más. El seguimiento comercial (llamadas, cotizaciones, próxima acción) es una capa
+              ligera de gestión de contacto, no un CRM completo.
             </span>
           </div>
         </>
@@ -161,8 +173,11 @@ function TarjetaOportunidadCliente({
   const [tab, setTab] = useState<Tab>("compras");
   const clienteRowId = cl.clienteRowId;
 
-  const { consultar: consultarHistorico, loading: cargandoHistorico } = useHistoricoComprasCliente();
-  const [historico, setHistorico] = useState<Awaited<ReturnType<typeof consultarHistorico>> | null>(null);
+  const { consultar: consultarHistorico, loading: cargandoHistorico } =
+    useHistoricoComprasCliente();
+  const [historico, setHistorico] = useState<Awaited<ReturnType<typeof consultarHistorico>> | null>(
+    null,
+  );
 
   const seguimiento = useSeguimientoOportunidad(abierto ? clienteRowId : null);
 
@@ -192,12 +207,17 @@ function TarjetaOportunidadCliente({
             {cl.clienteNombre ?? "Cliente sin nombre"}
           </span>
           {seguimiento.estadoActual && (
-            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] text-slate-600">
+            <Badge
+              variant="outline"
+              className="border-slate-200 bg-slate-50 text-[10px] text-slate-600"
+            >
               {ETIQUETA_RESULTADO[seguimiento.estadoActual]}
             </Badge>
           )}
         </div>
-        <span className="num shrink-0 text-xs font-bold text-blue-700">{money(cl.potencialTotal)}</span>
+        <span className="num shrink-0 text-xs font-bold text-blue-700">
+          {money(cl.potencialTotal)}
+        </span>
       </div>
 
       {!abierto && (
@@ -229,7 +249,8 @@ function TarjetaOportunidadCliente({
                     {p.referencia && <span className="text-slate-400"> · {p.referencia}</span>}
                   </span>
                   <span className="num shrink-0 text-slate-500">
-                    {formatCantidad(p.cantidadOfertable, p.unidadMedida)} · {money(p.potencialVenta)}
+                    {formatCantidad(p.cantidadOfertable, p.unidadMedida)} ·{" "}
+                    {money(p.potencialVenta)}
                   </span>
                 </li>
               ))}
@@ -261,7 +282,9 @@ function TarjetaOportunidadCliente({
                 </p>
               )}
               {historico && !historico.disponible && (
-                <p className="text-xs text-slate-500">{historico.motivo ?? "Sin datos disponibles."}</p>
+                <p className="text-xs text-slate-500">
+                  {historico.motivo ?? "Sin datos disponibles."}
+                </p>
               )}
               {historico?.disponible &&
                 ((historico.productos ?? []).length === 0 ? (
@@ -304,7 +327,9 @@ function TarjetaOportunidadCliente({
                               {p.numCompras}
                             </TableCell>
                             <TableCell className="text-right text-xs text-slate-500">
-                              {new Date(p.ultimaCompra).toLocaleDateString("es-CO", { timeZone: "UTC" })}
+                              {new Date(p.ultimaCompra).toLocaleDateString("es-CO", {
+                                timeZone: "UTC",
+                              })}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -370,8 +395,8 @@ function SeguimientoComercial({
       setProximaAccion("");
       setProximaFecha("");
       onRegistrado();
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el seguimiento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el seguimiento.");
     } finally {
       setGuardando(false);
     }
@@ -381,7 +406,9 @@ function SeguimientoComercial({
     <div className="pt-3">
       {seguimiento.proximoSeguimiento && (
         <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
-          <p className="font-bold text-blue-800">Próximo paso: {seguimiento.proximoSeguimiento.accion}</p>
+          <p className="font-bold text-blue-800">
+            Próximo paso: {seguimiento.proximoSeguimiento.accion}
+          </p>
           <p className="text-blue-700">
             {new Date(seguimiento.proximoSeguimiento.fecha).toLocaleDateString("es-CO", {
               timeZone: "UTC",
@@ -460,7 +487,12 @@ function SeguimientoComercial({
             </div>
           )}
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setMostrarForm(false)} disabled={guardando}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setMostrarForm(false)}
+              disabled={guardando}
+            >
               Cancelar
             </Button>
             <Button size="sm" onClick={handleGuardar} disabled={guardando}>

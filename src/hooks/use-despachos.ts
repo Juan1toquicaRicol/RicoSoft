@@ -122,8 +122,8 @@ export function useDespachos(filtros: FiltrosDespachos) {
       setItems(data.items);
       setTotal(data.total);
       setTotalPages(data.totalPages);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los despachos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los despachos.");
     } finally {
       setLoading(false);
     }
@@ -134,11 +134,14 @@ export function useDespachos(filtros: FiltrosDespachos) {
     refresh();
   }, [refresh]);
 
-  const crear = useCallback(async (input: CrearDespachoInput) => {
-    const data = await fetchAuth("/despachos", { method: "POST", body: JSON.stringify(input) });
-    await refresh();
-    return data as Despacho;
-  }, [refresh]);
+  const crear = useCallback(
+    async (input: CrearDespachoInput) => {
+      const data = await fetchAuth("/despachos", { method: "POST", body: JSON.stringify(input) });
+      await refresh();
+      return data as Despacho;
+    },
+    [refresh],
+  );
 
   return { items, total, totalPages, loading, error, refresh, crear };
 }
@@ -188,7 +191,9 @@ export function useDocumentosVentaParaDespacho() {
   const buscar = useCallback(async (search: string): Promise<DocumentosVentaParaDespacho> => {
     setLoading(true);
     try {
-      return await fetchAuth(`/despachos/documentos-venta${construirQuery({ search, pageSize: 10 })}`);
+      return await fetchAuth(
+        `/despachos/documentos-venta${construirQuery({ search, pageSize: 10 })}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -230,8 +235,8 @@ export function useDespacho(id: string | undefined) {
     try {
       const data = await fetchAuth(`/despachos/${id}`);
       setDetalle(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el despacho.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el despacho.");
     } finally {
       setLoading(false);
     }
@@ -248,9 +253,17 @@ export function useDespacho(id: string | undefined) {
   const actualizarLinea = useCallback(
     async (
       lineaId: string,
-      input: { cantidadPreparada?: number | null; cantidadDespachada?: number | null; cantidadEntregada?: number | null; observacion?: string | null },
+      input: {
+        cantidadPreparada?: number | null;
+        cantidadDespachada?: number | null;
+        cantidadEntregada?: number | null;
+        observacion?: string | null;
+      },
     ) => {
-      await fetchAuth(`/despachos/${id}/lineas/${lineaId}`, { method: "PATCH", body: JSON.stringify(input) });
+      await fetchAuth(`/despachos/${id}/lineas/${lineaId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
       await refresh();
     },
     [id, refresh],
@@ -258,7 +271,10 @@ export function useDespacho(id: string | undefined) {
 
   const crearNovedad = useCallback(
     async (tipo: string, descripcion: string) => {
-      await fetchAuth(`/despachos/${id}/novedades`, { method: "POST", body: JSON.stringify({ tipo, descripcion }) });
+      await fetchAuth(`/despachos/${id}/novedades`, {
+        method: "POST",
+        body: JSON.stringify({ tipo, descripcion }),
+      });
       await refresh();
     },
     [id, refresh],
@@ -279,5 +295,14 @@ export function useDespacho(id: string | undefined) {
     refresh();
   }, [refresh]);
 
-  return { detalle, loading, error, refresh, actualizarEstado, actualizarLinea, crearNovedad, resolverNovedad };
+  return {
+    detalle,
+    loading,
+    error,
+    refresh,
+    actualizarEstado,
+    actualizarLinea,
+    crearNovedad,
+    resolverNovedad,
+  };
 }

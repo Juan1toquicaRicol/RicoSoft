@@ -1,5 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Lock, Package, Plus, Ship, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Lock,
+  Package,
+  Plus,
+  Ship,
+  Upload,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,8 +20,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PanelColapsable } from "@/components/ui/panel-colapsable";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +74,10 @@ export const Route = createFileRoute("/importaciones/$id")({
   head: () => ({
     meta: [
       { title: "Detalle de Orden de Compra Internacional | RicoSoft" },
-      { name: "description", content: "Trazabilidad de lotes, expediente aduanero y costeo landed (NIC 2/21)." },
+      {
+        name: "description",
+        content: "Trazabilidad de lotes, expediente aduanero y costeo landed (NIC 2/21).",
+      },
     ],
   }),
   component: DetalleOrdenIntl,
@@ -168,7 +193,10 @@ function DetalleOrdenIntl() {
   usePollingOrdenCompraIntl(useCallback(() => refresh(), [refresh]));
 
   const puedeCrear = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CREAR);
-  const puedeGestionarTransito = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO);
+  const puedeGestionarTransito = hasPermission(
+    user,
+    PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
+  );
   const puedeRecibir = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_RECIBIR);
   const puedeLiquidar = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR);
 
@@ -177,7 +205,9 @@ function DetalleOrdenIntl() {
   const [guardandoLote, setGuardandoLote] = useState(false);
 
   const [loteLiquidando, setLoteLiquidando] = useState<LoteImportacion | null>(null);
-  const [liquidacionForm, setLiquidacionForm] = useState<LiquidarCosteoInput>({ ...liquidacionVacia });
+  const [liquidacionForm, setLiquidacionForm] = useState<LiquidarCosteoInput>({
+    ...liquidacionVacia,
+  });
   const [liquidando, setLiquidando] = useState(false);
 
   const [accionEnCurso, setAccionEnCurso] = useState<string | null>(null);
@@ -210,12 +240,15 @@ function DetalleOrdenIntl() {
   if (error || !orden) {
     return (
       <AppShell title="Orden de Compra Internacional" description="No fue posible cargar la orden.">
-        <div className="p-12 text-center text-xs text-slate-500">{error || "Orden no encontrada."}</div>
+        <div className="p-12 text-center text-xs text-slate-500">
+          {error || "Orden no encontrada."}
+        </div>
       </AppShell>
     );
   }
 
-  const descripcionItem = (itemId: string) => orden.items.find((i) => i.id === itemId)?.descripcion ?? "—";
+  const descripcionItem = (itemId: string) =>
+    orden.items.find((i) => i.id === itemId)?.descripcion ?? "—";
 
   const handleAgregarLote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,7 +282,9 @@ function DetalleOrdenIntl() {
     setAccionEnCurso(lote.id);
     try {
       await recibirPreCompraPlanta(lote.id);
-      toast.success(`Lote ${lote.blAwb} recibido en planta (pre-compra). Costeo provisional generado.`);
+      toast.success(
+        `Lote ${lote.blAwb} recibido en planta (pre-compra). Costeo provisional generado.`,
+      );
     } catch (err: any) {
       toast.error(err.message || "No fue posible registrar el ingreso a planta.");
     } finally {
@@ -408,25 +443,41 @@ function DetalleOrdenIntl() {
               )}
               Situación actual
             </p>
-            <p className="mt-1 text-base font-bold text-slate-900">{orden.situacionActual.etapaActual}</p>
+            <p className="mt-1 text-base font-bold text-slate-900">
+              {orden.situacionActual.etapaActual}
+            </p>
           </div>
           {orden.situacionActual.atencion && (
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Atención</p>
-              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.atencion}</p>
-              <p className="text-[11px] text-amber-700">{orden.situacionActual.diasRetraso} día(s) de retraso</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+                Atención
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                {orden.situacionActual.atencion}
+              </p>
+              <p className="text-[11px] text-amber-700">
+                {orden.situacionActual.diasRetraso} día(s) de retraso
+              </p>
             </div>
           )}
           {orden.situacionActual.responsable && (
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Responsable</p>
-              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.responsable}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Responsable
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                {orden.situacionActual.responsable}
+              </p>
             </div>
           )}
           {orden.situacionActual.proximaAccion && (
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Próxima acción</p>
-              <p className="text-sm font-semibold text-slate-800">{orden.situacionActual.proximaAccion}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Próxima acción
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                {orden.situacionActual.proximaAccion}
+              </p>
             </div>
           )}
         </div>
@@ -435,33 +486,51 @@ function DetalleOrdenIntl() {
       <div className="mt-4 grid gap-4 lg:grid-cols-4">
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">Estado</p>
-          <div className="mt-1"><EstadoBadge estado={orden.estado} /></div>
+          <div className="mt-1">
+            <EstadoBadge estado={orden.estado} />
+          </div>
         </div>
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">Moneda / TRM pactada</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.moneda} · {orden.trmPactada.toLocaleString("es-CO")}</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">
+            {orden.moneda} · {orden.trmPactada.toLocaleString("es-CO")}
+          </p>
         </div>
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">FOB × TRM estimado</p>
-          <p className="num mt-1 text-sm font-bold text-slate-900">{money(orden.valorEstimadoTotal, "COP")}</p>
+          <p className="num mt-1 text-sm font-bold text-slate-900">
+            {money(orden.valorEstimadoTotal, "COP")}
+          </p>
         </div>
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">Responsable de la orden</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.responsable?.nombre ?? "—"}</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">
+            {orden.responsable?.nombre ?? "—"}
+          </p>
         </div>
       </div>
 
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
         <div className="border-b border-slate-200 p-4 bg-slate-50/80">
-          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Ítems de la Orden</h3>
+          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+            Ítems de la Orden
+          </h3>
         </div>
         <Table>
           <TableHeader className="bg-slate-100/80">
             <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">Descripción</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Cantidad</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Valor FOB unit.</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">Subtotal FOB</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">
+                Descripción
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                Cantidad
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                Valor FOB unit.
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                Subtotal FOB
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
@@ -469,7 +538,9 @@ function DetalleOrdenIntl() {
               <TableRow key={item.id}>
                 <TableCell className="px-4 py-2.5">{item.descripcion}</TableCell>
                 <TableCell className="px-4 py-2.5 text-right font-mono">{item.cantidad}</TableCell>
-                <TableCell className="num px-4 py-2.5 text-right">{money(item.valorUnitarioFob, orden.moneda)}</TableCell>
+                <TableCell className="num px-4 py-2.5 text-right">
+                  {money(item.valorUnitarioFob, orden.moneda)}
+                </TableCell>
                 <TableCell className="num px-4 py-2.5 text-right font-bold">
                   {money(item.cantidad * item.valorUnitarioFob, orden.moneda)}
                 </TableCell>
@@ -492,7 +563,9 @@ function DetalleOrdenIntl() {
         </div>
 
         {orden.lotes.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-500">Esta orden no tiene lotes registrados todavía.</div>
+          <div className="p-8 text-center text-xs text-slate-500">
+            Esta orden no tiene lotes registrados todavía.
+          </div>
         ) : (
           <div className="divide-y divide-slate-100">
             {orden.lotes.map((lote) => (
@@ -549,7 +622,10 @@ function DetalleOrdenIntl() {
                       variant="outline"
                       onClick={() => {
                         setLoteLiquidando(lote);
-                        setLiquidacionForm({ ...liquidacionVacia, trmLiquidacion: orden.trmPactada });
+                        setLiquidacionForm({
+                          ...liquidacionVacia,
+                          trmLiquidacion: orden.trmPactada,
+                        });
                       }}
                       className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
                     >
@@ -564,9 +640,15 @@ function DetalleOrdenIntl() {
                       <TableHeader className="bg-slate-50">
                         <TableRow className="hover:bg-slate-50">
                           <TableHead className="text-slate-600 font-bold px-3 py-2">Ítem</TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Costo total COP</TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Costo unitario COP</TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">Dif. cambio COP</TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                            Costo total COP
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                            Costo unitario COP
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                            Dif. cambio COP
+                          </TableHead>
                           <TableHead className="text-slate-600 font-bold px-3 py-2">Tipo</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -574,9 +656,15 @@ function DetalleOrdenIntl() {
                         {lote.costeos.map((c) => (
                           <TableRow key={c.id}>
                             <TableCell className="px-3 py-2">{descripcionItem(c.itemId)}</TableCell>
-                            <TableCell className="num px-3 py-2 text-right font-bold">{money(c.costoTotalCop, "COP")}</TableCell>
-                            <TableCell className="num px-3 py-2 text-right">{money(c.costoUnitarioCop, "COP")}</TableCell>
-                            <TableCell className="num px-3 py-2 text-right">{money(c.diferenciaCambioCop, "COP")}</TableCell>
+                            <TableCell className="num px-3 py-2 text-right font-bold">
+                              {money(c.costoTotalCop, "COP")}
+                            </TableCell>
+                            <TableCell className="num px-3 py-2 text-right">
+                              {money(c.costoUnitarioCop, "COP")}
+                            </TableCell>
+                            <TableCell className="num px-3 py-2 text-right">
+                              {money(c.diferenciaCambioCop, "COP")}
+                            </TableCell>
                             <TableCell className="px-3 py-2">
                               <EstadoBadge estado={c.esProvisional ? "Pendiente" : "Aprobada"} />
                             </TableCell>
@@ -617,7 +705,11 @@ function DetalleOrdenIntl() {
         description="Actividades esperadas del proceso — quién debe hacer qué, y para cuándo"
         actions={
           puedeGestionarTransito && (
-            <Button size="xs" onClick={() => setModalActividadOpen(true)} className="h-7 text-[11px]">
+            <Button
+              size="xs"
+              onClick={() => setModalActividadOpen(true)}
+              className="h-7 text-[11px]"
+            >
               <Plus className="h-3 w-3 mr-1" /> Agregar actividad
             </Button>
           )
@@ -644,7 +736,9 @@ function DetalleOrdenIntl() {
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className={`font-bold ${a.estado === "Completada" ? "text-slate-500 line-through" : "text-slate-800"}`}>
+                    <p
+                      className={`font-bold ${a.estado === "Completada" ? "text-slate-500 line-through" : "text-slate-800"}`}
+                    >
                       {a.nombre}
                     </p>
                     <p className="text-[11px] text-slate-500">
@@ -759,22 +853,40 @@ function DetalleOrdenIntl() {
             <Table>
               <TableHeader className="bg-slate-100/80">
                 <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Concepto</TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">Valor</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Vencimiento</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Estado</TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">Acción</TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Concepto
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Valor
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Vencimiento
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Estado
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Acción
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orden.pagos.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="text-xs font-semibold text-slate-800">{p.concepto}</TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">{money(p.valor, p.moneda)}</TableCell>
-                    <TableCell className="text-xs text-slate-500">
-                      {p.fechaVencimiento ? new Date(p.fechaVencimiento).toLocaleDateString("es-CO") : "—"}
+                    <TableCell className="text-xs font-semibold text-slate-800">
+                      {p.concepto}
                     </TableCell>
-                    <TableCell><EstadoBadge estado={p.estado} /></TableCell>
+                    <TableCell className="num text-right text-xs text-slate-700">
+                      {money(p.valor, p.moneda)}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500">
+                      {p.fechaVencimiento
+                        ? new Date(p.fechaVencimiento).toLocaleDateString("es-CO")
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <EstadoBadge estado={p.estado} />
+                    </TableCell>
                     <TableCell className="text-right">
                       {puedeLiquidar && p.estado === "Pendiente" && (
                         <Button
@@ -820,48 +932,93 @@ function DetalleOrdenIntl() {
               {h.detalle && <p className="mt-1 text-xs text-slate-500 italic">{h.detalle}</p>}
             </li>
           ))}
-          {orden.historial.length === 0 && <li className="text-xs text-slate-500">Sin eventos registrados.</li>}
+          {orden.historial.length === 0 && (
+            <li className="text-xs text-slate-500">Sin eventos registrados.</li>
+          )}
         </ol>
       </div>
 
       {/* MODAL REGISTRAR LOTE */}
-      <Dialog open={modalLoteOpen} onOpenChange={(open) => { setModalLoteOpen(open); if (!open) setLoteForm({ ...loteVacio }); }}>
+      <Dialog
+        open={modalLoteOpen}
+        onOpenChange={(open) => {
+          setModalLoteOpen(open);
+          if (!open) setLoteForm({ ...loteVacio });
+        }}
+      >
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Registrar Lote de Embarque</DialogTitle>
-            <DialogDescription className="text-slate-500">Trazabilidad desde puerto de origen (BL/AWB, contenedor).</DialogDescription>
+            <DialogTitle className="text-slate-900 font-bold">
+              Registrar Lote de Embarque
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Trazabilidad desde puerto de origen (BL/AWB, contenedor).
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAgregarLote} className="space-y-3 py-2">
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">BL / AWB *</Label>
-              <Input required value={loteForm.blAwb} onChange={(e) => setLoteForm({ ...loteForm, blAwb: e.target.value })} className="h-9 text-xs border-slate-300" />
+              <Input
+                required
+                value={loteForm.blAwb}
+                onChange={(e) => setLoteForm({ ...loteForm, blAwb: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Contenedor</Label>
-                <Input value={loteForm.contenedor} onChange={(e) => setLoteForm({ ...loteForm, contenedor: e.target.value })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  value={loteForm.contenedor}
+                  onChange={(e) => setLoteForm({ ...loteForm, contenedor: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Precinto</Label>
-                <Input value={loteForm.precinto} onChange={(e) => setLoteForm({ ...loteForm, precinto: e.target.value })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  value={loteForm.precinto}
+                  onChange={(e) => setLoteForm({ ...loteForm, precinto: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Puerto de Origen *</Label>
-                <Input required value={loteForm.puertoOrigen} onChange={(e) => setLoteForm({ ...loteForm, puertoOrigen: e.target.value })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  required
+                  value={loteForm.puertoOrigen}
+                  onChange={(e) => setLoteForm({ ...loteForm, puertoOrigen: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Puerto de Destino *</Label>
-                <Input required value={loteForm.puertoDestino} onChange={(e) => setLoteForm({ ...loteForm, puertoDestino: e.target.value })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  required
+                  value={loteForm.puertoDestino}
+                  onChange={(e) => setLoteForm({ ...loteForm, puertoDestino: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">Naviera</Label>
-              <Input value={loteForm.naviera} onChange={(e) => setLoteForm({ ...loteForm, naviera: e.target.value })} className="h-9 text-xs border-slate-300" />
+              <Input
+                value={loteForm.naviera}
+                onChange={(e) => setLoteForm({ ...loteForm, naviera: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
             </div>
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalLoteOpen(false)} disabled={guardandoLote}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalLoteOpen(false)}
+                disabled={guardandoLote}
+              >
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoLote}>
@@ -876,53 +1033,157 @@ function DetalleOrdenIntl() {
       <Dialog open={!!loteLiquidando} onOpenChange={(open) => !open && setLoteLiquidando(null)}>
         <DialogContent className="sm:max-w-lg bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Liquidar Costeo de Importación</DialogTitle>
+            <DialogTitle className="text-slate-900 font-bold">
+              Liquidar Costeo de Importación
+            </DialogTitle>
             <DialogDescription className="text-slate-500">
-              Landed cost definitivo (NIC 2), prorrateado por ítem según su participación en el valor FOB. Lote {loteLiquidando?.blAwb}.
+              Landed cost definitivo (NIC 2), prorrateado por ítem según su participación en el
+              valor FOB. Lote {loteLiquidando?.blAwb}.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleLiquidar} className="space-y-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">TRM de Liquidación *</Label>
-                <Input type="number" step="0.01" required value={liquidacionForm.trmLiquidacion} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, trmLiquidacion: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={liquidacionForm.trmLiquidacion}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      trmLiquidacion: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Valor CIF Total (USD) *</Label>
-                <Input type="number" step="0.01" required value={liquidacionForm.valorCifTotalUsd} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, valorCifTotalUsd: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Label className="text-xs font-semibold text-slate-700">
+                  Valor CIF Total (USD) *
+                </Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={liquidacionForm.valorCifTotalUsd}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      valorCifTotalUsd: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Arancel Total (COP) *</Label>
-                <Input type="number" step="0.01" required value={liquidacionForm.arancelTotalCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, arancelTotalCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Label className="text-xs font-semibold text-slate-700">
+                  Arancel Total (COP) *
+                </Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={liquidacionForm.arancelTotalCop}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      arancelTotalCop: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">IVA Total (COP) *</Label>
-                <Input type="number" step="0.01" required value={liquidacionForm.ivaTotalCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, ivaTotalCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={liquidacionForm.ivaTotalCop}
+                  onChange={(e) =>
+                    setLiquidacionForm({ ...liquidacionForm, ivaTotalCop: Number(e.target.value) })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">IVA Descontable (COP)</Label>
-              <Input type="number" step="0.01" value={liquidacionForm.ivaDescontableCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, ivaDescontableCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
-              <p className="text-[10px] text-slate-500">La diferencia (IVA total − descontable) se capitaliza como costo bajo NIC 2.</p>
+              <Input
+                type="number"
+                step="0.01"
+                value={liquidacionForm.ivaDescontableCop}
+                onChange={(e) =>
+                  setLiquidacionForm({
+                    ...liquidacionForm,
+                    ivaDescontableCop: Number(e.target.value),
+                  })
+                }
+                className="h-9 text-xs border-slate-300"
+              />
+              <p className="text-[10px] text-slate-500">
+                La diferencia (IVA total − descontable) se capitaliza como costo bajo NIC 2.
+              </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Fletes Nacionales</Label>
-                <Input type="number" step="0.01" value={liquidacionForm.fletesNacionalesCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, fletesNacionalesCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={liquidacionForm.fletesNacionalesCop}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      fletesNacionalesCop: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Agenciamiento</Label>
-                <Input type="number" step="0.01" value={liquidacionForm.agenciamientoCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, agenciamientoCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={liquidacionForm.agenciamientoCop}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      agenciamientoCop: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Otros Costos</Label>
-                <Input type="number" step="0.01" value={liquidacionForm.otrosCostosCop} onChange={(e) => setLiquidacionForm({ ...liquidacionForm, otrosCostosCop: Number(e.target.value) })} className="h-9 text-xs border-slate-300" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={liquidacionForm.otrosCostosCop}
+                  onChange={(e) =>
+                    setLiquidacionForm({
+                      ...liquidacionForm,
+                      otrosCostosCop: Number(e.target.value),
+                    })
+                  }
+                  className="h-9 text-xs border-slate-300"
+                />
               </div>
             </div>
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setLoteLiquidando(null)} disabled={liquidando}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setLoteLiquidando(null)}
+                disabled={liquidando}
+              >
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={liquidando}>
@@ -943,7 +1204,9 @@ function DetalleOrdenIntl() {
       >
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Agregar actividad esperada</DialogTitle>
+            <DialogTitle className="text-slate-900 font-bold">
+              Agregar actividad esperada
+            </DialogTitle>
             <DialogDescription className="text-slate-500">
               Complementa la plantilla automática para un caso puntual de esta importación.
             </DialogDescription>
@@ -963,12 +1226,18 @@ function DetalleOrdenIntl() {
                 <Label className="text-xs font-semibold text-slate-700">Etapa</Label>
                 <Select
                   value={actividadForm.etapa}
-                  onValueChange={(v) => setActividadForm({ ...actividadForm, etapa: v as EtapaImportacion })}
+                  onValueChange={(v) =>
+                    setActividadForm({ ...actividadForm, etapa: v as EtapaImportacion })
+                  }
                 >
-                  <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs border-slate-300">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white">
                     {ETAPAS_IMPORTACION.map((et) => (
-                      <SelectItem key={et} value={et} className="text-xs">{et}</SelectItem>
+                      <SelectItem key={et} value={et} className="text-xs">
+                        {et}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -977,22 +1246,32 @@ function DetalleOrdenIntl() {
                 <Label className="text-xs font-semibold text-slate-700">Responsable</Label>
                 <Select
                   value={actividadForm.responsableTipo}
-                  onValueChange={(v) => setActividadForm({ ...actividadForm, responsableTipo: v as ResponsableTipo })}
+                  onValueChange={(v) =>
+                    setActividadForm({ ...actividadForm, responsableTipo: v as ResponsableTipo })
+                  }
                 >
-                  <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs border-slate-300">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent className="bg-white">
                     {RESPONSABLE_TIPOS.map((r) => (
-                      <SelectItem key={r} value={r} className="text-xs">{ETIQUETA_RESPONSABLE_TIPO[r]}</SelectItem>
+                      <SelectItem key={r} value={r} className="text-xs">
+                        {ETIQUETA_RESPONSABLE_TIPO[r]}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Nombre del responsable (opcional)</Label>
+              <Label className="text-xs font-semibold text-slate-700">
+                Nombre del responsable (opcional)
+              </Label>
               <Input
                 value={actividadForm.responsableNombre ?? ""}
-                onChange={(e) => setActividadForm({ ...actividadForm, responsableNombre: e.target.value })}
+                onChange={(e) =>
+                  setActividadForm({ ...actividadForm, responsableNombre: e.target.value })
+                }
                 className="h-9 text-xs border-slate-300"
               />
             </div>
@@ -1001,12 +1280,20 @@ function DetalleOrdenIntl() {
               <Input
                 type="date"
                 value={actividadForm.fechaLimite ?? ""}
-                onChange={(e) => setActividadForm({ ...actividadForm, fechaLimite: e.target.value })}
+                onChange={(e) =>
+                  setActividadForm({ ...actividadForm, fechaLimite: e.target.value })
+                }
                 className="h-9 text-xs border-slate-300"
               />
             </div>
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalActividadOpen(false)} disabled={guardandoActividad}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalActividadOpen(false)}
+                disabled={guardandoActividad}
+              >
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoActividad}>
@@ -1039,10 +1326,14 @@ function DetalleOrdenIntl() {
                 value={novedadForm.tipo}
                 onValueChange={(v) => setNovedadForm({ ...novedadForm, tipo: v as TipoNovedad })}
               >
-                <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs border-slate-300">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent className="bg-white">
                   {TIPOS_NOVEDAD.map((t) => (
-                    <SelectItem key={t} value={t} className="text-xs">{ETIQUETA_TIPO_NOVEDAD[t]}</SelectItem>
+                    <SelectItem key={t} value={t} className="text-xs">
+                      {ETIQUETA_TIPO_NOVEDAD[t]}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1061,18 +1352,34 @@ function DetalleOrdenIntl() {
               <Label className="text-xs font-semibold text-slate-700">Prioridad</Label>
               <Select
                 value={novedadForm.prioridad ?? "Media"}
-                onValueChange={(v) => setNovedadForm({ ...novedadForm, prioridad: v as "Alta" | "Media" | "Baja" })}
+                onValueChange={(v) =>
+                  setNovedadForm({ ...novedadForm, prioridad: v as "Alta" | "Media" | "Baja" })
+                }
               >
-                <SelectTrigger className="h-9 text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs border-slate-300">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent className="bg-white">
-                  <SelectItem value="Alta" className="text-xs">Alta</SelectItem>
-                  <SelectItem value="Media" className="text-xs">Media</SelectItem>
-                  <SelectItem value="Baja" className="text-xs">Baja</SelectItem>
+                  <SelectItem value="Alta" className="text-xs">
+                    Alta
+                  </SelectItem>
+                  <SelectItem value="Media" className="text-xs">
+                    Media
+                  </SelectItem>
+                  <SelectItem value="Baja" className="text-xs">
+                    Baja
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalNovedadOpen(false)} disabled={guardandoNovedad}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalNovedadOpen(false)}
+                disabled={guardandoNovedad}
+              >
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoNovedad}>
@@ -1093,7 +1400,9 @@ function DetalleOrdenIntl() {
       >
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Registrar pago / obligación</DialogTitle>
+            <DialogTitle className="text-slate-900 font-bold">
+              Registrar pago / obligación
+            </DialogTitle>
             <DialogDescription className="text-slate-500">
               Anticipo, saldo, flete, agencia, impuestos u otra obligación de esta importación.
             </DialogDescription>
@@ -1139,7 +1448,13 @@ function DetalleOrdenIntl() {
               />
             </div>
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalPagoOpen(false)} disabled={guardandoPago}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalPagoOpen(false)}
+                disabled={guardandoPago}
+              >
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoPago}>
@@ -1173,12 +1488,15 @@ function DetalleOrdenIntl() {
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
               {errorCierre}
               <p className="mt-2 font-semibold">
-                Si de todos modos necesitas cerrarla, escribe una justificación abajo y usa "Forzar cierre".
+                Si de todos modos necesitas cerrarla, escribe una justificación abajo y usa "Forzar
+                cierre".
               </p>
             </div>
           )}
           <div className="space-y-1 py-2">
-            <Label className="text-xs font-semibold text-slate-700">Justificación (solo si forzás el cierre)</Label>
+            <Label className="text-xs font-semibold text-slate-700">
+              Justificación (solo si forzás el cierre)
+            </Label>
             <Textarea
               value={justificacionCierre}
               onChange={(e) => setJustificacionCierre(e.target.value)}
@@ -1187,7 +1505,13 @@ function DetalleOrdenIntl() {
             />
           </div>
           <DialogFooter className="mt-2 flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setModalCerrarOpen(false)} disabled={cerrando}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalCerrarOpen(false)}
+              disabled={cerrando}
+            >
               Cancelar
             </Button>
             {errorCierre && (
@@ -1282,7 +1606,13 @@ function DocumentoExpedienteSlot({
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <p className="truncate text-[11px] text-slate-700">{archivo.nombre}</p>
           <div className="flex shrink-0 gap-1">
-            <Button type="button" size="xs" variant="outline" className="h-6 px-2 text-[10px]" onClick={handleVer}>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="h-6 px-2 text-[10px]"
+              onClick={handleVer}
+            >
               Ver
             </Button>
             {canManage && (
@@ -1297,7 +1627,13 @@ function DocumentoExpedienteSlot({
                 >
                   {subiendo ? "..." : "Reemplazar"}
                 </Button>
-                <Button type="button" size="xs" variant="destructive" className="h-6 px-2 text-[10px]" onClick={handleEliminar}>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="destructive"
+                  className="h-6 px-2 text-[10px]"
+                  onClick={handleEliminar}
+                >
                   Eliminar
                 </Button>
               </>
@@ -1378,11 +1714,19 @@ function ExpedienteAduaneroPanel({
   return (
     <div className="rounded-md border border-slate-200 p-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">Expediente aduanero</h4>
+        <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          Expediente aduanero
+        </h4>
         <div className="flex items-center gap-2">
           {expediente && <EstadoBadge estado={expediente.estado} />}
           {canManage && !editando && (
-            <Button type="button" size="xs" variant="outline" className="h-6 px-2 text-[10px]" onClick={handleEditar}>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="h-6 px-2 text-[10px]"
+              onClick={handleEditar}
+            >
               Editar
             </Button>
           )}
@@ -1412,7 +1756,9 @@ function ExpedienteAduaneroPanel({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-[10px] font-semibold text-slate-700">Certificado de origen (TLC)</Label>
+              <Label className="text-[10px] font-semibold text-slate-700">
+                Certificado de origen (TLC)
+              </Label>
               <Input
                 value={form.certificadoOrigenTlc ?? ""}
                 onChange={(e) => setForm({ ...form, certificadoOrigenTlc: e.target.value })}
@@ -1431,7 +1777,10 @@ function ExpedienteAduaneroPanel({
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] font-semibold text-slate-700">Estado</Label>
-            <Select value={form.estado ?? "En trámite"} onValueChange={(val) => setForm({ ...form, estado: val })}>
+            <Select
+              value={form.estado ?? "En trámite"}
+              onValueChange={(val) => setForm({ ...form, estado: val })}
+            >
               <SelectTrigger className="h-8 text-[11px]">
                 <SelectValue />
               </SelectTrigger>
@@ -1470,17 +1819,23 @@ function ExpedienteAduaneroPanel({
           <div>
             <dt className="text-slate-500">Fecha DIM</dt>
             <dd className="font-medium text-slate-800">
-              {expediente?.fechaDIM ? new Date(expediente.fechaDIM).toLocaleDateString("es-CO") : "—"}
+              {expediente?.fechaDIM
+                ? new Date(expediente.fechaDIM).toLocaleDateString("es-CO")
+                : "—"}
             </dd>
           </div>
           <div>
             <dt className="text-slate-500">Certificado origen (TLC)</dt>
-            <dd className="font-medium text-slate-800">{expediente?.certificadoOrigenTlc || "—"}</dd>
+            <dd className="font-medium text-slate-800">
+              {expediente?.certificadoOrigenTlc || "—"}
+            </dd>
           </div>
           <div>
             <dt className="text-slate-500">Fecha de levante</dt>
             <dd className="font-medium text-slate-800">
-              {expediente?.fechaLevante ? new Date(expediente.fechaLevante).toLocaleDateString("es-CO") : "—"}
+              {expediente?.fechaLevante
+                ? new Date(expediente.fechaLevante).toLocaleDateString("es-CO")
+                : "—"}
             </dd>
           </div>
         </dl>
@@ -1583,7 +1938,9 @@ function VistosBuenosPanel({
   return (
     <div className="rounded-md border border-slate-200 p-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">Vistos buenos</h4>
+        <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          Vistos buenos
+        </h4>
         {canManage && (
           <Button
             type="button"
@@ -1619,7 +1976,12 @@ function VistosBuenosPanel({
               onChange={(e) => setForm({ ...form, fecha: e.target.value })}
               className="h-8 text-[11px] border-slate-300"
             />
-            <Button type="submit" size="xs" className="h-8 shrink-0 text-[11px]" disabled={guardando}>
+            <Button
+              type="submit"
+              size="xs"
+              className="h-8 shrink-0 text-[11px]"
+              disabled={guardando}
+            >
               {guardando ? "..." : "Guardar"}
             </Button>
           </div>
@@ -1640,7 +2002,11 @@ function VistosBuenosPanel({
                   {vb.entidad}
                   {vb.numero ? ` · ${vb.numero}` : ""}
                 </p>
-                {vb.fecha && <p className="text-[10px] text-slate-500">{new Date(vb.fecha).toLocaleDateString("es-CO")}</p>}
+                {vb.fecha && (
+                  <p className="text-[10px] text-slate-500">
+                    {new Date(vb.fecha).toLocaleDateString("es-CO")}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {canManage ? (

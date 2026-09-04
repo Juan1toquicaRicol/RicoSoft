@@ -71,8 +71,8 @@ function IntegracionSiesaPage() {
     try {
       await sincronizar();
       toast.success("Sincronización iniciada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible iniciar la sincronización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible iniciar la sincronización.");
     }
   };
 
@@ -80,8 +80,10 @@ function IntegracionSiesaPage() {
     try {
       await cancelar(id);
       toast.success("Cancelación solicitada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible cancelar la sincronización.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "No fue posible cancelar la sincronización.",
+      );
     }
   };
 

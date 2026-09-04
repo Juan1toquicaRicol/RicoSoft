@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth, fetchAuthUpload, fetchAuthBlob } from "@/lib/session";
-import type { CotizacionProveedor, SolicitudCompra, SolicitudDisponibleParaFactura } from "@/lib/data";
+import type {
+  CotizacionProveedor,
+  SolicitudCompra,
+  SolicitudDisponibleParaFactura,
+} from "@/lib/data";
 
 /**
  * Solicitudes de compra ACTIVAS (Pendiente / En Cotización). En cuanto una
@@ -18,8 +22,8 @@ export function useSolicitudes() {
     try {
       const data = await fetchAuth("/solicitudes-compra");
       setSolicitudes(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando solicitudes de compra.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando solicitudes de compra.");
     } finally {
       setLoading(false);
     }
@@ -122,8 +126,8 @@ export function useSolicitudDetalle(id: string | undefined) {
     try {
       const data = await fetchAuth(`/solicitudes-compra/${id}`);
       setSolicitud(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la solicitud de compra.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la solicitud de compra.");
       setSolicitud(null);
     } finally {
       setLoading(false);
@@ -193,10 +197,7 @@ export async function descargarCotizacionSolicitud(id: string) {
  * Cuadro comparativo de cotizaciones de proveedor de una solicitud de
  * compra: listar, agregar (hasta 3), eliminar y elegir la ganadora.
  */
-export function useCotizacionesProveedor(
-  solicitudId: string | null,
-  onChange?: () => void,
-) {
+export function useCotizacionesProveedor(solicitudId: string | null, onChange?: () => void) {
   const [cotizaciones, setCotizaciones] = useState<CotizacionProveedor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -211,8 +212,8 @@ export function useCotizacionesProveedor(
     try {
       const data = await fetchAuth(`/solicitudes-compra/${solicitudId}/cotizaciones`);
       setCotizaciones(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las cotizaciones.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las cotizaciones.");
     } finally {
       setLoading(false);
     }
@@ -309,10 +310,14 @@ export function useSolicitudesDisponiblesParaFactura(proveedorId?: string) {
         if (proveedorId) params.set("proveedorId", proveedorId);
         if (search) params.set("search", search);
         const qs = params.toString();
-        const data = await fetchAuth(`/solicitudes-compra/disponibles-para-factura${qs ? `?${qs}` : ""}`);
+        const data = await fetchAuth(
+          `/solicitudes-compra/disponibles-para-factura${qs ? `?${qs}` : ""}`,
+        );
         setSolicitudes(Array.isArray(data) ? data : []);
-      } catch (err: any) {
-        setError(err.message || "Error cargando solicitudes de compra disponibles.");
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Error cargando solicitudes de compra disponibles.",
+        );
       } finally {
         setLoading(false);
       }
@@ -365,8 +370,8 @@ export function useHistorialCompras(filtros: HistorialFiltros) {
         setTotal(data.total ?? 0);
         setTotalPages(data.totalPages ?? 1);
       }
-    } catch (err: any) {
-      setError(err.message || "Error cargando la historia de compras.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la historia de compras.");
     } finally {
       setLoading(false);
     }

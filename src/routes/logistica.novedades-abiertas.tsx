@@ -4,7 +4,14 @@ import { AlertTriangle, Gauge } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useNovedadesAbiertas } from "@/hooks/use-logistica";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requirePermisoGuard } from "@/lib/route-guards";
@@ -16,7 +23,8 @@ export const Route = createFileRoute("/logistica/novedades-abiertas")({
       { title: "Novedades abiertas | RicoSoft" },
       {
         name: "description",
-        content: "Cola de novedades de despacho sin resolver, ordenada por antigüedad, con recurrencia por tipo y cliente.",
+        content:
+          "Cola de novedades de despacho sin resolver, ordenada por antigüedad, con recurrencia por tipo y cliente.",
       },
     ],
   }),
@@ -44,7 +52,9 @@ function NovedadesAbiertasPage() {
         <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs lg:col-span-2">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-bold text-slate-900">Cola por antigüedad</h2>
-            <p className="text-xs text-slate-500">La más vieja primero — es la que más urge resolver o escalar.</p>
+            <p className="text-xs text-slate-500">
+              La más vieja primero — es la que más urge resolver o escalar.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <Table>
@@ -86,12 +96,17 @@ function NovedadesAbiertasPage() {
                   <TableRow key={n.id} className={n.diasAbierta >= 3 ? "bg-slate-50" : undefined}>
                     <TableCell className="text-xs font-semibold text-slate-800">
                       <div className="flex items-center gap-1.5">
-                        {n.diasAbierta >= 3 && <AlertTriangle className="h-3.5 w-3.5 text-slate-500" />}
+                        {n.diasAbierta >= 3 && (
+                          <AlertTriangle className="h-3.5 w-3.5 text-slate-500" />
+                        )}
                         {n.diasAbierta} {n.diasAbierta === 1 ? "día" : "días"}
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">
-                      <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                      <Badge
+                        variant="outline"
+                        className="border-slate-200 bg-slate-50 text-slate-700"
+                      >
                         {n.tipo.replace(/_/g, " ")}
                       </Badge>
                     </TableCell>
@@ -132,7 +147,9 @@ function NovedadesAbiertasPage() {
 
           <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
             <h2 className="text-sm font-bold text-slate-900">Recurrencia por cliente</h2>
-            <p className="text-xs text-slate-500">¿Qué cliente tiene un problema estructural, no un incidente?</p>
+            <p className="text-xs text-slate-500">
+              ¿Qué cliente tiene un problema estructural, no un incidente?
+            </p>
             <ul className="mt-3 space-y-2">
               {porCliente.length === 0 && <p className="text-xs text-slate-500">Sin datos.</p>}
               {porCliente.map((c) => (

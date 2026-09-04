@@ -1,14 +1,20 @@
 import { Response } from "express";
+import { Empleado, HistorialSalario, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { DOMINIOS_PERMITIDOS, esDominioCorporativoValido } from "../../lib/dominios";
 
-function serializarEmpleado(e: any) {
+type EmpleadoConRelaciones = Empleado & {
+  historicoSalario?: HistorialSalario[];
+  _count?: { faltas: number };
+};
+
+function serializarEmpleado(e: EmpleadoConRelaciones) {
   return {
     ...e,
     salarioActual: Number(e.salarioActual),
-    strikesCount: e._count?.faltas ?? e.strikesCount ?? 0,
-    historicoSalario: (e.historicoSalario ?? []).map((h: any) => ({
+    strikesCount: e._count?.faltas ?? 0,
+    historicoSalario: (e.historicoSalario ?? []).map((h) => ({
       fecha: h.fecha,
       salarioAnterior: Number(h.salarioAnterior),
       nuevoSalario: Number(h.nuevoSalario),
@@ -21,7 +27,7 @@ export const listarEmpleados = async (req: AuthenticatedRequest, res: Response) 
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId } = req.query;
-    const where: any = { tenantId, eliminado: false };
+    const where: Prisma.EmpleadoWhereInput = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
     const empleados = await prisma.empleado.findMany({
@@ -43,8 +49,17 @@ export const listarEmpleados = async (req: AuthenticatedRequest, res: Response) 
 export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { empresaId, documento, nombres, apellidos, correo, cargo, area, fechaContratacion, salarioActual } =
-      req.body;
+    const {
+      empresaId,
+      documento,
+      nombres,
+      apellidos,
+      correo,
+      cargo,
+      area,
+      fechaContratacion,
+      salarioActual,
+    } = req.body;
 
     if (!empresaId || !documento || !nombres || !apellidos || !fechaContratacion || !correo) {
       return res.status(400).json({ message: "Faltan campos obligatorios del colaborador." });

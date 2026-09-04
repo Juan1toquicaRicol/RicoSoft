@@ -30,13 +30,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
  *   ítem nuevo o uno descontinuado; merece revisión aparte.
  */
 export type ClasificacionInventario =
-  | "vendible"
-  | "exceso"
-  | "obsolescencia"
-  | "sin_movimiento"
-  | "servicio"
-  | "repuesto"
-  | "insumo";
+  "vendible" | "exceso" | "obsolescencia" | "sin_movimiento" | "servicio" | "repuesto" | "insumo";
 
 /**
  * "liquidar" (obsolescencia) o "revisar" (exceso) — null para el resto. NO

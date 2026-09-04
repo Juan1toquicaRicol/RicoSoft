@@ -16,6 +16,10 @@ import { getTenantPrisma } from "./tenant-prisma";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
+interface ConIdDto {
+  id: string;
+}
+
 describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fase 1 piloto)", () => {
   const sufijo = randomUUID().slice(0, 8);
   let tenantAId: string;
@@ -43,7 +47,7 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const nit = `NIT-CREATE-${sufijo}`;
     // Deliberadamente NO se pasa tenantId en data.
-    const proveedor = await (tpA as any).proveedor.create({
+    const proveedor = await tpA.proveedor.create({
       data: { nit, nombre: "Creado sin tenantId" },
     });
     expect(proveedor.tenantId).toBe(tenantAId);
@@ -53,16 +57,16 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const tpB = getTenantPrisma(tenantBId);
     const nit = `NIT-FINDMANY-${sufijo}`;
-    await (tpA as any).proveedor.create({ data: { nit, nombre: "Solo de A" } });
+    await tpA.proveedor.create({ data: { nit, nombre: "Solo de A" } });
 
-    const desdeA = await (tpA as any).proveedor.findMany({ where: { nit } });
+    const desdeA = await tpA.proveedor.findMany({ where: { nit } });
     expect(desdeA).toHaveLength(1);
 
-    const desdeB = await (tpB as any).proveedor.findMany({ where: { nit } });
+    const desdeB = await tpB.proveedor.findMany({ where: { nit } });
     expect(desdeB).toHaveLength(0);
 
-    const countA = await (tpA as any).proveedor.count({ where: { nit } });
-    const countB = await (tpB as any).proveedor.count({ where: { nit } });
+    const countA = await tpA.proveedor.count({ where: { nit } });
+    const countB = await tpB.proveedor.count({ where: { nit } });
     expect(countA).toBe(1);
     expect(countB).toBe(0);
   });
@@ -71,12 +75,12 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const tpB = getTenantPrisma(tenantBId);
     const nit = `NIT-FINDUNIQUE-${sufijo}`;
-    const proveedor = await (tpA as any).proveedor.create({ data: { nit, nombre: "De A" } });
+    const proveedor = await tpA.proveedor.create({ data: { nit, nombre: "De A" } });
 
-    const desdeA = await (tpA as any).proveedor.findUnique({ where: { id: proveedor.id } });
+    const desdeA = await tpA.proveedor.findUnique({ where: { id: proveedor.id } });
     expect(desdeA).not.toBeNull();
 
-    const desdeB = await (tpB as any).proveedor.findUnique({ where: { id: proveedor.id } });
+    const desdeB = await tpB.proveedor.findUnique({ where: { id: proveedor.id } });
     expect(desdeB).toBeNull();
   });
 
@@ -84,12 +88,12 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const tpB = getTenantPrisma(tenantBId);
     const nit = `NIT-UPDATE-${sufijo}`;
-    const proveedor = await (tpA as any).proveedor.create({
+    const proveedor = await tpA.proveedor.create({
       data: { nit, nombre: "Nombre Original" },
     });
 
     await expect(
-      (tpB as any).proveedor.update({ where: { id: proveedor.id }, data: { nombre: "Hackeado" } }),
+      tpB.proveedor.update({ where: { id: proveedor.id }, data: { nombre: "Hackeado" } }),
     ).rejects.toThrow();
 
     // Prueba directa e inequívoca de que la fila NUNCA se tocó: se lee con
@@ -99,7 +103,7 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     expect(sinTocar?.nombre).toBe("Nombre Original");
 
     // El mismo update, desde el tenant correcto, sí funciona.
-    const actualizado = await (tpA as any).proveedor.update({
+    const actualizado = await tpA.proveedor.update({
       where: { id: proveedor.id },
       data: { nombre: "Nombre Actualizado" },
     });
@@ -110,15 +114,15 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const tpB = getTenantPrisma(tenantBId);
     const nit = `NIT-DELETE-${sufijo}`;
-    const proveedor = await (tpA as any).proveedor.create({ data: { nit, nombre: "A borrar" } });
+    const proveedor = await tpA.proveedor.create({ data: { nit, nombre: "A borrar" } });
 
-    await expect((tpB as any).proveedor.delete({ where: { id: proveedor.id } })).rejects.toThrow();
+    await expect(tpB.proveedor.delete({ where: { id: proveedor.id } })).rejects.toThrow();
 
     const sigueExistiendo = await prisma.proveedor.findUnique({ where: { id: proveedor.id } });
     expect(sigueExistiendo).not.toBeNull();
 
     // Desde el tenant correcto sí se puede eliminar.
-    await (tpA as any).proveedor.delete({ where: { id: proveedor.id } });
+    await tpA.proveedor.delete({ where: { id: proveedor.id } });
     const yaNoExiste = await prisma.proveedor.findUnique({ where: { id: proveedor.id } });
     expect(yaNoExiste).toBeNull();
   });
@@ -135,7 +139,7 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     });
 
     // updateMany desde B con un where amplio (sin nit) no debe tocar la fila de A.
-    const resultado = await (tpB as any).proveedor.updateMany({
+    const resultado = await tpB.proveedor.updateMany({
       where: {},
       data: { contacto: "Tocado por B" },
     });
@@ -151,7 +155,7 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const tpA = getTenantPrisma(tenantAId);
     const nit = `NIT-TX-${sufijo}`;
 
-    const resultado = await (tpA as any).$transaction(async (tx: any) => {
+    const resultado = await tpA.$transaction(async (tx) => {
       const creado = await tx.proveedor.create({ data: { nit, nombre: "Creado en transacción" } });
       return tx.proveedor.findUnique({ where: { id: creado.id } });
     });
@@ -170,11 +174,11 @@ describe.skipIf(!RUN)("tenant-prisma — enforcement estructural de tenantId (Fa
     const nombre = `Depto Excluido ${sufijo}`;
     const general = await prisma.departamento.create({ data: { tenantId: null, nombre } });
     try {
-      const desdeExtendido = await (tpA as any).departamento.findMany({ where: { nombre } });
+      const desdeExtendido = await tpA.departamento.findMany({ where: { nombre } });
       // Si tenantPrisma NO intercepta Departamento (como debe ser), esta
       // consulta se comporta igual que con el cliente base: encuentra el
       // GENERAL sin que nadie le haya agregado un filtro de tenantId.
-      expect(desdeExtendido.some((d: any) => d.id === general.id)).toBe(true);
+      expect(desdeExtendido.some((d: ConIdDto) => d.id === general.id)).toBe(true);
     } finally {
       await prisma.departamento.delete({ where: { id: general.id } });
     }

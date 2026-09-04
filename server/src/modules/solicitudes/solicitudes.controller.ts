@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
+import { Prisma, SolicitudCompra } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
@@ -71,7 +72,16 @@ const TRANSICIONES_DE_RESOLUCION = new Set(["Aprobada", "Rechazada"]);
 
 // No se expone `cotizacionRuta` (ruta interna en disco): se sirve solo a
 // través del endpoint autenticado GET /:id/archivo, igual que en facturas.
-function serializar(s: any) {
+// Las relaciones (facturas, cotizacionesProveedor) solo vienen presentes
+// cuando la consulta las incluyó explícitamente (ver INCLUDE_FACTURA_VINCULADA
+// más abajo); en el resto de llamadas (crear/actualizar sin include) quedan
+// undefined, de ahí que sean opcionales acá.
+type SolicitudSerializable = SolicitudCompra & {
+  facturas?: { id: string; numero: string; estado: string }[];
+  cotizacionesProveedor?: { id: string; esGanadora: boolean }[];
+};
+
+function serializar(s: SolicitudSerializable) {
   const {
     cotizacionRuta,
     cotizacionNombre,
@@ -108,7 +118,7 @@ function serializar(s: any) {
       total: cotizacionesProv.length,
       minimo: MIN_COTIZACIONES_REQUERIDAS,
       maximo: MAX_COTIZACIONES_COMPARATIVO,
-      tieneGanadora: cotizacionesProv.some((c: any) => c.esGanadora),
+      tieneGanadora: cotizacionesProv.some((c) => c.esGanadora),
     },
     // Factura final que se paga, si ya se registró (una solicitud "Comprado"
     // puede seguir sin factura hasta que llegue la factura del proveedor).
@@ -149,7 +159,11 @@ export const listarSolicitudes = async (req: AuthenticatedRequest, res: Response
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId } = req.query;
-    const where: any = { tenantId, estado: { in: ESTADOS_ACTIVOS }, eliminado: false };
+    const where: Prisma.SolicitudCompraWhereInput = {
+      tenantId,
+      estado: { in: ESTADOS_ACTIVOS },
+      eliminado: false,
+    };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
     const solicitudes = await req.tenantPrisma!.solicitudCompra.findMany({
@@ -200,19 +214,27 @@ export const listarHistorialCompras = async (req: AuthenticatedRequest, res: Res
     const tenantId = req.user!.tenantId;
     const { empresaId, estado, area, solicitante, desde, hasta } = req.query;
 
-    const where: any = { tenantId, estado: { in: ESTADOS_HISTORICOS }, eliminado: false };
+    const where: Prisma.SolicitudCompraWhereInput = {
+      tenantId,
+      estado: { in: ESTADOS_HISTORICOS },
+      eliminado: false,
+    };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && ESTADOS_HISTORICOS.includes(estado)) where.estado = estado;
     if (typeof area === "string" && area) where.area = { contains: area };
     if (typeof solicitante === "string" && solicitante)
       where.solicitante = { contains: solicitante };
+    const fechaResolucionFiltro: Prisma.DateTimeFilter<"SolicitudCompra"> = {};
     if (typeof desde === "string" && desde) {
-      where.fechaResolucion = { ...(where.fechaResolucion || {}), gte: new Date(desde) };
+      fechaResolucionFiltro.gte = new Date(desde);
     }
     if (typeof hasta === "string" && hasta) {
       const hastaFin = new Date(hasta);
       hastaFin.setHours(23, 59, 59, 999);
-      where.fechaResolucion = { ...(where.fechaResolucion || {}), lte: hastaFin };
+      fechaResolucionFiltro.lte = hastaFin;
+    }
+    if (Object.keys(fechaResolucionFiltro).length > 0) {
+      where.fechaResolucion = fechaResolucionFiltro;
     }
 
     // Paginación real: a diferencia de "Solicitudes activas" (acotado por
@@ -288,7 +310,7 @@ export const listarSolicitudesDisponiblesParaFactura = async (
         : undefined;
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-    const where: any = {
+    const where: Prisma.SolicitudCompraWhereInput = {
       tenantId,
       eliminado: false,
       estado: { in: ESTADOS_SC_VINCULABLES_A_FACTURA },
@@ -550,7 +572,7 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
       }
     }
 
-    const data: any = { estado: nuevoEstado };
+    const data: Prisma.SolicitudCompraUncheckedUpdateInput = { estado: nuevoEstado };
     if (TRANSICIONES_DE_RESOLUCION.has(nuevoEstado)) {
       data.fechaResolucion = new Date();
       data.resueltoPorId = req.user!.id;
@@ -735,7 +757,7 @@ export const subirCotizacionSolicitud = async (req: AuthenticatedRequest, res: R
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
-    const archivo = (req as any).file as Express.Multer.File | undefined;
+    const archivo = req.file as Express.Multer.File | undefined;
 
     if (!archivo) {
       return res.status(400).json({ message: "No se recibió ningún archivo." });

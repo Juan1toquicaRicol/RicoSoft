@@ -1,17 +1,49 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Cloud, DollarSign, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Cloud,
+  DollarSign,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  Wallet,
+  AlertTriangle,
+  Clock,
+  Users,
+} from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { EstadoBadge } from "@/components/ui/badge";
-import { BarraVencimiento } from "@/components/ui/barra-vencimiento";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import { StatCard } from "@/components/ui/stat-card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  FilaGrupo,
+  OPCION_SIN_AGRUPAR,
+  SelectorAgrupacion,
+} from "@/components/ui/selector-agrupacion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { agruparFilas } from "@/lib/agrupar";
 import {
   Dialog,
@@ -31,33 +63,47 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useCreditos, useCarteraSiesa } from "@/hooks/use-creditos";
+import { useCreditos, useResumenCreditos, useCarteraSiesa } from "@/hooks/use-creditos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money } from "@/lib/data";
+import { cn } from "@/lib/utils";
 import type { CreditoCliente } from "@/lib/data";
+
+const OPCIONES_ESTADO_CREDITO = ["Todos", "Al día", "Por vencer", "Vencido", "Paz y Salvo"];
+const OPCIONES_ESTADO_SIESA = ["Todos", "Al día", "Por vencer", "Vencido"];
 
 export const Route = createFileRoute("/creditos")({
   head: () => ({
     meta: [
       { title: "Créditos de clientes | RicoSoft" },
-      { name: "description", content: "Cupos, saldos y vencimientos de crédito por cliente con historial de pagos." },
+      {
+        name: "description",
+        content: "Cupos, saldos y vencimientos de crédito por cliente con historial de pagos.",
+      },
       { property: "og:title", content: "Créditos de clientes | RicoSoft" },
-      { property: "og:description", content: "Créditos activos, pendientes y vencidos en un solo panel." },
+      {
+        property: "og:description",
+        content: "Créditos activos, pendientes y vencidos en un solo panel.",
+      },
     ],
   }),
   component: Creditos,
 });
 
 function Creditos() {
-  const { creditos, loading, error, addCredito, registrarPago, marcarPazYSalvo, eliminarCredito } = useCreditos();
+  const [estadoFiltro, setEstadoFiltro] = useState("Todos");
+  const { creditos, loading, error, addCredito, registrarPago, marcarPazYSalvo, eliminarCredito } =
+    useCreditos({
+      estado: estadoFiltro,
+    });
+  const { resumen, loading: cargandoResumen } = useResumenCreditos();
   const { user } = useSession();
   const puedeGestionar = hasPermission(user, PERMISOS_SISTEMA.CREDITOS_GESTIONAR);
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.CREDITOS_ELIMINAR);
 
-  const total = creditos.reduce((acc, c) => acc + c.cupo, 0);
-  const saldo = creditos.reduce((acc, c) => acc + c.saldo, 0);
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({
@@ -87,7 +133,10 @@ function Creditos() {
     }
   }, [agrupacion]);
 
-  const gruposCreditos = useMemo(() => agruparFilas(creditos, claveDeAgrupacion), [creditos, claveDeAgrupacion]);
+  const gruposCreditos = useMemo(
+    () => agruparFilas(creditos, claveDeAgrupacion),
+    [creditos, claveDeAgrupacion],
+  );
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,23 +232,57 @@ function Creditos() {
         )
       }
     >
-      <div className="grid gap-4 sm:grid-cols-3 mb-6">
-        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Cupo total otorgado</p>
-          <p className="num mt-1 text-2xl font-bold text-blue-900">{money(total)}</p>
-        </div>
-        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Saldo por recaudar</p>
-          <p className="num mt-1 text-2xl font-bold text-slate-900">{money(saldo)}</p>
-        </div>
-        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Utilización del cupo</p>
-          <p className="num mt-1 text-2xl font-bold text-slate-900">{total > 0 ? Math.round((saldo / total) * 100) : 0}%</p>
-        </div>
+      {/* Cartera Siesa es la fuente real (créditos manuales suele estar en
+          $0 en tenants reales) — va primero y con jerarquía visual
+          superior. Ver PanelCarteraSiesa más abajo. */}
+      <PanelCarteraSiesa />
+
+      {/* Créditos manuales de RicoSoft: sección secundaria, deliberadamente
+          compacta (sin StatCard) para no competir en peso visual con la
+          cartera real cuando está vacía — sigue teniendo toda su función. */}
+      <div className="mt-8 mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          Créditos manuales (RicoSoft)
+        </h2>
+        {!cargandoResumen && resumen && (
+          <p className="text-[11px] text-slate-500">
+            Por recaudar{" "}
+            <span className="font-semibold text-slate-700">{money(resumen.porRecaudar)}</span> ·
+            Vencido{" "}
+            <span
+              className={cn(
+                "font-semibold",
+                resumen.vencido > 0 ? "text-slate-900" : "text-slate-700",
+              )}
+            >
+              {money(resumen.vencido)}
+            </span>{" "}
+            · Por vencer{" "}
+            <span className="font-semibold text-slate-700">{money(resumen.porVencer)}</span> · Al
+            día <span className="font-semibold text-slate-700">{money(resumen.alDia)}</span> ·
+            Clientes en mora{" "}
+            <span className="font-semibold text-slate-700">{resumen.clientesEnMora}</span> · Cupo
+            total <span className="font-semibold text-slate-700">{money(resumen.cupoTotal)}</span> ·
+            Utilización{" "}
+            <span className="font-semibold text-slate-700">{resumen.utilizacionPct}%</span>
+          </p>
+        )}
       </div>
 
-      <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-        <div className="flex justify-end border-b border-slate-200 bg-slate-50/80 p-3">
+      <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mb-6">
+        <div className="flex flex-wrap justify-end gap-2 border-b border-slate-200 bg-slate-50/80 p-3">
+          <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
+            <SelectTrigger className="h-9 w-40 text-xs bg-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OPCIONES_ESTADO_CREDITO.map((op) => (
+                <SelectItem key={op} value={op} className="text-xs">
+                  {op}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <SelectorAgrupacion
             value={agrupacion}
             onChange={setAgrupacion}
@@ -209,74 +292,180 @@ function Creditos() {
         <Table>
           <TableHeader className="bg-slate-100/80">
             <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cliente</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Cupo</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Saldo</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Vence</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+              <TableHead className="w-8 px-2 py-3.5" />
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Cliente
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Saldo por recaudar
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Saldo vencido
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Próximo vencimiento
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Días de mora
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Estado
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                Acciones
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
             {gruposCreditos.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />}
-                {grupo.filas.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">{c.cliente}</TableCell>
-                    <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">{money(c.cupo)}</TableCell>
-                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">{money(c.saldo)}</TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-500">
-                      <p className="font-mono">{new Date(c.vence).toLocaleDateString("es-CO")}</p>
-                      {c.estado !== "Paz y Salvo" && (
-                        <BarraVencimiento fecha={c.vence} etiquetaVencido="Vencido" className="mt-1" />
+                {grupo.clave && (
+                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={8} />
+                )}
+                {grupo.filas.map((c) => {
+                  const expandido = clienteExpandido === c.id;
+                  return (
+                    <Fragment key={c.id}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onClick={() => setClienteExpandido(expandido ? null : c.id)}
+                      >
+                        <TableCell className="px-2 py-3 text-slate-400">
+                          {expandido ? (
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          )}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
+                          {c.cliente}
+                        </TableCell>
+                        <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                          {money(c.saldo)}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "num px-4 py-3 text-right text-xs",
+                            c.vencido > 0 ? "font-bold text-slate-900" : "text-slate-400",
+                          )}
+                        >
+                          {c.vencido > 0 ? money(c.vencido) : "—"}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-500">
+                          <p className="font-mono">
+                            {new Date(c.vence).toLocaleDateString("es-CO")}
+                          </p>
+                          {c.estado !== "Paz y Salvo" && (
+                            <p className="text-[10px] text-slate-400">{c.estado}</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">
+                          {c.diasMora > 0 ? `${c.diasMora} días` : "—"}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <EstadoBadge estado={c.estado} />
+                        </TableCell>
+                        <TableCell
+                          className="px-4 py-3 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex justify-end gap-1.5">
+                            {puedeGestionar && c.estado !== "Paz y Salvo" && c.saldo > 0 && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => abrirPago(c)}
+                                className="h-7 gap-1 text-[11px]"
+                              >
+                                <DollarSign className="h-3 w-3" /> Registrar Pago
+                              </Button>
+                            )}
+                            {puedeGestionar && c.estado !== "Paz y Salvo" && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => setCreditoAPazYSalvo(c)}
+                                className="h-7 gap-1 text-[11px] border-blue-300 text-blue-800 hover:bg-blue-50"
+                              >
+                                <ShieldCheck className="h-3 w-3" /> Paz y Salvo
+                              </Button>
+                            )}
+                            {puedeEliminar && (
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => setCreditoAEliminar(c)}
+                                className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {expandido && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={8} className="bg-slate-50/80 px-4 py-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Desglose de cartera
+                            </p>
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  Total por recaudar
+                                </p>
+                                <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                                  {money(c.saldo)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  Vencido
+                                </p>
+                                <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                                  {money(c.vencido)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  Por vencer
+                                </p>
+                                <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                                  {money(c.porVencer)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  Al día
+                                </p>
+                                <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                                  {money(c.alDia)}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <EstadoBadge estado={c.estado} />
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {puedeGestionar && c.estado !== "Paz y Salvo" && c.saldo > 0 && (
-                          <Button size="xs" variant="outline" onClick={() => abrirPago(c)} className="h-7 gap-1 text-[11px]">
-                            <DollarSign className="h-3 w-3" /> Registrar Pago
-                          </Button>
-                        )}
-                        {puedeGestionar && c.estado !== "Paz y Salvo" && (
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => setCreditoAPazYSalvo(c)}
-                            className="h-7 gap-1 text-[11px] border-blue-300 text-blue-800 hover:bg-blue-50"
-                          >
-                            <ShieldCheck className="h-3 w-3" /> Paz y Salvo
-                          </Button>
-                        )}
-                        {puedeEliminar && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => setCreditoAEliminar(c)}
-                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </Fragment>
             ))}
             {creditos.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   {loading ? (
-                    <div className="py-12 text-center text-xs text-slate-500">Cargando créditos...</div>
+                    <div className="py-12 text-center text-xs text-slate-500">
+                      Cargando créditos...
+                    </div>
                   ) : error ? (
                     <div className="py-12 text-center text-xs text-slate-500">{error}</div>
                   ) : (
-                    <EmptyState icon={DollarSign} title="No hay créditos registrados" description='Haz clic en "Nuevo Crédito" para registrar el primero.' />
+                    <EmptyState
+                      icon={DollarSign}
+                      title="No hay créditos registrados"
+                      description='Haz clic en "Nuevo Crédito" para registrar el primero.'
+                    />
                   )}
                 </TableCell>
               </TableRow>
@@ -285,14 +474,14 @@ function Creditos() {
         </Table>
       </div>
 
-      <PanelCarteraSiesa />
-
       {/* MODAL NUEVO CRÉDITO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-900 font-bold">Nuevo crédito de cliente</DialogTitle>
-            <DialogDescription className="text-slate-500">Cupo y saldo inicial otorgados al cliente.</DialogDescription>
+            <DialogDescription className="text-slate-500">
+              Cupo y saldo inicial otorgados al cliente.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-2">
             <div className="space-y-1">
@@ -381,7 +570,13 @@ function Creditos() {
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setCreditoAPagar(null)} disabled={aplicandoPago}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCreditoAPagar(null)}
+              disabled={aplicandoPago}
+            >
               Cancelar
             </Button>
             <Button size="sm" onClick={handleRegistrarPago} disabled={aplicandoPago}>
@@ -392,13 +587,18 @@ function Creditos() {
       </Dialog>
 
       {/* CONFIRMAR PAZ Y SALVO */}
-      <AlertDialog open={!!creditoAPazYSalvo} onOpenChange={(open) => !open && setCreditoAPazYSalvo(null)}>
+      <AlertDialog
+        open={!!creditoAPazYSalvo}
+        onOpenChange={(open) => !open && setCreditoAPazYSalvo(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Marcar paz y salvo para {creditoAPazYSalvo?.cliente}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              ¿Marcar paz y salvo para {creditoAPazYSalvo?.cliente}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              El saldo pendiente quedará en $0 y el crédito se marcará como "Paz y Salvo". Esta acción
-              queda registrada con tu usuario y la hora actual.
+              El saldo pendiente quedará en $0 y el crédito se marcará como "Paz y Salvo". Esta
+              acción queda registrada con tu usuario y la hora actual.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -411,10 +611,15 @@ function Creditos() {
       </AlertDialog>
 
       {/* CONFIRMAR ELIMINACIÓN */}
-      <AlertDialog open={!!creditoAEliminar} onOpenChange={(open) => !open && setCreditoAEliminar(null)}>
+      <AlertDialog
+        open={!!creditoAEliminar}
+        onOpenChange={(open) => !open && setCreditoAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar el crédito de {creditoAEliminar?.cliente}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              ¿Eliminar el crédito de {creditoAEliminar?.cliente}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción es permanente. El crédito dejará de aparecer en el listado, pero queda
               registrado en la auditoría.
@@ -444,14 +649,25 @@ function Creditos() {
  * salvo" — esas acciones se hacen en Siesa, RicoSoft nunca le escribe.
  */
 function PanelCarteraSiesa() {
-  const { items, disponible, motivo, total, page, totalPages, loading, refresh } = useCarteraSiesa();
+  const { items, resumen, disponible, motivo, total, page, totalPages, loading, refresh } =
+    useCarteraSiesa();
   const [search, setSearch] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState("Todos");
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleBuscar = (valor: string) => {
     setSearch(valor);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => refresh({ search: valor, page: 1 }), 300);
+    debounceRef.current = setTimeout(
+      () => refresh({ search: valor, estado: estadoFiltro, page: 1 }),
+      300,
+    );
+  };
+
+  const handleEstadoFiltro = (valor: string) => {
+    setEstadoFiltro(valor);
+    refresh({ search, estado: valor, page: 1 });
   };
 
   if (!disponible) {
@@ -462,36 +678,111 @@ function PanelCarteraSiesa() {
     );
   }
 
+  const totalDistribucion = resumen ? resumen.vencido + resumen.porVencer + resumen.alDia : 0;
+  const pctVencido = totalDistribucion > 0 ? (resumen!.vencido / totalDistribucion) * 100 : 0;
+  const pctPorVencer = totalDistribucion > 0 ? (resumen!.porVencer / totalDistribucion) * 100 : 0;
+  const pctAlDia = totalDistribucion > 0 ? (resumen!.alDia / totalDistribucion) * 100 : 0;
+
   return (
-    <div className="mt-6 panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-3">
-        <div className="flex items-center gap-2">
-          <Cloud className="h-4 w-4 text-blue-500" />
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">Cartera Siesa (tiempo real)</h2>
-            <p className="text-[11px] text-slate-500">
-              Saldos reales por cliente, leídos directamente de Siesa. Solo lectura.
-            </p>
-          </div>
+    <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-4 py-3">
+        <Cloud className="h-4 w-4 text-blue-600" />
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Cartera Siesa — tiempo real</h2>
+          <p className="text-[11px] text-slate-500">
+            Cifras reales leídas directamente de Siesa. Solo lectura.
+          </p>
         </div>
-        <Input
-          placeholder="Buscar por cliente o NIT..."
-          value={search}
-          onChange={(e) => handleBuscar(e.target.value)}
-          className="h-9 w-full max-w-xs bg-white text-xs border-slate-300 shadow-2xs"
+      </div>
+
+      {/* KPIs: siempre reflejan TODA la cartera (no la página ni el filtro
+          actual) — cálculo 100% backend, ver GET /creditos/cartera-siesa. */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 p-4">
+        <StatCard label="Por recaudar" value={money(resumen?.porRecaudar ?? 0)} icon={Wallet} />
+        <StatCard
+          label="Vencido"
+          value={money(resumen?.vencido ?? 0)}
+          icon={AlertTriangle}
+          enfasis={(resumen?.vencido ?? 0) > 0 ? "atencion" : "default"}
+        />
+        <StatCard label="Por vencer" value={money(resumen?.porVencer ?? 0)} icon={Clock} />
+        <StatCard label="Al día" value={money(resumen?.alDia ?? 0)} icon={DollarSign} />
+        <StatCard
+          label="Clientes en mora"
+          value={String(resumen?.clientesEnMora ?? 0)}
+          icon={Users}
+          enfasis={(resumen?.clientesEnMora ?? 0) > 0 ? "atencion" : "default"}
         />
       </div>
+
+      {/* Barra de distribución: hace evidente que Por recaudar = Vencido +
+          Por vencer + Al día, sin fórmula ni gráfica. */}
+      {totalDistribucion > 0 && (
+        <div className="px-4 pb-4">
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full bg-slate-900"
+              style={{ width: `${pctVencido}%` }}
+              title="Vencido"
+            />
+            <div
+              className="h-full bg-slate-400"
+              style={{ width: `${pctPorVencer}%` }}
+              title="Por vencer"
+            />
+            <div className="h-full bg-slate-200" style={{ width: `${pctAlDia}%` }} title="Al día" />
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-400">
+            Vencido {Math.round(pctVencido)}% · Por vencer {Math.round(pctPorVencer)}% · Al día{" "}
+            {Math.round(pctAlDia)}% del total por recaudar
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-200 bg-slate-50/60 px-4 py-2">
+        <div className="flex flex-wrap gap-2">
+          <Select value={estadoFiltro} onValueChange={handleEstadoFiltro}>
+            <SelectTrigger className="h-8 w-36 text-xs bg-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OPCIONES_ESTADO_SIESA.map((op) => (
+                <SelectItem key={op} value={op} className="text-xs">
+                  {op}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Buscar por cliente o NIT..."
+            value={search}
+            onChange={(e) => handleBuscar(e.target.value)}
+            className="h-8 w-full max-w-xs bg-white text-xs border-slate-300 shadow-2xs"
+          />
+        </div>
+        <p className="text-[10px] text-slate-400">
+          El filtro y la búsqueda afectan solo la tabla, no los KPIs de arriba.
+        </p>
+      </div>
+
       <Table>
         <TableHeader className="bg-slate-100/80">
           <TableRow className="hover:bg-slate-100/80">
+            <TableHead className="w-8 px-2 py-3.5" />
             <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
               Cliente
             </TableHead>
             <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-              Saldo pendiente
+              Saldo por recaudar
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+              Saldo vencido
             </TableHead>
             <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-              Vencimiento más antiguo
+              Próximo vencimiento
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+              Días de mora
             </TableHead>
             <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
               Estado
@@ -501,35 +792,107 @@ function PanelCarteraSiesa() {
         <TableBody className="text-slate-800 font-medium">
           {items.length === 0 ? (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={4} className="p-0">
+              <TableCell colSpan={7} className="p-0">
                 <div className="py-12 text-center text-xs text-slate-500">
                   {loading ? "Cargando cartera..." : "No hay clientes con saldo pendiente."}
                 </div>
               </TableCell>
             </TableRow>
           ) : (
-            items.map((c) => (
-              <TableRow key={`${c.cliente}-${c.nit}`}>
-                <TableCell className="px-4 py-3">
-                  <p className="font-bold text-xs text-slate-900">{c.cliente}</p>
-                  {c.nit && <p className="text-[11px] font-mono text-slate-500">NIT {c.nit}</p>}
-                </TableCell>
-                <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                  {money(c.saldo)}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  <p className="font-mono text-xs text-slate-500">
-                    {new Date(c.vence).toLocaleDateString("es-CO")}
-                  </p>
-                  {c.estado !== "Paz y Salvo" && (
-                    <BarraVencimiento fecha={c.vence} etiquetaVencido="Vencido" className="mt-1" />
+            items.map((c) => {
+              const clave = `${c.cliente}-${c.nit}`;
+              const expandido = clienteExpandido === clave;
+              return (
+                <Fragment key={clave}>
+                  <TableRow
+                    className="cursor-pointer"
+                    onClick={() => setClienteExpandido(expandido ? null : clave)}
+                  >
+                    <TableCell className="px-2 py-3 text-slate-400">
+                      {expandido ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="font-bold text-xs text-slate-900">{c.cliente}</p>
+                      {c.nit && <p className="text-[11px] font-mono text-slate-500">NIT {c.nit}</p>}
+                    </TableCell>
+                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                      {money(c.saldo)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "num px-4 py-3 text-right text-xs",
+                        c.vencido > 0 ? "font-bold text-slate-900" : "text-slate-400",
+                      )}
+                    >
+                      {c.vencido > 0 ? money(c.vencido) : "—"}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <p className="font-mono text-xs text-slate-500">
+                        {new Date(c.vence).toLocaleDateString("es-CO")}
+                      </p>
+                      <p className="text-[10px] text-slate-400">{c.estado}</p>
+                    </TableCell>
+                    <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">
+                      {c.diasMora > 0 ? `${c.diasMora} días` : "—"}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <EstadoBadge estado={c.estado} />
+                    </TableCell>
+                  </TableRow>
+                  {expandido && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={7} className="bg-slate-50/80 px-4 py-4">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Desglose de cartera
+                        </p>
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Total por recaudar
+                            </p>
+                            <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                              {money(c.saldo)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Vencido
+                            </p>
+                            <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                              {money(c.vencido)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Por vencer
+                            </p>
+                            <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                              {money(c.porVencer)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Al día
+                            </p>
+                            <p className="num mt-0.5 text-sm font-bold text-slate-900">
+                              {money(c.alDia)}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-[11px] text-slate-500">
+                          Detalle documento por documento (facturas individuales de Siesa) no
+                          disponible todavía en esta vista — pendiente de un endpoint dedicado.
+                        </p>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  <EstadoBadge estado={c.estado} />
-                </TableCell>
-              </TableRow>
-            ))
+                </Fragment>
+              );
+            })
           )}
         </TableBody>
       </Table>

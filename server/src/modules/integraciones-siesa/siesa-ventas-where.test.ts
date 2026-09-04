@@ -15,7 +15,9 @@ describe("construirWhereHistorico", () => {
 
   it("con solo los filtros obligatorios, arma el WHERE base sin cláusulas opcionales", () => {
     const where = construirWhereHistorico(base);
-    expect(where).toBe("f.f461_id_cia = @ciaId AND f.f461_id_fecha >= @desde AND f.f461_id_fecha < @hasta");
+    expect(where).toBe(
+      "f.f461_id_cia = @ciaId AND f.f461_id_fecha >= @desde AND f.f461_id_fecha < @hasta",
+    );
   });
 
   it("agrega la cláusula de search cuando se pasa texto libre", () => {

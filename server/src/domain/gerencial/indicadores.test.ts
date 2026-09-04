@@ -7,12 +7,50 @@ import {
 
 function entradasVacias(): EntradasCentroGerencial {
   return {
-    finanzas: { totalCxP: 0, valorVencido: 0, valorProximoAVencer: 0, concentracionTopProveedor: null, nombreTopProveedor: null },
-    ventas: { disponible: false, netoActual: 0, netoAnterior: 0, variacionNetaPct: null, documentos: 0, productosTendenciaFuerte: 0, productosPerdiendoRotacion: 0, mesesHistoriaDisponibles: 0 },
-    inventario: { disponible: false, totalValor: 0, totalValorVendible: 0, totalComprometidoValor: 0, valorExceso: 0, valorObsolescencia: 0 },
-    produccion: { disponible: false, resumenProducir: { cantidad: 0, unidades: 0, impacto: 0 }, resumenNoProducir: { cantidad: 0, unidades: 0, impacto: 0 }, planesPorEstado: {} },
-    compras: { disponible: false, resumenComprar: { cantidad: 0, unidades: 0, impacto: 0 }, solicitudesPendientes: 0, cotizacionesPendientes: 0 },
-    riesgos: { disponible: false, resumenLiquidar: { cantidad: 0, unidades: 0, impacto: 0 }, resumenRiesgoQuiebre: { cantidad: 0, unidades: 0, impacto: 0 }, facturasVencidasCantidad: 0, patronesRecurrentesCantidad: 0 },
+    finanzas: {
+      totalCxP: 0,
+      valorVencido: 0,
+      valorProximoAVencer: 0,
+      concentracionTopProveedor: null,
+      nombreTopProveedor: null,
+    },
+    ventas: {
+      disponible: false,
+      netoActual: 0,
+      netoAnterior: 0,
+      variacionNetaPct: null,
+      documentos: 0,
+      productosTendenciaFuerte: 0,
+      productosPerdiendoRotacion: 0,
+      mesesHistoriaDisponibles: 0,
+    },
+    inventario: {
+      disponible: false,
+      totalValor: 0,
+      totalValorVendible: 0,
+      totalComprometidoValor: 0,
+      valorExceso: 0,
+      valorObsolescencia: 0,
+    },
+    produccion: {
+      disponible: false,
+      resumenProducir: { cantidad: 0, unidades: 0, impacto: 0 },
+      resumenNoProducir: { cantidad: 0, unidades: 0, impacto: 0 },
+      planesPorEstado: {},
+    },
+    compras: {
+      disponible: false,
+      resumenComprar: { cantidad: 0, unidades: 0, impacto: 0 },
+      solicitudesPendientes: 0,
+      cotizacionesPendientes: 0,
+    },
+    riesgos: {
+      disponible: false,
+      resumenLiquidar: { cantidad: 0, unidades: 0, impacto: 0 },
+      resumenRiesgoQuiebre: { cantidad: 0, unidades: 0, impacto: 0 },
+      facturasVencidasCantidad: 0,
+      patronesRecurrentesCantidad: 0,
+    },
   };
 }
 
@@ -53,7 +91,9 @@ describe("construirIndicadoresGerenciales", () => {
       productosPerdiendoRotacion: 0,
       mesesHistoriaDisponibles: 2,
     };
-    const [ventas] = construirIndicadoresGerenciales(entradas).filter((i) => i.categoria === "ventas");
+    const [ventas] = construirIndicadoresGerenciales(entradas).filter(
+      (i) => i.categoria === "ventas",
+    );
     expect(ventas.calidadDatos).toBe("BAJA"); // 2 meses < 3
     expect(ventas.tendencia).toBe("subida");
     expect(ventas.variacionPct).toBe(12.4);
@@ -69,7 +109,9 @@ describe("construirIndicadoresGerenciales", () => {
       valorExceso: 243_000_000,
       valorObsolescencia: 608_000_000,
     };
-    const capital = construirIndicadoresGerenciales(entradas).find((i) => i.id === "inventario.capital_inmovilizado");
+    const capital = construirIndicadoresGerenciales(entradas).find(
+      (i) => i.id === "inventario.capital_inmovilizado",
+    );
     expect(capital?.valor).toBe(243_000_000 + 608_000_000);
     expect(capital?.nivel).toBe("critico");
   });
@@ -80,16 +122,26 @@ describe("construirIndicadoresGerenciales", () => {
       disponible: true,
       resumenProducir: { cantidad: 5, unidades: 1000, impacto: 780_000_000 },
       resumenNoProducir: { cantidad: 0, unidades: 0, impacto: 0 },
-      planesPorEstado: { Planificada: 2, Aprobada: 3, "En producción": 1, Terminada: 4, Cancelada: 1 },
+      planesPorEstado: {
+        Planificada: 2,
+        Aprobada: 3,
+        "En producción": 1,
+        Terminada: 4,
+        Cancelada: 1,
+      },
     };
-    const planes = construirIndicadoresGerenciales(entradas).find((i) => i.id === "produccion.planes_activos");
+    const planes = construirIndicadoresGerenciales(entradas).find(
+      (i) => i.id === "produccion.planes_activos",
+    );
     expect(planes?.valor).toBe(4); // 3 Aprobada + 1 En producción
   });
 
   it("riesgos: no genera indicador de liquidación/quiebre cuando el conteo es 0, aunque disponible=true", () => {
     const entradas = entradasVacias();
     entradas.riesgos.disponible = true;
-    const riesgos = construirIndicadoresGerenciales(entradas).filter((i) => i.categoria === "riesgos");
+    const riesgos = construirIndicadoresGerenciales(entradas).filter(
+      (i) => i.categoria === "riesgos",
+    );
     expect(riesgos).toHaveLength(0);
   });
 
@@ -97,7 +149,15 @@ describe("construirIndicadoresGerenciales", () => {
     const entradas = entradasVacias();
     entradas.finanzas.valorVencido = 1;
     entradas.finanzas.totalCxP = 1;
-    const RUTAS_VALIDAS = ["/analitica", "/facturas", "/proveedores", "/inventario", "/plan-produccion", "/solicitudes-compra", "/toma-fisica"];
+    const RUTAS_VALIDAS = [
+      "/analitica",
+      "/facturas",
+      "/proveedores",
+      "/inventario",
+      "/plan-produccion",
+      "/solicitudes-compra",
+      "/toma-fisica",
+    ];
     for (const i of construirIndicadoresGerenciales(entradas)) {
       if (i.accion) expect(RUTAS_VALIDAS).toContain(i.accion.ruta);
     }

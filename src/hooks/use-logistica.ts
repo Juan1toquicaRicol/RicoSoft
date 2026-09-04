@@ -33,8 +33,8 @@ export function useCumplimientoLogistico(filtro: FiltroCumplimiento = {}) {
       const qs = params.toString();
       const data = await fetchAuth(`/logistica/cumplimiento${qs ? `?${qs}` : ""}`);
       setCumplimiento(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el cumplimiento logístico.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el cumplimiento logístico.");
     } finally {
       setLoading(false);
     }
@@ -84,8 +84,8 @@ export function useNovedadesAbiertas() {
     try {
       const data = await fetchAuth("/logistica/novedades-abiertas");
       setResumen(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las novedades abiertas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las novedades abiertas.");
     } finally {
       setLoading(false);
     }

@@ -77,7 +77,9 @@ export function calcularProduccionRecomendadaSiesa(
     if (!e || !e.esVendible) continue;
 
     const factorTendencia =
-      p.tendenciaPct === null ? 1 : clamp(1 + p.tendenciaPct / 100, TENDENCIA_MIN_FACTOR, TENDENCIA_MAX_FACTOR);
+      p.tendenciaPct === null
+        ? 1
+        : clamp(1 + p.tendenciaPct / 100, TENDENCIA_MIN_FACTOR, TENDENCIA_MAX_FACTOR);
     const demandaProyectada = Math.max(0, p.ventaPromedioMensual * factorTendencia);
 
     const produccionRecomendada = Math.max(

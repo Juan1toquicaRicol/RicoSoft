@@ -46,8 +46,10 @@ export function useSiesaSync() {
       setHistorial(items);
       const enCurso = items.find((i) => ESTADOS_ACTIVOS.includes(i.estado));
       setActiva(enCurso ?? null);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el historial de sincronizaciones.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error cargando el historial de sincronizaciones.",
+      );
     } finally {
       setLoading(false);
     }

@@ -2,10 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
 export type EstadoDisponibilidadComercial =
-  | "disponible"
-  | "requiere_produccion"
-  | "requiere_produccion_y_compra"
-  | "requiere_compra_directa";
+  "disponible" | "requiere_produccion" | "requiere_produccion_y_compra" | "requiere_compra_directa";
 
 export interface NecesidadCompraDisponibilidad {
   componenteRowId: number;
@@ -44,21 +41,26 @@ export function useDisponibilidadComercial() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const consultar = useCallback(async (itemRowId: number, cantidad: number): Promise<RespuestaDisponibilidad> => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await fetchAuth(
-        `/ventas/disponibilidad?itemRowId=${encodeURIComponent(itemRowId)}&cantidad=${encodeURIComponent(cantidad)}`,
-      );
-      return data;
-    } catch (err: any) {
-      setError(err.message || "Error consultando la disponibilidad comercial.");
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const consultar = useCallback(
+    async (itemRowId: number, cantidad: number): Promise<RespuestaDisponibilidad> => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await fetchAuth(
+          `/ventas/disponibilidad?itemRowId=${encodeURIComponent(itemRowId)}&cantidad=${encodeURIComponent(cantidad)}`,
+        );
+        return data;
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Error consultando la disponibilidad comercial.",
+        );
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   return { consultar, loading, error };
 }
@@ -95,7 +97,11 @@ export interface CentroComercial {
     cantidad: number | null;
     unidadMedida: string | null;
     motivo: string;
-    detalle: { diasCobertura?: number | null; ventaPromedioMensual?: number; cantidadExistente?: number };
+    detalle: {
+      diasCobertura?: number | null;
+      ventaPromedioMensual?: number;
+      cantidadExistente?: number;
+    };
     accion: { tipo: string; itemRowId: number; descripcion: string | null; cantidad?: number };
   }[];
   clientesInactivos?: ClienteEnRiesgo[];
@@ -116,8 +122,8 @@ export function useCentroComercial() {
     try {
       const data = await fetchAuth("/ventas/centro");
       setCentro(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el Centro Comercial.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el Centro Comercial.");
     } finally {
       setLoading(false);
     }
@@ -153,18 +159,25 @@ export function useHistoricoComprasCliente() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const consultar = useCallback(async (clienteRowId: number): Promise<RespuestaHistoricoCliente> => {
-    setLoading(true);
-    setError("");
-    try {
-      return await fetchAuth(`/ventas/clientes/${clienteRowId}/historico`);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el histórico de compras del cliente.");
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const consultar = useCallback(
+    async (clienteRowId: number): Promise<RespuestaHistoricoCliente> => {
+      setLoading(true);
+      setError("");
+      try {
+        return await fetchAuth(`/ventas/clientes/${clienteRowId}/historico`);
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Error cargando el histórico de compras del cliente.",
+        );
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   return { consultar, loading, error };
 }

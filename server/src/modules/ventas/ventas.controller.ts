@@ -1,7 +1,10 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
-import { leerExistenciasSiesa, buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import {
+  leerExistenciasSiesa,
+  buscarItemsSiesa,
+} from "../integraciones-siesa/siesa-inventario.service";
 import { leerListaMaterialesSiesa } from "../integraciones-siesa/siesa-manufactura.service";
 import {
   leerActividadMensualClientesSiesa,
@@ -22,7 +25,10 @@ import {
 } from "./ventas.schemas";
 
 async function resolverCiaSiesa(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
   return tenant?.siesaCiaId ?? null;
 }
 
@@ -108,7 +114,12 @@ export const obtenerCentroComercial = async (req: AuthenticatedRequest, res: Res
       leerUltimaCompraClientesSiesa(siesaCiaId, desdeUltimaCompra),
     ]);
 
-    const riesgoComercial = calcularClientesEnRiesgoSiesa(actividad, actividadKilos, ultimasCompras, ahora);
+    const riesgoComercial = calcularClientesEnRiesgoSiesa(
+      actividad,
+      actividadKilos,
+      ultimasCompras,
+      ahora,
+    );
     const productosEnRiesgoQuiebre = contexto.decisiones.filter((d) => d.tipo === "riesgo_quiebre");
 
     return res.json({
@@ -142,7 +153,10 @@ export const buscarProductosVenta = async (req: AuthenticatedRequest, res: Respo
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   if (!siesaCiaId) {
-    return res.json({ disponible: false, motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
   }
 
   try {
@@ -150,7 +164,10 @@ export const buscarProductosVenta = async (req: AuthenticatedRequest, res: Respo
     return res.json({ disponible: true, items });
   } catch (error) {
     console.error("Error al buscar productos en Siesa:", error);
-    return res.json({ disponible: false, motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 };
 
@@ -173,7 +190,10 @@ export const obtenerContextoProducto = async (req: AuthenticatedRequest, res: Re
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   if (!siesaCiaId) {
-    return res.json({ disponible: false, motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
   }
 
   const ahora = new Date();
@@ -187,9 +207,12 @@ export const obtenerContextoProducto = async (req: AuthenticatedRequest, res: Re
     ]);
 
     const item = existencias.find((e) => e.itemRowId === parseo.data.itemRowId);
-    const costoUnitario = item && item.cantidadExistente > 0 ? item.valorTotal / item.cantidadExistente : null;
-    const precioPromedioVenta = precio.cantidadTotal > 0 ? precio.netoTotal / precio.cantidadTotal : null;
-    const costoPromedioVenta = precio.cantidadTotal > 0 ? precio.costoTotal / precio.cantidadTotal : null;
+    const costoUnitario =
+      item && item.cantidadExistente > 0 ? item.valorTotal / item.cantidadExistente : null;
+    const precioPromedioVenta =
+      precio.cantidadTotal > 0 ? precio.netoTotal / precio.cantidadTotal : null;
+    const costoPromedioVenta =
+      precio.cantidadTotal > 0 ? precio.costoTotal / precio.cantidadTotal : null;
     const margenPromedioPct =
       precioPromedioVenta !== null && costoPromedioVenta !== null && precioPromedioVenta > 0
         ? Math.round(((precioPromedioVenta - costoPromedioVenta) / precioPromedioVenta) * 1000) / 10
@@ -210,7 +233,10 @@ export const obtenerContextoProducto = async (req: AuthenticatedRequest, res: Re
     });
   } catch (error) {
     console.error("Error al calcular el contexto del producto desde Siesa:", error);
-    return res.json({ disponible: false, motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 };
 

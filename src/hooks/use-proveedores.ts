@@ -65,8 +65,8 @@ export function useProveedores() {
       setTotal(data.total ?? 0);
       setTotalPages(data.totalPages ?? 1);
       setPage(data.page ?? 1);
-    } catch (err: any) {
-      setError(err.message || "Error cargando proveedores.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando proveedores.");
     } finally {
       setLoading(false);
     }

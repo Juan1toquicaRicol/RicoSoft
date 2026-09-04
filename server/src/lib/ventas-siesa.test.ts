@@ -266,7 +266,12 @@ describe("calcularClientesEnRiesgoSiesa", () => {
     mes: number,
     neto: number,
   ): ActividadMensualClienteSiesa => ({ clienteRowId, clienteNombre, anio, mes, neto });
-  const kg = (clienteRowId: number, anio: number, mes: number, kilos: number): ActividadMensualKilosClienteSiesa => ({
+  const kg = (
+    clienteRowId: number,
+    anio: number,
+    mes: number,
+    kilos: number,
+  ): ActividadMensualKilosClienteSiesa => ({
     clienteRowId,
     anio,
     mes,
@@ -280,7 +285,13 @@ describe("calcularClientesEnRiesgoSiesa", () => {
     ];
     const r = calcularClientesEnRiesgoSiesa(actividad, [], [], ahora);
     expect(r.caidasClientesTop).toEqual([
-      { clienteRowId: 1, clienteNombre: "Cliente Top", netoUltimoMes: 600, netoMesAnterior: 1000, caidaPct: 40 },
+      {
+        clienteRowId: 1,
+        clienteNombre: "Cliente Top",
+        netoUltimoMes: 600,
+        netoMesAnterior: 1000,
+        caidaPct: 40,
+      },
     ]);
   });
 
@@ -321,7 +332,10 @@ describe("calcularClientesEnRiesgoSiesa", () => {
   });
 
   it("sube la severidad a 'alta' cuando la inactividad supera 90 días", () => {
-    const actividad = [act(2, "Cliente Recurrente", 2026, 7, 500), act(2, "Cliente Recurrente", 2026, 6, 500)];
+    const actividad = [
+      act(2, "Cliente Recurrente", 2026, 7, 500),
+      act(2, "Cliente Recurrente", 2026, 6, 500),
+    ];
     const ultimas: UltimaCompraClienteSiesa[] = [
       { clienteRowId: 2, ultimaCompra: new Date(Date.UTC(2026, 4, 1)) }, // hace >90 días
     ];
@@ -339,7 +353,10 @@ describe("calcularClientesEnRiesgoSiesa", () => {
   });
 
   it("NO reporta inactividad cuando es de 45 días o menos", () => {
-    const actividad = [act(2, "Cliente Recurrente", 2026, 7, 500), act(2, "Cliente Recurrente", 2026, 6, 500)];
+    const actividad = [
+      act(2, "Cliente Recurrente", 2026, 7, 500),
+      act(2, "Cliente Recurrente", 2026, 6, 500),
+    ];
     const ultimas: UltimaCompraClienteSiesa[] = [
       { clienteRowId: 2, ultimaCompra: new Date(Date.UTC(2026, 7, 20)) }, // hace 21 días
     ];
@@ -354,7 +371,10 @@ describe("calcularClientesEnRiesgoSiesa", () => {
   });
 
   it("cuando un cliente inactivo no tiene kilos registrados, promedioMensualKilos y kilosEstimadosPerdidos son 0", () => {
-    const actividad = [act(2, "Solo Facturación", 2026, 7, 500), act(2, "Solo Facturación", 2026, 6, 500)];
+    const actividad = [
+      act(2, "Solo Facturación", 2026, 7, 500),
+      act(2, "Solo Facturación", 2026, 6, 500),
+    ];
     const ultimas: UltimaCompraClienteSiesa[] = [
       { clienteRowId: 2, ultimaCompra: new Date(Date.UTC(2026, 6, 1)) },
     ];

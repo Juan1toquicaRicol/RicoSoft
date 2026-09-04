@@ -26,7 +26,9 @@ describe.skipIf(!RUN)("Pagos — sobrepago, atomicidad y concurrencia (A-02/M-09
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };

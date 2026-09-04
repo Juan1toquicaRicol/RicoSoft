@@ -2,7 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useCentroComercial } from "@/hooks/use-ventas";
 import { useOportunidadComercial } from "@/hooks/use-oportunidades";
 import { money } from "@/lib/data";
@@ -206,7 +213,10 @@ function ComercialClientesPage() {
                 </ul>
               )}
               <div className="border-t border-slate-200 px-5 py-3">
-                <Link to="/oportunidades" className="text-xs font-semibold text-blue-700 hover:underline">
+                <Link
+                  to="/oportunidades"
+                  className="text-xs font-semibold text-blue-700 hover:underline"
+                >
                   Ver detalle completo por producto
                 </Link>
               </div>

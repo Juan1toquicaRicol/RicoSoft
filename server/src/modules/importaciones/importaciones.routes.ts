@@ -62,7 +62,11 @@ router.post(
   validarBody(crearOrdenCompraIntlSchema),
   crearOrdenCompraIntl,
 );
-router.delete("/:id", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_ELIMINAR), anularOrdenCompraIntl);
+router.delete(
+  "/:id",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_ELIMINAR),
+  anularOrdenCompraIntl,
+);
 
 router.post(
   "/:id/lotes",

@@ -78,7 +78,9 @@ export function NotificationBell() {
             >
               <div className="flex items-center gap-1.5">
                 {!n.leida && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-700" />}
-                <span className={cn("text-xs text-slate-800", !n.leida ? "font-bold" : "font-semibold")}>
+                <span
+                  className={cn("text-xs text-slate-800", !n.leida ? "font-bold" : "font-semibold")}
+                >
                   {n.titulo}
                 </span>
               </div>

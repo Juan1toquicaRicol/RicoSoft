@@ -89,8 +89,8 @@ export function useSeguimientoOportunidad(clienteRowId: number | null) {
     try {
       const data = await fetchAuth(`/oportunidades/${clienteRowId}/seguimientos`);
       setTimeline(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el seguimiento comercial.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el seguimiento comercial.");
     } finally {
       setLoading(false);
     }
@@ -127,8 +127,8 @@ export function useProximosSeguimientos() {
     try {
       const data = await fetchAuth("/oportunidades/seguimientos/pendientes");
       setPendientes(data.pendientes ?? []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los próximos seguimientos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los próximos seguimientos.");
     } finally {
       setLoading(false);
     }
@@ -176,8 +176,8 @@ export function useOportunidadComercial() {
     try {
       const data = await fetchAuth("/inventario/oportunidad-comercial");
       setOportunidad(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la oportunidad comercial.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la oportunidad comercial.");
     } finally {
       setLoading(false);
     }

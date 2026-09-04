@@ -1,9 +1,12 @@
 import { z } from "zod";
 
-const textoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
+const textoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
 const numero = z.union([z.number(), z.string()]);
 
-const itemOrdenSchema = z.object({
+export const itemOrdenSchema = z.object({
   descripcion: z.string(textoObligatorio("La descripción del ítem es obligatoria.")),
   subpartidaArancelariaId: z.string().uuid().nullish(),
   cantidad: numero,

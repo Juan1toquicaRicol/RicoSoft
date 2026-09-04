@@ -34,7 +34,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -51,13 +53,34 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
     tenantBId = tenantB.id;
 
     const adminA = await prisma.user.create({
-      data: { tenantId: tenantAId, email: `desp-admin-a-${sufijo}@test.ricosoft.local`, passwordHash, nombre: "Admin A", isSuperadmin: true, activo: true },
+      data: {
+        tenantId: tenantAId,
+        email: `desp-admin-a-${sufijo}@test.ricosoft.local`,
+        passwordHash,
+        nombre: "Admin A",
+        isSuperadmin: true,
+        activo: true,
+      },
     });
     await prisma.user.create({
-      data: { tenantId: tenantAId, email: `desp-sinpermiso-a-${sufijo}@test.ricosoft.local`, passwordHash, nombre: "Sin Permiso A", isSuperadmin: false, activo: true },
+      data: {
+        tenantId: tenantAId,
+        email: `desp-sinpermiso-a-${sufijo}@test.ricosoft.local`,
+        passwordHash,
+        nombre: "Sin Permiso A",
+        isSuperadmin: false,
+        activo: true,
+      },
     });
     const adminB = await prisma.user.create({
-      data: { tenantId: tenantBId, email: `desp-admin-b-${sufijo}@test.ricosoft.local`, passwordHash, nombre: "Admin B", isSuperadmin: true, activo: true },
+      data: {
+        tenantId: tenantBId,
+        email: `desp-admin-b-${sufijo}@test.ricosoft.local`,
+        passwordHash,
+        nombre: "Admin B",
+        isSuperadmin: true,
+        activo: true,
+      },
     });
 
     tokenAdminA = await login(`desp-admin-a-${sufijo}@test.ricosoft.local`);
@@ -73,7 +96,16 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
         valorPedido: 1_000_000,
         responsableId: adminA.id,
         responsable: "Admin A",
-        lineas: { create: [{ itemRowId: 1, descripcion: "Producto X", cantidadSolicitada: 100, unidadMedida: "KG" }] },
+        lineas: {
+          create: [
+            {
+              itemRowId: 1,
+              descripcion: "Producto X",
+              cantidadSolicitada: 100,
+              unidadMedida: "KG",
+            },
+          ],
+        },
       },
     });
     despachoAId = despachoA.id;
@@ -87,7 +119,16 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
         valorPedido: 500_000,
         responsableId: adminB.id,
         responsable: "Admin B",
-        lineas: { create: [{ itemRowId: 2, descripcion: "Producto Y", cantidadSolicitada: 50, unidadMedida: "UNID" }] },
+        lineas: {
+          create: [
+            {
+              itemRowId: 2,
+              descripcion: "Producto Y",
+              cantidadSolicitada: 50,
+              unidadMedida: "UNID",
+            },
+          ],
+        },
       },
     });
     despachoBId = despachoB.id;
@@ -95,7 +136,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
 
   afterAll(async () => {
     const tenantIds = [tenantAId, tenantBId];
-    await prisma.despachoNovedad.deleteMany({ where: { despacho: { tenantId: { in: tenantIds } } } });
+    await prisma.despachoNovedad.deleteMany({
+      where: { despacho: { tenantId: { in: tenantIds } } },
+    });
     await prisma.despachoLinea.deleteMany({ where: { despacho: { tenantId: { in: tenantIds } } } });
     await prisma.despacho.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -144,8 +187,14 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
 
   it("exige los campos requeridos por la transición (CARGANDO sin vehículo/conductor se rechaza)", async () => {
     // Avanza hasta PENDIENTE_CARGUE primero.
-    await request(app).patch(`/api/despachos/${despachoAId}/estado`).set("Authorization", `Bearer ${tokenAdminA}`).send({ estado: "PREPARADO" });
-    await request(app).patch(`/api/despachos/${despachoAId}/estado`).set("Authorization", `Bearer ${tokenAdminA}`).send({ estado: "PENDIENTE_CARGUE" });
+    await request(app)
+      .patch(`/api/despachos/${despachoAId}/estado`)
+      .set("Authorization", `Bearer ${tokenAdminA}`)
+      .send({ estado: "PREPARADO" });
+    await request(app)
+      .patch(`/api/despachos/${despachoAId}/estado`)
+      .set("Authorization", `Bearer ${tokenAdminA}`)
+      .send({ estado: "PENDIENTE_CARGUE" });
 
     const sinDatos = await request(app)
       .patch(`/api/despachos/${despachoAId}/estado`)
@@ -163,7 +212,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
   });
 
   it("registra el historial de transiciones vía Auditoria — visible en el detalle del despacho", async () => {
-    const detalle = await request(app).get(`/api/despachos/${despachoAId}`).set("Authorization", `Bearer ${tokenAdminA}`);
+    const detalle = await request(app)
+      .get(`/api/despachos/${despachoAId}`)
+      .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(detalle.status).toBe(200);
     expect(detalle.body.eventos.length).toBeGreaterThanOrEqual(3); // PREPARANDO, PREPARADO, PENDIENTE_CARGUE, CARGANDO
     expect(detalle.body.eventos.some((e: any) => e.accion === "ESTADO_CARGANDO")).toBe(true);
@@ -193,7 +244,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
   });
 
   it("Tenant A NUNCA puede ver ni modificar el despacho de Tenant B (aislamiento verificado también contra Prisma base)", async () => {
-    const detalle = await request(app).get(`/api/despachos/${despachoBId}`).set("Authorization", `Bearer ${tokenAdminA}`);
+    const detalle = await request(app)
+      .get(`/api/despachos/${despachoBId}`)
+      .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(detalle.status).toBe(404);
 
     const cambioEstado = await request(app)
@@ -208,7 +261,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
       .send({ tipo: "OTRA", descripcion: "intento cross-tenant" });
     expect(novedad.status).toBe(404);
 
-    const listado = await request(app).get("/api/despachos").set("Authorization", `Bearer ${tokenAdminA}`);
+    const listado = await request(app)
+      .get("/api/despachos")
+      .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(listado.status).toBe(200);
     expect(listado.body.items.some((d: any) => d.id === despachoBId)).toBe(false);
 

@@ -17,7 +17,8 @@ export const Route = createFileRoute("/logistica/cumplimiento")({
       { title: "Cumplimiento logístico | RicoSoft" },
       {
         name: "description",
-        content: "OTIF: % de despachos entregados a tiempo, calculado sobre datos reales del tenant.",
+        content:
+          "OTIF: % de despachos entregados a tiempo, calculado sobre datos reales del tenant.",
       },
     ],
   }),
@@ -118,8 +119,8 @@ function CumplimientoLogisticoPage() {
 
       <p className="mt-6 text-[11px] text-slate-400">
         OTIF mide únicamente "a tiempo" (fecha real ≤ fecha estimada). No mide "en full" (cantidad
-        completa por línea) — esa comparación requiere un umbral de negocio todavía no definido
-        (ver Fase 2.1 del Motor de Decisiones).
+        completa por línea) — esa comparación requiere un umbral de negocio todavía no definido (ver
+        Fase 2.1 del Motor de Decisiones).
       </p>
     </AppShell>
   );

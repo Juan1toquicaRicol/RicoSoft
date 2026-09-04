@@ -336,7 +336,8 @@ export function calcularClientesEnRiesgoSiesa(
 
     const kilosPorMes = kilosPorCliente.get(c.rowId);
     const promedioMensualNeto =
-      mesesActivos.reduce((acc, m) => acc + (c.porMes.get(claveMes(m)) ?? 0), 0) / mesesActivos.length;
+      mesesActivos.reduce((acc, m) => acc + (c.porMes.get(claveMes(m)) ?? 0), 0) /
+      mesesActivos.length;
     const mesesConKilos = mesesActivos.filter((m) => (kilosPorMes?.get(claveMes(m)) ?? 0) > 0);
     const promedioMensualKilos =
       mesesConKilos.length > 0
@@ -358,7 +359,10 @@ export function calcularClientesEnRiesgoSiesa(
   }
 
   const totalVentaEnRiesgo = todosLosInactivos.reduce((acc, c) => acc + c.ventaEstimadaPerdida, 0);
-  const totalKilosEnRiesgo = todosLosInactivos.reduce((acc, c) => acc + c.kilosEstimadosPerdidos, 0);
+  const totalKilosEnRiesgo = todosLosInactivos.reduce(
+    (acc, c) => acc + c.kilosEstimadosPerdidos,
+    0,
+  );
   const clientesInactivos = [...todosLosInactivos]
     .sort((a, b) => b.ventaEstimadaPerdida - a.ventaEstimadaPerdida)
     .slice(0, 8);

@@ -15,7 +15,10 @@ import {
 import { calcularPronosticoDemandaSiesa } from "../../lib/demanda-siesa";
 import { calcularProduccionRecomendadaSiesa } from "../../lib/produccion-siesa";
 import { calcularOportunidadComercialSiesa } from "../../lib/oportunidad-comercial-siesa";
-import { calcularResumenCoberturaSiesa, UMBRALES_COBERTURA_DEFECTO } from "../../lib/cobertura-siesa";
+import {
+  calcularResumenCoberturaSiesa,
+  UMBRALES_COBERTURA_DEFECTO,
+} from "../../lib/cobertura-siesa";
 import { calcularNecesidadesAbastecimientoSiesa } from "../../lib/abastecimiento-siesa";
 import { construirDecisionesPlaneacion } from "../../domain/planeacion/decisiones";
 import { calcularVentanasDemanda } from "../../domain/planeacion/demanda";
@@ -48,7 +51,10 @@ async function obtenerUmbralesInventario(req: AuthenticatedRequest, tenantId: st
         }
       : UMBRALES_COBERTURA_DEFECTO,
     inventarioObjetivo: config
-      ? { coberturaObjetivoDias: config.coberturaObjetivoDias, factorSeguridad: config.factorSeguridad }
+      ? {
+          coberturaObjetivoDias: config.coberturaObjetivoDias,
+          factorSeguridad: config.factorSeguridad,
+        }
       : UMBRALES_INVENTARIO_OBJETIVO_DEFECTO,
   };
 }
@@ -308,7 +314,11 @@ export const obtenerAbastecimientoGerencial = async (req: AuthenticatedRequest, 
     ]);
     const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
     const produccionRecomendada = calcularProduccionRecomendadaSiesa(pronostico.todos, existencias);
-    const necesidades = calcularNecesidadesAbastecimientoSiesa(produccionRecomendada, bom, existencias);
+    const necesidades = calcularNecesidadesAbastecimientoSiesa(
+      produccionRecomendada,
+      bom,
+      existencias,
+    );
     return res.json({ disponible: true, necesidades });
   } catch (error) {
     console.error("Error al calcular las necesidades de abastecimiento desde Siesa:", error);
@@ -346,15 +356,16 @@ export async function construirContextoPlaneacionSiesa(
   const desde90d = new Date(ahora.getTime() - 90 * 24 * 60 * 60 * 1000);
   const desde180d = new Date(ahora.getTime() - 180 * 24 * 60 * 60 * 1000);
 
-  const [ventasMensuales, existencias, bom, umbrales, ventas30d, ventas90d, ventas180d] = await Promise.all([
-    leerVentasMensualesPorProductoSiesa(siesaCiaId, desde),
-    leerExistenciasSiesa(siesaCiaId),
-    leerListaMaterialesSiesa(siesaCiaId),
-    obtenerUmbralesInventario(req, tenantId),
-    leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde30d, ahora),
-    leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde90d, ahora),
-    leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde180d, ahora),
-  ]);
+  const [ventasMensuales, existencias, bom, umbrales, ventas30d, ventas90d, ventas180d] =
+    await Promise.all([
+      leerVentasMensualesPorProductoSiesa(siesaCiaId, desde),
+      leerExistenciasSiesa(siesaCiaId),
+      leerListaMaterialesSiesa(siesaCiaId),
+      obtenerUmbralesInventario(req, tenantId),
+      leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde30d, ahora),
+      leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde90d, ahora),
+      leerVentasPorProductoEnRangoSiesa(siesaCiaId, desde180d, ahora),
+    ]);
 
   const resumenInventario = calcularResumenInventarioSiesa(existencias, ahora, umbrales.inventario);
   const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
@@ -364,14 +375,27 @@ export async function construirContextoPlaneacionSiesa(
     bom,
     existencias,
   );
-  const { riesgoRuptura } = calcularResumenCoberturaSiesa(existencias, pronostico.todos, umbrales.cobertura);
+  const { riesgoRuptura } = calcularResumenCoberturaSiesa(
+    existencias,
+    pronostico.todos,
+    umbrales.cobertura,
+  );
 
   // Fase 3/6 (Fase H): ventanas móviles de venta real (30/90/180 días) +
   // inventario objetivo derivado — enriquecen las decisiones con más
   // contexto, sin reemplazar el pronóstico mensual de 12 meses ya usado.
-  const ventanasDemanda = calcularVentanasDemanda(ventas30d, ventas90d, ventas180d, pronostico.todos);
+  const ventanasDemanda = calcularVentanasDemanda(
+    ventas30d,
+    ventas90d,
+    ventas180d,
+    pronostico.todos,
+  );
   const stockPorItem = new Map(existencias.map((e) => [e.itemRowId, e.cantidadExistente]));
-  const inventarioObjetivo = calcularInventarioObjetivo(ventanasDemanda, stockPorItem, umbrales.inventarioObjetivo);
+  const inventarioObjetivo = calcularInventarioObjetivo(
+    ventanasDemanda,
+    stockPorItem,
+    umbrales.inventarioObjetivo,
+  );
 
   const { decisiones, resumen } = construirDecisionesPlaneacion({
     resumenInventario,

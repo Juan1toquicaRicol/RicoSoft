@@ -1,10 +1,11 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { Contrato, Prisma } from "@prisma/client";
 
 const ESTADOS_VALIDOS = ["Activo", "Vencido", "Terminado", "En Renovación"];
 
-function serializar(c: any) {
+function serializar(c: Contrato) {
   return { ...c, valorContratado: Number(c.valorContratado) };
 }
 
@@ -12,7 +13,7 @@ export const listarContratos = async (req: AuthenticatedRequest, res: Response) 
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId, estado, search, page } = req.query;
-    const where: any = { tenantId, eliminado: false };
+    const where: Prisma.ContratoWhereInput = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && ESTADOS_VALIDOS.includes(estado)) where.estado = estado;
     if (typeof search === "string" && search.trim()) {

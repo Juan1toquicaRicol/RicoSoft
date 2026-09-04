@@ -1,11 +1,20 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 const PERIODICIDADES_VALIDAS = ["Mensual", "Anual", "Trimestral"];
 const MONEDAS_VALIDAS = ["COP", "USD"];
 
-function serializar(s: any) {
+const INCLUDE_SERVICIO = {
+  contratoRel: { select: { id: true, proveedor: true } },
+};
+
+type ServicioConContrato = Prisma.ServicioSuscripcionGetPayload<{
+  include: typeof INCLUDE_SERVICIO;
+}>;
+
+function serializar(s: ServicioConContrato) {
   return {
     ...s,
     costo: Number(s.costo),
@@ -15,15 +24,11 @@ function serializar(s: any) {
   };
 }
 
-const INCLUDE_SERVICIO = {
-  contratoRel: { select: { id: true, proveedor: true } },
-};
-
 export const listarServicios = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId, estado, search, page } = req.query;
-    const where: any = { tenantId, eliminado: false };
+    const where: Prisma.ServicioSuscripcionWhereInput = { tenantId, eliminado: false };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
     if (typeof estado === "string" && estado) where.estado = estado;
     if (typeof search === "string" && search.trim()) {

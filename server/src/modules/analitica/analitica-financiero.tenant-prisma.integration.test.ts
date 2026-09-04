@@ -15,6 +15,10 @@ import { prisma } from "../../config/prisma";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
+interface SaldoProveedorDto {
+  proveedorId: string;
+}
+
 describe.skipIf(!RUN)(
   "Bloque 3 — Cuentas por pagar y resumen financiero (multi-tenant real)",
   () => {
@@ -216,15 +220,15 @@ describe.skipIf(!RUN)(
       expect(res.body.totalPendiente).toBe(160000);
 
       const proveedorA = res.body.saldoPorProveedor.find(
-        (p: any) => p.proveedorId === proveedorAId,
+        (p: SaldoProveedorDto) => p.proveedorId === proveedorAId,
       );
       expect(proveedorA?.saldo).toBe(160000);
       expect(proveedorA?.facturas).toBe(2);
 
       // Nunca debe aparecer nada del proveedor/factura de Tenant B.
-      expect(res.body.saldoPorProveedor.some((p: any) => p.proveedorId === proveedorBId)).toBe(
-        false,
-      );
+      expect(
+        res.body.saldoPorProveedor.some((p: SaldoProveedorDto) => p.proveedorId === proveedorBId),
+      ).toBe(false);
     });
 
     it("cuentas-por-pagar: Tenant B ve únicamente su propia obligación vencida", async () => {
@@ -234,9 +238,9 @@ describe.skipIf(!RUN)(
       expect(res.status).toBe(200);
       expect(res.body.totalFacturas).toBe(1);
       expect(res.body.valorVencido).toBe(999999);
-      expect(res.body.saldoPorProveedor.some((p: any) => p.proveedorId === proveedorAId)).toBe(
-        false,
-      );
+      expect(
+        res.body.saldoPorProveedor.some((p: SaldoProveedorDto) => p.proveedorId === proveedorAId),
+      ).toBe(false);
     });
 
     it("resumen-financiero de proveedor: agrega facturas y pagos correctamente para el proveedor propio", async () => {

@@ -19,7 +19,9 @@ describe("rutas protegidas", () => {
   });
 
   it("rechaza con 403 un token inválido", async () => {
-    const res = await request(app).get("/api/usuarios").set("Authorization", "Bearer token-invalido");
+    const res = await request(app)
+      .get("/api/usuarios")
+      .set("Authorization", "Bearer token-invalido");
     expect(res.status).toBe(403);
   });
 });

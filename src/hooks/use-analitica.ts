@@ -147,8 +147,8 @@ export function useVentasGerencial(filtro: FiltroRangoVentas = {}) {
       const qs = params.toString();
       const data = await fetchAuth(`/analitica/ventas${qs ? `?${qs}` : ""}`);
       setVentas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las ventas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las ventas.");
     } finally {
       setLoading(false);
     }
@@ -225,8 +225,8 @@ export function useVentasPorVendedor() {
     try {
       const data = await fetchAuth("/analitica/ventas/vendedores");
       setDatos(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las ventas por vendedor.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las ventas por vendedor.");
     } finally {
       setLoading(false);
     }
@@ -275,8 +275,8 @@ export function useClientesVenta(filtro: FiltroRangoVentas & { limite?: number }
       setDisponible(data.disponible);
       setMotivo(data.motivo);
       setClientes(data.clientes ?? []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando ventas por cliente.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando ventas por cliente.");
     } finally {
       setLoading(false);
     }
@@ -354,8 +354,8 @@ export function useHistoricoVentas(filtros: HistoricoVentasFiltros, enabled = tr
       setItems(data.items ?? []);
       setTotal(data.total ?? 0);
       setTotalPages(data.totalPages ?? 1);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el histórico de ventas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el histórico de ventas.");
     } finally {
       setLoading(false);
     }
@@ -373,7 +373,6 @@ export function useHistoricoVentas(filtros: HistoricoVentasFiltros, enabled = tr
 
   useEffect(() => {
     if (enabled) refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh, enabled]);
 
   return { disponible, motivo, items, total, totalPages, loading, error, refresh };
@@ -391,8 +390,8 @@ export function useResumenGerencial() {
     try {
       const data = await fetchAuth("/analitica/resumen-gerencial");
       setResumen(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el resumen gerencial.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el resumen gerencial.");
     } finally {
       setLoading(false);
     }
@@ -430,8 +429,8 @@ export function useAnalitica() {
     try {
       const data = await fetchAuth("/analitica/resumen");
       setResumen(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la analítica.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la analítica.");
     } finally {
       setLoading(false);
     }

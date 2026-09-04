@@ -65,8 +65,8 @@ function PermisosConfigPage() {
       toast.success(`Permiso "${form.codigo}" creado.`);
       setForm(FORM_INICIAL);
       setCreando(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al crear el permiso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al crear el permiso.");
     } finally {
       setGuardando(false);
     }
@@ -85,8 +85,8 @@ function PermisosConfigPage() {
       await actualizarPermiso(editando.id, formEdicion);
       toast.success("Permiso actualizado.");
       setEditando(null);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el permiso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el permiso.");
     } finally {
       setGuardando(false);
     }
@@ -95,8 +95,8 @@ function PermisosConfigPage() {
   const handleToggleActivo = async (p: PermisoCatalogo) => {
     try {
       await actualizarPermiso(p.id, { activo: !p.activo });
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el permiso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el permiso.");
     }
   };
 
@@ -107,8 +107,8 @@ function PermisosConfigPage() {
       await eliminarPermiso(aEliminar.id);
       toast.success(`Permiso "${aEliminar.codigo}" eliminado.`);
       setAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar el permiso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar el permiso.");
     } finally {
       setEliminando(false);
     }

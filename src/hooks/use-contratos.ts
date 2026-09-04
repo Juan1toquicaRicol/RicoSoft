@@ -61,8 +61,8 @@ export function useContratos(filtros: ContratosFiltros = {}) {
         setTotal(data.total ?? 0);
         setTotalPages(data.totalPages ?? 1);
       }
-    } catch (err: any) {
-      setError(err.message || "Error cargando contratos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando contratos.");
     } finally {
       setLoading(false);
     }

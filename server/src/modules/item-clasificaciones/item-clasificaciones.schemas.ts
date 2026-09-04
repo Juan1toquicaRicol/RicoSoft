@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const textoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
+const textoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
 
 export const crearClasificacionSchema = z.object({
   codigo: z.string(textoObligatorio("El código es obligatorio.")).trim().min(1).max(50),

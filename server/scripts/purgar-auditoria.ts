@@ -41,7 +41,9 @@ async function main() {
   }
 
   const resultado = await prisma.auditoria.deleteMany({ where: { createdAt: { lt: limite } } });
-  console.log(`Eliminados ${resultado.count} registro(s) de auditoría anteriores a ${limite.toISOString()}.`);
+  console.log(
+    `Eliminados ${resultado.count} registro(s) de auditoría anteriores a ${limite.toISOString()}.`,
+  );
 }
 
 main()

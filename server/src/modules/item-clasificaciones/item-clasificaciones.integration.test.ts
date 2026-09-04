@@ -30,7 +30,9 @@ describe.skipIf(!RUN)("Clasificación funcional de ítems (multi-tenant real)", 
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -84,8 +86,12 @@ describe.skipIf(!RUN)("Clasificación funcional de ítems (multi-tenant real)", 
   });
 
   afterAll(async () => {
-    await prisma.itemClasificacionAsignada.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
-    await prisma.clasificacionFuncionalItem.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
+    await prisma.itemClasificacionAsignada.deleteMany({
+      where: { tenantId: { in: [tenantAId, tenantBId] } },
+    });
+    await prisma.clasificacionFuncionalItem.deleteMany({
+      where: { tenantId: { in: [tenantAId, tenantBId] } },
+    });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: [tenantAId, tenantBId] } } });
     await prisma.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
@@ -98,7 +104,13 @@ describe.skipIf(!RUN)("Clasificación funcional de ítems (multi-tenant real)", 
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
     const codigos = res.body.map((c: { codigo: string }) => c.codigo).sort();
-    expect(codigos).toEqual(["COMERCIAL", "EXPORTACION", "IMPORTACION", "INVENTARIO", "PRODUCCION"]);
+    expect(codigos).toEqual([
+      "COMERCIAL",
+      "EXPORTACION",
+      "IMPORTACION",
+      "INVENTARIO",
+      "PRODUCCION",
+    ]);
   });
 
   it("2. crea una clasificación nueva", async () => {
@@ -136,7 +148,9 @@ describe.skipIf(!RUN)("Clasificación funcional de ítems (multi-tenant real)", 
     expect(res.status).toBe(200);
     expect(res.body.activo).toBe(false);
 
-    const persiste = await prisma.clasificacionFuncionalItem.findUnique({ where: { id: creada.body.id } });
+    const persiste = await prisma.clasificacionFuncionalItem.findUnique({
+      where: { id: creada.body.id },
+    });
     expect(persiste).not.toBeNull();
   });
 
@@ -202,7 +216,11 @@ describe.skipIf(!RUN)("Clasificación funcional de ítems (multi-tenant real)", 
     const res = await request(app)
       .post("/api/item-clasificaciones/asignacion-masiva")
       .set("Authorization", `Bearer ${tokenAdminA}`)
-      .send({ itemRowIds: [910001, 910002, 910003], clasificacionId: c1.body.id, accion: "asignar" });
+      .send({
+        itemRowIds: [910001, 910002, 910003],
+        clasificacionId: c1.body.id,
+        accion: "asignar",
+      });
     expect(res.status).toBe(200);
     expect(res.body.afectados).toBe(3);
 

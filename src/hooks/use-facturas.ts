@@ -44,8 +44,8 @@ export function useFacturas(filtros: FacturasFiltros = {}) {
           setTotal(data.total ?? 0);
           setTotalPages(data.totalPages ?? 1);
         }
-      } catch (err: any) {
-        setError(err.message || "Error cargando facturas.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Error cargando facturas.");
       } finally {
         if (!opciones.silencioso) setLoading(false);
       }
@@ -199,8 +199,8 @@ export function useFacturasPorServicio(servicioId: string | undefined, limite = 
     try {
       const data = await fetchAuth(`/facturas?servicioId=${servicioId}&limit=${limite}`);
       setFacturas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las facturas del servicio.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las facturas del servicio.");
     } finally {
       setLoading(false);
     }
@@ -233,8 +233,8 @@ export function useFacturasPorSolicitud(solicitudCompraId: string | undefined) {
     try {
       const data = await fetchAuth(`/facturas?solicitudCompraId=${solicitudCompraId}`);
       setFacturas(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las facturas relacionadas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las facturas relacionadas.");
     } finally {
       setLoading(false);
     }

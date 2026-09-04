@@ -7,7 +7,11 @@ import { prisma } from "../config/prisma";
 // TENANT pertenece un dominio — eso vive en Tenant.dominioCorporativo (ver
 // obtenerTenantPorDominio más abajo); esta lista solo dice "es un dominio
 // corporativo reconocido", sin decidir la empresa.
-export const DOMINIOS_PERMITIDOS = ["ricol.com.co", "flexipackdecolombia.com", "greesolutions.com.co"];
+export const DOMINIOS_PERMITIDOS = [
+  "ricol.com.co",
+  "flexipackdecolombia.com",
+  "greesolutions.com.co",
+];
 
 export function esDominioCorporativoValido(correo: string): boolean {
   const dominio = correo.trim().toLowerCase().split("@")[1];

@@ -18,6 +18,10 @@ import { prisma } from "../config/prisma";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
+interface ConIdDto {
+  id: string;
+}
+
 describe.skipIf(!RUN)(
   "Alcance GENERAL/TENANT — Departamentos, Roles, Módulos (multi-tenant real)",
   () => {
@@ -121,12 +125,12 @@ describe.skipIf(!RUN)(
         const desdeA = await request(app)
           .get("/api/departamentos")
           .set("Authorization", `Bearer ${tokenA}`);
-        expect(desdeA.body.some((d: any) => d.id === crear.body.id)).toBe(true);
+        expect(desdeA.body.some((d: ConIdDto) => d.id === crear.body.id)).toBe(true);
 
         const desdeB = await request(app)
           .get("/api/departamentos")
           .set("Authorization", `Bearer ${tokenB}`);
-        expect(desdeB.body.some((d: any) => d.id === crear.body.id)).toBe(true);
+        expect(desdeB.body.some((d: ConIdDto) => d.id === crear.body.id)).toBe(true);
       });
 
       it("4-6. un departamento exclusivo de Tenant A no es visible desde Tenant B", async () => {
@@ -139,12 +143,12 @@ describe.skipIf(!RUN)(
         const desdeA = await request(app)
           .get("/api/departamentos")
           .set("Authorization", `Bearer ${tokenA}`);
-        expect(desdeA.body.some((d: any) => d.id === crear.body.id)).toBe(true);
+        expect(desdeA.body.some((d: ConIdDto) => d.id === crear.body.id)).toBe(true);
 
         const desdeB = await request(app)
           .get("/api/departamentos")
           .set("Authorization", `Bearer ${tokenB}`);
-        expect(desdeB.body.some((d: any) => d.id === crear.body.id)).toBe(false);
+        expect(desdeB.body.some((d: ConIdDto) => d.id === crear.body.id)).toBe(false);
 
         // 7. Intentar editarlo/asignarlo desde Tenant B -> 404 (IDOR)
         const editarDesdeB = await request(app)
@@ -196,7 +200,7 @@ describe.skipIf(!RUN)(
         const desdeB = await request(app)
           .get("/api/roles")
           .set("Authorization", `Bearer ${tokenB}`);
-        expect(desdeB.body.some((r: any) => r.id === crear.body.id)).toBe(true);
+        expect(desdeB.body.some((r: ConIdDto) => r.id === crear.body.id)).toBe(true);
       });
 
       it("12-14. un rol exclusivo de Tenant A no se puede asignar a una membresía de Tenant B", async () => {

@@ -23,8 +23,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const TODAS = "__todas__";
 const SIN_CLASIFICAR = "__sin_clasificar__";
@@ -139,8 +152,15 @@ function PanelClasificaciones({
   clasificaciones: ClasificacionFuncionalItem[];
   loading: boolean;
   puedeEditar: boolean;
-  crearClasificacion: (data: { codigo: string; nombre: string; descripcion?: string }) => Promise<unknown>;
-  actualizarClasificacion: (id: string, data: { nombre?: string; descripcion?: string }) => Promise<void>;
+  crearClasificacion: (data: {
+    codigo: string;
+    nombre: string;
+    descripcion?: string;
+  }) => Promise<unknown>;
+  actualizarClasificacion: (
+    id: string,
+    data: { nombre?: string; descripcion?: string },
+  ) => Promise<void>;
   cambiarActivo: (id: string, activo: boolean) => Promise<void>;
 }) {
   const [creando, setCreando] = useState(false);
@@ -158,8 +178,8 @@ function PanelClasificaciones({
       toast.success(`Clasificación "${nueva.nombre}" creada.`);
       setNueva({ codigo: "", nombre: "", descripcion: "" });
       setCreando(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al crear la clasificación.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al crear la clasificación.");
     } finally {
       setGuardando(false);
     }
@@ -177,16 +197,16 @@ function PanelClasificaciones({
       await actualizarClasificacion(editando.id, formEdicion);
       toast.success("Clasificación actualizada.");
       setEditando(null);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar la clasificación.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar la clasificación.");
     }
   };
 
   const handleToggleActivo = async (c: ClasificacionFuncionalItem) => {
     try {
       await cambiarActivo(c.id, !c.activo);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar la clasificación.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar la clasificación.");
     }
   };
 
@@ -261,7 +281,10 @@ function PanelClasificaciones({
                         Activa
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-transparent bg-slate-900 text-white">
+                      <Badge
+                        variant="outline"
+                        className="border-transparent bg-slate-900 text-white"
+                      >
                         Inactiva
                       </Badge>
                     )}
@@ -386,7 +409,10 @@ function PanelItems({
     refresh({
       search,
       page: nuevaPagina,
-      clasificacionId: filtroClasificacion !== TODAS && filtroClasificacion !== SIN_CLASIFICAR ? filtroClasificacion : undefined,
+      clasificacionId:
+        filtroClasificacion !== TODAS && filtroClasificacion !== SIN_CLASIFICAR
+          ? filtroClasificacion
+          : undefined,
       sinClasificar: filtroClasificacion === SIN_CLASIFICAR,
     });
   };
@@ -410,13 +436,17 @@ function PanelItems({
     if (!clasificacionMasiva || seleccion.size === 0) return;
     setAplicandoMasiva(true);
     try {
-      const resultado = await asignacionMasiva(Array.from(seleccion), clasificacionMasiva, "asignar");
+      const resultado = await asignacionMasiva(
+        Array.from(seleccion),
+        clasificacionMasiva,
+        "asignar",
+      );
       toast.success(resultado.mensaje);
       setSeleccion(new Set());
       setClasificacionMasiva("");
       await refresh({ search, page });
-    } catch (err: any) {
-      toast.error(err.message || "Error al aplicar la clasificación masiva.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al aplicar la clasificación masiva.");
     } finally {
       setAplicandoMasiva(false);
     }
@@ -460,7 +490,9 @@ function PanelItems({
 
       {puedeEditar && seleccion.size > 0 && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-blue-800 font-medium">{seleccion.size} ítem(s) seleccionados</span>
+          <span className="text-sm text-blue-800 font-medium">
+            {seleccion.size} ítem(s) seleccionados
+          </span>
           <Select value={clasificacionMasiva} onValueChange={setClasificacionMasiva}>
             <SelectTrigger className="w-56 bg-white h-8 text-xs">
               <SelectValue placeholder="Asignar clasificación..." />
@@ -513,7 +545,10 @@ function PanelItems({
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={puedeEditar ? 5 : 4} className="text-center text-slate-500 py-6">
+                <TableCell
+                  colSpan={puedeEditar ? 5 : 4}
+                  className="text-center text-slate-500 py-6"
+                >
                   {loading ? "Cargando ítems..." : "No se encontraron ítems con estos filtros."}
                 </TableCell>
               </TableRow>
@@ -538,7 +573,10 @@ function PanelItems({
                   <TableCell className="text-slate-800">{it.descripcion || "—"}</TableCell>
                   <TableCell>
                     {it.clasificaciones.length === 0 ? (
-                      <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-500">
+                      <Badge
+                        variant="outline"
+                        className="border-slate-200 bg-slate-50 text-slate-500"
+                      >
                         Sin clasificar
                       </Badge>
                     ) : (

@@ -36,9 +36,15 @@ export const Route = createFileRoute("/reglas")({
   head: () => ({
     meta: [
       { title: "Motor de reglas | RicoSoft" },
-      { name: "description", content: "Constructor visual de reglas SI/ENTONCES para enrutar y priorizar facturas." },
+      {
+        name: "description",
+        content: "Constructor visual de reglas SI/ENTONCES para enrutar y priorizar facturas.",
+      },
       { property: "og:title", content: "Motor de reglas | RicoSoft" },
-      { property: "og:description", content: "Automatiza la distribución de facturas según proveedor, monto o contrato." },
+      {
+        property: "og:description",
+        content: "Automatiza la distribución de facturas según proveedor, monto o contrato.",
+      },
     ],
   }),
   component: Reglas,
@@ -60,8 +66,8 @@ function Reglas() {
       await eliminarRegla(reglaAEliminar.id);
       toast.success(`Regla "${reglaAEliminar.nombre}" eliminada.`);
       setReglaAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar la regla.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar la regla.");
     } finally {
       setEliminando(false);
     }
@@ -77,8 +83,8 @@ function Reglas() {
         condiciones: [form.condicion],
         acciones: [form.accion],
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al crear la regla.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al crear la regla.");
       return;
     }
     setModalOpen(false);
@@ -114,7 +120,11 @@ function Reglas() {
                 <Switch
                   checked={r.activa}
                   onCheckedChange={() =>
-                    toggleActiva(r).catch((err: any) => toast.error(err.message || "Error al actualizar la regla."))
+                    toggleActiva(r).catch((err: unknown) =>
+                      toast.error(
+                        err instanceof Error ? err.message : "Error al actualizar la regla.",
+                      ),
+                    )
                   }
                   aria-label={`Activar ${r.nombre}`}
                 />
@@ -133,7 +143,9 @@ function Reglas() {
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Si</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Si
+                </p>
                 <ul className="mt-2 space-y-1.5">
                   {r.condiciones.map((c) => (
                     <li key={c} className="text-sm text-slate-800">
@@ -146,7 +158,9 @@ function Reglas() {
                 <ArrowRight className="h-4 w-4 text-slate-400" />
               </div>
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-800">Entonces</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-800">
+                  Entonces
+                </p>
                 <ul className="mt-2 space-y-1.5">
                   {r.acciones.map((a) => (
                     <li key={a} className="text-sm text-slate-800">
@@ -183,8 +197,12 @@ function Reglas() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">Nueva regla de enrutamiento</DialogTitle>
-            <DialogDescription className="text-slate-500">Define una condición y la acción a ejecutar cuando se cumpla.</DialogDescription>
+            <DialogTitle className="text-slate-900 font-bold">
+              Nueva regla de enrutamiento
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Define una condición y la acción a ejecutar cuando se cumpla.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-2">
             <div className="space-y-1">
@@ -251,7 +269,10 @@ function Reglas() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!reglaAEliminar} onOpenChange={(open) => !open && setReglaAEliminar(null)}>
+      <AlertDialog
+        open={!!reglaAEliminar}
+        onOpenChange={(open) => !open && setReglaAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar la regla "{reglaAEliminar?.nombre}"?</AlertDialogTitle>

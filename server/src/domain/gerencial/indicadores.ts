@@ -12,7 +12,8 @@
  * demanda), el indicador correspondiente se omite o marca
  * calidadDatos:"BAJA" — nunca se sintetiza un número.
  */
-export type CategoriaIndicador = "finanzas" | "ventas" | "inventario" | "produccion" | "compras" | "riesgos";
+export type CategoriaIndicador =
+  "finanzas" | "ventas" | "inventario" | "produccion" | "compras" | "riesgos";
 export type NivelIndicador = "critico" | "alto" | "medio" | "bajo" | "informativo";
 export type TendenciaIndicador = "subida" | "bajada" | "estable" | "sin_datos";
 export type UnidadIndicador = "COP" | "unidades" | "dias" | "%" | "conteo";
@@ -303,7 +304,8 @@ function indicadoresProduccion(e: EntradaProduccion): IndicadorGerencial[] {
     },
   ];
 
-  const planesActivos = (e.planesPorEstado["Aprobada"] ?? 0) + (e.planesPorEstado["En producción"] ?? 0);
+  const planesActivos =
+    (e.planesPorEstado["Aprobada"] ?? 0) + (e.planesPorEstado["En producción"] ?? 0);
   indicadores.push({
     id: "produccion.planes_activos",
     categoria: "produccion",
@@ -453,7 +455,9 @@ function indicadoresRiesgos(e: EntradaRiesgos): IndicadorGerencial[] {
  * ya calculadas por los módulos existentes. Función pura — sin I/O — para
  * poder probarla con datos fabricados.
  */
-export function construirIndicadoresGerenciales(entradas: EntradasCentroGerencial): IndicadorGerencial[] {
+export function construirIndicadoresGerenciales(
+  entradas: EntradasCentroGerencial,
+): IndicadorGerencial[] {
   return [
     ...indicadoresFinanzas(entradas.finanzas),
     ...indicadoresVentas(entradas.ventas),
@@ -472,7 +476,14 @@ export interface ResumenPorCategoria {
 }
 
 export function resumirPorCategoria(indicadores: IndicadorGerencial[]): ResumenPorCategoria[] {
-  const categorias: CategoriaIndicador[] = ["finanzas", "ventas", "inventario", "produccion", "compras", "riesgos"];
+  const categorias: CategoriaIndicador[] = [
+    "finanzas",
+    "ventas",
+    "inventario",
+    "produccion",
+    "compras",
+    "riesgos",
+  ];
   return categorias.map((categoria) => {
     const grupo = indicadores.filter((i) => i.categoria === categoria);
     return {

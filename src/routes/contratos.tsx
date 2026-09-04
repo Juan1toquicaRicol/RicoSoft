@@ -125,8 +125,8 @@ function Contratos() {
       await eliminarContrato(contratoAEliminar.id);
       toast.success(`Contrato con "${contratoAEliminar.proveedor}" eliminado.`);
       setContratoAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar el contrato.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar el contrato.");
     } finally {
       setEliminando(false);
     }
@@ -172,8 +172,8 @@ function Contratos() {
     if (!form.proveedorId || !form.responsableId) return;
     try {
       await addContrato(form);
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el contrato.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el contrato.");
       return;
     }
     setModalOpen(false);

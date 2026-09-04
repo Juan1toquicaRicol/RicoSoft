@@ -37,8 +37,8 @@ export function usePermisosCatalogo() {
     try {
       const data = await fetchAuth("/permisos");
       setPermisos(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el catálogo de permisos.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el catálogo de permisos.");
     } finally {
       setLoading(false);
     }

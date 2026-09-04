@@ -14,7 +14,10 @@ export const Route = createFileRoute("/bandeja")({
   head: () => ({
     meta: [
       { title: "Bandeja de Aprobación | RicoSoft" },
-      { name: "description", content: "Bandeja de entrada para revisar y aprobar facturas asignadas." },
+      {
+        name: "description",
+        content: "Bandeja de entrada para revisar y aprobar facturas asignadas.",
+      },
     ],
   }),
   component: Bandeja,
@@ -62,7 +65,9 @@ function Bandeja() {
               onClick={() => setCarpeta(c.key)}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
-                carpeta === c.key ? "bg-blue-50 text-blue-800 border border-blue-100" : "text-slate-500 hover:bg-slate-100",
+                carpeta === c.key
+                  ? "bg-blue-50 text-blue-800 border border-blue-100"
+                  : "text-slate-500 hover:bg-slate-100",
               )}
             >
               <c.icon className="h-4 w-4 shrink-0" />
@@ -83,14 +88,18 @@ function Bandeja() {
                 <div className="flex min-w-0 items-center gap-2">
                   <p className="truncate text-sm font-bold text-slate-900">{f.proveedor}</p>
                   <span className="shrink-0 text-[11px] font-mono text-slate-500">{f.numero}</span>
-                  <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">{f.empresaId}</span>
+                  <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                    {f.empresaId}
+                  </span>
                 </div>
                 <p className="mt-1 truncate text-xs text-slate-500">
                   {f.area} · responsable: {f.responsable} · vence {f.vence}
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5 sm:ml-auto">
-                <span className="num text-sm font-bold text-slate-900">{money(f.total, f.moneda)}</span>
+                <span className="num text-sm font-bold text-slate-900">
+                  {money(f.total, f.moneda)}
+                </span>
                 <EstadoBadge estado={f.estado} />
               </div>
             </Link>

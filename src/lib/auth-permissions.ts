@@ -126,6 +126,11 @@ export const PERMISOS_SISTEMA = {
   VENTAS_VER: "ventas.ver",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
+  OBJETIVOS_VER: "objetivos.ver",
+  OBJETIVOS_CREAR: "objetivos.crear",
+  OBJETIVOS_EDITAR: "objetivos.editar",
+  OBJETIVOS_ELIMINAR: "objetivos.eliminar",
+  OBJETIVOS_ASIGNAR: "objetivos.asignar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -153,7 +158,8 @@ export interface PermisoDefinicion {
     | "Integraciones"
     | "Inventario"
     | "Ventas"
-    | "Despachos";
+    | "Despachos"
+    | "Objetivos";
   nombre: string;
   descripcion: string;
 }
@@ -700,7 +706,8 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.GESTION_LIQUIDACION_GESTIONAR,
     modulo: "Inventario",
     nombre: "Gestionar liquidación",
-    descripcion: "Permite crear gestiones de liquidación y avanzar su estado (aprobar, rechazar, ejecutar).",
+    descripcion:
+      "Permite crear gestiones de liquidación y avanzar su estado (aprobar, rechazar, ejecutar).",
   },
   {
     id: PERMISOS_SISTEMA.VENTAS_VER,
@@ -713,7 +720,8 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.DESPACHOS_VER,
     modulo: "Despachos",
     nombre: "Ver despachos",
-    descripcion: "Permite consultar el listado, detalle, línea de tiempo y novedades de los despachos.",
+    descripcion:
+      "Permite consultar el listado, detalle, línea de tiempo y novedades de los despachos.",
   },
   {
     id: PERMISOS_SISTEMA.DESPACHOS_GESTIONAR,
@@ -721,5 +729,37 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Gestionar despachos",
     descripcion:
       "Permite crear despachos desde una venta real de Siesa, avanzar su estado logístico, y registrar/resolver novedades.",
+  },
+  {
+    id: PERMISOS_SISTEMA.OBJETIVOS_VER,
+    modulo: "Objetivos",
+    nombre: "Ver objetivos",
+    descripcion:
+      "Permite consultar metas comerciales (empresa y por vendedor), su cumplimiento y el comparativo contra el año anterior.",
+  },
+  {
+    id: PERMISOS_SISTEMA.OBJETIVOS_CREAR,
+    modulo: "Objetivos",
+    nombre: "Crear objetivos",
+    descripcion: "Permite crear nuevas metas comerciales de empresa o de vendedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.OBJETIVOS_EDITAR,
+    modulo: "Objetivos",
+    nombre: "Editar objetivos",
+    descripcion: "Permite modificar una meta existente y cambiar su estado (activar/cancelar).",
+  },
+  {
+    id: PERMISOS_SISTEMA.OBJETIVOS_ELIMINAR,
+    modulo: "Objetivos",
+    nombre: "Eliminar objetivos",
+    descripcion: "Permite eliminar (soft-delete) una meta comercial.",
+  },
+  {
+    id: PERMISOS_SISTEMA.OBJETIVOS_ASIGNAR,
+    modulo: "Objetivos",
+    nombre: "Asignar objetivos",
+    descripcion:
+      "Permite asignar una meta individual a un vendedor desde el flujo de Centro Gerencial.",
   },
 ];

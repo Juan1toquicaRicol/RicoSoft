@@ -241,7 +241,10 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
             }
           : {}),
         ...(datosPago !== undefined
-          ? { datosPago: typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null }
+          ? {
+              datosPago:
+                typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null,
+            }
           : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
         ...(departamentoIdFinal !== undefined ? { departamentoId: departamentoIdFinal } : {}),

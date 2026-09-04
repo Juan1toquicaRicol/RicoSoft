@@ -82,7 +82,10 @@ export function calcularCapacidadProductivaSiesa(
 
       if (unidadesPosibles < capacidadMaxima) {
         capacidadMaxima = unidadesPosibles;
-        materialLimitante = { componenteRowId: c.componenteRowId, descripcion: c.descripcionComponente };
+        materialLimitante = {
+          componenteRowId: c.componenteRowId,
+          descripcion: c.descripcionComponente,
+        };
       }
     }
 

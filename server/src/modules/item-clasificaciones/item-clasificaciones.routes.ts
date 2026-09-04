@@ -45,7 +45,11 @@ router.patch(
   cambiarActivoClasificacion,
 );
 
-router.get("/items", requirePermission(PERMISOS_SISTEMA.CONFIGURACION_VER), listarItemsConClasificacion);
+router.get(
+  "/items",
+  requirePermission(PERMISOS_SISTEMA.CONFIGURACION_VER),
+  listarItemsConClasificacion,
+);
 router.get(
   "/items/:itemRowId",
   requirePermission(PERMISOS_SISTEMA.CONFIGURACION_VER),

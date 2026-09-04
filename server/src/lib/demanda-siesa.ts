@@ -94,12 +94,22 @@ export function calcularPronosticoDemandaSiesa(
 
   const porProducto = new Map<
     number,
-    { descripcion: string | null; referencia: string | null; unidadMedida: string | null; porMes: Map<string, number> }
+    {
+      descripcion: string | null;
+      referencia: string | null;
+      unidadMedida: string | null;
+      porMes: Map<string, number>;
+    }
   >();
   for (const v of ventasMensuales) {
     let p = porProducto.get(v.itemRowId);
     if (!p) {
-      p = { descripcion: v.descripcion, referencia: v.referencia, unidadMedida: v.unidadMedida, porMes: new Map() };
+      p = {
+        descripcion: v.descripcion,
+        referencia: v.referencia,
+        unidadMedida: v.unidadMedida,
+        porMes: new Map(),
+      };
       porProducto.set(v.itemRowId, p);
     }
     const clave = `${v.anio}-${v.mes}`;
@@ -132,11 +142,14 @@ export function calcularPronosticoDemandaSiesa(
         : null;
 
     const avgBaseAnterior = promedio(nueveAnteriores.map((m) => p.porMes.get(claveMes(m)) ?? 0));
-    const perdiendoRotacion = avgBaseAnterior > 0 && avgUltimos3 < avgBaseAnterior * UMBRAL_PERDIDA_ROTACION;
+    const perdiendoRotacion =
+      avgBaseAnterior > 0 && avgUltimos3 < avgBaseAnterior * UMBRAL_PERDIDA_ROTACION;
 
     const desviacion = desviacionEstandar(serie12, ventaPromedioMensual);
-    const coeficienteVariacion = ventaPromedioMensual > 0 ? desviacion / ventaPromedioMensual : null;
-    const demandaIrregular = coeficienteVariacion !== null && coeficienteVariacion > UMBRAL_VARIABILIDAD_ALTA;
+    const coeficienteVariacion =
+      ventaPromedioMensual > 0 ? desviacion / ventaPromedioMensual : null;
+    const demandaIrregular =
+      coeficienteVariacion !== null && coeficienteVariacion > UMBRAL_VARIABILIDAD_ALTA;
 
     productos.push({
       itemRowId,
@@ -162,9 +175,16 @@ export function calcularPronosticoDemandaSiesa(
     .slice(0, 15);
 
   const tendenciaFuerte = productos
-    .filter((p) => p.tendenciaPct !== null && Math.abs(p.tendenciaPct) >= UMBRAL_TENDENCIA_FUERTE_PCT)
+    .filter(
+      (p) => p.tendenciaPct !== null && Math.abs(p.tendenciaPct) >= UMBRAL_TENDENCIA_FUERTE_PCT,
+    )
     .sort((a, b) => Math.abs(b.tendenciaPct!) - Math.abs(a.tendenciaPct!))
     .slice(0, 15);
 
-  return { topDemanda, perdiendoRotacion: perdiendoRotacionLista, tendenciaFuerte, todos: productos };
+  return {
+    topDemanda,
+    perdiendoRotacion: perdiendoRotacionLista,
+    tendenciaFuerte,
+    todos: productos,
+  };
 }

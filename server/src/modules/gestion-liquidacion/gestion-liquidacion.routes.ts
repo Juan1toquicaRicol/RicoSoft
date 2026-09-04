@@ -14,6 +14,10 @@ router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("gestion_liquidacion.ver"), listarGestionesLiquidacion);
 router.post("/", requirePermission("gestion_liquidacion.gestionar"), crearGestionLiquidacion);
-router.patch("/:id/estado", requirePermission("gestion_liquidacion.gestionar"), actualizarEstadoGestionLiquidacion);
+router.patch(
+  "/:id/estado",
+  requirePermission("gestion_liquidacion.gestionar"),
+  actualizarEstadoGestionLiquidacion,
+);
 
 export default router;

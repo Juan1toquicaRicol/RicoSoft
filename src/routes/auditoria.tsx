@@ -6,8 +6,19 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  FilaGrupo,
+  OPCION_SIN_AGRUPAR,
+  SelectorAgrupacion,
+} from "@/components/ui/selector-agrupacion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { agruparFilas } from "@/lib/agrupar";
 import { fetchAuth } from "@/lib/session";
 import { History } from "lucide-react";
@@ -16,9 +27,15 @@ export const Route = createFileRoute("/auditoria")({
   head: () => ({
     meta: [
       { title: "Auditoría | RicoSoft" },
-      { name: "description", content: "Traza completa de accesos, cambios, aprobaciones y descargas del sistema." },
+      {
+        name: "description",
+        content: "Traza completa de accesos, cambios, aprobaciones y descargas del sistema.",
+      },
       { property: "og:title", content: "Auditoría | RicoSoft" },
-      { property: "og:description", content: "Registro de todas las acciones realizadas en la plataforma." },
+      {
+        property: "og:description",
+        content: "Registro de todas las acciones realizadas en la plataforma.",
+      },
     ],
   }),
   component: Auditoria,
@@ -75,15 +92,18 @@ function Auditoria() {
     }
   }, [agrupacion]);
 
-  const gruposEventos = useMemo(() => agruparFilas(eventos, claveDeAgrupacion), [eventos, claveDeAgrupacion]);
+  const gruposEventos = useMemo(
+    () => agruparFilas(eventos, claveDeAgrupacion),
+    [eventos, claveDeAgrupacion],
+  );
 
   useEffect(() => {
     (async () => {
       try {
         const data = await fetchAuth("/auditoria?pageSize=50");
         setEventos(data.data ?? []);
-      } catch (err: any) {
-        setError(err.message || "Error cargando el registro de auditoría.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Error cargando el registro de auditoría.");
       } finally {
         setLoading(false);
       }
@@ -105,17 +125,29 @@ function Auditoria() {
           <SelectorAgrupacion
             value={agrupacion}
             onChange={setAgrupacion}
-            opciones={[OPCION_SIN_AGRUPAR, { value: "accion", label: "Acción" }, { value: "usuario", label: "Usuario" }]}
+            opciones={[
+              OPCION_SIN_AGRUPAR,
+              { value: "accion", label: "Acción" },
+              { value: "usuario", label: "Usuario" },
+            ]}
           />
         </div>
         <Table>
           <TableHeader className="bg-slate-100/80">
             <TableRow className="hover:bg-slate-100/80">
               <TableHead className="w-8" />
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fecha</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Usuario</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Acción</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Detalle</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Fecha
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Usuario
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Acción
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Detalle
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
@@ -139,79 +171,98 @@ function Auditoria() {
             )}
             {gruposEventos.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={5} />}
+                {grupo.clave && (
+                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={5} />
+                )}
                 {grupo.filas.map((e) => {
-                let anteriores: Record<string, unknown> | null = null;
-                let nuevos: Record<string, unknown> | null = null;
-                try {
-                  anteriores = e.datosAnteriores ? JSON.parse(e.datosAnteriores) : null;
-                } catch {
-                  anteriores = null;
-                }
-                try {
-                  nuevos = e.datosNuevos ? JSON.parse(e.datosNuevos) : null;
-                } catch {
-                  nuevos = null;
-                }
-                const cambios = calcularCambios(anteriores, nuevos);
-                const tieneDetalleTecnico = cambios.length > 0 || (anteriores && !nuevos);
-                const abierta = expandido === e.id;
+                  let anteriores: Record<string, unknown> | null = null;
+                  let nuevos: Record<string, unknown> | null = null;
+                  try {
+                    anteriores = e.datosAnteriores ? JSON.parse(e.datosAnteriores) : null;
+                  } catch {
+                    anteriores = null;
+                  }
+                  try {
+                    nuevos = e.datosNuevos ? JSON.parse(e.datosNuevos) : null;
+                  } catch {
+                    nuevos = null;
+                  }
+                  const cambios = calcularCambios(anteriores, nuevos);
+                  const tieneDetalleTecnico = cambios.length > 0 || (anteriores && !nuevos);
+                  const abierta = expandido === e.id;
 
-                return (
-                  <Fragment key={e.id}>
-                    <TableRow
-                      className={tieneDetalleTecnico ? "cursor-pointer" : ""}
-                      onClick={() => tieneDetalleTecnico && setExpandido(abierta ? null : e.id)}
-                    >
-                      <TableCell className="px-4 py-3 text-slate-400">
-                        {tieneDetalleTecnico &&
-                          (abierta ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)}
-                      </TableCell>
-                      <TableCell className="num px-4 py-3 text-xs text-slate-500">
-                        {new Date(e.createdAt).toLocaleString("es-CO")}
-                      </TableCell>
-                      <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
-                        {e.usuario?.nombre ?? e.usuarioAfectado ?? "—"}
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-700">
-                          {e.accion}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-xs text-slate-600">{e.detalle}</TableCell>
-                    </TableRow>
-                    {abierta && tieneDetalleTecnico && (
-                      <TableRow className="bg-slate-50/60 hover:bg-slate-50/60">
-                        <TableCell />
-                        <TableCell colSpan={4} className="px-4 py-3">
-                          {cambios.length > 0 ? (
-                            <table className="text-xs">
-                              <thead>
-                                <tr className="text-left text-slate-500">
-                                  <th className="pr-6 py-1 font-bold">Campo</th>
-                                  <th className="pr-6 py-1 font-bold">Antes</th>
-                                  <th className="pr-6 py-1 font-bold">Después</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {cambios.map((c) => (
-                                  <tr key={c.campo}>
-                                    <td className="pr-6 py-1 font-mono text-slate-500">{c.campo}</td>
-                                    <td className="pr-6 py-1 text-slate-600">{formatearValor(c.antes)}</td>
-                                    <td className="pr-6 py-1 font-semibold text-slate-900">{formatearValor(c.despues)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          ) : (
-                            <p className="text-xs text-slate-500">Registro eliminado (no queda estado nuevo).</p>
-                          )}
+                  return (
+                    <Fragment key={e.id}>
+                      <TableRow
+                        className={tieneDetalleTecnico ? "cursor-pointer" : ""}
+                        onClick={() => tieneDetalleTecnico && setExpandido(abierta ? null : e.id)}
+                      >
+                        <TableCell className="px-4 py-3 text-slate-400">
+                          {tieneDetalleTecnico &&
+                            (abierta ? (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            ))}
+                        </TableCell>
+                        <TableCell className="num px-4 py-3 text-xs text-slate-500">
+                          {new Date(e.createdAt).toLocaleString("es-CO")}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
+                          {e.usuario?.nombre ?? e.usuarioAfectado ?? "—"}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className="border-slate-200 bg-slate-100 text-slate-700"
+                          >
+                            {e.accion}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-600">
+                          {e.detalle}
                         </TableCell>
                       </TableRow>
-                    )}
-                  </Fragment>
-                );
-              })}
+                      {abierta && tieneDetalleTecnico && (
+                        <TableRow className="bg-slate-50/60 hover:bg-slate-50/60">
+                          <TableCell />
+                          <TableCell colSpan={4} className="px-4 py-3">
+                            {cambios.length > 0 ? (
+                              <table className="text-xs">
+                                <thead>
+                                  <tr className="text-left text-slate-500">
+                                    <th className="pr-6 py-1 font-bold">Campo</th>
+                                    <th className="pr-6 py-1 font-bold">Antes</th>
+                                    <th className="pr-6 py-1 font-bold">Después</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cambios.map((c) => (
+                                    <tr key={c.campo}>
+                                      <td className="pr-6 py-1 font-mono text-slate-500">
+                                        {c.campo}
+                                      </td>
+                                      <td className="pr-6 py-1 text-slate-600">
+                                        {formatearValor(c.antes)}
+                                      </td>
+                                      <td className="pr-6 py-1 font-semibold text-slate-900">
+                                        {formatearValor(c.despues)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <p className="text-xs text-slate-500">
+                                Registro eliminado (no queda estado nuevo).
+                              </p>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </Fragment>
             ))}
           </TableBody>

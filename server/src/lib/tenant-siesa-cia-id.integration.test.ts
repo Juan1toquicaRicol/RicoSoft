@@ -57,14 +57,22 @@ describe.skipIf(!RUN)("Tenant.siesaCiaId — índice único filtrado (permite m�
     const ciaId = parseInt(sufijo, 16) % 1_000_000;
 
     const tenantA = await prisma.tenant.create({
-      data: { nombre: `Con Siesa A ${sufijo}`, subdomain: `con-siesa-a-${sufijo}`, siesaCiaId: ciaId },
+      data: {
+        nombre: `Con Siesa A ${sufijo}`,
+        subdomain: `con-siesa-a-${sufijo}`,
+        siesaCiaId: ciaId,
+      },
     });
     tenantIds.push(tenantA.id);
 
     let errorCapturado: unknown = null;
     try {
       const tenantB = await prisma.tenant.create({
-        data: { nombre: `Con Siesa B ${sufijo}`, subdomain: `con-siesa-b-${sufijo}`, siesaCiaId: ciaId },
+        data: {
+          nombre: `Con Siesa B ${sufijo}`,
+          subdomain: `con-siesa-b-${sufijo}`,
+          siesaCiaId: ciaId,
+        },
       });
       // Si por algún motivo NO lanzó (el fix estaría roto), igual se limpia.
       tenantIds.push(tenantB.id);

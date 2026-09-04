@@ -24,8 +24,8 @@ export function useBodegasSiesa() {
     try {
       const data = await fetchAuth("/toma-fisica/bodegas");
       setBodegas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las bodegas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las bodegas.");
     } finally {
       setLoading(false);
     }
@@ -64,8 +64,8 @@ export function useTomasFisicas() {
     try {
       const data = await fetchAuth("/toma-fisica");
       setTomas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las tomas físicas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las tomas físicas.");
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,8 @@ export function useTomaFisica(id: string | undefined) {
     try {
       const data = await fetchAuth(`/toma-fisica/${id}`);
       setDetalle(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando la toma física.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando la toma física.");
     } finally {
       setLoading(false);
     }
@@ -179,8 +179,8 @@ export function usePatronesTomaFisica() {
     try {
       const data = await fetchAuth("/toma-fisica/patrones");
       setPatrones(data.patrones ?? []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los patrones de diferencia.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los patrones de diferencia.");
     } finally {
       setLoading(false);
     }

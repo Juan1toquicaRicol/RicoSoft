@@ -58,7 +58,8 @@ function DistribucionEstados({ datos }: { datos: { etiqueta: string; valor: numb
 
 function DashboardExecutive() {
   const { resumen, loading, error } = useDashboard();
-  const { facturas, solicitudes, creditos, servicios, contratos, despachos, importaciones } = resumen;
+  const { facturas, solicitudes, creditos, servicios, contratos, despachos, importaciones } =
+    resumen;
 
   const sinAccesoAIndicadores =
     !loading &&
@@ -160,8 +161,8 @@ function DashboardExecutive() {
           <section className="space-y-3">
             <Link to="/solicitudes-compra" className="block group">
               <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 group-hover:text-blue-700">
-                <ShoppingCart className="h-4 w-4 text-slate-400 group-hover:text-blue-600" /> Solicitudes
-                de compra
+                <ShoppingCart className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />{" "}
+                Solicitudes de compra
               </h2>
             </Link>
             <Link
@@ -285,72 +286,101 @@ function DashboardExecutive() {
 
         {!loading && despachos && despachos.total > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Truck className="h-4 w-4 text-slate-400" /> Despachos
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <StatCard
-                label="En proceso"
-                value={String(despachos.enProceso)}
-                hint={`De ${despachos.total} despachos totales`}
-                icon={Truck}
-              />
-              <StatCard label="Entregados" value={String(despachos.entregados)} icon={PackageCheck} />
-              <StatCard
-                label="Novedades abiertas"
-                value={String(despachos.novedadesAbiertas)}
-                hint="Requieren gestión (faltantes, dirección, rechazo...)"
-                icon={AlertTriangle}
-                enfasis={despachos.novedadesAbiertas > 0 ? "atencion" : "default"}
-              />
-            </div>
+            <Link to="/despachos" className="block group">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 group-hover:text-blue-700">
+                <Truck className="h-4 w-4 text-slate-400 group-hover:text-blue-600" /> Despachos
+              </h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard
+                  label="En proceso"
+                  value={String(despachos.enProceso)}
+                  hint={`De ${despachos.total} despachos totales`}
+                  icon={Truck}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Entregados"
+                  value={String(despachos.entregados)}
+                  icon={PackageCheck}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Novedades abiertas"
+                  value={String(despachos.novedadesAbiertas)}
+                  hint="Requieren gestión (faltantes, dirección, rechazo...)"
+                  icon={AlertTriangle}
+                  enfasis={despachos.novedadesAbiertas > 0 ? "atencion" : "default"}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+              </div>
+            </Link>
           </section>
         )}
 
         {!loading && contratos && contratos.activos > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <FileSignature className="h-4 w-4 text-slate-400" /> Contratos de proveedores
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <StatCard label="Contratos activos" value={String(contratos.activos)} icon={FileSignature} />
-              <StatCard
-                label="Valor contratado activo"
-                value={money(contratos.valorContratadoActivo)}
-                icon={Wallet}
-              />
-              <StatCard
-                label="Próximos a vencer"
-                value={String(contratos.proximosAVencer)}
-                hint="En los próximos 30 días"
-                icon={AlertTriangle}
-                enfasis={contratos.proximosAVencer > 0 ? "atencion" : "default"}
-              />
-            </div>
+            <Link to="/contratos" className="block group">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 group-hover:text-blue-700">
+                <FileSignature className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />{" "}
+                Contratos de proveedores
+              </h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard
+                  label="Contratos activos"
+                  value={String(contratos.activos)}
+                  icon={FileSignature}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Valor contratado activo"
+                  value={money(contratos.valorContratadoActivo)}
+                  icon={Wallet}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Próximos a vencer"
+                  value={String(contratos.proximosAVencer)}
+                  hint="En los próximos 30 días"
+                  icon={AlertTriangle}
+                  enfasis={contratos.proximosAVencer > 0 ? "atencion" : "default"}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+              </div>
+            </Link>
           </section>
         )}
 
         {!loading && servicios && servicios.activos > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-slate-400" /> Servicios y suscripciones
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <StatCard label="Servicios activos" value={String(servicios.activos)} icon={Wallet} />
-              <StatCard
-                label="Costo recurrente mensual"
-                value={money(servicios.costoRecurrenteMensual)}
-                hint="Normalizado a valor mensual (anual/12, trimestral/3)"
-                icon={TrendingUp}
-              />
-              <StatCard
-                label="Próximos a renovar"
-                value={String(servicios.proximosVencimientos)}
-                hint="En los próximos 30 días"
-                icon={Clock}
-                enfasis={servicios.proximosVencimientos > 0 ? "atencion" : "default"}
-              />
-            </div>
+            <Link to="/servicios" className="block group">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 group-hover:text-blue-700">
+                <Wallet className="h-4 w-4 text-slate-400 group-hover:text-blue-600" /> Servicios y
+                suscripciones
+              </h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard
+                  label="Servicios activos"
+                  value={String(servicios.activos)}
+                  icon={Wallet}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Costo recurrente mensual"
+                  value={money(servicios.costoRecurrenteMensual)}
+                  hint="Normalizado a valor mensual (anual/12, trimestral/3)"
+                  icon={TrendingUp}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+                <StatCard
+                  label="Próximos a renovar"
+                  value={String(servicios.proximosVencimientos)}
+                  hint="En los próximos 30 días"
+                  icon={Clock}
+                  enfasis={servicios.proximosVencimientos > 0 ? "atencion" : "default"}
+                  className="cursor-pointer transition-all hover:border-blue-400"
+                />
+              </div>
+            </Link>
           </section>
         )}
 

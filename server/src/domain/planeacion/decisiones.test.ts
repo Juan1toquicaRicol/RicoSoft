@@ -43,10 +43,31 @@ describe("construirDecisionesPlaneacion", () => {
     const { decisiones, resumen } = construirDecisionesPlaneacion(
       baseParams({
         produccionRecomendada: [
-          { itemRowId: 1, descripcion: "Producto A", referencia: null, unidadMedida: "UND", demandaProyectada: 500, pedidosComprometidos: 50, inventarioDisponible: 180, cantidadPendienteEntrar: 40, produccionRecomendada: 410 },
+          {
+            itemRowId: 1,
+            descripcion: "Producto A",
+            referencia: null,
+            unidadMedida: "UND",
+            demandaProyectada: 500,
+            pedidosComprometidos: 50,
+            inventarioDisponible: 180,
+            cantidadPendienteEntrar: 40,
+            produccionRecomendada: 410,
+          },
         ],
         existencias: [
-          { itemRowId: 1, descripcion: "Producto A", referencia: null, cantidadExistente: 180, cantidadComprometida: 50, cantidadPendienteEntrar: 40, valorTotal: 1_800_000, fechaUltimaVenta: null, esVendible: true, naturaleza: "producto" },
+          {
+            itemRowId: 1,
+            descripcion: "Producto A",
+            referencia: null,
+            cantidadExistente: 180,
+            cantidadComprometida: 50,
+            cantidadPendienteEntrar: 40,
+            valorTotal: 1_800_000,
+            fechaUltimaVenta: null,
+            esVendible: true,
+            naturaleza: "producto",
+          },
         ],
       }),
     );
@@ -61,13 +82,42 @@ describe("construirDecisionesPlaneacion", () => {
     const { decisiones } = construirDecisionesPlaneacion(
       baseParams({
         produccionRecomendada: [
-          { itemRowId: 1, descripcion: "Producto A", referencia: null, unidadMedida: "UND", demandaProyectada: 400, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 400 },
+          {
+            itemRowId: 1,
+            descripcion: "Producto A",
+            referencia: null,
+            unidadMedida: "UND",
+            demandaProyectada: 400,
+            pedidosComprometidos: 0,
+            inventarioDisponible: 0,
+            cantidadPendienteEntrar: 0,
+            produccionRecomendada: 400,
+          },
         ],
         bom: [
-          { itemPadreRowId: 1, componenteRowId: 10, descripcionComponente: "Materia Y", referenciaComponente: null, cantBase: 100, cantRequerida: 100, pctDesperdicio: 0 },
+          {
+            itemPadreRowId: 1,
+            componenteRowId: 10,
+            descripcionComponente: "Materia Y",
+            referenciaComponente: null,
+            cantBase: 100,
+            cantRequerida: 100,
+            pctDesperdicio: 0,
+          },
         ],
         existencias: [
-          { itemRowId: 10, descripcion: "Materia Y", referencia: null, cantidadExistente: 250, cantidadComprometida: 0, cantidadPendienteEntrar: 0, valorTotal: 0, fechaUltimaVenta: null, esVendible: false, naturaleza: "insumo" },
+          {
+            itemRowId: 10,
+            descripcion: "Materia Y",
+            referencia: null,
+            cantidadExistente: 250,
+            cantidadComprometida: 0,
+            cantidadPendienteEntrar: 0,
+            valorTotal: 0,
+            fechaUltimaVenta: null,
+            esVendible: false,
+            naturaleza: "insumo",
+          },
         ],
       }),
     );
@@ -77,14 +127,26 @@ describe("construirDecisionesPlaneacion", () => {
     expect(d?.motivo).toContain("Materia Y");
     expect(d?.detalle.materialLimitante).toBe("Materia Y");
     expect(d?.detalle.deficitProductivo).toBe(150);
-    expect(d?.accion).toEqual({ tipo: "plan-produccion", itemRowId: 1, descripcion: "Producto A", cantidad: 250 });
+    expect(d?.accion).toEqual({
+      tipo: "plan-produccion",
+      itemRowId: 1,
+      descripcion: "Producto A",
+      cantidad: 250,
+    });
   });
 
   it("genera decisiones 'comprar' desde las necesidades de abastecimiento", () => {
     const { decisiones, resumen } = construirDecisionesPlaneacion(
       baseParams({
         necesidadesAbastecimiento: [
-          { componenteRowId: 10, descripcion: "Materia Y", referencia: null, cantidadNecesaria: 300, cantidadDisponible: 250, deficit: 50 },
+          {
+            componenteRowId: 10,
+            descripcion: "Materia Y",
+            referencia: null,
+            cantidadNecesaria: 300,
+            cantidadDisponible: 250,
+            deficit: 50,
+          },
         ],
       }),
     );
@@ -136,7 +198,15 @@ describe("construirDecisionesPlaneacion", () => {
     const { decisiones, resumen } = construirDecisionesPlaneacion(
       baseParams({
         riesgoRuptura: [
-          { itemRowId: 7, descripcion: "Producto crítico", referencia: null, unidadMedida: "UND", existenciaDisponible: 20, ventaPromedioMensual: 100, diasCobertura: 6 },
+          {
+            itemRowId: 7,
+            descripcion: "Producto crítico",
+            referencia: null,
+            unidadMedida: "UND",
+            existenciaDisponible: 20,
+            ventaPromedioMensual: 100,
+            diasCobertura: 6,
+          },
         ],
       }),
     );
@@ -149,10 +219,31 @@ describe("construirDecisionesPlaneacion", () => {
     const { decisiones } = construirDecisionesPlaneacion(
       baseParams({
         pronostico: [
-          { itemRowId: 1, descripcion: "A", referencia: null, unidadMedida: null, ventaPromedioMensual: 10, tendenciaPct: null, coeficienteVariacion: null, demandaIrregular: false, perdiendoRotacion: false, mesesConVenta: 8 },
+          {
+            itemRowId: 1,
+            descripcion: "A",
+            referencia: null,
+            unidadMedida: null,
+            ventaPromedioMensual: 10,
+            tendenciaPct: null,
+            coeficienteVariacion: null,
+            demandaIrregular: false,
+            perdiendoRotacion: false,
+            mesesConVenta: 8,
+          },
         ],
         produccionRecomendada: [
-          { itemRowId: 1, descripcion: "A", referencia: null, unidadMedida: null, demandaProyectada: 10, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 10 },
+          {
+            itemRowId: 1,
+            descripcion: "A",
+            referencia: null,
+            unidadMedida: null,
+            demandaProyectada: 10,
+            pedidosComprometidos: 0,
+            inventarioDisponible: 0,
+            cantidadPendienteEntrar: 0,
+            produccionRecomendada: 10,
+          },
         ],
       }),
     );
@@ -165,7 +256,17 @@ describe("Fase H — enriquecimiento con ventanasDemanda/inventarioObjetivo (opc
     const { decisiones } = construirDecisionesPlaneacion(
       baseParams({
         produccionRecomendada: [
-          { itemRowId: 1, descripcion: "A", referencia: null, unidadMedida: null, demandaProyectada: 10, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 10 },
+          {
+            itemRowId: 1,
+            descripcion: "A",
+            referencia: null,
+            unidadMedida: null,
+            demandaProyectada: 10,
+            pedidosComprometidos: 0,
+            inventarioDisponible: 0,
+            cantidadPendienteEntrar: 0,
+            produccionRecomendada: 10,
+          },
         ],
       }),
     );
@@ -178,13 +279,41 @@ describe("Fase H — enriquecimiento con ventanasDemanda/inventarioObjetivo (opc
     const { decisiones } = construirDecisionesPlaneacion(
       baseParams({
         produccionRecomendada: [
-          { itemRowId: 1, descripcion: "A", referencia: null, unidadMedida: null, demandaProyectada: 10, pedidosComprometidos: 0, inventarioDisponible: 0, cantidadPendienteEntrar: 0, produccionRecomendada: 10 },
+          {
+            itemRowId: 1,
+            descripcion: "A",
+            referencia: null,
+            unidadMedida: null,
+            demandaProyectada: 10,
+            pedidosComprometidos: 0,
+            inventarioDisponible: 0,
+            cantidadPendienteEntrar: 0,
+            produccionRecomendada: 10,
+          },
         ],
         ventanasDemanda: [
-          { itemRowId: 1, ventas30d: 300, ventas90d: 900, ventas180d: 1800, promedioDiario30d: 10, promedioSemanal30d: 70, promedioMensual30d: 300, mesesConVenta: 12, calidadDatos: "ALTA" },
+          {
+            itemRowId: 1,
+            ventas30d: 300,
+            ventas90d: 900,
+            ventas180d: 1800,
+            promedioDiario30d: 10,
+            promedioSemanal30d: 70,
+            promedioMensual30d: 300,
+            mesesConVenta: 12,
+            calidadDatos: "ALTA",
+          },
         ],
         inventarioObjetivo: [
-          { itemRowId: 1, stockActual: 0, stockObjetivo: 450, coberturaMeses: null, excedente: 0, deficit: 450, calidadDatos: "ALTA" },
+          {
+            itemRowId: 1,
+            stockActual: 0,
+            stockObjetivo: 450,
+            coberturaMeses: null,
+            excedente: 0,
+            deficit: 450,
+            calidadDatos: "ALTA",
+          },
         ],
       }),
     );

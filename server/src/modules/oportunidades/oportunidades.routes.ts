@@ -16,7 +16,11 @@ router.use(attachTenantPrisma);
 // GET /inventario/oportunidad-comercial (la fuente de la lista de
 // oportunidades); no se crea un permiso paralelo para esta capa ligera de
 // seguimiento.
-router.get("/seguimientos/pendientes", requirePermission("analitica.ver"), listarProximosSeguimientos);
+router.get(
+  "/seguimientos/pendientes",
+  requirePermission("analitica.ver"),
+  listarProximosSeguimientos,
+);
 router.get(
   "/:clienteRowId/seguimientos",
   requirePermission("analitica.ver"),

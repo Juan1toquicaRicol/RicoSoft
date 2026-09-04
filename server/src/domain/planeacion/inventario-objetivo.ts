@@ -48,7 +48,8 @@ export function calcularInventarioObjetivo(
 ): InventarioObjetivoItem[] {
   return ventanas.map((v) => {
     const stockActual = stockPorItem.get(v.itemRowId) ?? 0;
-    const stockObjetivo = v.promedioDiario30d * umbrales.coberturaObjetivoDias * umbrales.factorSeguridad;
+    const stockObjetivo =
+      v.promedioDiario30d * umbrales.coberturaObjetivoDias * umbrales.factorSeguridad;
     const coberturaMeses = v.promedioMensual30d > 0 ? stockActual / v.promedioMensual30d : null;
 
     return {

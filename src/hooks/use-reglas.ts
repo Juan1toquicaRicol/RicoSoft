@@ -22,8 +22,8 @@ export function useReglas() {
     try {
       const data = await fetchAuth("/reglas");
       setReglas(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando reglas.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando reglas.");
     } finally {
       setLoading(false);
     }
@@ -41,7 +41,7 @@ export function useReglas() {
           method: "PATCH",
           body: JSON.stringify({ activa: !regla.activa }),
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await refresh();
         throw err;
       }
@@ -50,7 +50,12 @@ export function useReglas() {
   );
 
   const addRegla = useCallback(
-    async (data: { nombre: string; prioridad: number; condiciones: string[]; acciones: string[] }) => {
+    async (data: {
+      nombre: string;
+      prioridad: number;
+      condiciones: string[];
+      acciones: string[];
+    }) => {
       await fetchAuth("/reglas", { method: "POST", body: JSON.stringify(data) });
       await refresh();
     },

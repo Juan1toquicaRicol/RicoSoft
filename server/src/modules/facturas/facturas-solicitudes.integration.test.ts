@@ -32,7 +32,9 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
   const login = async (email: string): Promise<string> => {
     const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
     if (res.status !== 200 || !res.body.token) {
-      throw new Error(`Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `Login de prueba falló para ${email}: ${res.status} ${JSON.stringify(res.body)}`,
+      );
     }
     return res.body.token as string;
   };
@@ -62,7 +64,11 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
     tenantBId = tenantB.id;
 
     const rolSinPermiso = await prisma.rol.create({
-      data: { tenantId: tenantAId, nombre: `Sin Permisos FacSC ${sufijo}`, permisos: JSON.stringify([]) },
+      data: {
+        tenantId: tenantAId,
+        nombre: `Sin Permisos FacSC ${sufijo}`,
+        permisos: JSON.stringify([]),
+      },
     });
 
     await prisma.user.create({
@@ -114,7 +120,9 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
   afterAll(async () => {
     const tenantIds = [tenantAId, tenantBId];
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.facturaHistorial.deleteMany({ where: { factura: { tenantId: { in: tenantIds } } } });
+    await prisma.facturaHistorial.deleteMany({
+      where: { factura: { tenantId: { in: tenantIds } } },
+    });
     await prisma.factura.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.solicitudCompra.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.proveedor.deleteMany({ where: { tenantId: { in: tenantIds } } });

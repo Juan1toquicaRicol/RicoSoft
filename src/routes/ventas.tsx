@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ChevronDown, Info, Loader2, Search, TrendingDown, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Info,
+  Loader2,
+  Search,
+  TrendingDown,
+  Users,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -45,17 +53,23 @@ export const Route = createFileRoute("/ventas")({
   component: Ventas,
 });
 
-const ESTADO_INFO: Record<
-  DisponibilidadComercial["estado"],
-  { label: string; classes: string }
-> = {
-  disponible: { label: "Disponible para venta", classes: "bg-emerald-50 border-emerald-200 text-emerald-700" },
-  requiere_produccion: { label: "Requiere producción", classes: "bg-blue-50 border-blue-200 text-blue-700" },
+const ESTADO_INFO: Record<DisponibilidadComercial["estado"], { label: string; classes: string }> = {
+  disponible: {
+    label: "Disponible para venta",
+    classes: "bg-emerald-50 border-emerald-200 text-emerald-700",
+  },
+  requiere_produccion: {
+    label: "Requiere producción",
+    classes: "bg-blue-50 border-blue-200 text-blue-700",
+  },
   requiere_produccion_y_compra: {
     label: "Requiere producción y compra",
     classes: "bg-amber-50 border-amber-200 text-amber-700",
   },
-  requiere_compra_directa: { label: "Requiere compra directa", classes: "bg-red-50 border-red-200 text-red-700" },
+  requiere_compra_directa: {
+    label: "Requiere compra directa",
+    classes: "bg-red-50 border-red-200 text-red-700",
+  },
 };
 
 /** Autocompletado de producto por descripción/referencia — busca en vivo contra el maestro de Siesa (debounce 300ms). */
@@ -90,7 +104,6 @@ function AutocompletadoProducto({
         setSugerencias(res.items ?? []);
       }
       setAbierto(true);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -100,7 +113,9 @@ function AutocompletadoProducto({
 
   return (
     <div className="relative space-y-1">
-      <Label className="text-[11px] font-semibold text-slate-500 uppercase">Referencia o producto</Label>
+      <Label className="text-[11px] font-semibold text-slate-500 uppercase">
+        Referencia o producto
+      </Label>
       {seleccionado ? (
         <div className="flex h-9 w-64 items-center justify-between rounded-md border border-slate-300 bg-slate-50 px-2 text-xs">
           <span className="truncate font-semibold text-slate-800">
@@ -162,13 +177,24 @@ function PanelContextoProducto({ contexto }: { contexto: ContextoProducto }) {
     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
         <span>
-          Costo actual: <span className="num font-semibold">{contexto.costoUnitario !== null ? money(contexto.costoUnitario ?? 0) : "sin dato"}</span>
+          Costo actual:{" "}
+          <span className="num font-semibold">
+            {contexto.costoUnitario !== null ? money(contexto.costoUnitario ?? 0) : "sin dato"}
+          </span>
         </span>
         <span>
-          Precio promedio ({contexto.ventanaPrecioDias}d): <span className="num font-semibold">{contexto.precioPromedioVenta !== null ? money(contexto.precioPromedioVenta ?? 0) : "sin ventas recientes"}</span>
+          Precio promedio ({contexto.ventanaPrecioDias}d):{" "}
+          <span className="num font-semibold">
+            {contexto.precioPromedioVenta !== null
+              ? money(contexto.precioPromedioVenta ?? 0)
+              : "sin ventas recientes"}
+          </span>
         </span>
         <span>
-          Margen promedio: <span className="num font-semibold">{contexto.margenPromedioPct !== null ? `${contexto.margenPromedioPct}%` : "—"}</span>
+          Margen promedio:{" "}
+          <span className="num font-semibold">
+            {contexto.margenPromedioPct !== null ? `${contexto.margenPromedioPct}%` : "—"}
+          </span>
         </span>
       </div>
       {(contexto.clientes ?? []).length > 0 && (
@@ -178,8 +204,13 @@ function PanelContextoProducto({ contexto }: { contexto: ContextoProducto }) {
           </p>
           <ul className="mt-1 space-y-0.5">
             {(contexto.clientes ?? []).slice(0, 5).map((c) => (
-              <li key={c.clienteRowId ?? c.clienteNombre} className="flex items-center justify-between text-[11px]">
-                <span className="min-w-0 truncate text-slate-600">{c.clienteNombre ?? "Cliente sin nombre"}</span>
+              <li
+                key={c.clienteRowId ?? c.clienteNombre}
+                className="flex items-center justify-between text-[11px]"
+              >
+                <span className="min-w-0 truncate text-slate-600">
+                  {c.clienteNombre ?? "Cliente sin nombre"}
+                </span>
                 <span className="num shrink-0 text-slate-500">{compact(c.cantidadHistorica)}</span>
               </li>
             ))}
@@ -187,7 +218,9 @@ function PanelContextoProducto({ contexto }: { contexto: ContextoProducto }) {
         </div>
       )}
       {(contexto.clientes ?? []).length === 0 && (
-        <p className="mt-2 text-[11px] text-slate-400">Sin clientes con compras recientes de este producto.</p>
+        <p className="mt-2 text-[11px] text-slate-400">
+          Sin clientes con compras recientes de este producto.
+        </p>
       )}
     </div>
   );
@@ -232,13 +265,15 @@ function PanelDisponibilidad() {
     <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
       <h2 className="text-sm font-bold text-slate-900">¿Puedo vender esto?</h2>
       <p className="text-xs text-slate-500">
-        Busca el producto, revisa costo/precio/margen y a quién se le vende, y consulta disponibilidad
-        real antes de comprometer un pedido.
+        Busca el producto, revisa costo/precio/margen y a quién se le vende, y consulta
+        disponibilidad real antes de comprometer un pedido.
       </p>
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <AutocompletadoProducto seleccionado={itemSeleccionado} onSeleccionar={handleSeleccionar} />
         <div className="space-y-1">
-          <Label className="text-[11px] font-semibold text-slate-500 uppercase">Cantidad solicitada</Label>
+          <Label className="text-[11px] font-semibold text-slate-500 uppercase">
+            Cantidad solicitada
+          </Label>
           <Input
             type="number"
             value={cantidad}
@@ -246,7 +281,11 @@ function PanelDisponibilidad() {
             className="h-9 w-40 text-xs"
           />
         </div>
-        <Button size="sm" onClick={handleConsultar} disabled={!itemSeleccionado || !cantidad || loading}>
+        <Button
+          size="sm"
+          onClick={handleConsultar}
+          disabled={!itemSeleccionado || !cantidad || loading}
+        >
           <Search className="mr-1 h-3.5 w-3.5" /> {loading ? "Consultando..." : "Consultar"}
         </Button>
       </div>
@@ -259,7 +298,9 @@ function PanelDisponibilidad() {
         <div className={cn("mt-4 rounded-lg border p-4", ESTADO_INFO[resultado.estado].classes)}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold">{resultado.descripcion ?? `Ítem ${resultado.itemRowId}`}</p>
+              <p className="text-xs font-bold">
+                {resultado.descripcion ?? `Ítem ${resultado.itemRowId}`}
+              </p>
               <p className="text-[11px] opacity-80">{resultado.referencia}</p>
             </div>
             <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold">
@@ -295,7 +336,9 @@ function PanelDisponibilidad() {
             {resultado.deficit > 0 && (
               <span>
                 Déficit:{" "}
-                <span className="num font-semibold">{formatCantidad(resultado.deficit, resultado.unidadMedida)}</span>
+                <span className="num font-semibold">
+                  {formatCantidad(resultado.deficit, resultado.unidadMedida)}
+                </span>
               </span>
             )}
             {resultado.capacidadProductiva !== null && (
@@ -308,7 +351,8 @@ function PanelDisponibilidad() {
             )}
             {resultado.materialLimitante && (
               <span>
-                Material limitante: <span className="font-semibold">{resultado.materialLimitante}</span>
+                Material limitante:{" "}
+                <span className="font-semibold">{resultado.materialLimitante}</span>
               </span>
             )}
           </div>
@@ -325,16 +369,24 @@ function PanelDisponibilidad() {
           )}
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {(resultado.estado === "requiere_produccion" || resultado.estado === "requiere_produccion_y_compra") && (
-              <Link to="/plan-produccion" className="rounded-md bg-white/80 px-3 py-1.5 text-[11px] font-bold hover:bg-white">
+            {(resultado.estado === "requiere_produccion" ||
+              resultado.estado === "requiere_produccion_y_compra") && (
+              <Link
+                to="/plan-produccion"
+                className="rounded-md bg-white/80 px-3 py-1.5 text-[11px] font-bold hover:bg-white"
+              >
                 Crear plan de producción
               </Link>
             )}
-            {(resultado.estado === "requiere_produccion_y_compra" || resultado.estado === "requiere_compra_directa") && (
+            {(resultado.estado === "requiere_produccion_y_compra" ||
+              resultado.estado === "requiere_compra_directa") && (
               <Link
                 to="/solicitudes-compra"
                 search={{
-                  item: resultado.necesidadesCompra[0]?.descripcion ?? resultado.descripcion ?? "Insumo sin descripción",
+                  item:
+                    resultado.necesidadesCompra[0]?.descripcion ??
+                    resultado.descripcion ??
+                    "Insumo sin descripción",
                   cantidad: resultado.necesidadesCompra[0]?.deficit ?? resultado.deficit,
                 }}
                 className="rounded-md bg-white/80 px-3 py-1.5 text-[11px] font-bold hover:bg-white"
@@ -385,7 +437,10 @@ function FilaClienteEnRiesgo({ cliente: c }: { cliente: ClienteEnRiesgo }) {
         </TableCell>
         <TableCell className="text-right text-xs">
           <span
-            className={cn("num font-semibold", c.severidad === "alta" ? "text-red-600" : "text-amber-600")}
+            className={cn(
+              "num font-semibold",
+              c.severidad === "alta" ? "text-red-600" : "text-amber-600",
+            )}
           >
             {c.diasInactivo} días
           </span>
@@ -412,11 +467,15 @@ function FilaClienteEnRiesgo({ cliente: c }: { cliente: ClienteEnRiesgo }) {
               </p>
             )}
             {historico && !historico.disponible && (
-              <p className="mt-2 text-xs text-slate-500">{historico.motivo ?? "Sin datos disponibles."}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {historico.motivo ?? "Sin datos disponibles."}
+              </p>
             )}
-            {historico?.disponible && (
-              (historico.productos ?? []).length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">Sin compras registradas en el período.</p>
+            {historico?.disponible &&
+              ((historico.productos ?? []).length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Sin compras registradas en el período.
+                </p>
               ) : (
                 <div className="mt-2 overflow-x-auto">
                   <Table>
@@ -455,15 +514,16 @@ function FilaClienteEnRiesgo({ cliente: c }: { cliente: ClienteEnRiesgo }) {
                             {p.numCompras}
                           </TableCell>
                           <TableCell className="text-right text-xs text-slate-500">
-                            {new Date(p.ultimaCompra).toLocaleDateString("es-CO", { timeZone: "UTC" })}
+                            {new Date(p.ultimaCompra).toLocaleDateString("es-CO", {
+                              timeZone: "UTC",
+                            })}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-              )
-            )}
+              ))}
           </TableCell>
         </TableRow>
       )}
@@ -509,19 +569,26 @@ function Ventas() {
             >
               <div className="space-y-2">
                 {(centro.productosEnRiesgoQuiebre ?? []).slice(0, 10).map((p) => (
-                  <div key={p.itemRowId} className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+                  <div
+                    key={p.itemRowId}
+                    className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2"
+                  >
                     <p className="text-xs font-bold text-orange-800">{p.titulo}</p>
                     <p className="mt-0.5 text-[11px] text-slate-600">{p.motivo}</p>
                   </div>
                 ))}
               </div>
-              <Link to="/inventario" className="mt-3 inline-block text-[11px] font-semibold text-blue-700 hover:underline">
+              <Link
+                to="/inventario"
+                className="mt-3 inline-block text-[11px] font-semibold text-blue-700 hover:underline"
+              >
                 Ver Centro de Decisiones
               </Link>
             </PanelColapsable>
           )}
 
-          {((centro.clientesInactivos ?? []).length > 0 || (centro.caidasClientesTop ?? []).length > 0) && (
+          {((centro.clientesInactivos ?? []).length > 0 ||
+            (centro.caidasClientesTop ?? []).length > 0) && (
             <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs">
               <div className="flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-red-600" />
@@ -551,7 +618,9 @@ function Ventas() {
                   <p className="num mt-1 text-xl font-bold text-amber-700">
                     {formatCantidad(centro.totalKilosEnRiesgo ?? 0, "KG")}
                   </p>
-                  <p className="mt-1 text-[11px] text-amber-600">Solo productos vendidos por kilo</p>
+                  <p className="mt-1 text-[11px] text-amber-600">
+                    Solo productos vendidos por kilo
+                  </p>
                 </div>
               </div>
 
@@ -592,7 +661,10 @@ function Ventas() {
                   <h3 className="text-xs font-bold text-slate-900">Caídas fuertes este mes</h3>
                   <ul className="mt-2 space-y-1.5">
                     {(centro.caidasClientesTop ?? []).map((c) => (
-                      <li key={c.clienteRowId ?? c.clienteNombre} className="flex items-center justify-between text-xs">
+                      <li
+                        key={c.clienteRowId ?? c.clienteNombre}
+                        className="flex items-center justify-between text-xs"
+                      >
                         <span className="min-w-0 truncate text-slate-700">
                           {c.clienteNombre ?? "Cliente sin nombre"}
                         </span>
@@ -607,12 +679,13 @@ function Ventas() {
             </div>
           )}
 
-          {(centro.productosEnRiesgoQuiebre ?? []).length === 0 && (centro.clientesInactivos ?? []).length === 0 && (
-            <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
-              Nada urgente que atender hoy — sin productos en riesgo de quiebre ni clientes inactivos
-              recientes.
-            </div>
-          )}
+          {(centro.productosEnRiesgoQuiebre ?? []).length === 0 &&
+            (centro.clientesInactivos ?? []).length === 0 && (
+              <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
+                Nada urgente que atender hoy — sin productos en riesgo de quiebre ni clientes
+                inactivos recientes.
+              </div>
+            )}
 
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />

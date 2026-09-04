@@ -13,27 +13,27 @@ async function main() {
 
   const { recordset: tablas } = await pool
     .request()
-    .query(
+    .query<{ TABLE_NAME: string }>(
       `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME`,
     );
 
   const patron =
     /venta|factura|invoice|pedido|order|remis|kardex|movim|nota_?credito|nota_?debito|linea|detalle|item|vendedor|seller/i;
-  const candidatas = tablas.filter((t: any) => patron.test(t.TABLE_NAME));
+  const candidatas = tablas.filter((t) => patron.test(t.TABLE_NAME));
 
   console.log(
     `\n📋 ${candidatas.length} tablas candidatas a ventas de ${tablas.length} totales:\n`,
   );
-  candidatas.forEach((t: any) => console.log(`  - ${t.TABLE_NAME}`));
+  candidatas.forEach((t) => console.log(`  - ${t.TABLE_NAME}`));
 
   if (tableFilter) {
     console.log(`\n🔍 Columnas de ${tableFilter}:\n`);
     const { recordset: columnas } = await pool
       .request()
-      .query(
+      .query<{ COLUMN_NAME: string; DATA_TYPE: string }>(
         `SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='${tableFilter}' ORDER BY ORDINAL_POSITION`,
       );
-    columnas.forEach((c: any) => console.log(`  - ${c.COLUMN_NAME} (${c.DATA_TYPE})`));
+    columnas.forEach((c) => console.log(`  - ${c.COLUMN_NAME} (${c.DATA_TYPE})`));
 
     console.log(`\nConteo de filas:`);
     const { recordset: cnt } = await pool

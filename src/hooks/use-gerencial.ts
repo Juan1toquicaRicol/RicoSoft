@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
-export type CategoriaIndicador = "finanzas" | "ventas" | "inventario" | "produccion" | "compras" | "riesgos";
+export type CategoriaIndicador =
+  "finanzas" | "ventas" | "inventario" | "produccion" | "compras" | "riesgos";
 export type NivelIndicador = "critico" | "alto" | "medio" | "bajo" | "informativo";
 export type TendenciaIndicador = "subida" | "bajada" | "estable" | "sin_datos";
 export type UnidadIndicador = "COP" | "unidades" | "dias" | "%" | "conteo";
@@ -55,8 +56,8 @@ export function useCentroGerencial() {
     try {
       const data = await fetchAuth("/gerencial/resumen");
       setCentro(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando el Centro Gerencial.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando el Centro Gerencial.");
     } finally {
       setLoading(false);
     }

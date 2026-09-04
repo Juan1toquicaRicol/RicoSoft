@@ -4,7 +4,10 @@ import { prisma } from "../../config/prisma";
 import { obtenerObligacionesAbiertas } from "../analitica/analitica.controller";
 import { construirContextoPlaneacionSiesa } from "../inventario/inventario.controller";
 import { calcularPatronesRecurrentesTenant } from "../toma-fisica/toma-fisica.controller";
-import { leerVentasMensualesSiesa, leerTopClientesVentaSiesa } from "../integraciones-siesa/siesa-ventas.service";
+import {
+  leerVentasMensualesSiesa,
+  leerTopClientesVentaSiesa,
+} from "../integraciones-siesa/siesa-ventas.service";
 import { calcularResumenVentas } from "../../lib/ventas-siesa";
 import {
   construirIndicadoresGerenciales,
@@ -64,16 +67,24 @@ export const obtenerCentroGerencial = async (req: AuthenticatedRequest, res: Res
   const tenantId = req.user!.tenantId;
   const ahora = new Date();
 
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
 
   // Finanzas: siempre disponible (no depende de Siesa) — RicoSoft es la fuente de verdad de Factura/Pago.
-  const obligaciones = (await obtenerObligacionesAbiertas(req, tenantId)).filter((o) => o.saldo > 0);
-  const valorVencido = obligaciones.filter((o) => o.vence < ahora).reduce((acc, o) => acc + o.saldo, 0);
+  const obligaciones = (await obtenerObligacionesAbiertas(req, tenantId)).filter(
+    (o) => o.saldo > 0,
+  );
+  const valorVencido = obligaciones
+    .filter((o) => o.vence < ahora)
+    .reduce((acc, o) => acc + o.saldo, 0);
   const limite30d = new Date(ahora.getTime() + 30 * DIA_MS);
   const valorProximoAVencer = obligaciones
     .filter((o) => o.vence >= ahora && o.vence <= limite30d)
     .reduce((acc, o) => acc + o.saldo, 0);
-  const { concentracionTopProveedor, nombreTopProveedor } = calcularConcentracionTopProveedor(obligaciones);
+  const { concentracionTopProveedor, nombreTopProveedor } =
+    calcularConcentracionTopProveedor(obligaciones);
 
   const finanzas: EntradaFinanzas = {
     totalCxP: obligaciones.reduce((acc, o) => acc + o.saldo, 0),
@@ -84,14 +95,20 @@ export const obtenerCentroGerencial = async (req: AuthenticatedRequest, res: Res
   };
 
   // RicoSoft-native, siempre disponibles independientemente de Siesa.
-  const [planesPorEstadoRaw, solicitudesPendientes, cotizacionesPendientes, patronesRecurrentes] = await Promise.all([
-    req.tenantPrisma!.planProduccion.findMany({ select: { estado: true } }),
-    req.tenantPrisma!.solicitudCompra.count({ where: { estado: { in: ESTADOS_SOLICITUD_ACTIVOS }, eliminado: false } }),
-    req.tenantPrisma!.solicitudCompra.count({ where: { estado: "En Cotización", eliminado: false } }),
-    calcularPatronesRecurrentesTenant(tenantId),
-  ]);
+  const [planesPorEstadoRaw, solicitudesPendientes, cotizacionesPendientes, patronesRecurrentes] =
+    await Promise.all([
+      req.tenantPrisma!.planProduccion.findMany({ select: { estado: true } }),
+      req.tenantPrisma!.solicitudCompra.count({
+        where: { estado: { in: ESTADOS_SOLICITUD_ACTIVOS }, eliminado: false },
+      }),
+      req.tenantPrisma!.solicitudCompra.count({
+        where: { estado: "En Cotización", eliminado: false },
+      }),
+      calcularPatronesRecurrentesTenant(tenantId),
+    ]);
   const planesPorEstado: Record<string, number> = {};
-  for (const p of planesPorEstadoRaw) planesPorEstado[p.estado] = (planesPorEstado[p.estado] ?? 0) + 1;
+  for (const p of planesPorEstadoRaw)
+    planesPorEstado[p.estado] = (planesPorEstado[p.estado] ?? 0) + 1;
 
   // Todo lo que depende de Siesa (ventas, inventario, producción recomendada,
   // compras sugeridas, riesgo de quiebre) queda en disponible:false si el
@@ -106,22 +123,55 @@ export const obtenerCentroGerencial = async (req: AuthenticatedRequest, res: Res
     productosPerdiendoRotacion: 0,
     mesesHistoriaDisponibles: 0,
   };
-  let entradasSiesa: Pick<EntradasCentroGerencial, "inventario" | "produccion" | "compras" | "riesgos"> = {
-    inventario: { disponible: false, totalValor: 0, totalValorVendible: 0, totalComprometidoValor: 0, valorExceso: 0, valorObsolescencia: 0 },
-    produccion: { disponible: false, resumenProducir: { cantidad: 0, unidades: 0, impacto: 0 }, resumenNoProducir: { cantidad: 0, unidades: 0, impacto: 0 }, planesPorEstado },
-    compras: { disponible: false, resumenComprar: { cantidad: 0, unidades: 0, impacto: 0 }, solicitudesPendientes, cotizacionesPendientes },
-    riesgos: { disponible: false, resumenLiquidar: { cantidad: 0, unidades: 0, impacto: 0 }, resumenRiesgoQuiebre: { cantidad: 0, unidades: 0, impacto: 0 }, facturasVencidasCantidad: obligaciones.filter((o) => o.vence < ahora).length, patronesRecurrentesCantidad: patronesRecurrentes.length },
+  let entradasSiesa: Pick<
+    EntradasCentroGerencial,
+    "inventario" | "produccion" | "compras" | "riesgos"
+  > = {
+    inventario: {
+      disponible: false,
+      totalValor: 0,
+      totalValorVendible: 0,
+      totalComprometidoValor: 0,
+      valorExceso: 0,
+      valorObsolescencia: 0,
+    },
+    produccion: {
+      disponible: false,
+      resumenProducir: { cantidad: 0, unidades: 0, impacto: 0 },
+      resumenNoProducir: { cantidad: 0, unidades: 0, impacto: 0 },
+      planesPorEstado,
+    },
+    compras: {
+      disponible: false,
+      resumenComprar: { cantidad: 0, unidades: 0, impacto: 0 },
+      solicitudesPendientes,
+      cotizacionesPendientes,
+    },
+    riesgos: {
+      disponible: false,
+      resumenLiquidar: { cantidad: 0, unidades: 0, impacto: 0 },
+      resumenRiesgoQuiebre: { cantidad: 0, unidades: 0, impacto: 0 },
+      facturasVencidasCantidad: obligaciones.filter((o) => o.vence < ahora).length,
+      patronesRecurrentesCantidad: patronesRecurrentes.length,
+    },
   };
   let motivoSiesaNoDisponible: string | null = null;
 
   if (!tenant?.siesaCiaId) {
-    motivoSiesaNoDisponible = "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.";
+    motivoSiesaNoDisponible =
+      "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.";
   } else {
     try {
       const ahoraUtc = new Date();
-      const desdeSerieMensual = new Date(Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth() - 12, 1));
-      const inicioMesActual = new Date(Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth(), 1));
-      const inicioMesSiguiente = new Date(Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth() + 1, 1));
+      const desdeSerieMensual = new Date(
+        Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth() - 12, 1),
+      );
+      const inicioMesActual = new Date(
+        Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth(), 1),
+      );
+      const inicioMesSiguiente = new Date(
+        Date.UTC(ahoraUtc.getUTCFullYear(), ahoraUtc.getUTCMonth() + 1, 1),
+      );
 
       const [contexto, serieVentas, topClientesVenta] = await Promise.all([
         construirContextoPlaneacionSiesa(req, tenantId, tenant.siesaCiaId),
@@ -174,7 +224,8 @@ export const obtenerCentroGerencial = async (req: AuthenticatedRequest, res: Res
       };
     } catch (error) {
       console.error("Error al calcular el Centro Gerencial desde Siesa:", error);
-      motivoSiesaNoDisponible = "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.";
+      motivoSiesaNoDisponible =
+        "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.";
     }
   }
 

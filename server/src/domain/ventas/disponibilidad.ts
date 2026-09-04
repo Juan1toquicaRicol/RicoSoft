@@ -1,7 +1,10 @@
 import type { ExistenciaItemSiesa } from "../../modules/integraciones-siesa/siesa-inventario.service";
 import type { ComponenteBomSiesa } from "../../modules/integraciones-siesa/siesa-manufactura.service";
 import { calcularCapacidadProductivaSiesa } from "../planeacion/capacidad-productiva";
-import { calcularNecesidadesAbastecimientoSiesa, type NecesidadAbastecimientoSiesa } from "../../lib/abastecimiento-siesa";
+import {
+  calcularNecesidadesAbastecimientoSiesa,
+  type NecesidadAbastecimientoSiesa,
+} from "../../lib/abastecimiento-siesa";
 
 /**
  * Disponibilidad comercial — responde "¿PUEDO VENDER ESTO?" para un
@@ -24,10 +27,7 @@ import { calcularNecesidadesAbastecimientoSiesa, type NecesidadAbastecimientoSie
  *   déficit, la única vía es comprarlo.
  */
 export type EstadoDisponibilidadComercial =
-  | "disponible"
-  | "requiere_produccion"
-  | "requiere_produccion_y_compra"
-  | "requiere_compra_directa";
+  "disponible" | "requiere_produccion" | "requiere_produccion_y_compra" | "requiere_compra_directa";
 
 export interface DisponibilidadComercial {
   itemRowId: number;

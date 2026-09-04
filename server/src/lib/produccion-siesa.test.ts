@@ -55,10 +55,7 @@ describe("calcularProduccionRecomendadaSiesa", () => {
 
   it("recomienda producir cuando el stock no alcanza — ejemplo del enunciado", () => {
     // Producto Y: venta promedio 2.000, stock 600, comprometido 1.100 → 2000+1100-600 = 2500.
-    const r = calcularProduccionRecomendadaSiesa(
-      [pronostico(2, 2000)],
-      [existencia(2, 600, 1100)],
-    );
+    const r = calcularProduccionRecomendadaSiesa([pronostico(2, 2000)], [existencia(2, 600, 1100)]);
     expect(r).toHaveLength(1);
     expect(r[0].produccionRecomendada).toBe(2500);
   });
@@ -73,28 +70,19 @@ describe("calcularProduccionRecomendadaSiesa", () => {
 
   it("aplica la tendencia a la demanda proyectada, dentro del rango [-50%, +100%]", () => {
     // +30% de tendencia: 1000 * 1.3 = 1300.
-    const r = calcularProduccionRecomendadaSiesa(
-      [pronostico(1, 1000, 30)],
-      [existencia(1, 0)],
-    );
+    const r = calcularProduccionRecomendadaSiesa([pronostico(1, 1000, 30)], [existencia(1, 0)]);
     expect(r[0].demandaProyectada).toBe(1300);
   });
 
   it("limita la tendencia a +100% (no proyecta un pico atípico como la norma)", () => {
     // +500% de tendencia — se limita a factor 2.0 → 1000 * 2 = 2000, no 6000.
-    const r = calcularProduccionRecomendadaSiesa(
-      [pronostico(1, 1000, 500)],
-      [existencia(1, 0)],
-    );
+    const r = calcularProduccionRecomendadaSiesa([pronostico(1, 1000, 500)], [existencia(1, 0)]);
     expect(r[0].demandaProyectada).toBe(2000);
   });
 
   it("limita la tendencia a -50% (no proyecta demanda negativa por una caída fuerte)", () => {
     // -90% de tendencia — se limita a factor 0.5 → 1000 * 0.5 = 500.
-    const r = calcularProduccionRecomendadaSiesa(
-      [pronostico(1, 1000, -90)],
-      [existencia(1, 0)],
-    );
+    const r = calcularProduccionRecomendadaSiesa([pronostico(1, 1000, -90)], [existencia(1, 0)]);
     expect(r[0].demandaProyectada).toBe(500);
   });
 

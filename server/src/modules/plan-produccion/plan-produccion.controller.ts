@@ -1,7 +1,10 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { esTransicionValida, type EstadoPlanProduccion } from "../../lib/plan-produccion";
-import { crearPlanProduccionSchema, actualizarEstadoPlanProduccionSchema } from "./plan-produccion.schemas";
+import {
+  crearPlanProduccionSchema,
+  actualizarEstadoPlanProduccionSchema,
+} from "./plan-produccion.schemas";
 
 /** Lista los planes de producción del tenant, más recientes primero. */
 export const listarPlanesProduccion = async (req: AuthenticatedRequest, res: Response) => {
@@ -49,7 +52,10 @@ export const crearPlanProduccion = async (req: AuthenticatedRequest, res: Respon
       detalle: `${req.user!.nombre} creó un plan de producción para "${parseo.data.descripcion ?? plan.itemRowId}" (${plan.cantidadPlaneada} planeadas).`,
       entidadTipo: "PlanProduccion",
       entidadId: plan.id,
-      datosNuevos: JSON.stringify({ estado: plan.estado, cantidadPlaneada: Number(plan.cantidadPlaneada) }),
+      datosNuevos: JSON.stringify({
+        estado: plan.estado,
+        cantidadPlaneada: Number(plan.cantidadPlaneada),
+      }),
     },
   });
 

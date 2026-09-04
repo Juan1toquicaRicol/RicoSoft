@@ -2,12 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
 export type EstadoPlanProduccion =
-  | "Planificada"
-  | "Aprobada"
-  | "En producción"
-  | "Parcial"
-  | "Terminada"
-  | "Cancelada";
+  "Planificada" | "Aprobada" | "En producción" | "Parcial" | "Terminada" | "Cancelada";
 
 export interface PlanProduccion {
   id: string;
@@ -46,8 +41,8 @@ export function usePlanesProduccion() {
     try {
       const data = await fetchAuth("/plan-produccion");
       setPlanes(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los planes de producción.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los planes de producción.");
     } finally {
       setLoading(false);
     }

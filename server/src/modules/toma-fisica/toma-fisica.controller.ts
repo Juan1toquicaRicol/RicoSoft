@@ -1,7 +1,10 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
-import { leerBodegasSiesa, leerExistenciaPorBodegaSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import {
+  leerBodegasSiesa,
+  leerExistenciaPorBodegaSiesa,
+} from "../integraciones-siesa/siesa-inventario.service";
 import {
   calcularLineasTomaFisica,
   calcularResumenTomaFisica,
@@ -16,7 +19,10 @@ import { crearTomaFisicaSchema, registrarConteoSchema } from "./toma-fisica.sche
  * resuelto SIEMPRE desde el tenant autenticado, nunca del body/query).
  */
 async function resolverCiaSiesa(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
   return tenant?.siesaCiaId ?? null;
 }
 
@@ -35,14 +41,20 @@ async function buscarTomaFisicaDelTenant(tomaFisicaId: string, tenantId: string)
 export const listarBodegas = async (req: AuthenticatedRequest, res: Response) => {
   const ciaId = await resolverCiaSiesa(req.user!.tenantId);
   if (!ciaId) {
-    return res.json({ disponible: false, motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
   }
   try {
     const bodegas = await leerBodegasSiesa(ciaId);
     return res.json({ disponible: true, bodegas });
   } catch (error) {
     console.error("Error al leer bodegas desde Siesa:", error);
-    return res.json({ disponible: false, motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 };
 
@@ -73,7 +85,9 @@ export const crearTomaFisica = async (req: AuthenticatedRequest, res: Response) 
 
   const ciaId = await resolverCiaSiesa(tenantId);
   if (!ciaId) {
-    return res.status(400).json({ message: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
+    return res
+      .status(400)
+      .json({ message: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada." });
   }
 
   let bodegas;
@@ -81,11 +95,15 @@ export const crearTomaFisica = async (req: AuthenticatedRequest, res: Response) 
     bodegas = await leerBodegasSiesa(ciaId);
   } catch (error) {
     console.error("Error al leer bodegas desde Siesa:", error);
-    return res.status(502).json({ message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.status(502).json({
+      message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
   const bodega = bodegas.find((b) => b.bodegaRowId === parseo.data.bodegaRowId);
   if (!bodega) {
-    return res.status(404).json({ message: "La bodega indicada no existe en Siesa para este tenant." });
+    return res
+      .status(404)
+      .json({ message: "La bodega indicada no existe en Siesa para este tenant." });
   }
 
   let existencia;
@@ -93,7 +111,9 @@ export const crearTomaFisica = async (req: AuthenticatedRequest, res: Response) 
     existencia = await leerExistenciaPorBodegaSiesa(ciaId, bodega.bodegaRowId);
   } catch (error) {
     console.error("Error al leer existencia por bodega desde Siesa:", error);
-    return res.status(502).json({ message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde." });
+    return res.status(502).json({
+      message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
   }
 
   const toma = await prisma.tomaFisica.create({
@@ -129,7 +149,11 @@ export const crearTomaFisica = async (req: AuthenticatedRequest, res: Response) 
       detalle: `${req.user!.nombre} inició una toma física en la bodega "${bodega.nombre}" (${toma._count.lineas} referencias).`,
       entidadTipo: "TomaFisica",
       entidadId: toma.id,
-      datosNuevos: JSON.stringify({ estado: "Abierta", bodegaRowId: bodega.bodegaRowId, lineas: toma._count.lineas }),
+      datosNuevos: JSON.stringify({
+        estado: "Abierta",
+        bodegaRowId: bodega.bodegaRowId,
+        lineas: toma._count.lineas,
+      }),
     },
   });
 
@@ -169,7 +193,9 @@ export const registrarConteo = async (req: AuthenticatedRequest, res: Response) 
   const toma = await buscarTomaFisicaDelTenant(req.params.id, req.user!.tenantId);
   if (!toma) return res.status(404).json({ message: "Toma física no encontrada." });
   if (toma.estado !== "Abierta") {
-    return res.status(400).json({ message: "Esta toma física ya está cerrada; no se puede modificar el conteo." });
+    return res
+      .status(400)
+      .json({ message: "Esta toma física ya está cerrada; no se puede modificar el conteo." });
   }
 
   const parseo = registrarConteoSchema.safeParse(req.body);

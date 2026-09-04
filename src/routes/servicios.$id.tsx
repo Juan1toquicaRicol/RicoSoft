@@ -16,7 +16,14 @@ import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/data";
 import { siglaEmpresa } from "@/lib/tenant-context";
@@ -74,15 +81,17 @@ function DetalleServicio() {
       await toggleEstadoSuscripcion(servicio.id);
       await refresh();
       toast.success(`Servicio ${servicio.estado === "Activo" ? "desactivado" : "activado"}.`);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el servicio.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el servicio.");
     }
   };
 
   if (loading && !servicio) {
     return (
       <AppShell title="Cargando servicio..." description="RicoSoft Contabilidad">
-        <div className="panel p-12 text-center text-xs text-slate-500 bg-white border-slate-200 shadow-2xs">Cargando...</div>
+        <div className="panel p-12 text-center text-xs text-slate-500 bg-white border-slate-200 shadow-2xs">
+          Cargando...
+        </div>
       </AppShell>
     );
   }
@@ -108,9 +117,15 @@ function DetalleServicio() {
     ["Periodicidad", servicio.periodicidad],
     ["Responsable", servicio.responsableArea],
     ["Próxima renovación", new Date(servicio.fechaRenovacion).toLocaleDateString("es-CO")],
-    ...(servicio.diaVencimiento ? [["Día de vencimiento", `Día ${servicio.diaVencimiento} de cada mes`]] : []),
-    ...(servicio.fechaInicio ? [["Fecha de inicio", new Date(servicio.fechaInicio).toLocaleDateString("es-CO")]] : []),
-    ...(servicio.fechaFin ? [["Fecha de finalización", new Date(servicio.fechaFin).toLocaleDateString("es-CO")]] : []),
+    ...(servicio.diaVencimiento
+      ? [["Día de vencimiento", `Día ${servicio.diaVencimiento} de cada mes`]]
+      : []),
+    ...(servicio.fechaInicio
+      ? [["Fecha de inicio", new Date(servicio.fechaInicio).toLocaleDateString("es-CO")]]
+      : []),
+    ...(servicio.fechaFin
+      ? [["Fecha de finalización", new Date(servicio.fechaFin).toLocaleDateString("es-CO")]]
+      : []),
   ] as [string, string][];
 
   return (
@@ -126,7 +141,8 @@ function DetalleServicio() {
           </Link>
           {puedeEditar && (
             <Button size="sm" variant="outline" onClick={handleToggleEstado} className="gap-2">
-              <Power className="h-4 w-4" /> {servicio.estado === "Activo" ? "Desactivar" : "Activar"}
+              <Power className="h-4 w-4" />{" "}
+              {servicio.estado === "Activo" ? "Desactivar" : "Activar"}
             </Button>
           )}
         </>
@@ -142,8 +158,12 @@ function DetalleServicio() {
 
             {servicio.contratoRel && (
               <div className="mb-4">
-                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1">
-                  <FileSignature className="h-3.5 w-3.5" /> Contrato con {servicio.contratoRel.proveedor}
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1"
+                >
+                  <FileSignature className="h-3.5 w-3.5" /> Contrato con{" "}
+                  {servicio.contratoRel.proveedor}
                 </Badge>
               </div>
             )}
@@ -163,7 +183,9 @@ function DetalleServicio() {
 
             <div className="mt-6 border-t border-slate-200 pt-4">
               <p className="text-[11px] uppercase tracking-wide text-slate-500">Valor recurrente</p>
-              <p className="num text-xl font-bold text-blue-800">{money(servicio.costo, servicio.moneda)}</p>
+              <p className="num text-xl font-bold text-blue-800">
+                {money(servicio.costo, servicio.moneda)}
+              </p>
             </div>
 
             {servicio.observaciones && (
@@ -188,18 +210,32 @@ function DetalleServicio() {
               <Table>
                 <TableHeader className="bg-slate-100/80">
                   <TableRow className="hover:bg-slate-100/80">
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Factura</TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Emisión</TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Vencimiento</TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3 text-right">Valor</TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">Estado</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                      Factura
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                      Emisión
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                      Vencimiento
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3 text-right">
+                      Valor
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                      Estado
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="text-slate-800 font-medium">
                   {facturas.map((f) => (
                     <TableRow key={f.id}>
                       <TableCell className="py-2.5 pr-3">
-                        <Link to="/facturas/$id" params={{ id: f.id }} className="font-bold text-blue-800 hover:underline">
+                        <Link
+                          to="/facturas/$id"
+                          params={{ id: f.id }}
+                          className="font-bold text-blue-800 hover:underline"
+                        >
                           {f.numero}
                         </Link>
                       </TableCell>
@@ -209,7 +245,9 @@ function DetalleServicio() {
                       <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
                         {new Date(f.vence).toLocaleDateString("es-CO")}
                       </TableCell>
-                      <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">{money(f.total, f.moneda)}</TableCell>
+                      <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">
+                        {money(f.total, f.moneda)}
+                      </TableCell>
                       <TableCell className="py-2.5 pr-3">
                         <EstadoBadge estado={f.estado} />
                       </TableCell>
@@ -227,7 +265,9 @@ function DetalleServicio() {
               <TrendingUp className="h-4 w-4 text-slate-500" /> Costo Histórico
             </h2>
             {costoHistorico.length === 0 ? (
-              <p className="text-xs text-slate-500">Sin facturas suficientes para mostrar histórico.</p>
+              <p className="text-xs text-slate-500">
+                Sin facturas suficientes para mostrar histórico.
+              </p>
             ) : (
               <ul className="space-y-2.5">
                 {costoHistorico.map((m) => (
@@ -236,12 +276,18 @@ function DetalleServicio() {
                     <span className="flex items-center gap-1.5 font-semibold">
                       {money(m.total)}
                       {m.variacion > 0 && (
-                        <span className="flex items-center text-slate-900" title={`Subió ${money(m.variacion)} vs. el mes anterior`}>
+                        <span
+                          className="flex items-center text-slate-900"
+                          title={`Subió ${money(m.variacion)} vs. el mes anterior`}
+                        >
                           <ArrowUp className="h-3 w-3" />
                         </span>
                       )}
                       {m.variacion < 0 && (
-                        <span className="flex items-center text-slate-400" title={`Bajó ${money(-m.variacion)} vs. el mes anterior`}>
+                        <span
+                          className="flex items-center text-slate-400"
+                          title={`Bajó ${money(-m.variacion)} vs. el mes anterior`}
+                        >
                           <ArrowDown className="h-3 w-3" />
                         </span>
                       )}
@@ -257,7 +303,8 @@ function DetalleServicio() {
               <Building2 className="h-4 w-4 text-slate-500" /> Relaciones
             </h2>
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Truck className="h-3.5 w-3.5" /> Proveedor: <span className="font-semibold text-slate-900">{servicio.proveedor}</span>
+              <Truck className="h-3.5 w-3.5" /> Proveedor:{" "}
+              <span className="font-semibold text-slate-900">{servicio.proveedor}</span>
             </div>
             {servicio.contratoRel ? (
               <div className="flex items-center gap-2 text-xs text-slate-500">

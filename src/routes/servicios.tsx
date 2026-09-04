@@ -115,8 +115,8 @@ function ServiciosPage() {
       await eliminarSuscripcion(servicioAEliminar.id);
       toast.success(`Servicio "${servicioAEliminar.nombre}" eliminado.`);
       setServicioAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar el servicio.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar el servicio.");
     } finally {
       setEliminando(false);
     }
@@ -193,8 +193,8 @@ function ServiciosPage() {
         fechaRenovacion: form.fechaRenovacion,
         responsableId: form.responsableId,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el servicio.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el servicio.");
       return;
     }
     setModalOpen(false);
@@ -245,7 +245,9 @@ function ServiciosPage() {
             Empresa Activa
           </p>
           <p className="text-sm font-bold text-slate-900 mt-2">
-            {empresaActiva === "ALL" ? "Todas las empresas (Consolidado)" : siglaEmpresa(empresaActiva)}
+            {empresaActiva === "ALL"
+              ? "Todas las empresas (Consolidado)"
+              : siglaEmpresa(empresaActiva)}
           </p>
         </div>
       </div>
@@ -369,8 +371,10 @@ function ServiciosPage() {
                           size="xs"
                           variant="outline"
                           onClick={() =>
-                            toggleEstadoSuscripcion(sub.id).catch((err: any) =>
-                              toast.error(err.message || "Error al cambiar el estado."),
+                            toggleEstadoSuscripcion(sub.id).catch((err: unknown) =>
+                              toast.error(
+                                err instanceof Error ? err.message : "Error al cambiar el estado.",
+                              ),
                             )
                           }
                           className="h-7 text-[11px] gap-1"
@@ -578,7 +582,7 @@ function ServiciosPage() {
                 </Label>
                 <Select
                   value={form.moneda}
-                  onValueChange={(val: any) => setForm({ ...form, moneda: val })}
+                  onValueChange={(val: "COP" | "USD") => setForm({ ...form, moneda: val })}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />
@@ -595,7 +599,9 @@ function ServiciosPage() {
                 </Label>
                 <Select
                   value={form.periodicidad}
-                  onValueChange={(val: any) => setForm({ ...form, periodicidad: val })}
+                  onValueChange={(val: PeriodicidadServicio) =>
+                    setForm({ ...form, periodicidad: val })
+                  }
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />

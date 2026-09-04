@@ -64,7 +64,9 @@ describe("calcularCandidatosLiquidacionSiesa", () => {
   });
 
   it("ordena por score descendente y limita a 20", () => {
-    const items = Array.from({ length: 25 }, (_, i) => item(i, { valorTotal: (i + 1) * 1_000_000 }));
+    const items = Array.from({ length: 25 }, (_, i) =>
+      item(i, { valorTotal: (i + 1) * 1_000_000 }),
+    );
     const candidatos = calcularCandidatosLiquidacionSiesa(items, new Map());
     expect(candidatos).toHaveLength(20);
     expect(candidatos[0].score).toBeGreaterThanOrEqual(candidatos[1].score);

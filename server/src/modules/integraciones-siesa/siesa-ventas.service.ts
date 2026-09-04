@@ -842,10 +842,8 @@ export async function leerLineasDocumentoVentaSiesa(
   docRowId: number,
 ): Promise<LineaDocumentoVentaSiesa[]> {
   const pool = await getSiesaPool();
-  const { recordset } = await pool
-    .request()
-    .input("ciaId", ciaId)
-    .input("docRowId", docRowId).query<{
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("docRowId", docRowId)
+    .query<{
     itemRowId: number;
     descripcion: string | null;
     referencia: string | null;
@@ -884,10 +882,8 @@ export async function leerDocumentoVentaPorIdSiesa(
   docRowId: number,
 ): Promise<DocumentoVentaSiesa | null> {
   const pool = await getSiesaPool();
-  const { recordset } = await pool
-    .request()
-    .input("ciaId", ciaId)
-    .input("docRowId", docRowId).query<{
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("docRowId", docRowId)
+    .query<{
     id: number;
     fecha: Date;
     referencia: string | null;
@@ -1301,5 +1297,213 @@ export async function leerHistoricoComprasClienteSiesa(
     netoHistorico: Number(r.netoHistorico ?? 0),
     numCompras: r.numCompras,
     ultimaCompra: r.ultimaCompra,
+  }));
+}
+
+export interface VentaRangoSiesa {
+  neto: number;
+  documentos: number;
+}
+
+/**
+ * Total neto (SIN IVA) y número de documentos dentro de un rango arbitrario
+ * [desde, hasta) — a diferencia de leerVentasMensualesSiesa (que agrega por
+ * mes calendario completo), esta función soporta rangos parciales exactos
+ * (p. ej. 01-15 de un mes) para el comparativo año actual vs. año anterior
+ * del módulo de Objetivos. Filtra opcionalmente por vendedor
+ * (f461_rowid_tercero_vendedor) para el cumplimiento de metas individuales.
+ */
+export async function leerVentasRangoSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+  vendedorSiesaRowId?: number | null,
+): Promise<VentaRangoSiesa> {
+  const pool = await getSiesaPool();
+  const request = pool.request().input("ciaId", ciaId).input("desde", desde).input("hasta", hasta);
+  let filtroVendedor = "";
+  if (vendedorSiesaRowId != null) {
+    request.input("vendedorSiesaRowId", vendedorSiesaRowId);
+    filtroVendedor = "AND f461_rowid_tercero_vendedor = @vendedorSiesaRowId";
+  }
+  const { recordset } = await request.query<{ neto: number; documentos: number }>(`
+    SELECT
+      SUM(f461_vlr_bruto - f461_vlr_dscto) AS neto,
+      COUNT(*) AS documentos
+    FROM t461_cm_docto_factura_venta
+    WHERE f461_id_cia = @ciaId AND f461_id_fecha >= @desde AND f461_id_fecha < @hasta
+      ${filtroVendedor}
+  `);
+  const fila = recordset[0];
+  return { neto: Number(fila?.neto ?? 0), documentos: fila?.documentos ?? 0 };
+}
+
+export interface KilosRangoSiesa {
+  kilos: number;
+}
+
+/**
+ * Kilos vendidos dentro de un rango arbitrario [desde, hasta) — misma
+ * fuente y filtros que leerTopProductosVentaKilosSiesa (v470_ventas,
+ * v470_rowid_docto_fact IS NOT NULL, solo líneas en KG), pero sin agrupar
+ * por producto: un único total, para el cumplimiento de metaVolumenKg.
+ */
+export async function leerKilosRangoSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+  vendedorSiesaRowId?: number | null,
+): Promise<KilosRangoSiesa> {
+  const pool = await getSiesaPool();
+  const request = pool.request().input("ciaId", ciaId).input("desde", desde).input("hasta", hasta);
+  let filtroVendedor = "";
+  if (vendedorSiesaRowId != null) {
+    request.input("vendedorSiesaRowId", vendedorSiesaRowId);
+    filtroVendedor = "AND f.f461_rowid_tercero_vendedor = @vendedorSiesaRowId";
+  }
+  const { recordset } = await request.query<{ kilos: number }>(`
+    SELECT SUM(v.v470_cant_base) AS kilos
+    FROM v470_ventas v
+    INNER JOIN t461_cm_docto_factura_venta f
+      ON f.f461_rowid_docto = v.v470_rowid_docto_fact AND f.f461_id_cia = v.v470_id_cia
+    WHERE v.v470_id_cia = @ciaId
+      AND v.v470_rowid_docto_fact IS NOT NULL
+      AND v.v470_id_fecha >= @desde AND v.v470_id_fecha < @hasta
+      AND LTRIM(RTRIM(v.v470_id_unidad_medida)) = 'KG'
+      ${filtroVendedor}
+  `);
+  return { kilos: Number(recordset[0]?.kilos ?? 0) };
+}
+
+export interface VendedorCatalogoSiesa {
+  vendedorRowId: number;
+  vendedorNombre: string | null;
+}
+
+/**
+ * Catálogo de vendedores con al menos una venta en los últimos `mesesAtras`
+ * meses — para el <select> del formulario de creación de objetivo VENDEDOR.
+ * No trae vendedores sin actividad reciente (evita listar terceros
+ * históricos que ya no venden), pero un vendedor nuevo sin ninguna venta
+ * previa simplemente no aparece hasta su primera factura — limitación
+ * conocida, documentada en el diseño del módulo Objetivos.
+ */
+export async function leerCatalogoVendedoresSiesa(
+  ciaId: number,
+  mesesAtras: number,
+): Promise<VendedorCatalogoSiesa[]> {
+  const pool = await getSiesaPool();
+  const desde = new Date();
+  desde.setUTCMonth(desde.getUTCMonth() - mesesAtras);
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("desde", desde).query<{
+    vendedorRowId: number;
+    vendedorNombre: string | null;
+  }>(`
+    SELECT DISTINCT
+      f.f461_rowid_tercero_vendedor AS vendedorRowId,
+      tv.f200_razon_social AS vendedorNombre
+    FROM t461_cm_docto_factura_venta f
+    LEFT JOIN t200_mm_terceros tv ON tv.f200_rowid = f.f461_rowid_tercero_vendedor
+    WHERE f.f461_id_cia = @ciaId
+      AND f.f461_id_fecha >= @desde
+      AND f.f461_rowid_tercero_vendedor IS NOT NULL
+    ORDER BY tv.f200_razon_social ASC
+  `);
+  return recordset.map((r) => ({
+    vendedorRowId: r.vendedorRowId,
+    vendedorNombre: r.vendedorNombre?.trim() || null,
+  }));
+}
+
+export interface VentaVendedorRangoSiesa {
+  vendedorRowId: number | null;
+  vendedorNombre: string | null;
+  neto: number;
+  documentos: number;
+}
+
+/**
+ * Venta neta (SIN IVA) por vendedor dentro de un rango arbitrario
+ * [desde, hasta) — a diferencia de leerVentasDiariasPorVendedorSiesa (que
+ * desglosa día a día para "hoy/ayer/mes actual" del Centro Comercial), esta
+ * función agrega el RANGO COMPLETO de una sola vez, sin desglose diario.
+ * Es la fuente correcta para el "aporte por vendedor" de un objetivo — un
+ * objetivo trimestral/anual necesita la venta de todo su rango, no solo la
+ * del mes en curso.
+ */
+export async function leerVentasPorVendedorRangoSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+): Promise<VentaVendedorRangoSiesa[]> {
+  const pool = await getSiesaPool();
+  const { recordset } = await pool
+    .request()
+    .input("ciaId", ciaId)
+    .input("desde", desde)
+    .input("hasta", hasta).query<{
+    vendedorRowId: number | null;
+    vendedorNombre: string | null;
+    neto: number;
+    documentos: number;
+  }>(`
+    SELECT
+      f.f461_rowid_tercero_vendedor AS vendedorRowId,
+      tv.f200_razon_social AS vendedorNombre,
+      SUM(f.f461_vlr_bruto - f.f461_vlr_dscto) AS neto,
+      COUNT(*) AS documentos
+    FROM t461_cm_docto_factura_venta f
+    LEFT JOIN t200_mm_terceros tv ON tv.f200_rowid = f.f461_rowid_tercero_vendedor
+    WHERE f.f461_id_cia = @ciaId AND f.f461_id_fecha >= @desde AND f.f461_id_fecha < @hasta
+    GROUP BY f.f461_rowid_tercero_vendedor, tv.f200_razon_social
+  `);
+  return recordset.map((r) => ({
+    vendedorRowId: r.vendedorRowId,
+    vendedorNombre: r.vendedorNombre?.trim() || null,
+    neto: Number(r.neto ?? 0),
+    documentos: r.documentos,
+  }));
+}
+
+export interface KilosVendedorRangoSiesa {
+  vendedorRowId: number | null;
+  kilos: number;
+}
+
+/**
+ * Kilos vendidos por vendedor dentro de un rango arbitrario [desde, hasta)
+ * — mismos filtros que leerKilosRangoSiesa (v470_rowid_docto_fact IS NOT
+ * NULL, solo líneas en KG), agrupado por vendedor vía el join a t461 para
+ * el "aporte por vendedor" (kilos) de un objetivo.
+ */
+export async function leerKilosPorVendedorRangoSiesa(
+  ciaId: number,
+  desde: Date,
+  hasta: Date,
+): Promise<KilosVendedorRangoSiesa[]> {
+  const pool = await getSiesaPool();
+  const { recordset } = await pool
+    .request()
+    .input("ciaId", ciaId)
+    .input("desde", desde)
+    .input("hasta", hasta).query<{
+    vendedorRowId: number | null;
+    kilos: number;
+  }>(`
+    SELECT
+      f.f461_rowid_tercero_vendedor AS vendedorRowId,
+      SUM(v.v470_cant_base) AS kilos
+    FROM v470_ventas v
+    INNER JOIN t461_cm_docto_factura_venta f
+      ON f.f461_rowid_docto = v.v470_rowid_docto_fact AND f.f461_id_cia = v.v470_id_cia
+    WHERE v.v470_id_cia = @ciaId
+      AND v.v470_rowid_docto_fact IS NOT NULL
+      AND v.v470_id_fecha >= @desde AND v.v470_id_fecha < @hasta
+      AND LTRIM(RTRIM(v.v470_id_unidad_medida)) = 'KG'
+    GROUP BY f.f461_rowid_tercero_vendedor
+  `);
+  return recordset.map((r) => ({
+    vendedorRowId: r.vendedorRowId,
+    kilos: Number(r.kilos ?? 0),
   }));
 }

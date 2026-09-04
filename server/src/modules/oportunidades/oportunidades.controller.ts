@@ -1,8 +1,13 @@
 import { Response } from "express";
+import { OportunidadSeguimiento } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { clienteParamsSchema, crearSeguimientoSchema, RESULTADOS_TERMINALES } from "./oportunidades.schemas";
+import {
+  clienteParamsSchema,
+  crearSeguimientoSchema,
+  RESULTADOS_TERMINALES,
+} from "./oportunidades.schemas";
 
-function serializar(s: any) {
+function serializar(s: OportunidadSeguimiento) {
   return {
     id: s.id,
     clienteRowId: s.clienteRowId,
@@ -30,7 +35,9 @@ export const listarSeguimientosCliente = async (req: AuthenticatedRequest, res: 
   try {
     const parseo = clienteParamsSchema.safeParse(req.params);
     if (!parseo.success) {
-      return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+      return res
+        .status(400)
+        .json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
     }
 
     const seguimientos = await req.tenantPrisma!.oportunidadSeguimiento.findMany({
@@ -43,7 +50,9 @@ export const listarSeguimientosCliente = async (req: AuthenticatedRequest, res: 
     // paso, las fechas de eventos anteriores quedan solo como historial.
     const masReciente = seguimientos[0];
     const proximoVigente =
-      masReciente && masReciente.proximoSeguimientoFecha && !RESULTADOS_TERMINALES.has(masReciente.resultado)
+      masReciente &&
+      masReciente.proximoSeguimientoFecha &&
+      !RESULTADOS_TERMINALES.has(masReciente.resultado)
         ? { fecha: masReciente.proximoSeguimientoFecha, accion: masReciente.proximaAccion }
         : null;
 
@@ -71,11 +80,15 @@ export const crearSeguimiento = async (req: AuthenticatedRequest, res: Response)
     const tenantId = req.user!.tenantId;
     const parseoParams = clienteParamsSchema.safeParse(req.params);
     if (!parseoParams.success) {
-      return res.status(400).json({ message: parseoParams.error.errors[0]?.message ?? "Datos inválidos." });
+      return res
+        .status(400)
+        .json({ message: parseoParams.error.errors[0]?.message ?? "Datos inválidos." });
     }
     const parseoBody = crearSeguimientoSchema.safeParse(req.body);
     if (!parseoBody.success) {
-      return res.status(400).json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
+      return res
+        .status(400)
+        .json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
     }
     const data = parseoBody.data;
 
@@ -89,10 +102,12 @@ export const crearSeguimiento = async (req: AuthenticatedRequest, res: Response)
         accion: data.accion,
         resultado: data.resultado,
         comentario: data.comentario || null,
-        proximaAccion: RESULTADOS_TERMINALES.has(data.resultado) ? null : data.proximaAccion || null,
+        proximaAccion: RESULTADOS_TERMINALES.has(data.resultado)
+          ? null
+          : data.proximaAccion || null,
         proximoSeguimientoFecha: RESULTADOS_TERMINALES.has(data.resultado)
           ? null
-          : data.proximoSeguimientoFecha ?? null,
+          : (data.proximoSeguimientoFecha ?? null),
         usuarioId: req.user!.id,
         usuario: req.user!.nombre,
       },
@@ -142,7 +157,8 @@ export const listarProximosSeguimientos = async (req: AuthenticatedRequest, res:
       .filter((s) => s.proximoSeguimientoFecha && !RESULTADOS_TERMINALES.has(s.resultado))
       .sort(
         (a, b) =>
-          new Date(a.proximoSeguimientoFecha!).getTime() - new Date(b.proximoSeguimientoFecha!).getTime(),
+          new Date(a.proximoSeguimientoFecha!).getTime() -
+          new Date(b.proximoSeguimientoFecha!).getTime(),
       )
       .map(serializar);
 

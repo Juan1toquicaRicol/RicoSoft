@@ -193,8 +193,8 @@ function SolicitudesCompraPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir la cotización.");
     } finally {
       setDescargandoCotizacion(false);
     }
@@ -252,8 +252,8 @@ function SolicitudesCompraPage() {
       setProveedorCotizacionSeleccionado(null);
       setArchivoCotizacion(null);
       if (archivoCotizacionRef.current) archivoCotizacionRef.current.value = "";
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible agregar la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible agregar la cotización.");
     } finally {
       setGuardandoCotizacion(false);
     }
@@ -264,8 +264,8 @@ function SolicitudesCompraPage() {
     try {
       await eliminarCotizacion(cotizacionId);
       toast.success("Cotización eliminada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar la cotización.");
     } finally {
       setAccionCotizacionId(null);
     }
@@ -276,8 +276,10 @@ function SolicitudesCompraPage() {
     try {
       await seleccionarGanadora(cotizacionId);
       toast.success("Cotización ganadora seleccionada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible seleccionar la cotización ganadora.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "No fue posible seleccionar la cotización ganadora.",
+      );
     } finally {
       setAccionCotizacionId(null);
     }
@@ -290,8 +292,8 @@ function SolicitudesCompraPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
     }
   };
 
@@ -315,8 +317,8 @@ function SolicitudesCompraPage() {
       );
       toast.success(`Solicitud actualizada a "${confirmAccion.estado}".`);
       setConfirmAccion(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar la solicitud.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible actualizar la solicitud.");
     } finally {
       setAplicandoAccion(false);
     }
@@ -329,8 +331,8 @@ function SolicitudesCompraPage() {
       await eliminarSolicitudCompra(solicitudAEliminar.id);
       toast.success(`Solicitud "${solicitudAEliminar.item}" eliminada.`);
       setSolicitudAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar la solicitud.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar la solicitud.");
     } finally {
       setEliminando(false);
     }
@@ -393,7 +395,8 @@ function SolicitudesCompraPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.item || !form.solicitanteId) {
-      if (form.item && !form.solicitanteId) toast.error("Selecciona el responsable del departamento.");
+      if (form.item && !form.solicitanteId)
+        toast.error("Selecciona el responsable del departamento.");
       return;
     }
     setGuardando(true);
@@ -412,14 +415,16 @@ function SolicitudesCompraPage() {
       if (cotizacion) {
         try {
           await subirCotizacionSolicitud(creada.id, cotizacion);
-        } catch (err: any) {
+        } catch (err: unknown) {
           toast.error(
-            err.message || "La solicitud se creó, pero no fue posible adjuntar la cotización.",
+            err instanceof Error
+              ? err.message
+              : "La solicitud se creó, pero no fue posible adjuntar la cotización.",
           );
         }
       }
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar la solicitud.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar la solicitud.");
       setGuardando(false);
       return;
     }
@@ -606,13 +611,11 @@ function SolicitudesCompraPage() {
                                 size="xs"
                                 variant="success"
                                 disabled={
-                                  sol.cotizacionesResumen.total <
-                                    sol.cotizacionesResumen.minimo ||
+                                  sol.cotizacionesResumen.total < sol.cotizacionesResumen.minimo ||
                                   !sol.cotizacionesResumen.tieneGanadora
                                 }
                                 title={
-                                  sol.cotizacionesResumen.total <
-                                    sol.cotizacionesResumen.minimo ||
+                                  sol.cotizacionesResumen.total < sol.cotizacionesResumen.minimo ||
                                   !sol.cotizacionesResumen.tieneGanadora
                                     ? `Se requiere al menos ${sol.cotizacionesResumen.minimo} cotización y una ganadora elegida.`
                                     : undefined

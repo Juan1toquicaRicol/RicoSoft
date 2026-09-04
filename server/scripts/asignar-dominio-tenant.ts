@@ -37,7 +37,9 @@ async function main() {
 
   if (quitar) {
     await prisma.tenant.update({ where: { id: tenant.id }, data: { dominioCorporativo: null } });
-    console.log(`✅ ${tenant.nombre} ya no tiene dominio corporativo asignado (autoregistro público desactivado).`);
+    console.log(
+      `✅ ${tenant.nombre} ya no tiene dominio corporativo asignado (autoregistro público desactivado).`,
+    );
     return;
   }
 

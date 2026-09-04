@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { ReglaEnrutamiento } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
@@ -17,7 +18,7 @@ function sanearLista(input: unknown): string[] {
   return input.filter((p): p is string => typeof p === "string" && p.trim().length > 0);
 }
 
-function serializar(r: any) {
+function serializar(r: ReglaEnrutamiento) {
   return {
     id: r.id,
     nombre: r.nombre,
@@ -95,7 +96,9 @@ export const actualizarRegla = async (req: AuthenticatedRequest, res: Response) 
         ...(typeof nombre === "string" ? { nombre } : {}),
         ...(Number.isFinite(Number(prioridad)) ? { prioridad: Number(prioridad) } : {}),
         ...(typeof activa === "boolean" ? { activa } : {}),
-        ...(Array.isArray(condiciones) ? { condiciones: JSON.stringify(sanearLista(condiciones)) } : {}),
+        ...(Array.isArray(condiciones)
+          ? { condiciones: JSON.stringify(sanearLista(condiciones)) }
+          : {}),
         ...(Array.isArray(acciones) ? { acciones: JSON.stringify(sanearLista(acciones)) } : {}),
       },
     });

@@ -124,7 +124,10 @@ export interface Buckets {
  * Agrupa saldos por antigüedad frente a su fecha de vencimiento: ya vencido,
  * o cuántos días faltan para vencer (0-30 / 31-60 / 61-90 / más de 90).
  */
-export function agruparPorAntiguedad(items: { vence: Date; saldo: number }[], ahora: Date): Buckets {
+export function agruparPorAntiguedad(
+  items: { vence: Date; saldo: number }[],
+  ahora: Date,
+): Buckets {
   const buckets: Buckets = { vencido: 0, dias0a30: 0, dias31a60: 0, dias61a90: 0, mas90: 0 };
   for (const item of items) {
     const dias = Math.floor((item.vence.getTime() - ahora.getTime()) / DIA_MS);
@@ -381,7 +384,8 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
       resultado.contratos = {
         activos: contratos.length,
         valorContratadoActivo: contratos.reduce((acc, c) => acc + Number(c.valorContratado), 0),
-        proximosAVencer: contratos.filter((c) => c.fechaFin >= ahora && c.fechaFin <= en30Dias).length,
+        proximosAVencer: contratos.filter((c) => c.fechaFin >= ahora && c.fechaFin <= en30Dias)
+          .length,
       };
     }
 

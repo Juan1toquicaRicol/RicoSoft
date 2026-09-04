@@ -70,8 +70,10 @@ export function useDashboard() {
     try {
       const data = await fetchAuth("/analitica/dashboard");
       setResumen(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando los indicadores del dashboard.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error cargando los indicadores del dashboard.",
+      );
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,11 @@
 import { Response } from "express";
+import { Permiso } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { parseRolPermisos } from "../../lib/permissions";
 import { listarCatalogoPermisos } from "./permisos.service";
 
-function serializar(p: any) {
+function serializar(p: Permiso) {
   return {
     id: p.id,
     codigo: p.codigo,

@@ -63,12 +63,7 @@ describe("calcularPronosticoDemandaSiesa", () => {
 
   it("tendenciaPct es null cuando la base anterior es 'ruido' frente al volumen típico (evita porcentajes absurdos)", () => {
     // Pasó de 1 unidad/mes a 300 — matemáticamente sería +29.900%, pero no es una señal útil.
-    const ventas = [
-      v(1, 2026, 8, 300),
-      v(1, 2026, 7, 300),
-      v(1, 2026, 6, 300),
-      v(1, 2026, 5, 1),
-    ];
+    const ventas = [v(1, 2026, 8, 300), v(1, 2026, 7, 300), v(1, 2026, 6, 300), v(1, 2026, 5, 1)];
     const r = calcularPronosticoDemandaSiesa(ventas, ahora);
     const p = r.topDemanda.find((x) => x.itemRowId === 1)!;
     expect(p.tendenciaPct).toBeNull();

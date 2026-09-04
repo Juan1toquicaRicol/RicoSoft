@@ -97,8 +97,8 @@ function DetalleSolicitud() {
       await cambiarEstado(confirmAccion.estado);
       toast.success(`Solicitud actualizada a "${confirmAccion.estado}".`);
       setConfirmAccion(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar la solicitud.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible actualizar la solicitud.");
     } finally {
       setAplicandoAccion(false);
     }
@@ -111,8 +111,8 @@ function DetalleSolicitud() {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir la cotización.");
     } finally {
       setDescargandoCotizacion(false);
     }
@@ -125,8 +125,8 @@ function DetalleSolicitud() {
     try {
       await subirCotizacion(file);
       toast.success("Documento de cotización subido.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible subir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible subir el documento.");
     } finally {
       setSubiendoCotizacion(false);
       if (archivoCotizacionSolicitudRef.current) archivoCotizacionSolicitudRef.current.value = "";
@@ -139,8 +139,8 @@ function DetalleSolicitud() {
       await confirmarRecepcion(comentarioRecepcion.trim() || undefined);
       toast.success("Recepción del producto confirmada.");
       setComentarioRecepcion("");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible confirmar la recepción.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible confirmar la recepción.");
     } finally {
       setConfirmandoRecepcion(false);
     }
@@ -170,7 +170,8 @@ function DetalleSolicitud() {
     );
   }
 
-  const puedeEstadoActivo = solicitud.estado === "Pendiente" || solicitud.estado === "En Cotización";
+  const puedeEstadoActivo =
+    solicitud.estado === "Pendiente" || solicitud.estado === "En Cotización";
 
   const campos = [
     ["Solicitante", solicitud.solicitante],
@@ -555,8 +556,8 @@ function PanelCotizaciones({
       setProveedorSeleccionado(null);
       setArchivo(null);
       if (archivoRef.current) archivoRef.current.value = "";
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible agregar la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible agregar la cotización.");
     } finally {
       setGuardando(false);
     }
@@ -567,8 +568,8 @@ function PanelCotizaciones({
     try {
       await eliminarCotizacion(cotizacionId);
       toast.success("Cotización eliminada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar la cotización.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar la cotización.");
     } finally {
       setAccionId(null);
     }
@@ -579,8 +580,10 @@ function PanelCotizaciones({
     try {
       await seleccionarGanadora(cotizacionId);
       toast.success("Cotización ganadora seleccionada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible seleccionar la cotización ganadora.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "No fue posible seleccionar la cotización ganadora.",
+      );
     } finally {
       setAccionId(null);
     }
@@ -592,8 +595,8 @@ function PanelCotizaciones({
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
     }
   };
 
@@ -642,7 +645,9 @@ function PanelCotizaciones({
               <TableCell className="num px-3 py-2 text-right text-xs font-bold">
                 {money(c.valorTotalCOP)}
               </TableCell>
-              <TableCell className="px-3 py-2 text-center text-xs">{c.tiempoEntregaDias} d.</TableCell>
+              <TableCell className="px-3 py-2 text-center text-xs">
+                {c.tiempoEntregaDias} d.
+              </TableCell>
               <TableCell className="px-3 py-2 text-center">
                 <button
                   type="button"
@@ -772,7 +777,9 @@ function PanelCotizaciones({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Tiempo de entrega (días) *</Label>
+              <Label className="text-xs font-semibold text-slate-700">
+                Tiempo de entrega (días) *
+              </Label>
               <Input
                 required
                 type="number"
@@ -784,7 +791,9 @@ function PanelCotizaciones({
             </div>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs font-semibold text-slate-700">Documento de la cotización *</Label>
+            <Label className="text-xs font-semibold text-slate-700">
+              Documento de la cotización *
+            </Label>
             <div className="flex items-center gap-2">
               <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
               <Input

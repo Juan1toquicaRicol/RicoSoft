@@ -16,7 +16,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   useDespachos,
   useResumenDespachos,
@@ -37,7 +44,8 @@ export const Route = createFileRoute("/despachos")({
       { title: "Despachos | RicoSoft" },
       {
         name: "description",
-        content: "Torre de control operativa: qué pedidos están pendientes de despachar, en qué etapa está cada uno y qué falta.",
+        content:
+          "Torre de control operativa: qué pedidos están pendientes de despachar, en qué etapa está cada uno y qué falta.",
       },
     ],
   }),
@@ -91,8 +99,8 @@ function DialogoNuevoDespacho({
       toast.success("Despacho creado.");
       onOpenChange(false);
       onCreado(despacho.id);
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo crear el despacho.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el despacho.");
     } finally {
       setCreando(false);
     }
@@ -113,7 +121,11 @@ function DialogoNuevoDespacho({
             <Label className="text-[11px] font-semibold text-slate-500 uppercase">
               Cliente, NIT o referencia
             </Label>
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 text-xs" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 text-xs"
+            />
           </div>
           <Button size="sm" onClick={handleBuscar} disabled={loading}>
             <Search className="mr-1 h-3.5 w-3.5" /> Buscar
@@ -125,14 +137,25 @@ function DialogoNuevoDespacho({
         {documentos.length > 0 && (
           <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
             {documentos.map((d) => (
-              <div key={d.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-2 text-xs">
+              <div
+                key={d.id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 p-2 text-xs"
+              >
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-800">{d.clienteNombre ?? "Cliente sin nombre"}</p>
+                  <p className="font-semibold text-slate-800">
+                    {d.clienteNombre ?? "Cliente sin nombre"}
+                  </p>
                   <p className="text-slate-500">
-                    {d.referencia ?? d.id} · {new Date(d.fecha).toLocaleDateString("es-CO")} · {money(d.neto)}
+                    {d.referencia ?? d.id} · {new Date(d.fecha).toLocaleDateString("es-CO")} ·{" "}
+                    {money(d.neto)}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => handleCrear(d)} disabled={creando}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCrear(d)}
+                  disabled={creando}
+                >
                   Crear despacho
                 </Button>
               </div>
@@ -178,9 +201,10 @@ function DespachosPage() {
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-10">
         {INDICADORES.map(({ estado, label }) => {
-          const cantidad = estado === null
-            ? Object.values(porEstado).reduce((acc, n) => acc + n, 0)
-            : porEstado[estado] ?? 0;
+          const cantidad =
+            estado === null
+              ? Object.values(porEstado).reduce((acc, n) => acc + n, 0)
+              : (porEstado[estado] ?? 0);
           const activo = estadoFiltro === estado;
           return (
             <button
@@ -191,10 +215,14 @@ function DespachosPage() {
                 setPage(1);
               }}
               className={`panel rounded-lg border p-3 text-left transition ${
-                activo ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                activo
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                {label}
+              </p>
               <p className="num mt-1 text-lg font-bold text-slate-900">{cantidad}</p>
             </button>
           );
@@ -211,28 +239,60 @@ function DespachosPage() {
             <Table>
               <TableHeader className="bg-slate-100/80">
                 <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Documento</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Cliente</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Estado</TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">Valor</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Vehículo</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Conductor</TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">Creado</TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Documento
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Cliente
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Estado
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Valor
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Vehículo
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Conductor
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Creado
+                  </TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((d) => (
                   <TableRow key={d.id} className="hover:bg-slate-50/80">
-                    <TableCell className="text-xs text-slate-600">{d.siesaDocReferencia ?? d.siesaDocRowId}</TableCell>
-                    <TableCell className="text-xs font-semibold text-slate-800">{d.clienteNombre}</TableCell>
-                    <TableCell><EstadoBadge estado={d.estado} /></TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">{money(d.valorPedido)}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{d.vehiculoPlaca ?? "—"}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{d.conductorNombre ?? "—"}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{new Date(d.createdAt).toLocaleDateString("es-CO")}</TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {d.siesaDocReferencia ?? d.siesaDocRowId}
+                    </TableCell>
+                    <TableCell className="text-xs font-semibold text-slate-800">
+                      {d.clienteNombre}
+                    </TableCell>
+                    <TableCell>
+                      <EstadoBadge estado={d.estado} />
+                    </TableCell>
+                    <TableCell className="num text-right text-xs text-slate-700">
+                      {money(d.valorPedido)}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {d.vehiculoPlaca ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {d.conductorNombre ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {new Date(d.createdAt).toLocaleDateString("es-CO")}
+                    </TableCell>
                     <TableCell className="text-right text-xs">
-                      <Link to="/despachos/$id" params={{ id: d.id }} className="font-semibold text-blue-700 hover:underline">
+                      <Link
+                        to="/despachos/$id"
+                        params={{ id: d.id }}
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
                         Ver detalle
                       </Link>
                     </TableCell>
@@ -246,11 +306,23 @@ function DespachosPage() {
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
             <span>{total} despachos en total</span>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
                 Anterior
               </Button>
-              <span>Página {page} de {totalPages}</span>
-              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              <span>
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 Siguiente
               </Button>
             </div>

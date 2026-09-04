@@ -8,12 +8,7 @@
  * no crea una orden real allá.
  */
 export type EstadoPlanProduccion =
-  | "Planificada"
-  | "Aprobada"
-  | "En producción"
-  | "Parcial"
-  | "Terminada"
-  | "Cancelada";
+  "Planificada" | "Aprobada" | "En producción" | "Parcial" | "Terminada" | "Cancelada";
 
 /**
  * Transiciones válidas por estado actual. Cancelada es alcanzable desde

@@ -52,8 +52,24 @@ describe("calcularLineasTomaFisica", () => {
 describe("calcularResumenTomaFisica", () => {
   it("cuenta líneas contadas/pendientes y suma el valor de diferencia total", () => {
     const lineas = calcularLineasTomaFisica([
-      { id: "a", itemRowId: 1, descripcion: null, referencia: null, stockSistema: 100, conteoFisico: 90, valorUnitario: 10 },
-      { id: "b", itemRowId: 2, descripcion: null, referencia: null, stockSistema: 50, conteoFisico: null, valorUnitario: 20 },
+      {
+        id: "a",
+        itemRowId: 1,
+        descripcion: null,
+        referencia: null,
+        stockSistema: 100,
+        conteoFisico: 90,
+        valorUnitario: 10,
+      },
+      {
+        id: "b",
+        itemRowId: 2,
+        descripcion: null,
+        referencia: null,
+        stockSistema: 50,
+        conteoFisico: null,
+        valorUnitario: 20,
+      },
     ]);
     const r = calcularResumenTomaFisica(lineas);
     expect(r.totalLineas).toBe(2);
@@ -70,7 +86,13 @@ describe("detectarPatronesRecurrentes", () => {
     fecha: Date,
     diferenciaPct: number,
     tomaFisicaId = "t1",
-  ): OcurrenciaDiferencia => ({ tomaFisicaId, fecha, itemRowId, descripcion: `Item ${itemRowId}`, diferenciaPct });
+  ): OcurrenciaDiferencia => ({
+    tomaFisicaId,
+    fecha,
+    itemRowId,
+    descripcion: `Item ${itemRowId}`,
+    diferenciaPct,
+  });
 
   it("detecta un patrón cuando las últimas 3 tomas tienen diferencia del mismo signo", () => {
     const historico = [

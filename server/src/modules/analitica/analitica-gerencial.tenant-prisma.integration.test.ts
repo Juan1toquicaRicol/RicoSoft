@@ -16,6 +16,18 @@ import { prisma } from "../../config/prisma";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
+interface AlertaDto {
+  tipo: string;
+}
+
+interface TopClienteDto {
+  cliente: string;
+}
+
+interface TopProveedorDto {
+  nombre: string;
+}
+
 describe.skipIf(!RUN)("Centro Gerencial Financiero — resumen-gerencial (multi-tenant real)", () => {
   const app = createApp();
   const PASSWORD = "TestPassword123";
@@ -238,7 +250,7 @@ describe.skipIf(!RUN)("Centro Gerencial Financiero — resumen-gerencial (multi-
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
 
-    const tipos = res.body.alertas.map((a: any) => a.tipo);
+    const tipos = res.body.alertas.map((a: AlertaDto) => a.tipo);
     expect(tipos).toContain("cxp_vencida");
     expect(tipos).toContain("cartera_vencida_alta");
     expect(tipos).toContain("concentracion_cliente");
@@ -255,12 +267,12 @@ describe.skipIf(!RUN)("Centro Gerencial Financiero — resumen-gerencial (multi-
     expect(res.body.cuentasPorPagar.total).toBe(999999);
     expect(res.body.cartera.total).toBe(999999);
     // Nunca debe verse ningún monto ni nombre de A.
-    expect(res.body.cartera.topClientes.some((c: any) => c.cliente === "Cliente Grande")).toBe(
-      false,
-    );
+    expect(
+      res.body.cartera.topClientes.some((c: TopClienteDto) => c.cliente === "Cliente Grande"),
+    ).toBe(false);
     expect(
       res.body.cuentasPorPagar.topProveedores.some(
-        (p: any) => p.nombre === "Proveedor Concentrado A",
+        (p: TopProveedorDto) => p.nombre === "Proveedor Concentrado A",
       ),
     ).toBe(false);
   });

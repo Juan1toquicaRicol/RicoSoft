@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
@@ -8,7 +9,7 @@ export const listarFaltas = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId } = req.query;
-    const where: any = { tenantId };
+    const where: Prisma.FaltaStrikeWhereInput = { tenantId };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
     const faltas = await prisma.faltaStrike.findMany({
@@ -18,7 +19,10 @@ export const listarFaltas = async (req: AuthenticatedRequest, res: Response) => 
       take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(
-      faltas.map((f) => ({ ...f, nombreEmpleado: `${f.empleado.nombres} ${f.empleado.apellidos}` })),
+      faltas.map((f) => ({
+        ...f,
+        nombreEmpleado: `${f.empleado.nombres} ${f.empleado.apellidos}`,
+      })),
     );
   } catch (error) {
     console.error("Error al listar faltas:", error);

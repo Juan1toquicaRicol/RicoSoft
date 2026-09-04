@@ -16,8 +16,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   usePlanesProduccion,
   type CrearPlanProduccionInput,
@@ -91,8 +104,8 @@ function DialogoNuevoPlan({
       toast.success("Plan de producción creado.");
       onOpenChange(false);
       onCreado();
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo crear el plan de producción.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el plan de producción.");
     } finally {
       setCreando(false);
     }
@@ -209,8 +222,8 @@ function PlanProduccionPage() {
     try {
       await actualizarEstado(id, estado);
       toast.success(`Estado actualizado a "${estado}".`);
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo actualizar el estado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo actualizar el estado.");
     } finally {
       setCambiandoId(null);
     }
@@ -318,7 +331,9 @@ function PlanProduccionPage() {
                       {puedeGestionar && SIGUIENTES_ESTADOS[p.estado].length > 0 && (
                         <Select
                           value=""
-                          onValueChange={(v) => handleCambiarEstado(p.id, v as EstadoPlanProduccion)}
+                          onValueChange={(v) =>
+                            handleCambiarEstado(p.id, v as EstadoPlanProduccion)
+                          }
                           disabled={cambiandoId === p.id}
                         >
                           <SelectTrigger className="h-8 w-40 text-xs">

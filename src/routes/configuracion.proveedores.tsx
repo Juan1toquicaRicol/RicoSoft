@@ -140,8 +140,8 @@ function ProveedoresConfigPage() {
         departamentoId: SIN_DEPARTAMENTO,
       });
       setCreando(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el proveedor.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el proveedor.");
     } finally {
       setGuardando(false);
     }
@@ -150,8 +150,8 @@ function ProveedoresConfigPage() {
   const handleToggleActivo = async (p: Proveedor) => {
     try {
       await actualizarProveedor(p.id, { activo: !p.activo });
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el proveedor.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el proveedor.");
     }
   };
 
@@ -160,8 +160,10 @@ function ProveedoresConfigPage() {
       await actualizarProveedor(p.id, {
         departamentoId: departamentoId === SIN_DEPARTAMENTO ? null : departamentoId,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el departamento del proveedor.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al actualizar el departamento del proveedor.",
+      );
     }
   };
 
@@ -181,8 +183,10 @@ function ProveedoresConfigPage() {
       });
       toast.success(`Condiciones de pago de "${editandoPago.nombre}" actualizadas.`);
       setEditandoPago(null);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar las condiciones de pago.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al actualizar las condiciones de pago.",
+      );
     } finally {
       setGuardandoPago(false);
     }
@@ -193,8 +197,8 @@ function ProveedoresConfigPage() {
     try {
       await eliminarProveedor(p.id);
       toast.success(`Proveedor "${p.nombre}" eliminado.`);
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el proveedor.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el proveedor.");
     }
   };
 

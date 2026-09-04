@@ -1,6 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Users, Search, RefreshCw, UserCheck, UserX, Shield, Eye, Trash2, UserPlus, Building2, X, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  Users,
+  Search,
+  RefreshCw,
+  UserCheck,
+  UserX,
+  Shield,
+  Eye,
+  Trash2,
+  UserPlus,
+  Building2,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
@@ -15,7 +29,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 import {
@@ -156,7 +177,10 @@ function UsuariosConfigPage() {
     }
   }, [agrupacion]);
 
-  const gruposUsuarios = useMemo(() => agruparFilas(usuarios, claveDeAgrupacion), [usuarios, claveDeAgrupacion]);
+  const gruposUsuarios = useMemo(
+    () => agruparFilas(usuarios, claveDeAgrupacion),
+    [usuarios, claveDeAgrupacion],
+  );
 
   const abrirEdicion = (u: UsuarioApi) => {
     setUsuarioEditando(u);
@@ -190,8 +214,8 @@ function UsuariosConfigPage() {
     try {
       const data = await fetchAuth(`/membresias/usuarios/${userId}`);
       setMembresias(Array.isArray(data.membresias) ? data.membresias : []);
-    } catch (err: any) {
-      toast.error(err.message || "Error al cargar las empresas del usuario.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al cargar las empresas del usuario.");
     } finally {
       setCargandoMembresias(false);
     }
@@ -228,8 +252,8 @@ function UsuariosConfigPage() {
       setNuevaMembresiaSuperadmin(false);
       setRolesTenantElegido([]);
       fetchMembresias(usuarioEditando.id);
-    } catch (err: any) {
-      toast.error(err.message || "Error al otorgar el acceso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al otorgar el acceso.");
     } finally {
       setGuardandoMembresia(false);
     }
@@ -243,8 +267,8 @@ function UsuariosConfigPage() {
         body: JSON.stringify({ activo: !m.activo }),
       });
       fetchMembresias(usuarioEditando.id);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el acceso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el acceso.");
     }
   };
 
@@ -255,8 +279,8 @@ function UsuariosConfigPage() {
       await fetchAuth(`/membresias/${m.id}`, { method: "DELETE" });
       toast.success(`Acceso a ${m.tenant.nombre} eliminado.`);
       fetchMembresias(usuarioEditando.id);
-    } catch (err: any) {
-      toast.error(err.message || "Error al quitar el acceso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al quitar el acceso.");
     } finally {
       setEliminandoMembresiaId(null);
     }
@@ -281,8 +305,8 @@ function UsuariosConfigPage() {
       });
       setOkModal("Correo electrónico actualizado.");
       fetchUsuarios();
-    } catch (err: any) {
-      setErrorModal(err.message || "Error al cambiar el correo electrónico.");
+    } catch (err: unknown) {
+      setErrorModal(err instanceof Error ? err.message : "Error al cambiar el correo electrónico.");
     } finally {
       setGuardandoEmail(false);
     }
@@ -309,8 +333,8 @@ function UsuariosConfigPage() {
       setOkModal("Contraseña restablecida.");
       setNuevaPassword("");
       setConfirmarNuevaPassword("");
-    } catch (err: any) {
-      setErrorModal(err.message || "Error al restablecer la contraseña.");
+    } catch (err: unknown) {
+      setErrorModal(err instanceof Error ? err.message : "Error al restablecer la contraseña.");
     } finally {
       setGuardandoPassword(false);
     }
@@ -324,8 +348,8 @@ function UsuariosConfigPage() {
       setUsuarioAEliminar(null);
       setUsuarioEditando(null);
       fetchUsuarios();
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el usuario.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el usuario.");
     } finally {
       setEliminando(false);
     }
@@ -337,8 +361,8 @@ function UsuariosConfigPage() {
     try {
       const data = await fetchAuth(`/usuarios?search=${encodeURIComponent(search)}`);
       setUsuarios(data.data || []);
-    } catch (err: any) {
-      setError(err.message || "Error cargando usuarios.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando usuarios.");
     } finally {
       setLoading(false);
     }
@@ -349,7 +373,7 @@ function UsuariosConfigPage() {
       const data = await fetchAuth("/roles");
       setRoles(
         Array.isArray(data)
-          ? data.map((r: any) => ({ id: r.id, nombre: r.nombre, activo: r.activo }))
+          ? data.map((r: RolOpcion) => ({ id: r.id, nombre: r.nombre, activo: r.activo }))
           : [],
       );
     } catch {
@@ -361,7 +385,9 @@ function UsuariosConfigPage() {
     try {
       const data = await fetchAuth("/departamentos");
       setDepartamentos(
-        Array.isArray(data) ? data.map((d: any) => ({ id: d.id, nombre: d.nombre })) : [],
+        Array.isArray(data)
+          ? data.map((d: DepartamentoOpcion) => ({ id: d.id, nombre: d.nombre }))
+          : [],
       );
     } catch {
       // El catálogo de departamentos es secundario; si falla, simplemente no se ofrece el selector.
@@ -375,12 +401,10 @@ function UsuariosConfigPage() {
 
   useEffect(() => {
     if (puedeCambiarRol || puedeCrear) fetchRoles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puedeCambiarRol, puedeCrear]);
 
   useEffect(() => {
     if (puedeCambiarDepartamento || puedeCrear) fetchDepartamentos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puedeCambiarDepartamento, puedeCrear]);
 
   const rolesActivos = roles.filter((r) => r.activo);
@@ -392,8 +416,8 @@ function UsuariosConfigPage() {
         body: JSON.stringify({ activo: nuevoEstado }),
       });
       fetchUsuarios();
-    } catch (err: any) {
-      toast.error(err.message || "Error al cambiar estado");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al cambiar estado");
     }
   };
 
@@ -406,8 +430,8 @@ function UsuariosConfigPage() {
         body: JSON.stringify({ rolId: rolIdReal }),
       });
       fetchUsuarios();
-    } catch (err: any) {
-      toast.error(err.message || "Error al asignar el rol");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al asignar el rol");
     } finally {
       setCambiandoRolId(null);
     }
@@ -422,8 +446,8 @@ function UsuariosConfigPage() {
         body: JSON.stringify({ departamentoId: departamentoIdReal }),
       });
       fetchUsuarios();
-    } catch (err: any) {
-      toast.error(err.message || "Error al asignar el departamento");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al asignar el departamento");
     } finally {
       setCambiandoDepartamentoId(null);
     }
@@ -468,8 +492,8 @@ function UsuariosConfigPage() {
       toast.success(`Usuario "${nuevoUsuario.nombre.trim()}" creado correctamente.`);
       setCreandoUsuario(false);
       fetchUsuarios();
-    } catch (err: any) {
-      setErrorNuevoUsuario(err.message || "Error al crear el usuario.");
+    } catch (err: unknown) {
+      setErrorNuevoUsuario(err instanceof Error ? err.message : "Error al crear el usuario.");
     } finally {
       setGuardandoNuevoUsuario(false);
     }
@@ -544,109 +568,122 @@ function UsuariosConfigPage() {
                 <Fragment key={grupo.clave || "sin-grupo"}>
                   {grupo.clave && (
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                      <TableCell colSpan={5} className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        {grupo.clave} <span className="font-normal text-slate-400">({grupo.filas.length})</span>
+                      <TableCell
+                        colSpan={5}
+                        className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                      >
+                        {grupo.clave}{" "}
+                        <span className="font-normal text-slate-400">({grupo.filas.length})</span>
                       </TableCell>
                     </TableRow>
                   )}
                   {grupo.filas.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <div className="font-medium text-slate-800 flex items-center gap-2">
-                      {u.nombre}
-                      {u.isSuperadmin && (
-                        <Badge variant="outline" className="border-transparent bg-slate-900 text-white gap-1">
-                          <Shield className="h-3 w-3" /> Superadmin
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500">{u.email}</div>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {puedeCambiarDepartamento ? (
-                      <Select
-                        value={u.departamentoId ?? "__sin_departamento__"}
-                        onValueChange={(value) => handleCambiarDepartamento(u.id, value)}
-                        disabled={cambiandoDepartamentoId === u.id}
-                      >
-                        <SelectTrigger className="h-8 w-44 text-xs">
-                          <SelectValue placeholder="Sin departamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__sin_departamento__">Sin departamento</SelectItem>
-                          {departamentos.map((d) => (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      u.departamento?.nombre || "Sin departamento"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {u.isSuperadmin ? (
-                      <span className="text-xs text-slate-500">Todos los permisos</span>
-                    ) : puedeCambiarRol ? (
-                      <Select
-                        value={u.rolId ?? "__sin_rol__"}
-                        onValueChange={(value) => handleCambiarRol(u.id, value)}
-                        disabled={cambiandoRolId === u.id}
-                      >
-                        <SelectTrigger className="h-8 w-44 text-xs">
-                          <SelectValue placeholder="Sin rol" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__sin_rol__">Sin rol asignado</SelectItem>
-                          {rolesActivos.map((r) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {r.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge variant="secondary">{u.rolRel?.nombre || "Sin rol"}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {u.activo ? (
-                      <Badge className="border-blue-200 bg-blue-50 text-blue-800 gap-1" variant="outline">
-                        <UserCheck className="h-3 w-3" /> Activo
-                      </Badge>
-                    ) : (
-                      <Badge className="border-transparent bg-slate-900 text-white gap-1" variant="outline">
-                        <UserX className="h-3 w-3" /> Inactivo
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {puedeGestionar && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Ver / editar usuario"
-                          onClick={() => abrirEdicion(u)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {puedeDesactivar && !u.isSuperadmin ? (
-                        <Button
-                          size="sm"
-                          variant={u.activo ? "destructive" : "success"}
-                          onClick={() => handleToggleEstado(u.id, !u.activo)}
-                        >
-                          {u.activo ? "Desactivar" : "Activar"}
-                        </Button>
-                      ) : (
-                        !puedeGestionar && <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="font-medium text-slate-800 flex items-center gap-2">
+                          {u.nombre}
+                          {u.isSuperadmin && (
+                            <Badge
+                              variant="outline"
+                              className="border-transparent bg-slate-900 text-white gap-1"
+                            >
+                              <Shield className="h-3 w-3" /> Superadmin
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">{u.email}</div>
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {puedeCambiarDepartamento ? (
+                          <Select
+                            value={u.departamentoId ?? "__sin_departamento__"}
+                            onValueChange={(value) => handleCambiarDepartamento(u.id, value)}
+                            disabled={cambiandoDepartamentoId === u.id}
+                          >
+                            <SelectTrigger className="h-8 w-44 text-xs">
+                              <SelectValue placeholder="Sin departamento" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__sin_departamento__">Sin departamento</SelectItem>
+                              {departamentos.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          u.departamento?.nombre || "Sin departamento"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {u.isSuperadmin ? (
+                          <span className="text-xs text-slate-500">Todos los permisos</span>
+                        ) : puedeCambiarRol ? (
+                          <Select
+                            value={u.rolId ?? "__sin_rol__"}
+                            onValueChange={(value) => handleCambiarRol(u.id, value)}
+                            disabled={cambiandoRolId === u.id}
+                          >
+                            <SelectTrigger className="h-8 w-44 text-xs">
+                              <SelectValue placeholder="Sin rol" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__sin_rol__">Sin rol asignado</SelectItem>
+                              {rolesActivos.map((r) => (
+                                <SelectItem key={r.id} value={r.id}>
+                                  {r.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant="secondary">{u.rolRel?.nombre || "Sin rol"}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {u.activo ? (
+                          <Badge
+                            className="border-blue-200 bg-blue-50 text-blue-800 gap-1"
+                            variant="outline"
+                          >
+                            <UserCheck className="h-3 w-3" /> Activo
+                          </Badge>
+                        ) : (
+                          <Badge
+                            className="border-transparent bg-slate-900 text-white gap-1"
+                            variant="outline"
+                          >
+                            <UserX className="h-3 w-3" /> Inactivo
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {puedeGestionar && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Ver / editar usuario"
+                              onClick={() => abrirEdicion(u)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {puedeDesactivar && !u.isSuperadmin ? (
+                            <Button
+                              size="sm"
+                              variant={u.activo ? "destructive" : "success"}
+                              onClick={() => handleToggleEstado(u.id, !u.activo)}
+                            >
+                              {u.activo ? "Desactivar" : "Activar"}
+                            </Button>
+                          ) : (
+                            !puedeGestionar && <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ))}
                 </Fragment>
               ))
@@ -726,7 +763,9 @@ function UsuariosConfigPage() {
               <div className="border-t border-slate-200 pt-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-slate-500" />
-                  <Label className="text-sm font-semibold text-slate-700">Acceso a otras empresas</Label>
+                  <Label className="text-sm font-semibold text-slate-700">
+                    Acceso a otras empresas
+                  </Label>
                 </div>
 
                 {cargandoMembresias ? (
@@ -743,9 +782,11 @@ function UsuariosConfigPage() {
                         className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2.5 py-1.5"
                       >
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-800 truncate">{m.tenant.nombre}</p>
+                          <p className="text-xs font-semibold text-slate-800 truncate">
+                            {m.tenant.nombre}
+                          </p>
                           <p className="text-[11px] text-slate-500">
-                            {m.isSuperadmin ? "Superadmin" : m.rolRel?.nombre ?? "Sin rol"}
+                            {m.isSuperadmin ? "Superadmin" : (m.rolRel?.nombre ?? "Sin rol")}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -775,8 +816,13 @@ function UsuariosConfigPage() {
 
                 {tenantsDisponiblesParaMembresia.length > 0 && (
                   <div className="rounded-md bg-slate-50 border border-slate-200 p-2.5 space-y-2">
-                    <p className="text-[11px] font-semibold text-slate-600">Dar acceso a otra empresa</p>
-                    <Select value={nuevaMembresiaTenantId} onValueChange={handleElegirTenantNuevaMembresia}>
+                    <p className="text-[11px] font-semibold text-slate-600">
+                      Dar acceso a otra empresa
+                    </p>
+                    <Select
+                      value={nuevaMembresiaTenantId}
+                      onValueChange={handleElegirTenantNuevaMembresia}
+                    >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Elige una empresa..." />
                       </SelectTrigger>
@@ -790,12 +836,17 @@ function UsuariosConfigPage() {
                     </Select>
 
                     {nuevaMembresiaTenantId && !nuevaMembresiaSuperadmin && (
-                      <Select value={nuevaMembresiaRolId || "__sin_rol__"} onValueChange={(v) => setNuevaMembresiaRolId(v === "__sin_rol__" ? "" : v)}>
+                      <Select
+                        value={nuevaMembresiaRolId || "__sin_rol__"}
+                        onValueChange={(v) => setNuevaMembresiaRolId(v === "__sin_rol__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue placeholder="Sin rol" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__sin_rol__">Sin rol (sin permisos hasta asignar uno)</SelectItem>
+                          <SelectItem value="__sin_rol__">
+                            Sin rol (sin permisos hasta asignar uno)
+                          </SelectItem>
                           {rolesTenantElegido.map((r) => (
                             <SelectItem key={r.id} value={r.id}>
                               {r.nombre}
@@ -848,7 +899,10 @@ function UsuariosConfigPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!usuarioAEliminar} onOpenChange={(open) => !open && setUsuarioAEliminar(null)}>
+      <AlertDialog
+        open={!!usuarioAEliminar}
+        onOpenChange={(open) => !open && setUsuarioAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar a {usuarioAEliminar?.nombre}?</AlertDialogTitle>
@@ -870,7 +924,10 @@ function UsuariosConfigPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={creandoUsuario} onOpenChange={(open) => !guardandoNuevoUsuario && setCreandoUsuario(open)}>
+      <Dialog
+        open={creandoUsuario}
+        onOpenChange={(open) => !guardandoNuevoUsuario && setCreandoUsuario(open)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nuevo usuario</DialogTitle>
@@ -954,7 +1011,10 @@ function UsuariosConfigPage() {
                 <Select
                   value={nuevoUsuario.rolId || "__sin_rol__"}
                   onValueChange={(value) =>
-                    setNuevoUsuario({ ...nuevoUsuario, rolId: value === "__sin_rol__" ? "" : value })
+                    setNuevoUsuario({
+                      ...nuevoUsuario,
+                      rolId: value === "__sin_rol__" ? "" : value,
+                    })
                   }
                 >
                   <SelectTrigger>

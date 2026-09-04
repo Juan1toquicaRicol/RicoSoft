@@ -8,7 +8,12 @@ export interface Empresa {
 }
 
 export const EMPRESAS: Empresa[] = [
-  { id: "RC", nombre: "REPRESENTACION INDUSTRIALES DE COLOMBIA S.A.S", nit: "8050069065", sigla: "RICOL" },
+  {
+    id: "RC",
+    nombre: "REPRESENTACION INDUSTRIALES DE COLOMBIA S.A.S",
+    nit: "8050069065",
+    sigla: "RICOL",
+  },
   { id: "FL", nombre: "FLEXIPACK DE COLOMBIA S.A.S", nit: "900215771", sigla: "FLEXIPACK" },
   { id: "GR", nombre: "GREEN SOLUTIONS COLOMBIA S.A.S BIC", nit: "901411539", sigla: "GREEN" },
 ];
@@ -78,7 +83,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const empresaActualObj = EMPRESAS.find((e) => e.id === empresaActiva);
 
   return (
-    <TenantContext.Provider value={{ empresaActiva, setEmpresaActiva, empresas: EMPRESAS, empresaActualObj }}>
+    <TenantContext.Provider
+      value={{ empresaActiva, setEmpresaActiva, empresas: EMPRESAS, empresaActualObj }}
+    >
       {children}
     </TenantContext.Provider>
   );

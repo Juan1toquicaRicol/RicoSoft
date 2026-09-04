@@ -22,7 +22,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -56,7 +63,11 @@ import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { DOMINIOS_PERMITIDOS, esDominioCorporativoValido } from "@/lib/dominios";
 import { money, Empleado, GravedadStrike } from "@/lib/data";
-import { FilaGrupo, OPCION_SIN_AGRUPAR, SelectorAgrupacion } from "@/components/ui/selector-agrupacion";
+import {
+  FilaGrupo,
+  OPCION_SIN_AGRUPAR,
+  SelectorAgrupacion,
+} from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
 
 export const Route = createFileRoute("/gestion-humana")({
@@ -164,7 +175,6 @@ function GestionHumana() {
     registradoPor: "Director RRHH",
   });
 
-
   // Filtered Lists
   const filteredEmpleados = useMemo(() => {
     if (empresaActiva === "ALL") return empleados;
@@ -219,7 +229,10 @@ function GestionHumana() {
         return null;
     }
   }, [agrupacionFaltas]);
-  const gruposFaltas = useMemo(() => agruparFilas(filteredFaltas, claveFaltas), [filteredFaltas, claveFaltas]);
+  const gruposFaltas = useMemo(
+    () => agruparFilas(filteredFaltas, claveFaltas),
+    [filteredFaltas, claveFaltas],
+  );
 
   // Handlers
   const handleSaveEmpleado = async (e: React.FormEvent) => {
@@ -265,7 +278,11 @@ function GestionHumana() {
     e.preventDefault();
     if (!selectedEmpleado) return;
     try {
-      await updateSalarioEmpleado(selectedEmpleado.id, Number(salarioForm.nuevoSalario), salarioForm.motivo);
+      await updateSalarioEmpleado(
+        selectedEmpleado.id,
+        Number(salarioForm.nuevoSalario),
+        salarioForm.motivo,
+      );
     } catch (err: any) {
       toast.error(err.message || "Error al actualizar el salario.");
       return;
@@ -396,30 +413,56 @@ function GestionHumana() {
             <SelectorAgrupacion
               value={agrupacionEmpleados}
               onChange={setAgrupacionEmpleados}
-              opciones={[OPCION_SIN_AGRUPAR, { value: "area", label: "Departamento" }, { value: "estado", label: "Estado" }]}
+              opciones={[
+                OPCION_SIN_AGRUPAR,
+                { value: "area", label: "Departamento" },
+                { value: "estado", label: "Estado" },
+              ]}
             />
           </div>
           <Table>
             <TableHeader className="bg-slate-100/80">
               <TableRow className="hover:bg-slate-100/80">
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Documento</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Empresa</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Cargo / Departamento</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fechas Contratación</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Salario Actual</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">Strikes</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Documento
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Colaborador
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Empresa
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Cargo / Departamento
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Fechas Contratación
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Salario Actual
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
+                  Strikes
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Estado
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Acciones
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="text-slate-800 font-medium">
               {gruposEmpleados.map((grupo) => (
                 <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />}
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                  )}
                   {grupo.filas.map((emp) => (
                     <TableRow key={emp.id}>
-                      <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">{emp.documento}</TableCell>
+                      <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">
+                        {emp.documento}
+                      </TableCell>
                       <TableCell className="px-4 py-3">
                         <p className="font-bold text-slate-900">
                           {emp.nombres} {emp.apellidos}
@@ -427,7 +470,10 @@ function GestionHumana() {
                         <p className="text-[11px] text-slate-500 font-normal">{emp.correo}</p>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 font-bold">
+                        <Badge
+                          variant="outline"
+                          className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                        >
                           {emp.empresaId}
                         </Badge>
                       </TableCell>
@@ -447,11 +493,15 @@ function GestionHumana() {
                       </TableCell>
                       <TableCell className="num px-4 py-3 text-right font-bold text-slate-900">
                         {money(emp.salarioActual)}
-                        <p className="text-[10px] text-slate-400 font-normal">({emp.historicoSalario.length} cambios)</p>
+                        <p className="text-[10px] text-slate-400 font-normal">
+                          ({emp.historicoSalario.length} cambios)
+                        </p>
                       </TableCell>
                       <TableCell className="px-4 py-3 text-center font-bold">
                         {emp.strikesCount > 0 ? (
-                          <Badge className="rounded-full border-transparent bg-slate-900 text-white">{emp.strikesCount} ⚡</Badge>
+                          <Badge className="rounded-full border-transparent bg-slate-900 text-white">
+                            {emp.strikesCount} ⚡
+                          </Badge>
                         ) : (
                           <span className="text-xs text-slate-400 font-normal">0</span>
                         )}
@@ -479,8 +529,11 @@ function GestionHumana() {
                               variant="ghost"
                               onClick={() => {
                                 if (confirm(`¿Liquidar al colaborador ${emp.nombres}?`)) {
-                                  liquidarEmpleado(emp.id, new Date().toISOString().split("T")[0]).catch(
-                                    (err: any) => toast.error(err.message || "Error al liquidar el colaborador."),
+                                  liquidarEmpleado(
+                                    emp.id,
+                                    new Date().toISOString().split("T")[0],
+                                  ).catch((err: any) =>
+                                    toast.error(err.message || "Error al liquidar el colaborador."),
                                   );
                                 }
                               }}
@@ -509,7 +562,9 @@ function GestionHumana() {
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={9} className="p-0">
                     {loading ? (
-                      <div className="py-12 text-center text-xs text-slate-500">Cargando colaboradores...</div>
+                      <div className="py-12 text-center text-xs text-slate-500">
+                        Cargando colaboradores...
+                      </div>
                     ) : error ? (
                       <div className="py-12 text-center text-xs text-slate-500">{error}</div>
                     ) : (
@@ -518,7 +573,11 @@ function GestionHumana() {
                         title="No hay colaboradores registrados para esta empresa"
                         description='Haz clic en "Registrar Colaborador" para crear el primer expediente.'
                         action={
-                          <Button size="sm" onClick={() => setModalEmpleadoOpen(true)} className="gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => setModalEmpleadoOpen(true)}
+                            className="gap-2"
+                          >
                             <UserPlus className="h-4 w-4" /> Registrar Colaborador
                           </Button>
                         }
@@ -547,35 +606,63 @@ function GestionHumana() {
             <SelectorAgrupacion
               value={agrupacionPermisos}
               onChange={setAgrupacionPermisos}
-              opciones={[OPCION_SIN_AGRUPAR, { value: "tipo", label: "Tipo de permiso" }, { value: "estado", label: "Estado" }]}
+              opciones={[
+                OPCION_SIN_AGRUPAR,
+                { value: "tipo", label: "Tipo de permiso" },
+                { value: "estado", label: "Estado" },
+              ]}
             />
           </div>
           <Table>
             <TableHeader className="bg-slate-100/80">
               <TableRow className="hover:bg-slate-100/80">
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Tipo Permiso</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fechas (Inicio / Fin)</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">Días</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Observaciones</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Estado</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">Acciones</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Colaborador
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Tipo Permiso
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Fechas (Inicio / Fin)
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
+                  Días
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Observaciones
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Estado
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Acciones
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="text-slate-800 font-medium">
               {gruposPermisos.map((grupo) => (
                 <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />}
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={7} />
+                  )}
                   {grupo.filas.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="px-4 py-3 font-bold text-slate-900">{p.nombreEmpleado}</TableCell>
-                      <TableCell className="px-4 py-3 text-xs font-bold text-blue-800">{p.tipoPermiso}</TableCell>
+                      <TableCell className="px-4 py-3 font-bold text-slate-900">
+                        {p.nombreEmpleado}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-bold text-blue-800">
+                        {p.tipoPermiso}
+                      </TableCell>
                       <TableCell className="px-4 py-3 text-xs font-mono text-slate-600">
                         {new Date(p.fechaInicio).toLocaleDateString("es-CO")} al{" "}
                         {new Date(p.fechaFin).toLocaleDateString("es-CO")}
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-center font-bold text-xs text-slate-900">{p.dias} días</TableCell>
-                      <TableCell className="px-4 py-3 text-xs text-slate-500 max-w-[250px] truncate">{p.observaciones || "-"}</TableCell>
+                      <TableCell className="px-4 py-3 text-center font-bold text-xs text-slate-900">
+                        {p.dias} días
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500 max-w-[250px] truncate">
+                        {p.observaciones || "-"}
+                      </TableCell>
                       <TableCell className="px-4 py-3">
                         <EstadoBadge estado={p.estado} />
                       </TableCell>
@@ -617,7 +704,9 @@ function GestionHumana() {
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={7} className="p-0">
                     {loading ? (
-                      <div className="py-12 text-center text-xs text-slate-500">Cargando permisos...</div>
+                      <div className="py-12 text-center text-xs text-slate-500">
+                        Cargando permisos...
+                      </div>
                     ) : error ? (
                       <div className="py-12 text-center text-xs text-slate-500">{error}</div>
                     ) : (
@@ -626,7 +715,11 @@ function GestionHumana() {
                         title="No hay solicitudes de permiso registradas"
                         description='Haz clic en "Solicitar Permiso" para crear la primera.'
                         action={
-                          <Button size="sm" onClick={() => setModalPermisoOpen(true)} className="gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => setModalPermisoOpen(true)}
+                            className="gap-2"
+                          >
                             <Plus className="h-4 w-4" /> Solicitar Permiso
                           </Button>
                         }
@@ -661,24 +754,40 @@ function GestionHumana() {
           <Table>
             <TableHeader className="bg-slate-100/80">
               <TableRow className="hover:bg-slate-100/80">
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Fecha</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Colaborador</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Gravedad</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Motivo de la Falta</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Descargos presentados</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">Registrado Por</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Fecha
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Colaborador
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Gravedad
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Motivo de la Falta
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Descargos presentados
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Registrado Por
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="text-slate-800 font-medium">
               {gruposFaltas.map((grupo) => (
                 <Fragment key={grupo.clave || "sin-grupo"}>
-                  {grupo.clave && <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />}
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={6} />
+                  )}
                   {grupo.filas.map((f) => (
                     <TableRow key={f.id}>
                       <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">
                         {new Date(f.fecha).toLocaleDateString("es-CO")}
                       </TableCell>
-                      <TableCell className="px-4 py-3 font-bold text-slate-900">{f.nombreEmpleado}</TableCell>
+                      <TableCell className="px-4 py-3 font-bold text-slate-900">
+                        {f.nombreEmpleado}
+                      </TableCell>
                       <TableCell className="px-4 py-3">
                         <Badge
                           variant="outline"
@@ -693,11 +802,15 @@ function GestionHumana() {
                           {f.gravedad}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800 max-w-[280px]">{f.motivo}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800 max-w-[280px]">
+                        {f.motivo}
+                      </TableCell>
                       <TableCell className="px-4 py-3 text-xs text-slate-500 max-w-[250px] italic">
                         {f.descargos || "Sin descargos registrados"}
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-xs text-slate-500">{f.registradoPor}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500">
+                        {f.registradoPor}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </Fragment>
@@ -839,7 +952,8 @@ function GestionHumana() {
                 className="h-9 text-xs border-slate-300"
               />
               <p className="text-[11px] text-slate-400">
-                Solo se permiten correos corporativos ({DOMINIOS_PERMITIDOS.map((d) => `@${d}`).join(", ")}).
+                Solo se permiten correos corporativos (
+                {DOMINIOS_PERMITIDOS.map((d) => `@${d}`).join(", ")}).
               </p>
             </div>
 
@@ -1187,12 +1301,7 @@ function GestionHumana() {
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                variant="destructive"
-                className="font-bold"
-              >
+              <Button type="submit" size="sm" variant="destructive" className="font-bold">
                 Aplicar Sanción
               </Button>
             </DialogFooter>
@@ -1200,11 +1309,15 @@ function GestionHumana() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!empleadoAEliminar} onOpenChange={(open) => !open && setEmpleadoAEliminar(null)}>
+      <AlertDialog
+        open={!!empleadoAEliminar}
+        onOpenChange={(open) => !open && setEmpleadoAEliminar(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              ¿Eliminar el expediente de {empleadoAEliminar?.nombres} {empleadoAEliminar?.apellidos}?
+              ¿Eliminar el expediente de {empleadoAEliminar?.nombres} {empleadoAEliminar?.apellidos}
+              ?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción es permanente. El colaborador dejará de aparecer en el listado, pero su

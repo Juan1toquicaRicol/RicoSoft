@@ -14,6 +14,10 @@ router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("plan_produccion.ver"), listarPlanesProduccion);
 router.post("/", requirePermission("plan_produccion.gestionar"), crearPlanProduccion);
-router.patch("/:id/estado", requirePermission("plan_produccion.gestionar"), actualizarEstadoPlanProduccion);
+router.patch(
+  "/:id/estado",
+  requirePermission("plan_produccion.gestionar"),
+  actualizarEstadoPlanProduccion,
+);
 
 export default router;

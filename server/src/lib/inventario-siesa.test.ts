@@ -137,8 +137,9 @@ describe("calcularResumenInventarioSiesa", () => {
   });
 
   it("topRiesgo incluye exceso y obsolescencia, ordenados por valor descendente, máximo 15", () => {
-    const items = Array.from({ length: 20 }, (_, i) =>
-      item(i, 10, 0, (i + 1) * 100, dia(200)), // todos obsolescencia
+    const items = Array.from(
+      { length: 20 },
+      (_, i) => item(i, 10, 0, (i + 1) * 100, dia(200)), // todos obsolescencia
     );
     const r = calcularResumenInventarioSiesa(items, ahora);
     expect(r.topRiesgo).toHaveLength(15);

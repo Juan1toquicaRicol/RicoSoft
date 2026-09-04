@@ -10,7 +10,10 @@ export interface GrupoFilas<T> {
  * código de render. Los grupos se ordenan alfabéticamente (locale es) para
  * que el orden no cambie entre renders.
  */
-export function agruparFilas<T>(filas: T[], claveDe: ((fila: T) => string) | null): GrupoFilas<T>[] {
+export function agruparFilas<T>(
+  filas: T[],
+  claveDe: ((fila: T) => string) | null,
+): GrupoFilas<T>[] {
   if (!claveDe) return [{ clave: "", filas }];
 
   const grupos = new Map<string, T[]>();

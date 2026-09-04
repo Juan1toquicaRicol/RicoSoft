@@ -168,10 +168,8 @@ export async function leerExistenciaPorBodegaSiesa(
   bodegaRowId: number,
 ): Promise<ExistenciaItemBodegaSiesa[]> {
   const pool = await getSiesaPool();
-  const { recordset } = await pool
-    .request()
-    .input("ciaId", ciaId)
-    .input("bodegaRowId", bodegaRowId).query<{
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("bodegaRowId", bodegaRowId)
+    .query<{
     itemRowId: number;
     descripcion: string | null;
     referencia: string | null;

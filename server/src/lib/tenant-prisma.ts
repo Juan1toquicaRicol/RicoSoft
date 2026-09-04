@@ -64,6 +64,7 @@ const MODELOS_TENANT_SCOPED = new Set([
   "ClasificacionFuncionalItem",
   "ItemClasificacionAsignada",
   "InboxItem",
+  "Objetivo",
 ]);
 
 /** Convención de Prisma: el accessor del cliente es el nombre del modelo

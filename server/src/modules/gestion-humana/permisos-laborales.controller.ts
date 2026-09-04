@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
@@ -8,7 +9,7 @@ export const listarPermisosLaborales = async (req: AuthenticatedRequest, res: Re
   try {
     const tenantId = req.user!.tenantId;
     const { empresaId } = req.query;
-    const where: any = { tenantId };
+    const where: Prisma.PermisoLaboralWhereInput = { tenantId };
     if (typeof empresaId === "string" && empresaId) where.empresaId = empresaId;
 
     const permisos = await prisma.permisoLaboral.findMany({

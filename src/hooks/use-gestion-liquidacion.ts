@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
-export type EstadoGestionLiquidacion = "PENDIENTE" | "EN_REVISION" | "APROBADA" | "RECHAZADA" | "EJECUTADA";
+export type EstadoGestionLiquidacion =
+  "PENDIENTE" | "EN_REVISION" | "APROBADA" | "RECHAZADA" | "EJECUTADA";
 export type CategoriaLiquidacion = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
 
 export interface GestionLiquidacion {
@@ -48,8 +49,8 @@ export function useGestionesLiquidacion() {
     try {
       const data = await fetchAuth("/gestion-liquidacion");
       setGestiones(data);
-    } catch (err: any) {
-      setError(err.message || "Error cargando las gestiones de liquidación.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando las gestiones de liquidación.");
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { Response } from "express";
-import { Prisma } from "@prisma/client";
+import { Response, Request } from "express";
+import { Pago, Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import {
   UPLOADS_DIR_COMPROBANTES,
@@ -21,7 +21,7 @@ function esErrorDeConcurrencia(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
 }
 
-function serializarPago(p: any) {
+function serializarPago(p: Pago) {
   return {
     id: p.id,
     facturaId: p.facturaId,
@@ -205,9 +205,7 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
           referencia:
             typeof referencia === "string" && referencia.trim() ? referencia.trim() : null,
           observaciones:
-            typeof observaciones === "string" && observaciones.trim()
-              ? observaciones.trim()
-              : null,
+            typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
           registradoPorId: req.user!.id,
           registradoPorNombre: req.user!.nombre,
         },
@@ -263,7 +261,8 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
     if (esErrorDeConcurrencia(error)) {
       console.warn("Conflicto de concurrencia al registrar pago (P2034):", error);
       return res.status(409).json({
-        message: "Otro pago se procesó al mismo tiempo sobre esta factura. Verifica el saldo actual e intenta de nuevo.",
+        message:
+          "Otro pago se procesó al mismo tiempo sobre esta factura. Verifica el saldo actual e intenta de nuevo.",
       });
     }
     console.error("Error al registrar pago:", error);
@@ -363,7 +362,7 @@ export const subirComprobantePago = async (req: AuthenticatedRequest, res: Respo
   try {
     const tenantId = req.user!.tenantId;
     const { facturaId, id: pagoId } = req.params;
-    const archivo = (req as any).file as Express.Multer.File | undefined;
+    const archivo = (req as Request & { file?: Express.Multer.File }).file;
 
     if (!archivo) {
       return res.status(400).json({ message: "No se recibió ningún archivo." });

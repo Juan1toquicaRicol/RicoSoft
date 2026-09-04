@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const textoObligatorio = (mensaje: string) => ({ required_error: mensaje, invalid_type_error: mensaje });
+const textoObligatorio = (mensaje: string) => ({
+  required_error: mensaje,
+  invalid_type_error: mensaje,
+});
 
 // `valor` acepta number o string (el frontend puede mandar cualquiera); la
 // validación de que sea un número positivo real ocurre en el controlador,

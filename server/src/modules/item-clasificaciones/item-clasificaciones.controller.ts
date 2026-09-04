@@ -24,7 +24,10 @@ const CLASIFICACIONES_SEMILLA = [
 ];
 
 async function resolverCiaSiesa(tenantId: string): Promise<number | null> {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { siesaCiaId: true } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
   return tenant?.siesaCiaId ?? null;
 }
 
@@ -88,8 +91,8 @@ export const crearClasificacion = async (req: AuthenticatedRequest, res: Respons
 
     const ultimaOrden =
       orden ??
-      ((await req.tenantPrisma!.clasificacionFuncionalItem.aggregate({ _max: { orden: true } }))._max
-        .orden ?? 0) + 1;
+      ((await req.tenantPrisma!.clasificacionFuncionalItem.aggregate({ _max: { orden: true } }))
+        ._max.orden ?? 0) + 1;
 
     const clasificacion = await req.tenantPrisma!.clasificacionFuncionalItem.create({
       data: {
@@ -112,7 +115,9 @@ export const crearClasificacion = async (req: AuthenticatedRequest, res: Respons
       },
     });
 
-    return res.status(201).json(serializarClasificacion({ ...clasificacion, _count: { asignaciones: 0 } }));
+    return res
+      .status(201)
+      .json(serializarClasificacion({ ...clasificacion, _count: { asignaciones: 0 } }));
   } catch (error) {
     console.error("Error al crear clasificación funcional de ítem:", error);
     return res.status(500).json({ message: "Error al crear la clasificación." });
@@ -125,7 +130,9 @@ export const actualizarClasificacion = async (req: AuthenticatedRequest, res: Re
     const { id } = req.params;
     const { nombre, descripcion, orden } = req.body;
 
-    const existente = await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({ where: { id } });
+    const existente = await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({
+      where: { id },
+    });
     if (!existente) return res.status(404).json({ message: "Clasificación no encontrada." });
 
     const actualizada = await req.tenantPrisma!.clasificacionFuncionalItem.update({
@@ -168,7 +175,9 @@ export const cambiarActivoClasificacion = async (req: AuthenticatedRequest, res:
     const { id } = req.params;
     const { activo } = req.body;
 
-    const existente = await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({ where: { id } });
+    const existente = await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({
+      where: { id },
+    });
     if (!existente) return res.status(404).json({ message: "Clasificación no encontrada." });
 
     const actualizada = await req.tenantPrisma!.clasificacionFuncionalItem.update({
@@ -237,7 +246,10 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
 
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25));
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25),
+    );
     const clasificacionId =
       typeof req.query.clasificacionId === "string" && req.query.clasificacionId
         ? req.query.clasificacionId
@@ -246,7 +258,9 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
 
     if (clasificacionId || sinClasificar) {
       const clasificacion = clasificacionId
-        ? await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({ where: { id: clasificacionId } })
+        ? await req.tenantPrisma!.clasificacionFuncionalItem.findFirst({
+            where: { id: clasificacionId },
+          })
         : null;
       if (clasificacionId && !clasificacion) {
         return res.status(404).json({ message: "Clasificación no encontrada." });
@@ -257,7 +271,13 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
       });
       const itemsClasificados = [...new Set(todasLasAsignaciones.map((a) => a.itemRowId))];
       const itemsConClasificacion = clasificacionId
-        ? [...new Set(todasLasAsignaciones.filter((a) => a.clasificacionId === clasificacionId).map((a) => a.itemRowId))]
+        ? [
+            ...new Set(
+              todasLasAsignaciones
+                .filter((a) => a.clasificacionId === clasificacionId)
+                .map((a) => a.itemRowId),
+            ),
+          ]
         : null;
 
       const idsParaFiltroSql = sinClasificar ? itemsClasificados : itemsConClasificacion!;
@@ -291,7 +311,9 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
       // conjunto de itemRowId a filtrar excede el límite de parámetros de
       // una consulta SQL — se conserva el comportamiento anterior.
       const itemsClasificadosSet = new Set(itemsClasificados);
-      const itemsConClasificacionSet = itemsConClasificacion ? new Set(itemsConClasificacion) : null;
+      const itemsConClasificacionSet = itemsConClasificacion
+        ? new Set(itemsConClasificacion)
+        : null;
 
       const { items: catalogoCompleto } = await listarItemsMaestroSiesa(siesaCiaId, {
         search: search || undefined,
@@ -300,7 +322,9 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
       });
 
       const filtrados = catalogoCompleto.filter((it) =>
-        sinClasificar ? !itemsClasificadosSet.has(it.itemRowId) : itemsConClasificacionSet!.has(it.itemRowId),
+        sinClasificar
+          ? !itemsClasificadosSet.has(it.itemRowId)
+          : itemsConClasificacionSet!.has(it.itemRowId),
       );
 
       const total = filtrados.length;
@@ -348,7 +372,14 @@ export const listarItemsConClasificacion = async (req: AuthenticatedRequest, res
 
 async function adjuntarClasificaciones(
   req: AuthenticatedRequest,
-  items: { itemRowId: number; descripcion: string | null; referencia: string | null; unidadMedida: string | null; esVendible: boolean; naturaleza: string }[],
+  items: {
+    itemRowId: number;
+    descripcion: string | null;
+    referencia: string | null;
+    unidadMedida: string | null;
+    esVendible: boolean;
+    naturaleza: string;
+  }[],
 ) {
   if (items.length === 0) return [];
   const itemRowIds = items.map((i) => i.itemRowId);
@@ -359,7 +390,11 @@ async function adjuntarClasificaciones(
   const porItem = new Map<number, { id: string; nombre: string; codigo: string }[]>();
   for (const a of asignaciones) {
     const lista = porItem.get(a.itemRowId) ?? [];
-    lista.push({ id: a.clasificacion.id, nombre: a.clasificacion.nombre, codigo: a.clasificacion.codigo });
+    lista.push({
+      id: a.clasificacion.id,
+      nombre: a.clasificacion.nombre,
+      codigo: a.clasificacion.codigo,
+    });
     porItem.set(a.itemRowId, lista);
   }
   return items.map((it) => ({ ...it, clasificaciones: porItem.get(it.itemRowId) ?? [] }));
@@ -374,7 +409,9 @@ export const obtenerClasificacionesDeItem = async (req: AuthenticatedRequest, re
 
     const asignaciones = await req.tenantPrisma!.itemClasificacionAsignada.findMany({
       where: { itemRowId },
-      include: { clasificacion: { select: { id: true, nombre: true, codigo: true, activo: true } } },
+      include: {
+        clasificacion: { select: { id: true, nombre: true, codigo: true, activo: true } },
+      },
     });
 
     return res.json({
@@ -416,7 +453,9 @@ export const actualizarClasificacionesDeItem = async (req: AuthenticatedRequest,
       select: { id: true, nombre: true },
     });
     if (clasificacionesValidas.length !== new Set(clasificacionIds).size) {
-      return res.status(404).json({ message: "Una o más clasificaciones no existen en este tenant." });
+      return res
+        .status(404)
+        .json({ message: "Una o más clasificaciones no existen en este tenant." });
     }
 
     const actuales = await req.tenantPrisma!.itemClasificacionAsignada.findMany({
@@ -435,7 +474,11 @@ export const actualizarClasificacionesDeItem = async (req: AuthenticatedRequest,
 
     await req.tenantPrisma!.$transaction([
       ...(aQuitar.length > 0
-        ? [req.tenantPrisma!.itemClasificacionAsignada.deleteMany({ where: { id: { in: aQuitar.map((a) => a.id) } } })]
+        ? [
+            req.tenantPrisma!.itemClasificacionAsignada.deleteMany({
+              where: { id: { in: aQuitar.map((a) => a.id) } },
+            }),
+          ]
         : []),
       ...(aAgregar.length > 0
         ? [
@@ -462,7 +505,11 @@ export const actualizarClasificacionesDeItem = async (req: AuthenticatedRequest,
         detalle: `${req.user!.nombre} actualizó las clasificaciones del ítem Siesa #${itemRowId}: +[${aAgregar
           .map((id) => clasificacionesValidas.find((c) => c.id === id)?.nombre)
           .join(", ")}] -[${aQuitar
-          .map((a) => actuales.find((x) => x.id === a.id) && clasificacionesValidas.find((c) => c.id === a.clasificacionId)?.nombre)
+          .map(
+            (a) =>
+              actuales.find((x) => x.id === a.id) &&
+              clasificacionesValidas.find((c) => c.id === a.clasificacionId)?.nombre,
+          )
           .filter(Boolean)
           .join(", ")}]`,
         entidadTipo: "ItemClasificacionAsignada",

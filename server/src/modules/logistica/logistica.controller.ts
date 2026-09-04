@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
 import { calcularOtif } from "../../domain/logistica/otif";
@@ -18,7 +19,7 @@ export const obtenerCumplimientoLogistico = async (req: AuthenticatedRequest, re
     const desde = typeof desdeQuery === "string" && desdeQuery ? new Date(desdeQuery) : null;
     const hasta = typeof hastaQuery === "string" && hastaQuery ? new Date(hastaQuery) : null;
 
-    const where: any = {};
+    const where: Prisma.DespachoWhereInput = {};
     if (desde || hasta) {
       where.fechaEntregaReal = {
         ...(desde ? { gte: desde } : {}),
