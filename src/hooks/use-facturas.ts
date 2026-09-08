@@ -63,7 +63,6 @@ export function useFacturas(filtros: FacturasFiltros = {}) {
       numero: string;
       proveedorId: string;
       servicioId?: string;
-      contratoId?: string;
       solicitudCompraId?: string;
       area: string;
       responsableId: string;

@@ -78,7 +78,7 @@ const TRANSICIONES_DE_RESOLUCION = new Set(["Aprobada", "Rechazada"]);
 // undefined, de ahí que sean opcionales acá.
 type SolicitudSerializable = SolicitudCompra & {
   facturas?: { id: string; numero: string; estado: string }[];
-  cotizacionesProveedor?: { id: string; esGanadora: boolean }[];
+  cotizacionesProveedor?: { id: string; esGanadora: boolean; valorTotalCOP: Prisma.Decimal }[];
 };
 
 function serializar(s: SolicitudSerializable) {
@@ -119,6 +119,12 @@ function serializar(s: SolicitudSerializable) {
       minimo: MIN_COTIZACIONES_REQUERIDAS,
       maximo: MAX_COTIZACIONES_COMPARATIVO,
       tieneGanadora: cotizacionesProv.some((c) => c.esGanadora),
+      // El listado ya no pide un valor estimado al crear la solicitud (se
+      // decide con las cotizaciones reales) — "Menor valor" reemplaza esa
+      // columna con el mínimo entre las cotizaciones cargadas hasta ahora.
+      menorValor: cotizacionesProv.length
+        ? Math.min(...cotizacionesProv.map((c) => Number(c.valorTotalCOP)))
+        : null,
     },
     // Factura final que se paga, si ya se registró (una solicitud "Comprado"
     // puede seguir sin factura hasta que llegue la factura del proveedor).
@@ -146,7 +152,7 @@ const INCLUDE_FACTURA_VINCULADA = {
     take: 1,
   },
   cotizacionesProveedor: {
-    select: { id: true, esGanadora: true },
+    select: { id: true, esGanadora: true, valorTotalCOP: true },
   },
 };
 
@@ -555,6 +561,9 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
     // 3; relajado a pedido del negocio — con 1 o 2 cotizaciones también se
     // puede aprobar si hay ganadora). Se valida en el backend (aquí)
     // independientemente de que el frontend ya bloquee el botón por UX.
+    let cotizacionGanadora:
+      | { proveedorId: string | null; proveedorNombre: string; valorTotalCOP: Prisma.Decimal }
+      | undefined;
     if (nuevoEstado === "Aprobada") {
       const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
         where: { solicitudCompraId: id, tenantId },
@@ -564,7 +573,8 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
           message: `Se requiere al menos ${MIN_COTIZACIONES_REQUERIDAS} cotización de proveedor para aprobar esta solicitud (hay ${cotizaciones.length}).`,
         });
       }
-      if (!cotizaciones.some((c) => c.esGanadora)) {
+      cotizacionGanadora = cotizaciones.find((c) => c.esGanadora);
+      if (!cotizacionGanadora) {
         return res.status(409).json({
           message:
             "Selecciona la cotización ganadora en el cuadro comparativo antes de aprobar la solicitud.",
@@ -573,6 +583,16 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
     }
 
     const data: Prisma.SolicitudCompraUncheckedUpdateInput = { estado: nuevoEstado };
+    // Al aprobar, el proveedor y el valor de la solicitud quedan fijados a
+    // los de la cotización que ganó el cuadro comparativo — la solicitud se
+    // crea sin proveedor elegido y con un valor estimado provisional a
+    // propósito (ver solicitudes-compra.index.tsx), así que este es el único
+    // momento en que esos campos quedan con el dato real.
+    if (cotizacionGanadora) {
+      data.proveedorId = cotizacionGanadora.proveedorId;
+      data.proveedor = cotizacionGanadora.proveedorNombre;
+      data.valorEstimado = cotizacionGanadora.valorTotalCOP;
+    }
     if (TRANSICIONES_DE_RESOLUCION.has(nuevoEstado)) {
       data.fechaResolucion = new Date();
       data.resueltoPorId = req.user!.id;

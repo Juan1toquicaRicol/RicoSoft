@@ -1,5 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CreditCard, Plus, Power, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CreditCard,
+  Pencil,
+  Plus,
+  Power,
+  Trash2,
+} from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -53,15 +62,14 @@ import {
 import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import { useServicios } from "@/hooks/use-servicios";
 import { useProveedorBusqueda } from "@/hooks/use-proveedores";
-import { useContratos } from "@/hooks/use-contratos";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departamento";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
-import { money, PeriodicidadServicio } from "@/lib/data";
+import { money, PeriodicidadServicio, type ServicioSuscripcion } from "@/lib/data";
 
-export const Route = createFileRoute("/servicios")({
+export const Route = createFileRoute("/servicios/")({
   head: () => ({
     meta: [
       { title: "Servicios y Suscripciones | RicoSoft" },
@@ -82,6 +90,7 @@ function ServiciosPage() {
     loading,
     error,
     addSuscripcion,
+    actualizarSuscripcion,
     toggleEstadoSuscripcion,
     eliminarSuscripcion,
   } = useServicios();
@@ -93,15 +102,19 @@ function ServiciosPage() {
   const [proveedorSeleccionadoNombre, setProveedorSeleccionadoNombre] = useState<
     string | undefined
   >();
-  const { contratos } = useContratos();
-  const contratosActivos = contratos.filter((c) => c.estado === "Activo");
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
   const empresaBloqueada =
     empresaIdDeTenant(user?.tenantNombre) || (empresaActiva !== "ALL" ? empresaActiva : null);
   const puedeEliminar = hasPermission(user, PERMISOS_SISTEMA.SERVICIOS_ELIMINAR);
+  const puedeEditar = hasPermission(user, PERMISOS_SISTEMA.SERVICIOS_EDITAR);
 
   const [modalOpen, setModalOpen] = useState(false);
+  // Servicio en edición (null = el modal está creando uno nuevo). Guardamos
+  // el registro completo, no solo el id, para poder reenviar al backend los
+  // campos que este formulario no expone (descripción, fechas, observaciones)
+  // sin borrarlos — actualizarServicio reemplaza el registro completo.
+  const [editando, setEditando] = useState<ServicioSuscripcion | null>(null);
   const [servicioAEliminar, setServicioAEliminar] = useState<{ id: string; nombre: string } | null>(
     null,
   );
@@ -127,10 +140,9 @@ function ServiciosPage() {
     area: "Sistemas",
     nombreServicio: "",
     proveedorId: "",
-    contratoId: "",
     periodicidad: "Mensual" as PeriodicidadServicio,
     costo: 350000,
-    moneda: "COP" as const,
+    moneda: "COP" as "COP" | "USD",
     fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     responsableId: "",
   });
@@ -157,9 +169,42 @@ function ServiciosPage() {
     }
   }, [agrupacion]);
 
+  const [orden, setOrden] = useState<{ campo: CampoOrdenServicio; dir: "asc" | "desc" } | null>(
+    null,
+  );
+  const cambiarOrden = (campo: CampoOrdenServicio) => {
+    setOrden((actual) => {
+      if (actual?.campo !== campo) return { campo, dir: "asc" };
+      return actual.dir === "asc" ? { campo, dir: "desc" } : null;
+    });
+  };
+
+  const sortedSuscripciones = useMemo(() => {
+    if (!orden) return filteredSuscripciones;
+    const factor = orden.dir === "asc" ? 1 : -1;
+    return [...filteredSuscripciones].sort((a, b) => {
+      switch (orden.campo) {
+        case "servicio":
+          return a.nombreServicio.localeCompare(b.nombreServicio) * factor;
+        case "area":
+          return a.area.localeCompare(b.area) * factor;
+        case "costo":
+          return (a.costo - b.costo) * factor;
+        case "periodicidad":
+          return a.periodicidad.localeCompare(b.periodicidad) * factor;
+        case "fechaRenovacion":
+          return (
+            (new Date(a.fechaRenovacion).getTime() - new Date(b.fechaRenovacion).getTime()) * factor
+          );
+        default:
+          return 0;
+      }
+    });
+  }, [filteredSuscripciones, orden]);
+
   const gruposSuscripciones = useMemo(
-    () => agruparFilas(filteredSuscripciones, claveDeAgrupacion),
-    [filteredSuscripciones, claveDeAgrupacion],
+    () => agruparFilas(sortedSuscripciones, claveDeAgrupacion),
+    [sortedSuscripciones, claveDeAgrupacion],
   );
 
   // Total recurrente acumulado por empresa
@@ -173,6 +218,52 @@ function ServiciosPage() {
       }, 0);
   }, [filteredSuscripciones]);
 
+  // Servicios activos cuya próxima renovación cae dentro de los próximos 30
+  // días — hoy esa señal solo se ve fila por fila (BarraVencimiento), sin un
+  // resumen que permita saber de un vistazo si hay renovaciones inminentes.
+  const proximosAVencer = useMemo(() => {
+    const ahora = Date.now();
+    const en30Dias = ahora + 30 * 24 * 60 * 60 * 1000;
+    return filteredSuscripciones.filter((s) => {
+      if (s.estado !== "Activo") return false;
+      const fecha = new Date(s.fechaRenovacion).getTime();
+      return fecha >= ahora && fecha <= en30Dias;
+    }).length;
+  }, [filteredSuscripciones]);
+
+  const resetForm = () => {
+    setForm({
+      empresaId: empresaBloqueada || "RC",
+      area: "Sistemas",
+      nombreServicio: "",
+      proveedorId: "",
+      periodicidad: "Mensual",
+      costo: 350000,
+      moneda: "COP",
+      fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      responsableId: "",
+    });
+    setProveedorSeleccionadoNombre(undefined);
+    setEditando(null);
+  };
+
+  const abrirEdicion = (sub: ServicioSuscripcion) => {
+    setEditando(sub);
+    setForm({
+      empresaId: sub.empresaId,
+      area: sub.area,
+      nombreServicio: sub.nombreServicio,
+      proveedorId: sub.proveedorId || "",
+      periodicidad: sub.periodicidad,
+      costo: sub.costo,
+      moneda: sub.moneda,
+      fechaRenovacion: sub.fechaRenovacion.split("T")[0],
+      responsableId: sub.responsableId || "",
+    });
+    setProveedorSeleccionadoNombre(sub.proveedor);
+    setModalOpen(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.nombreServicio || !form.proveedorId) return;
@@ -181,36 +272,47 @@ function ServiciosPage() {
       return;
     }
     try {
-      await addSuscripcion({
-        empresaId: form.empresaId,
-        area: form.area,
-        nombreServicio: form.nombreServicio,
-        proveedorId: form.proveedorId,
-        contratoId: form.contratoId || undefined,
-        periodicidad: form.periodicidad,
-        costo: Number(form.costo),
-        moneda: form.moneda,
-        fechaRenovacion: form.fechaRenovacion,
-        responsableId: form.responsableId,
-      });
+      if (editando) {
+        await actualizarSuscripcion(editando.id, {
+          empresaId: form.empresaId,
+          area: form.area,
+          nombreServicio: form.nombreServicio,
+          descripcion: editando.descripcion ?? undefined,
+          proveedorId: form.proveedorId,
+          periodicidad: form.periodicidad,
+          costo: Number(form.costo),
+          moneda: form.moneda,
+          fechaInicio: editando.fechaInicio ?? undefined,
+          fechaFin: editando.fechaFin ?? undefined,
+          diaVencimiento: editando.diaVencimiento ?? undefined,
+          fechaRenovacion: form.fechaRenovacion,
+          responsableId: form.responsableId,
+          observaciones: editando.observaciones ?? undefined,
+        });
+        toast.success(`Servicio "${form.nombreServicio}" actualizado.`);
+      } else {
+        await addSuscripcion({
+          empresaId: form.empresaId,
+          area: form.area,
+          nombreServicio: form.nombreServicio,
+          proveedorId: form.proveedorId,
+          periodicidad: form.periodicidad,
+          costo: Number(form.costo),
+          moneda: form.moneda,
+          fechaRenovacion: form.fechaRenovacion,
+          responsableId: form.responsableId,
+        });
+      }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al registrar el servicio.");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : `Error al ${editando ? "editar" : "registrar"} el servicio.`,
+      );
       return;
     }
     setModalOpen(false);
-    setProveedorSeleccionadoNombre(undefined);
-    setForm({
-      empresaId: empresaBloqueada || "RC",
-      area: "Sistemas",
-      nombreServicio: "",
-      proveedorId: "",
-      contratoId: "",
-      periodicidad: "Mensual",
-      costo: 350000,
-      moneda: "COP",
-      fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      responsableId: "",
-    });
+    resetForm();
   };
 
   return (
@@ -242,13 +344,14 @@ function ServiciosPage() {
         </div>
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Empresa Activa
+            Próximos a Vencer
           </p>
-          <p className="text-sm font-bold text-slate-900 mt-2">
-            {empresaActiva === "ALL"
-              ? "Todas las empresas (Consolidado)"
-              : siglaEmpresa(empresaActiva)}
+          <p
+            className={`text-2xl font-bold mt-1 ${proximosAVencer > 0 ? "text-amber-600" : "text-slate-900"}`}
+          >
+            {proximosAVencer}
           </p>
+          <p className="text-[11px] text-slate-500 mt-0.5">En los próximos 30 días</p>
         </div>
       </div>
 
@@ -277,25 +380,40 @@ function ServiciosPage() {
           <TableHeader className="bg-slate-100/80">
             <TableRow className="hover:bg-slate-100/80">
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Servicio / Licencia
+                <EncabezadoOrdenable campo="servicio" orden={orden} onClick={cambiarOrden}>
+                  Servicio / Licencia
+                </EncabezadoOrdenable>
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Empresa
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Departamento Categorizado
+                <EncabezadoOrdenable campo="area" orden={orden} onClick={cambiarOrden}>
+                  Departamento Categorizado
+                </EncabezadoOrdenable>
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Proveedor
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Periodicidad
+                <EncabezadoOrdenable campo="periodicidad" orden={orden} onClick={cambiarOrden}>
+                  Periodicidad
+                </EncabezadoOrdenable>
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Costo
+                <EncabezadoOrdenable
+                  campo="costo"
+                  orden={orden}
+                  onClick={cambiarOrden}
+                  alinearDerecha
+                >
+                  Costo
+                </EncabezadoOrdenable>
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Próxima Renovación
+                <EncabezadoOrdenable campo="fechaRenovacion" orden={orden} onClick={cambiarOrden}>
+                  Próxima Renovación
+                </EncabezadoOrdenable>
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Estado
@@ -359,6 +477,7 @@ function ServiciosPage() {
                           fecha={sub.fechaRenovacion}
                           etiquetaVencido="Venció"
                           className="mt-1"
+                          semaforo
                         />
                       )}
                     </TableCell>
@@ -367,6 +486,16 @@ function ServiciosPage() {
                     </TableCell>
                     <TableCell className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1.5">
+                        {puedeEditar && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => abrirEdicion(sub)}
+                            className="h-7 text-[11px] gap-1"
+                          >
+                            <Pencil className="h-3 w-3" /> Editar
+                          </Button>
+                        )}
                         <Button
                           size="xs"
                           variant="outline"
@@ -428,12 +557,20 @@ function ServiciosPage() {
         </Table>
       </div>
 
-      {/* MODAL REGISTRAR SUSCRIPCION */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      {/* MODAL REGISTRAR/EDITAR SUSCRIPCION */}
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) resetForm();
+        }}
+      >
         <DialogContent className="sm:max-w-md bg-white border-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-900 font-bold">
-              Registrar Servicio o Suscripción Activa
+              {editando
+                ? "Editar Servicio o Suscripción"
+                : "Registrar Servicio o Suscripción Activa"}
             </DialogTitle>
             <DialogDescription className="text-slate-500">
               Control de costos recurrentes y licencias por departamento.
@@ -536,32 +673,6 @@ function ServiciosPage() {
                 antes de registrar un servicio.
               </p>
             )}
-
-            <div className="space-y-1">
-              <Label htmlFor="contrato" className="text-xs font-semibold text-slate-700">
-                Contrato vinculado (opcional)
-              </Label>
-              <Select
-                value={form.contratoId || "__none__"}
-                onValueChange={(val) =>
-                  setForm({ ...form, contratoId: val === "__none__" ? "" : val })
-                }
-              >
-                <SelectTrigger id="contrato" className="h-9 text-xs border-slate-300 bg-white">
-                  <SelectValue placeholder="Sin contrato asociado" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-slate-200">
-                  <SelectItem value="__none__" className="text-xs">
-                    Sin contrato asociado
-                  </SelectItem>
-                  {contratosActivos.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">
-                      {c.proveedor} — {c.area}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
@@ -675,7 +786,7 @@ function ServiciosPage() {
                 size="sm"
                 className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
               >
-                Guardar Servicio
+                {editando ? "Guardar Cambios" : "Guardar Servicio"}
               </Button>
             </DialogFooter>
           </form>
@@ -709,5 +820,41 @@ function ServiciosPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppShell>
+  );
+}
+
+type CampoOrdenServicio = "servicio" | "area" | "costo" | "periodicidad" | "fechaRenovacion";
+
+/** Encabezado de columna clicable para ordenar la tabla — asc en el primer
+ * clic, desc en el segundo, sin orden en el tercero (vuelve al orden
+ * original de la lista). */
+function EncabezadoOrdenable({
+  campo,
+  orden,
+  onClick,
+  alinearDerecha,
+  children,
+}: {
+  campo: CampoOrdenServicio;
+  orden: { campo: CampoOrdenServicio; dir: "asc" | "desc" } | null;
+  onClick: (campo: CampoOrdenServicio) => void;
+  alinearDerecha?: boolean;
+  children: React.ReactNode;
+}) {
+  const activo = orden?.campo === campo;
+  const Icono = activo ? (orden.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      title="Ordenar"
+      onClick={() => onClick(campo)}
+      // Deliberadamente sin color de texto azul ni subrayado: esto ordena la
+      // tabla, no navega a ningún lado, así que no debe verse como un link
+      // (que sí navega, ver el nombre del servicio en cada fila).
+      className={`inline-flex select-none items-center gap-1 rounded px-1 py-0.5 -mx-1 hover:bg-slate-200/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 ${alinearDerecha ? "flex-row-reverse" : ""} ${activo ? "bg-slate-200/70" : ""}`}
+    >
+      {children}
+      <Icono className={`h-3 w-3 ${activo ? "opacity-100" : "opacity-40"}`} />
+    </button>
   );
 }

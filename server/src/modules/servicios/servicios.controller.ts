@@ -1,26 +1,15 @@
 import { Response } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, ServicioSuscripcion } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 const PERIODICIDADES_VALIDAS = ["Mensual", "Anual", "Trimestral"];
 const MONEDAS_VALIDAS = ["COP", "USD"];
 
-const INCLUDE_SERVICIO = {
-  contratoRel: { select: { id: true, proveedor: true } },
-};
-
-type ServicioConContrato = Prisma.ServicioSuscripcionGetPayload<{
-  include: typeof INCLUDE_SERVICIO;
-}>;
-
-function serializar(s: ServicioConContrato) {
+function serializar(s: ServicioSuscripcion) {
   return {
     ...s,
     costo: Number(s.costo),
-    contratoRel: s.contratoRel
-      ? { id: s.contratoRel.id, proveedor: s.contratoRel.proveedor }
-      : undefined,
   };
 }
 
@@ -37,7 +26,7 @@ export const listarServicios = async (req: AuthenticatedRequest, res: Response) 
     }
 
     // Paginación real (Bloque 6): opt-in con `page`, mismo patrón que
-    // Facturas/Contratos — sin `page`, se conserva el array plano con tope
+    // Facturas — sin `page`, se conserva el array plano con tope
     // de seguridad para no romper consumidores existentes (p. ej. el select
     // de servicios activos del formulario de Facturas).
     if (typeof page !== "undefined") {
@@ -50,7 +39,6 @@ export const listarServicios = async (req: AuthenticatedRequest, res: Response) 
       const [servicios, total] = await Promise.all([
         req.tenantPrisma!.servicioSuscripcion.findMany({
           where,
-          include: INCLUDE_SERVICIO,
           orderBy: { fechaRenovacion: "asc" },
           skip: (pageNum - 1) * pageSizeNum,
           take: pageSizeNum,
@@ -69,7 +57,6 @@ export const listarServicios = async (req: AuthenticatedRequest, res: Response) 
 
     const servicios = await req.tenantPrisma!.servicioSuscripcion.findMany({
       where,
-      include: INCLUDE_SERVICIO,
       orderBy: { fechaRenovacion: "asc" },
       take: 1000, // tope de seguridad para consumidores que no piden `page` todavía
     });
@@ -82,7 +69,7 @@ export const listarServicios = async (req: AuthenticatedRequest, res: Response) 
 
 /**
  * Detalle de un servicio/suscripción para su vista propia (proveedor,
- * responsable, contrato). Las facturas relacionadas se consultan aparte vía
+ * responsable). Las facturas relacionadas se consultan aparte vía
  * GET /facturas?servicioId=... (ya soporta `limit`), para no duplicar la
  * lógica de listado/paginación de facturas en dos controladores distintos.
  */
@@ -93,11 +80,30 @@ export const obtenerServicio = async (req: AuthenticatedRequest, res: Response) 
 
     const servicio = await req.tenantPrisma!.servicioSuscripcion.findFirst({
       where: { id, tenantId, eliminado: false },
-      include: INCLUDE_SERVICIO,
     });
     if (!servicio) return res.status(404).json({ message: "Servicio no encontrado." });
 
-    return res.json(serializar(servicio));
+    // Historial de uso: creación, ediciones y activaciones/desactivaciones —
+    // no existe una tabla de historial propia para ServicioSuscripcion (a
+    // diferencia de Factura), así que se reconstruye a partir de Auditoria,
+    // que ya registra estos eventos (ver crearServicio/actualizarServicio/
+    // toggleEstadoServicio). Esto es lo que responde "cuándo se activó" y
+    // qué se hizo con el servicio, sin necesitar una tabla nueva.
+    const eventos = await req.tenantPrisma!.auditoria.findMany({
+      where: { tenantId, entidadTipo: "ServicioSuscripcion", entidadId: id },
+      orderBy: { createdAt: "asc" },
+      include: { usuario: { select: { nombre: true } } },
+    });
+
+    return res.json({
+      ...serializar(servicio),
+      historial: eventos.map((e) => ({
+        fecha: e.createdAt,
+        actor: e.usuario?.nombre ?? "Sistema",
+        accion: e.accion,
+        detalle: e.detalle,
+      })),
+    });
   } catch (error) {
     console.error("Error al obtener servicio:", error);
     return res.status(500).json({ message: "Error al obtener el servicio." });
@@ -114,7 +120,6 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
       descripcion,
       proveedorId,
       proveedor,
-      contratoId,
       periodicidad,
       costo,
       moneda,
@@ -127,7 +132,7 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
       observaciones,
     } = req.body;
 
-    // Mismo principio que Facturas/Contratos: si viene proveedorId o
+    // Mismo principio que Facturas: si viene proveedorId o
     // responsableId, el nombre se toma del catálogo/tenant, nunca del texto
     // que mande el cliente; si no, se acepta texto libre por compatibilidad.
     let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
@@ -160,16 +165,6 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
       responsableNombre = responsableDb.nombre;
     }
 
-    // Aislamiento multi-tenant: el contrato relacionado debe ser del mismo tenant (IDOR).
-    if (contratoId) {
-      const contratoDb = await req.tenantPrisma!.contrato.findFirst({
-        where: { id: contratoId, tenantId, eliminado: false },
-      });
-      if (!contratoDb) {
-        return res.status(404).json({ message: "El contrato seleccionado no existe." });
-      }
-    }
-
     if (!empresaId || !area || !nombreServicio || !proveedorNombre || !fechaRenovacion) {
       return res.status(400).json({ message: "Faltan campos obligatorios del servicio." });
     }
@@ -197,7 +192,6 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
           typeof descripcion === "string" && descripcion.trim() ? descripcion.trim() : null,
         proveedorId: proveedorId || null,
         proveedor: proveedorNombre,
-        contratoId: contratoId || null,
         periodicidad: PERIODICIDADES_VALIDAS.includes(periodicidad) ? periodicidad : "Mensual",
         costo: costoNum,
         moneda: MONEDAS_VALIDAS.includes(moneda) ? moneda : "COP",
@@ -210,7 +204,6 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
         observaciones:
           typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
       },
-      include: INCLUDE_SERVICIO,
     });
 
     await req.tenantPrisma!.auditoria.create({
@@ -236,6 +229,138 @@ export const crearServicio = async (req: AuthenticatedRequest, res: Response) =>
   }
 };
 
+/**
+ * Edita los datos de un servicio/suscripción ya registrado (proveedor,
+ * costo, periodicidad, fechas, responsable, etc.). Separado de
+ * toggleEstadoServicio, que solo activa/desactiva sin tocar el resto de
+ * campos.
+ */
+export const actualizarServicio = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+    const {
+      empresaId,
+      area,
+      nombreServicio,
+      descripcion,
+      proveedorId,
+      proveedor,
+      periodicidad,
+      costo,
+      moneda,
+      fechaInicio,
+      fechaFin,
+      diaVencimiento,
+      fechaRenovacion,
+      responsableId,
+      responsableArea,
+      observaciones,
+    } = req.body;
+
+    const existente = await req.tenantPrisma!.servicioSuscripcion.findFirst({
+      where: { id, tenantId, eliminado: false },
+    });
+    if (!existente) return res.status(404).json({ message: "Servicio no encontrado." });
+
+    // Mismo principio que crearServicio: si viene proveedorId o
+    // responsableId, el nombre se toma del catálogo/tenant, nunca del texto
+    // que mande el cliente.
+    let proveedorNombre = typeof proveedor === "string" ? proveedor : "";
+    if (proveedorId) {
+      const proveedorDb = await req.tenantPrisma!.proveedor.findFirst({
+        where: { id: proveedorId, tenantId, activo: true },
+      });
+      if (!proveedorDb) {
+        return res
+          .status(404)
+          .json({ message: "El proveedor seleccionado no existe o está inactivo." });
+      }
+      proveedorNombre = proveedorDb.nombre;
+    }
+
+    let responsableNombre = typeof responsableArea === "string" ? responsableArea : "";
+    if (responsableId) {
+      const responsableDb = await prisma.user.findFirst({
+        where: { id: responsableId, tenantId, activo: true },
+      });
+      if (!responsableDb) {
+        return res
+          .status(404)
+          .json({ message: "El responsable seleccionado no existe o está inactivo." });
+      }
+      responsableNombre = responsableDb.nombre;
+    }
+
+    if (!empresaId || !area || !nombreServicio || !proveedorNombre || !fechaRenovacion) {
+      return res.status(400).json({ message: "Faltan campos obligatorios del servicio." });
+    }
+    const costoNum = Number(costo);
+    if (!Number.isFinite(costoNum) || costoNum < 0) {
+      return res.status(400).json({ message: "El costo debe ser un número no negativo." });
+    }
+    let diaVencimientoNum: number | null = null;
+    if (diaVencimiento !== undefined && diaVencimiento !== null && diaVencimiento !== "") {
+      diaVencimientoNum = Number(diaVencimiento);
+      if (!Number.isInteger(diaVencimientoNum) || diaVencimientoNum < 1 || diaVencimientoNum > 31) {
+        return res
+          .status(400)
+          .json({ message: "El día de vencimiento debe ser un número entre 1 y 31." });
+      }
+    }
+
+    const actualizado = await req.tenantPrisma!.servicioSuscripcion.update({
+      where: { id },
+      data: {
+        empresaId,
+        area,
+        nombreServicio,
+        descripcion:
+          typeof descripcion === "string" && descripcion.trim() ? descripcion.trim() : null,
+        proveedorId: proveedorId || null,
+        proveedor: proveedorNombre,
+        periodicidad: PERIODICIDADES_VALIDAS.includes(periodicidad) ? periodicidad : "Mensual",
+        costo: costoNum,
+        moneda: MONEDAS_VALIDAS.includes(moneda) ? moneda : "COP",
+        fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
+        fechaFin: fechaFin ? new Date(fechaFin) : null,
+        diaVencimiento: diaVencimientoNum,
+        fechaRenovacion: new Date(fechaRenovacion),
+        responsableId: responsableId || null,
+        responsableArea: responsableNombre || "Líder de Área",
+        observaciones:
+          typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
+      },
+    });
+
+    await req.tenantPrisma!.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        accion: "SERVICIO_EDITADO",
+        detalle: `${req.user!.nombre} editó el servicio "${actualizado.nombreServicio}"`,
+        entidadTipo: "ServicioSuscripcion",
+        entidadId: id,
+        datosAnteriores: JSON.stringify({
+          nombreServicio: existente.nombreServicio,
+          proveedor: existente.proveedor,
+          costo: Number(existente.costo),
+        }),
+        datosNuevos: JSON.stringify({
+          nombreServicio: actualizado.nombreServicio,
+          proveedor: actualizado.proveedor,
+          costo: costoNum,
+        }),
+      },
+    });
+
+    return res.json(serializar(actualizado));
+  } catch (error) {
+    console.error("Error al editar servicio:", error);
+    return res.status(500).json({ message: "Error al editar el servicio." });
+  }
+};
+
 export const toggleEstadoServicio = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -250,7 +375,6 @@ export const toggleEstadoServicio = async (req: AuthenticatedRequest, res: Respo
     const actualizado = await req.tenantPrisma!.servicioSuscripcion.update({
       where: { id },
       data: { estado: nuevoEstado },
-      include: INCLUDE_SERVICIO,
     });
 
     await req.tenantPrisma!.auditoria.create({

@@ -16,6 +16,9 @@ import {
   type ActividadSeguimiento,
 } from "../../domain/importaciones/motor-seguimiento";
 import { evaluarCondicionesCierre } from "../../domain/importaciones/condiciones-cierre";
+import { obtenerTrmOficial } from "../../integrations/trm/trm.service";
+import { buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import { buscarItemsOrdenSchema } from "./importaciones.schemas";
 import type { z } from "zod";
 import type { itemOrdenSchema } from "./importaciones.schemas";
 
@@ -35,6 +38,66 @@ const INCOTERMS_VALIDOS = [
   "DDP",
 ];
 const MONEDAS_VALIDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
+/**
+ * País de origen normalizado (Fase de mejora del módulo, ver auditoría):
+ * antes era texto libre ("China"/"china"/"CHINA" como valores distintos).
+ * Mismo patrón que INCOTERMS_VALIDOS/MONEDAS_VALIDAS — una lista de
+ * referencia estática validada en código, sin tabla propia (no hay
+ * necesidad de administrar países desde una pantalla, ni datos adicionales
+ * por país todavía). El frontend mantiene la MISMA lista literal (igual que
+ * ya pasa con incoterm/moneda), no hay un paquete compartido en este repo.
+ */
+const PAISES_VALIDOS = [
+  "Alemania",
+  "Arabia Saudita",
+  "Argentina",
+  "Bélgica",
+  "Bolivia",
+  "Brasil",
+  "Canadá",
+  "Chile",
+  "China",
+  "Colombia",
+  "Corea del Sur",
+  "Costa Rica",
+  "Ecuador",
+  "Emiratos Árabes Unidos",
+  "España",
+  "Estados Unidos",
+  "Francia",
+  "Guatemala",
+  "Hong Kong",
+  "India",
+  "Indonesia",
+  "Israel",
+  "Italia",
+  "Japón",
+  "Malasia",
+  "México",
+  "Países Bajos",
+  "Panamá",
+  "Perú",
+  "Polonia",
+  "Portugal",
+  "Reino Unido",
+  "República Dominicana",
+  "Singapur",
+  "Sudáfrica",
+  "Suiza",
+  "Tailandia",
+  "Taiwán",
+  "Turquía",
+  "Vietnam",
+];
+const FORMAS_PAGO_VALIDAS = [
+  "Anticipado",
+  "Carta de crédito",
+  "Crédito 30 días",
+  "Crédito 60 días",
+  "Crédito 90 días",
+  "Contra entrega",
+];
+const UNIDADES_MEDIDA_VALIDAS = ["KG", "TON", "SACO25KG", "SACO50KG", "LT", "UND"];
 const ESTADOS_ORDEN_VALIDOS = ["Borrador", "Confirmada", "Cerrada", "Anulada"];
 // Validación de forma en el controlador, mismo patrón que ESTADOS_ORDEN_VALIDOS
 // arriba — no una máquina de estados con transiciones: la regla de negocio de
@@ -144,9 +207,9 @@ type ItemConSubpartida = Prisma.ItemOrdenCompraIntlGetPayload<{
 }>;
 type CosteoDetalle = Prisma.CosteoImportacionDetalleGetPayload<Record<string, never>>;
 type VistoBueno = Prisma.VistoBuenoAduaneroGetPayload<Record<string, never>>;
-type ExpedienteConVistosBuenos = Prisma.ExpedienteAduaneroGetPayload<{
-  include: { vistosBuenos: true };
-}>;
+type ExpedienteConVistosBuenos = Prisma.ExpedienteAduaneroGetPayload<Record<string, never>> & {
+  vistosBuenos?: VistoBueno[];
+};
 type LoteConDetalle = Prisma.LoteImportacionGetPayload<Record<string, never>> & {
   expediente?: ExpedienteConVistosBuenos | null;
   costeos?: CosteoDetalle[];
@@ -155,8 +218,18 @@ type HistorialConEvidencia = Prisma.ImportacionHistorialGetPayload<Record<string
 type Actividad = Prisma.ImportacionActividadGetPayload<Record<string, never>>;
 type Novedad = Prisma.ImportacionNovedadGetPayload<Record<string, never>>;
 type Pago = Prisma.ImportacionPagoGetPayload<Record<string, never>>;
+type RequisitoProveedor = Prisma.RequisitoProveedorImportacionGetPayload<Record<string, never>>;
 type OrdenParaSerializar = Prisma.OrdenCompraIntlGetPayload<Record<string, never>> & {
   responsableUsuario?: { id: string; nombre: string } | null;
+  // Requisitos incluidos vía la relación de Proveedor (referencia VIVA:
+  // siempre los vigentes al momento de leer la orden, nunca un snapshot —
+  // decisión explícita de esta fase, ver comentario en schema.prisma).
+  proveedor?: {
+    id: string;
+    nombre: string;
+    nit: string;
+    requisitosImportacion: RequisitoProveedor[];
+  } | null;
   items?: ItemConSubpartida[];
   lotes?: LoteConDetalle[];
   historial?: HistorialConEvidencia[];
@@ -325,9 +398,21 @@ const serializarOrden = (o: OrdenParaSerializar) => ({
   codigo: o.codigo ?? `IMP-${o.id.slice(0, 8)}`, // fallback legible para órdenes anteriores a esta migración
   numeroOrden: o.numeroOrden,
   incoterm: o.incoterm,
+  proveedorId: o.proveedorId,
   proveedorExtranjero: o.proveedorExtranjero,
+  proveedor: o.proveedor
+    ? {
+        id: o.proveedor.id,
+        nombre: o.proveedor.nombre,
+        nit: o.proveedor.nit,
+        // Solo activos y ordenados — mismo filtro que la pantalla de
+        // administración por defecto (?incluirInactivos=true la cambia ahí).
+        requisitos: o.proveedor.requisitosImportacion,
+      }
+    : null,
   paisOrigen: o.paisOrigen,
   moneda: o.moneda,
+  formaPago: o.formaPago,
   trmPactada: numero(o.trmPactada),
   valorEstimadoTotal: numero(o.valorEstimadoTotal),
   estado: o.estado,
@@ -377,6 +462,17 @@ function aParaSeguimiento(a: Actividad): ActividadSeguimiento {
 
 const INCLUDE_ORDEN_DETALLE = {
   responsableUsuario: { select: { id: true, nombre: true } },
+  proveedor: {
+    select: {
+      id: true,
+      nombre: true,
+      nit: true,
+      requisitosImportacion: {
+        where: { activo: true },
+        orderBy: { orden: "asc" as const },
+      },
+    },
+  },
   items: { include: { subpartida: true } },
   lotes: {
     include: {
@@ -388,6 +484,70 @@ const INCLUDE_ORDEN_DETALLE = {
   actividades: { orderBy: { fechaLimite: "asc" as const } },
   novedades: { orderBy: { createdAt: "desc" as const } },
   pagos: { orderBy: { fechaVencimiento: "asc" as const } },
+};
+
+async function resolverCiaSiesa(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
+  return tenant?.siesaCiaId ?? null;
+}
+
+/**
+ * Autocompletado de ítem para la tabla de "Ítems de la Orden" del modal de
+ * creación — mismo patrón ya probado en Ventas (buscarProductosVenta):
+ * búsqueda directa contra el maestro de ítems de Siesa (t120_mc_items), sin
+ * catálogo propio en RicoSoft. Un tenant sin `siesaCiaId` configurado (o si
+ * Siesa no responde) recibe `disponible:false` — el formulario simplemente
+ * cae a captura 100% manual, nunca rompe la creación de la orden.
+ */
+export const buscarItemsOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.user!.tenantId;
+  const parseo = buscarItemsOrdenSchema.safeParse(req.query);
+  if (!parseo.success) {
+    return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+  }
+
+  const siesaCiaId = await resolverCiaSiesa(tenantId);
+  if (!siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+      items: [],
+    });
+  }
+
+  try {
+    const items = await buscarItemsSiesa(siesaCiaId, parseo.data.search, 10);
+    return res.json({ disponible: true, items });
+  } catch (error) {
+    console.error("Error al buscar ítems en Siesa para Importaciones:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      items: [],
+    });
+  }
+};
+
+/**
+ * TRM oficial del día (Banco de la República, vía datos.gov.co) — solo
+ * informativa, para que el usuario compare contra la TRM pactada con el
+ * proveedor antes de guardar la orden. Nunca sobrescribe nada por sí sola.
+ * 502 (no 500) si el servicio externo falla: es una integración de terceros
+ * fuera de nuestro control, no un error de la aplicación.
+ */
+export const obtenerTrmOficialController = async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const trm = await obtenerTrmOficial();
+    return res.json(trm);
+  } catch (error) {
+    console.error("Error al obtener la TRM oficial:", error);
+    return res.status(502).json({
+      message: error instanceof Error ? error.message : "No fue posible obtener la TRM oficial.",
+    });
+  }
 };
 
 export const listarOrdenesCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
@@ -524,10 +684,12 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
     const {
       numeroOrden,
       incoterm,
+      proveedorId,
       proveedorExtranjero,
       paisOrigen,
       moneda,
       trmPactada,
+      formaPago,
       observaciones,
       items,
     } = req.body;
@@ -537,14 +699,43 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
         message: `Incoterm inválido. Valores permitidos: ${INCOTERMS_VALIDOS.join(", ")}.`,
       });
     }
+    if (!PAISES_VALIDOS.includes(paisOrigen)) {
+      return res.status(400).json({ message: "El país de origen seleccionado no es válido." });
+    }
     if (!MONEDAS_VALIDAS.includes(moneda)) {
       return res
         .status(400)
         .json({ message: `Moneda inválida. Valores permitidos: ${MONEDAS_VALIDAS.join(", ")}.` });
     }
+    if (formaPago != null && !FORMAS_PAGO_VALIDAS.includes(formaPago)) {
+      return res.status(400).json({
+        message: `Forma de pago inválida. Valores permitidos: ${FORMAS_PAGO_VALIDAS.join(", ")}.`,
+      });
+    }
+    // Sin catálogo local de proveedores extranjeros duplicado: si viene
+    // proveedorId, DEBE ser un Proveedor real del propio tenant (nunca de
+    // otro — IDOR) y su nombre se vuelve la fuente de verdad de
+    // proveedorExtranjero, aunque el cliente mande otra cosa.
+    let proveedorSeleccionado: { id: string; nombre: string } | null = null;
+    if (proveedorId) {
+      proveedorSeleccionado = await prisma.proveedor.findFirst({
+        where: { id: proveedorId, tenantId, activo: true },
+        select: { id: true, nombre: true },
+      });
+      if (!proveedorSeleccionado) {
+        return res.status(404).json({ message: "El proveedor seleccionado no existe." });
+      }
+    }
     const trm = numero(trmPactada);
     if (!Number.isFinite(trm) || trm <= 0) {
       return res.status(400).json({ message: "La TRM pactada debe ser un número mayor a cero." });
+    }
+    for (const item of items as ItemOrdenBody[]) {
+      if (item.unidadMedida != null && !UNIDADES_MEDIDA_VALIDAS.includes(item.unidadMedida)) {
+        return res.status(400).json({
+          message: `Unidad de medida inválida en "${item.descripcion}". Valores permitidos: ${UNIDADES_MEDIDA_VALIDAS.join(", ")}.`,
+        });
+      }
     }
 
     // Solo las órdenes activas cuentan para la unicidad del número: una orden
@@ -591,16 +782,20 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
         codigo,
         numeroOrden,
         incoterm,
-        proveedorExtranjero,
+        proveedorId: proveedorSeleccionado?.id ?? null,
+        proveedorExtranjero: proveedorSeleccionado?.nombre ?? proveedorExtranjero,
         paisOrigen,
         moneda,
         trmPactada: trm,
         valorEstimadoTotal,
+        formaPago: formaPago ?? null,
         observaciones: observaciones ?? null,
         responsableId: req.user!.id,
         items: {
           create: items.map((item: ItemOrdenBody) => ({
             descripcion: item.descripcion,
+            referencia: item.referencia ?? null,
+            unidadMedida: item.unidadMedida ?? null,
             subpartidaArancelariaId: item.subpartidaArancelariaId ?? null,
             cantidad: numero(item.cantidad),
             pesoKg: item.pesoKg != null ? numero(item.pesoKg) : null,
@@ -1824,6 +2019,9 @@ export const cerrarOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
       where: { id: orden.id },
       include: INCLUDE_ORDEN_DETALLE,
     });
+    if (!actualizada) {
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    }
 
     return res.json(serializarOrden(actualizada));
   } catch (error) {

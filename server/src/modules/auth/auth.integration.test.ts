@@ -140,6 +140,7 @@ describe.skipIf(!RUN)(
 
     afterAll(async () => {
       const tenantIds = [tenantRicolId, tenantFlexipackId, tenantGreenId, tenantAjenoId];
+      await prisma.inboxItem.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.solicitudCompra.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.membresia.deleteMany({ where: { userId: juanId } });

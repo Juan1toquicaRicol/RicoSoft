@@ -204,7 +204,9 @@ describe.skipIf(!RUN)(
       const antes = await request(app)
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${tokenAAdmin}`);
-      expect(antes.body.find((s: any) => s.id === id)?.estado).toBe("Pendiente");
+      expect(antes.body.find((s: { id: string; estado: string }) => s.id === id)?.estado).toBe(
+        "Pendiente",
+      );
 
       const subida = await agregarCotizacion(id, tokenAAdmin, 1);
       expect(subida.status).toBe(201);
@@ -212,7 +214,9 @@ describe.skipIf(!RUN)(
       const despues = await request(app)
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${tokenAAdmin}`);
-      expect(despues.body.find((s: any) => s.id === id)?.estado).toBe("En Cotización");
+      expect(despues.body.find((s: { id: string; estado: string }) => s.id === id)?.estado).toBe(
+        "En Cotización",
+      );
     });
 
     it("bloquea agregar una 4ta cotización y bloquea el acceso cruzado entre tenants", async () => {
@@ -259,7 +263,9 @@ describe.skipIf(!RUN)(
         .post(`/api/solicitudes-compra/${id}/cotizaciones/${ids[1]}/seleccionar`)
         .set("Authorization", `Bearer ${tokenAAdmin}`);
       expect(seleccion.status).toBe(200);
-      expect(seleccion.body.find((c: any) => c.id === ids[1]).esGanadora).toBe(true);
+      expect(
+        seleccion.body.find((c: { id: string; esGanadora: boolean }) => c.id === ids[1]).esGanadora,
+      ).toBe(true);
 
       const aprobar = await request(app)
         .patch(`/api/solicitudes-compra/${id}/estado`)

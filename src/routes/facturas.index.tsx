@@ -65,7 +65,6 @@ import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context
 import { useFacturas } from "@/hooks/use-facturas";
 import { useProveedorBusqueda, type ProveedorOpcion } from "@/hooks/use-proveedores";
 import { useServicios } from "@/hooks/use-servicios";
-import { useContratos } from "@/hooks/use-contratos";
 import { useSolicitudesDisponiblesParaFactura } from "@/hooks/use-solicitudes";
 import type { SolicitudDisponibleParaFactura } from "@/lib/data";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
@@ -73,7 +72,7 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
-import { money, EstadoFactura } from "@/lib/data";
+import { money, EstadoFactura, PrioridadOptions } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/facturas/")({
@@ -147,8 +146,6 @@ function FacturasPage() {
   } = useProveedorBusqueda();
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ProveedorOpcion | null>(null);
   const { suscripciones } = useServicios();
-  const { contratos } = useContratos();
-  const contratosActivos = contratos.filter((c) => c.estado === "Activo");
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
   // La empresa "de verdad" es la del tenant en el que se está (cada tenant
@@ -211,7 +208,6 @@ function FacturasPage() {
     numero: "",
     proveedorId: "",
     servicioId: "",
-    contratoId: "",
     solicitudCompraId: "",
     area: "",
     responsableId: "",
@@ -249,11 +245,9 @@ function FacturasPage() {
   );
   const servicioSeleccionado = suscripciones.find((s) => s.id === form.servicioId) ?? null;
   const totalFormPreview = Number(form.subtotal || 0) + Number(form.iva || 0);
-  // Una factura solo se relaciona con UNA de las tres cosas a la vez.
+  // Una factura solo se relaciona con UNA de las dos cosas a la vez.
   const tieneSolicitud = Boolean(form.solicitudCompraId);
   const tieneServicio = Boolean(form.servicioId);
-  const tieneContrato = Boolean(form.contratoId);
-  const tieneServicioOContrato = tieneServicio || tieneContrato;
   const alertaValorPreview =
     servicioSeleccionado && totalFormPreview > servicioSeleccionado.costo
       ? `El valor de la factura (${money(totalFormPreview)}) supera el valor recurrente configurado para "${servicioSeleccionado.nombreServicio}" (${money(servicioSeleccionado.costo, servicioSeleccionado.moneda)}).`
@@ -269,8 +263,15 @@ function FacturasPage() {
   // Si el usuario cambia de proveedor después de elegir una solicitud, esa
   // solicitud ya no es necesariamente compatible — se limpia la selección en
   // vez de dejar una relación que el usuario ya no ve reflejada en pantalla.
+  // No aplica cuando la solicitud no trae proveedor de catálogo (cotización
+  // ganadora con proveedor manual): ahí se espera que el usuario elija el
+  // proveedor después de seleccionar la solicitud, sin perder la relación.
   useEffect(() => {
-    if (solicitudSeleccionada && solicitudSeleccionada.proveedorId !== (form.proveedorId || null)) {
+    if (
+      solicitudSeleccionada &&
+      solicitudSeleccionada.proveedorId &&
+      solicitudSeleccionada.proveedorId !== (form.proveedorId || null)
+    ) {
       setSolicitudSeleccionada(null);
       setForm((f) => ({ ...f, solicitudCompraId: "" }));
     }
@@ -314,7 +315,6 @@ function FacturasPage() {
         numero: form.numero,
         proveedorId: form.proveedorId,
         servicioId: form.servicioId || undefined,
-        contratoId: form.contratoId || undefined,
         solicitudCompraId: form.solicitudCompraId || undefined,
         area: form.area,
         responsableId: form.responsableId,
@@ -350,7 +350,6 @@ function FacturasPage() {
       numero: "",
       proveedorId: "",
       servicioId: "",
-      contratoId: "",
       solicitudCompraId: "",
       area: "",
       responsableId: "",
@@ -656,7 +655,7 @@ function FacturasPage() {
                   selectedLabel={proveedorSeleccionado?.nombre}
                   options={proveedorOpciones.map((p) => ({ value: p.id, label: p.nombre }))}
                 />
-                {proveedorSeleccionado && (
+                {proveedorSeleccionado?.nit && (
                   <p className="text-[11px] text-slate-500">NIT {proveedorSeleccionado.nit}</p>
                 )}
                 {form.proveedorId === "" &&
@@ -815,7 +814,7 @@ function FacturasPage() {
                   ) : (
                     <button
                       type="button"
-                      disabled={!form.proveedorId || tieneServicioOContrato}
+                      disabled={tieneServicio}
                       onClick={() => {
                         setBuscarSolicitudTexto("");
                         buscarSolicitudesDisponibles();
@@ -825,11 +824,9 @@ function FacturasPage() {
                     >
                       <span className="flex items-center gap-1.5">
                         <Search className="h-3.5 w-3.5" />
-                        {tieneServicioOContrato
-                          ? "Ya relacionada con servicio/contrato"
-                          : form.proveedorId
-                            ? "Sin solicitud asociada"
-                            : "Elige un proveedor primero"}
+                        {tieneServicio
+                          ? "Ya relacionada con un servicio"
+                          : "Sin solicitud asociada"}
                       </span>
                       <span aria-hidden>›</span>
                     </button>
@@ -845,25 +842,42 @@ function FacturasPage() {
                   </Label>
                   <Select
                     value={form.servicioId || "__none__"}
-                    disabled={tieneSolicitud || tieneContrato}
+                    disabled={tieneSolicitud}
                     onValueChange={(val) => {
                       if (val === "__none__") {
                         setForm({ ...form, servicioId: "" });
                         return;
                       }
-                      // Servicio y solicitud/contrato son mutuamente
-                      // excluyentes; además, el servicio ya sabe quién lo
-                      // gestiona — se autocompleta área y responsable.
+                      // Servicio y solicitud son mutuamente excluyentes;
+                      // además, el servicio ya sabe quién lo gestiona y
+                      // cuánto cuesta — se autocompletan proveedor, área,
+                      // responsable y subtotal (si aún estaban vacíos), en
+                      // vez de pedirle al usuario que los vuelva a teclear.
                       const servicio = serviciosDelProveedor.find((s) => s.id === val);
                       setForm({
                         ...form,
                         servicioId: val,
                         solicitudCompraId: "",
-                        contratoId: "",
+                        proveedorId: servicio?.proveedorId || form.proveedorId,
                         area: servicio?.area || form.area,
                         responsableId: servicio?.responsableId || form.responsableId,
+                        subtotal:
+                          form.subtotal || (servicio ? String(servicio.costo) : form.subtotal),
                       });
-                      if (servicio) setSolicitudSeleccionada(null);
+                      if (servicio) {
+                        setSolicitudSeleccionada(null);
+                        // El Combobox de proveedor muestra su etiqueta desde
+                        // este estado (búsqueda server-side, no desde
+                        // `options`) — sin esto, el proveedor quedaba
+                        // asignado por dentro pero el campo se veía vacío.
+                        if (servicio.proveedorId) {
+                          setProveedorSeleccionado({
+                            id: servicio.proveedorId,
+                            nombre: servicio.proveedor,
+                            nit: "",
+                          });
+                        }
+                      }
                     }}
                   >
                     <SelectTrigger
@@ -879,44 +893,6 @@ function FacturasPage() {
                       {serviciosDelProveedor.map((s) => (
                         <SelectItem key={s.id} value={s.id} className="text-xs">
                           {s.nombreServicio}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <Label
-                    htmlFor="contrato"
-                    className="shrink-0 text-xs font-semibold text-slate-600 w-36"
-                  >
-                    Contrato
-                  </Label>
-                  <Select
-                    value={form.contratoId || "__none__"}
-                    disabled={tieneSolicitud || tieneServicio}
-                    onValueChange={(val) => {
-                      if (val === "__none__") {
-                        setForm({ ...form, contratoId: "" });
-                        return;
-                      }
-                      setForm({ ...form, contratoId: val, solicitudCompraId: "", servicioId: "" });
-                      setSolicitudSeleccionada(null);
-                    }}
-                  >
-                    <SelectTrigger
-                      id="contrato"
-                      className="h-8 flex-1 border-none bg-transparent text-xs shadow-none hover:bg-white disabled:opacity-60"
-                    >
-                      <SelectValue placeholder="Sin contrato asociado" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200">
-                      <SelectItem value="__none__" className="text-xs">
-                        Sin contrato asociado
-                      </SelectItem>
-                      {contratosActivos.map((c) => (
-                        <SelectItem key={c.id} value={c.id} className="text-xs">
-                          {c.proveedor} — {c.area}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -989,6 +965,27 @@ function FacturasPage() {
                   Usuarios.
                 </p>
               )}
+
+              <div className="space-y-1">
+                <Label htmlFor="prioridad" className="text-xs font-semibold text-slate-700">
+                  Prioridad
+                </Label>
+                <Select
+                  value={form.prioridad}
+                  onValueChange={(val) => setForm({ ...form, prioridad: val })}
+                >
+                  <SelectTrigger id="prioridad" className="h-9 text-xs border-slate-300 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    {Object.values(PrioridadOptions).map((p) => (
+                      <SelectItem key={p} value={p} className="text-xs">
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Documento (opcional)</Label>
@@ -1089,13 +1086,35 @@ function FacturasPage() {
                       onClick={() => {
                         setSolicitudSeleccionada(s);
                         // Una factura solo se relaciona con una cosa: elegir
-                        // solicitud limpia servicio/contrato si había alguno.
+                        // solicitud limpia servicio si había alguno.
+                        // Proveedor y subtotal se autocompletan con el dato
+                        // real de la solicitud (el proveedor que ganó el
+                        // cuadro comparativo y su saldo pendiente), en vez de
+                        // pedirle al usuario que los vuelva a teclear — sigue
+                        // pudiendo ajustarlos a mano después.
                         setForm({
                           ...form,
                           solicitudCompraId: s.id,
+                          proveedorId: s.proveedorId || form.proveedorId,
+                          subtotal: form.subtotal || String(s.saldoPendiente),
                           servicioId: "",
-                          contratoId: "",
                         });
+                        if (s.proveedorId) {
+                          // El Combobox de proveedor muestra su etiqueta
+                          // desde este estado (búsqueda server-side, no
+                          // desde `options`) — sin esto, el proveedor
+                          // quedaba asignado por dentro pero el campo se
+                          // veía vacío.
+                          setProveedorSeleccionado({
+                            id: s.proveedorId,
+                            nombre: s.proveedor || "",
+                            nit: "",
+                          });
+                        } else {
+                          toast.info(
+                            `Esta solicitud no tiene un proveedor del catálogo asociado (quedó registrado como "${s.proveedor || "sin nombre"}") — selecciónalo manualmente.`,
+                          );
+                        }
                         setDialogSolicitudOpen(false);
                       }}
                     >

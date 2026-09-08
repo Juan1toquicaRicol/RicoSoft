@@ -23,6 +23,15 @@ export const PERMISOS_SISTEMA = {
   DEPARTAMENTOS_CREAR: "departamentos.crear",
   DEPARTAMENTOS_EDITAR: "departamentos.editar",
   DEPARTAMENTOS_ELIMINAR: "departamentos.eliminar",
+  PERFILES_FUNCIONALES_VER: "perfiles_funcionales.ver",
+  PERFILES_FUNCIONALES_CREAR: "perfiles_funcionales.crear",
+  PERFILES_FUNCIONALES_EDITAR: "perfiles_funcionales.editar",
+  PERFILES_FUNCIONALES_ELIMINAR: "perfiles_funcionales.eliminar",
+  PERFILES_FUNCIONALES_ASIGNAR: "perfiles_funcionales.asignar",
+  REGLAS_DESTINATARIOS_VER: "reglas_destinatarios.ver",
+  REGLAS_DESTINATARIOS_CREAR: "reglas_destinatarios.crear",
+  REGLAS_DESTINATARIOS_EDITAR: "reglas_destinatarios.editar",
+  REGLAS_DESTINATARIOS_ELIMINAR: "reglas_destinatarios.eliminar",
   PROVEEDORES_VER: "proveedores.ver",
   PROVEEDORES_CREAR: "proveedores.crear",
   PROVEEDORES_EDITAR: "proveedores.editar",
@@ -49,10 +58,6 @@ export const PERMISOS_SISTEMA = {
   SERVICIOS_CREAR: "servicios.crear",
   SERVICIOS_EDITAR: "servicios.editar",
   SERVICIOS_ELIMINAR: "servicios.eliminar",
-  CONTRATOS_VER: "contratos.ver",
-  CONTRATOS_CREAR: "contratos.crear",
-  CONTRATOS_EDITAR: "contratos.editar",
-  CONTRATOS_ELIMINAR: "contratos.eliminar",
   REGLAS_VER: "reglas.ver",
   REGLAS_CREAR: "reglas.crear",
   REGLAS_EDITAR: "reglas.editar",
@@ -78,6 +83,14 @@ export const PERMISOS_SISTEMA = {
   IMPORTACIONES_RECIBIR: "importaciones.recibir",
   IMPORTACIONES_LIQUIDAR: "importaciones.liquidar",
   IMPORTACIONES_ELIMINAR: "importaciones.eliminar",
+  IMPORTACIONES_REQUISITOS_VER: "importaciones.requisitos_ver",
+  IMPORTACIONES_REQUISITOS_CREAR: "importaciones.requisitos_crear",
+  IMPORTACIONES_REQUISITOS_EDITAR: "importaciones.requisitos_editar",
+  IMPORTACIONES_REQUISITOS_ELIMINAR: "importaciones.requisitos_eliminar",
+  IMPORTACIONES_CORREOS_VER: "importaciones.correos_ver",
+  IMPORTACIONES_CORREOS_PROCESAR: "importaciones.correos_procesar",
+  IMPORTACIONES_CORREOS_RESOLVER: "importaciones.correos_resolver",
+  IMPORTACIONES_CORREOS_CONFIGURAR: "importaciones.correos_configurar",
   INTEGRACION_SIESA_VER: "integracion_siesa.ver",
   INTEGRACION_SIESA_SINCRONIZAR: "integracion_siesa.sincronizar",
   INVENTARIO_CONFIGURAR: "inventario.configurar",
@@ -95,6 +108,10 @@ export const PERMISOS_SISTEMA = {
   OBJETIVOS_EDITAR: "objetivos.editar",
   OBJETIVOS_ELIMINAR: "objetivos.eliminar",
   OBJETIVOS_ASIGNAR: "objetivos.asignar",
+  BIOMETRICO_VER: "biometrico.ver",
+  BIOMETRICO_SINCRONIZAR: "biometrico.sincronizar",
+  BIOMETRICO_ASOCIAR: "biometrico.asociar",
+  BIOMETRICO_CONFIGURAR: "biometrico.configurar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -107,6 +124,25 @@ export function parseRolPermisos(permisos: string | null | undefined): string[] 
   } catch {
     return [];
   }
+}
+
+/**
+ * Guard anti-escalación de privilegios: nadie puede otorgar (al crear un
+ * usuario o reasignarle el rol) un permiso que él mismo no posee — un
+ * superadmin, o alguien con "todos" los permisos vía isSuperadmin, siempre
+ * puede. Sin este chequeo, un actor con un permiso puntual y aislado como
+ * "usuarios.crear" (pensado para altas de personal, ej. RR.HH.) podía crear
+ * una cuenta y asignarle de una vez el rol más privilegiado del tenant.
+ * Devuelve el primer permiso "de más" encontrado, o null si el rol es un
+ * subconjunto válido de lo que el actor ya tiene.
+ */
+export function primerPermisoQueExcedeAlActor(
+  actor: { isSuperadmin: boolean; permisos: string[] },
+  permisosDelRol: string[],
+): string | null {
+  if (actor.isSuperadmin) return null;
+  const propios = new Set(actor.permisos);
+  return permisosDelRol.find((p) => !propios.has(p)) ?? null;
 }
 
 export interface SessionUser {

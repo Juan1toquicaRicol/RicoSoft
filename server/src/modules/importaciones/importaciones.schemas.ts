@@ -6,8 +6,14 @@ const textoObligatorio = (mensaje: string) => ({
 });
 const numero = z.union([z.number(), z.string()]);
 
+export const buscarItemsOrdenSchema = z.object({
+  search: z.string().min(2, "Escribe al menos 2 caracteres para buscar."),
+});
+
 export const itemOrdenSchema = z.object({
   descripcion: z.string(textoObligatorio("La descripción del ítem es obligatoria.")),
+  referencia: z.string().nullish(),
+  unidadMedida: z.string().nullish(),
   subpartidaArancelariaId: z.string().uuid().nullish(),
   cantidad: numero,
   pesoKg: numero.nullish(),
@@ -18,10 +24,12 @@ export const itemOrdenSchema = z.object({
 export const crearOrdenCompraIntlSchema = z.object({
   numeroOrden: z.string(textoObligatorio("El número de orden es obligatorio.")),
   incoterm: z.string(textoObligatorio("El Incoterm es obligatorio.")),
+  proveedorId: z.string().uuid().nullish(),
   proveedorExtranjero: z.string(textoObligatorio("El proveedor extranjero es obligatorio.")),
   paisOrigen: z.string(textoObligatorio("El país de origen es obligatorio.")),
   moneda: z.string(textoObligatorio("La moneda es obligatoria.")),
   trmPactada: numero,
+  formaPago: z.string().nullish(),
   observaciones: z.string().nullish(),
   items: z.array(itemOrdenSchema).min(1, "La orden debe tener al menos un ítem."),
 });

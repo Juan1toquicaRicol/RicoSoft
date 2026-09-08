@@ -7,7 +7,6 @@ import {
   CreditCard,
   DollarSign,
   Download,
-  FileSignature,
   FileText,
   Loader2,
   MessageSquare,
@@ -263,7 +262,7 @@ function DetalleFactura() {
               </div>
             </div>
 
-            {(factura.servicio || factura.contratoRel || factura.solicitudCompraRel) && (
+            {(factura.servicio || factura.solicitudCompraRel) && (
               <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
                 {factura.servicio && (
                   <Link to="/servicios/$id" params={{ id: factura.servicio.id }}>
@@ -274,15 +273,6 @@ function DetalleFactura() {
                       <Receipt className="h-3.5 w-3.5" /> {factura.servicio.nombre}
                     </Badge>
                   </Link>
-                )}
-                {factura.contratoRel && (
-                  <Badge
-                    variant="outline"
-                    className="gap-1.5 border-slate-200 bg-slate-50 text-slate-700 py-1"
-                  >
-                    <FileSignature className="h-3.5 w-3.5" /> Contrato con{" "}
-                    {factura.contratoRel.proveedor}
-                  </Badge>
                 )}
                 {factura.solicitudCompraRel && (
                   <Link to="/historia-compras">

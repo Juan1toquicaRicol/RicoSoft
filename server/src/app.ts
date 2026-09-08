@@ -6,11 +6,12 @@ import usuariosRoutes from "./modules/usuarios/usuarios.routes";
 import rolesRoutes from "./modules/roles/roles.routes";
 import permisosRoutes from "./modules/permisos/permisos.routes";
 import departamentosRoutes from "./modules/departamentos/departamentos.routes";
+import perfilesFuncionalesRoutes from "./modules/perfiles-funcionales/perfiles-funcionales.routes";
+import reglasDestinatariosRoutes from "./modules/reglas-destinatarios/reglas-destinatarios.routes";
 import auditoriaRoutes from "./modules/auditoria/auditoria.routes";
 import facturasRoutes from "./modules/facturas/facturas.routes";
 import solicitudesRoutes from "./modules/solicitudes/solicitudes.routes";
 import serviciosRoutes from "./modules/servicios/servicios.routes";
-import contratosRoutes from "./modules/contratos/contratos.routes";
 import reglasRoutes from "./modules/reglas/reglas.routes";
 import creditosRoutes from "./modules/creditos/creditos.routes";
 import gestionHumanaRoutes from "./modules/gestion-humana/gestion-humana.routes";
@@ -20,6 +21,7 @@ import notificacionesRoutes from "./modules/notificaciones/notificaciones.routes
 import proveedoresRoutes from "./modules/proveedores/proveedores.routes";
 import itemClasificacionesRoutes from "./modules/item-clasificaciones/item-clasificaciones.routes";
 import importacionesRoutes from "./modules/importaciones/importaciones.routes";
+import importacionesBandejaRoutes from "./modules/importaciones/importaciones-bandeja.routes";
 import integracionesSiesaRoutes from "./modules/integraciones-siesa/siesa-sync.routes";
 import membresiasRoutes from "./modules/membresias/membresias.routes";
 import inventarioRoutes from "./modules/inventario/inventario.routes";
@@ -90,11 +92,12 @@ export function createApp() {
   app.use("/api/roles", rolesRoutes);
   app.use("/api/permisos", permisosRoutes);
   app.use("/api/departamentos", departamentosRoutes);
+  app.use("/api/perfiles-funcionales", perfilesFuncionalesRoutes);
+  app.use("/api/reglas-destinatarios", reglasDestinatariosRoutes);
   app.use("/api/auditoria", auditoriaRoutes);
   app.use("/api/facturas", facturasRoutes);
   app.use("/api/solicitudes-compra", solicitudesRoutes);
   app.use("/api/servicios", serviciosRoutes);
-  app.use("/api/contratos", contratosRoutes);
   app.use("/api/reglas", reglasRoutes);
   app.use("/api/creditos", creditosRoutes);
   app.use("/api/gestion-humana", gestionHumanaRoutes);
@@ -103,6 +106,11 @@ export function createApp() {
   app.use("/api/notificaciones", notificacionesRoutes);
   app.use("/api/proveedores", proveedoresRoutes);
   app.use("/api/item-clasificaciones", itemClasificacionesRoutes);
+  // Montado ANTES de /api/importaciones (no importa el orden en Express
+  // entre prefijos distintos, pero se agrupa aquí visualmente): router
+  // propio para no crecer más el archivo de rutas de Importaciones ya
+  // existente. Ver comentario en importaciones-bandeja.routes.ts.
+  app.use("/api/importaciones/bandeja", importacionesBandejaRoutes);
   app.use("/api/importaciones", importacionesRoutes);
   app.use("/api/integraciones/siesa", integracionesSiesaRoutes);
   app.use("/api/membresias", membresiasRoutes);

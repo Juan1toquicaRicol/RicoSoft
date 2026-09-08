@@ -154,7 +154,9 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
       .get("/api/solicitudes-compra/disponibles-para-factura")
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    const fila = res.body.find((s: any) => s.id === sc.id);
+    const fila = res.body.find(
+      (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === sc.id,
+    );
     expect(fila).toBeDefined();
     expect(fila.facturado).toBe(0);
     expect(fila.saldoPendiente).toBe(1000000);
@@ -169,8 +171,16 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
       .query({ proveedorId: proveedorA1Id })
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((s: any) => s.id === scA1.id)).toBe(true);
-    expect(res.body.some((s: any) => s.id === scA2.id)).toBe(false);
+    expect(
+      res.body.some(
+        (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === scA1.id,
+      ),
+    ).toBe(true);
+    expect(
+      res.body.some(
+        (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === scA2.id,
+      ),
+    ).toBe(false);
   });
 
   it("1/4. Crear factura relacionada con solicitud: la solicitud pasa a Facturada y la factura queda Aprobada automáticamente", async () => {
@@ -209,7 +219,9 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
     const disponibles = await request(app)
       .get("/api/solicitudes-compra/disponibles-para-factura")
       .set("Authorization", `Bearer ${tokenA}`);
-    const fila = disponibles.body.find((s: any) => s.id === sc.id);
+    const fila = disponibles.body.find(
+      (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === sc.id,
+    );
     expect(fila.facturado).toBe(700000);
     expect(fila.saldoPendiente).toBe(300000);
   });
@@ -229,7 +241,11 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
     const disponibles = await request(app)
       .get("/api/solicitudes-compra/disponibles-para-factura")
       .set("Authorization", `Bearer ${tokenA}`);
-    expect(disponibles.body.some((s: any) => s.id === sc.id)).toBe(false);
+    expect(
+      disponibles.body.some(
+        (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === sc.id,
+      ),
+    ).toBe(false);
   });
 
   it("8. Factura sin solicitud: se crea normalmente, sin vincular nada", async () => {
@@ -273,7 +289,7 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
       .query({ solicitudCompraId: sc.id })
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    const ids = res.body.map((f: any) => f.id);
+    const ids = res.body.map((f: { id: string }) => f.id);
     expect(ids).toContain(f1.body.id);
     expect(ids).toContain(f2.body.id);
     expect(res.body).toHaveLength(2);
@@ -285,7 +301,11 @@ describe.skipIf(!RUN)("Factura <-> Solicitud de Compra (multi-tenant real)", () 
     const disponiblesB = await request(app)
       .get("/api/solicitudes-compra/disponibles-para-factura")
       .set("Authorization", `Bearer ${tokenB}`);
-    expect(disponiblesB.body.some((s: any) => s.id === scA.id)).toBe(false);
+    expect(
+      disponiblesB.body.some(
+        (s: { id: string; facturado?: number; saldoPendiente?: number }) => s.id === scA.id,
+      ),
+    ).toBe(false);
 
     const intentoCruzado = await request(app)
       .post("/api/facturas")

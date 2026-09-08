@@ -6,6 +6,7 @@ import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { whereAlcance } from "../../lib/alcance";
 import { validarPasswordSegura } from "../../lib/password";
 import { esDominioCorporativoValido } from "../../lib/dominios";
+import { parseRolPermisos, primerPermisoQueExcedeAlActor } from "../../lib/permissions";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -236,6 +237,18 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
       if (!rol) {
         return res.status(404).json({ message: "El rol seleccionado no existe o está inactivo." });
       }
+      // Anti-escalación: quien crea el usuario no puede otorgarle, vía el
+      // rol, un permiso que él mismo no tiene — "usuarios.crear" (pensado
+      // para altas de personal) no debe alcanzar para fabricar un admin.
+      const permisoExcedido = primerPermisoQueExcedeAlActor(
+        req.user!,
+        parseRolPermisos(rol.permisos),
+      );
+      if (permisoExcedido) {
+        return res.status(403).json({
+          message: `No puedes asignar el rol "${rol.nombre}": otorga el permiso "${permisoExcedido}", que tú mismo no tienes.`,
+        });
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -370,6 +383,17 @@ export const asignarRolUsuario = async (req: AuthenticatedRequest, res: Response
       });
       if (!rol) {
         return res.status(404).json({ message: "El rol seleccionado no existe o está inactivo." });
+      }
+      // Anti-escalación: mismo guard que en crearUsuario — no se puede
+      // reasignar un rol que otorgue un permiso que el actor mismo no tiene.
+      const permisoExcedido = primerPermisoQueExcedeAlActor(
+        req.user!,
+        parseRolPermisos(rol.permisos),
+      );
+      if (permisoExcedido) {
+        return res.status(403).json({
+          message: `No puedes asignar el rol "${rol.nombre}": otorga el permiso "${permisoExcedido}", que tú mismo no tienes.`,
+        });
       }
     }
 
@@ -596,6 +620,17 @@ export const asignarDepartamentoUsuario = async (req: AuthenticatedRequest, res:
       });
       if (!departamento) {
         return res.status(404).json({ message: "El departamento seleccionado no existe." });
+      }
+      // esSistemas=true otorga TODOS los permisos del sistema a quien quede
+      // asignado ahí (calcularPermisosEfectivos) — asignarlo por esta vía
+      // sería una escalación de privilegios equivalente a otorgar
+      // superadmin, sin pasar por ninguno de los controles que sí protegen
+      // a isSuperadmin. Requiere la misma autoridad.
+      if (departamento.esSistemas && !req.user!.isSuperadmin) {
+        return res.status(403).json({
+          message:
+            "Solo un superadministrador puede asignar un departamento marcado como Sistemas.",
+        });
       }
     }
 

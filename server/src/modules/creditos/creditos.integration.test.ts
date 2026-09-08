@@ -205,6 +205,47 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     expect(pago.body.estado).toBe("Al día");
   });
 
+  it("5b. Fase 5.4.1 — dos abonos concurrentes que juntos exceden el saldo nunca lo dejan negativo (sin lost update)", async () => {
+    const creado = await request(app)
+      .post("/api/creditos")
+      .set("Authorization", `Bearer ${tokenAGestor}`)
+      .send({
+        cliente: `Cliente Concurrencia ${sufijo}`,
+        cupo: 1_000_000,
+        saldo: 300_000,
+        vence: enDiasMs(60),
+      });
+    const id = creado.body.id;
+
+    // Dos abonos de 200.000 disparados a la vez sobre un saldo de 300.000:
+    // individualmente cada uno cabe (200.000 <= 300.000), pero juntos
+    // (400.000) exceden el saldo. Antes del fix, ambos leían el mismo
+    // saldoActual=300.000 y el segundo pisaba al primero (lost update),
+    // dejando el saldo en 100.000 en vez de rechazar el segundo.
+    const [a, b] = await Promise.all([
+      request(app)
+        .post(`/api/creditos/${id}/pago`)
+        .set("Authorization", `Bearer ${tokenAGestor}`)
+        .send({ monto: 200_000 }),
+      request(app)
+        .post(`/api/creditos/${id}/pago`)
+        .set("Authorization", `Bearer ${tokenAGestor}`)
+        .send({ monto: 200_000 }),
+    ]);
+
+    const estados = [a.status, b.status].sort();
+    // Exactamente uno de los dos debió aplicarse (200) y el otro rechazarse
+    // (400 por exceder el saldo restante recalculado, o 409 por conflicto de
+    // concurrencia) — nunca los dos con 200.
+    expect(estados).not.toEqual([200, 200]);
+    expect(estados.includes(200)).toBe(true);
+
+    const final = await prisma.creditoCliente.findUnique({ where: { id } });
+    // El saldo final es siempre 100.000 (300.000 - solo un abono de
+    // 200.000 aplicado) — nunca negativo, nunca con ambos abonos aplicados.
+    expect(Number(final?.saldo)).toBe(100_000);
+  });
+
   it("6. marcarPazYSalvo pone saldo en 0 y estado 'Paz y Salvo'", async () => {
     const creado = await request(app)
       .post("/api/creditos")
@@ -245,7 +286,19 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     const listado = await request(app)
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenAGestor}`);
-    expect(listado.body.some((c: any) => c.id === id)).toBe(false);
+    expect(
+      listado.body.some(
+        (c: {
+          id: string;
+          estado?: string;
+          saldo?: number;
+          vencido?: number;
+          porVencer?: number;
+          alDia?: number;
+          diasMora?: number;
+        }) => c.id === id,
+      ),
+    ).toBe(false);
 
     const enDb = await prisma.creditoCliente.findUnique({ where: { id } });
     expect(enDb).not.toBeNull();
@@ -280,7 +333,19 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     const listado = await request(app)
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenAGestor}`);
-    expect(listado.body.some((c: any) => c.id === creditoBId)).toBe(false);
+    expect(
+      listado.body.some(
+        (c: {
+          id: string;
+          estado?: string;
+          saldo?: number;
+          vencido?: number;
+          porVencer?: number;
+          alDia?: number;
+          diasMora?: number;
+        }) => c.id === creditoBId,
+      ),
+    ).toBe(false);
 
     const editar = await request(app)
       .patch(`/api/creditos/${creditoBId}`)
@@ -315,7 +380,19 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenBGestor}`);
     expect(listado.status).toBe(200);
-    expect(listado.body.some((c: any) => c.id === creditoBId)).toBe(true);
+    expect(
+      listado.body.some(
+        (c: {
+          id: string;
+          estado?: string;
+          saldo?: number;
+          vencido?: number;
+          porVencer?: number;
+          alDia?: number;
+          diasMora?: number;
+        }) => c.id === creditoBId,
+      ),
+    ).toBe(true);
   });
 
   it("11. cada mutación (crear/pago/paz-y-salvo/eliminar) deja un registro en Auditoria del tenant correcto", async () => {
@@ -384,7 +461,17 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     const listado = await request(app)
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenAGestor}`);
-    const fila = listado.body.find((c: any) => c.id === id);
+    const fila = listado.body.find(
+      (c: {
+        id: string;
+        estado?: string;
+        saldo?: number;
+        vencido?: number;
+        porVencer?: number;
+        alDia?: number;
+        diasMora?: number;
+      }) => c.id === id,
+    );
     expect(fila.estado).toBe("Vencido");
     expect(fila.vencido).toBe(500_000);
     expect(fila.porVencer).toBe(0);
@@ -413,7 +500,17 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     const listado = await request(app)
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenAGestor}`);
-    const filaParcial = listado.body.find((c: any) => c.id === id);
+    const filaParcial = listado.body.find(
+      (c: {
+        id: string;
+        estado?: string;
+        saldo?: number;
+        vencido?: number;
+        porVencer?: number;
+        alDia?: number;
+        diasMora?: number;
+      }) => c.id === id,
+    );
     expect(filaParcial.saldo).toBe(400_000);
     expect(filaParcial.vencido).toBe(400_000); // seguía vencido, ahora por menos
 
@@ -425,7 +522,17 @@ describe.skipIf(!RUN)("Créditos de Clientes (multi-tenant real)", () => {
     const listadoFinal = await request(app)
       .get("/api/creditos")
       .set("Authorization", `Bearer ${tokenAGestor}`);
-    const filaFinal = listadoFinal.body.find((c: any) => c.id === id);
+    const filaFinal = listadoFinal.body.find(
+      (c: {
+        id: string;
+        estado?: string;
+        saldo?: number;
+        vencido?: number;
+        porVencer?: number;
+        alDia?: number;
+        diasMora?: number;
+      }) => c.id === id,
+    );
     expect(filaFinal.saldo).toBe(0);
     expect(filaFinal.estado).toBe("Al día");
     expect(filaFinal.vencido).toBe(0);

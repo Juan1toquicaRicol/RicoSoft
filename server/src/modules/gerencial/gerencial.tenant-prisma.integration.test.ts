@@ -149,13 +149,17 @@ describe.skipIf(!RUN)("Centro Gerencial — /api/gerencial/resumen (multi-tenant
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
 
-    const finanzas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_total");
+    const finanzas = res.body.indicadores.find(
+      (i: { id: string; valor?: number }) => i.id === "finanzas.cxp_total",
+    );
     expect(finanzas.valor).toBe(0);
-    const vencidas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_vencida");
+    const vencidas = res.body.indicadores.find(
+      (i: { id: string; valor?: number }) => i.id === "finanzas.cxp_vencida",
+    );
     expect(vencidas).toBeUndefined(); // Tenant A no tiene facturas vencidas propias
 
     const compras = res.body.indicadores.find(
-      (i: any) => i.id === "compras.solicitudes_pendientes",
+      (i: { id: string; valor?: number }) => i.id === "compras.solicitudes_pendientes",
     );
     expect(compras.valor).toBe(0);
   });
@@ -166,10 +170,12 @@ describe.skipIf(!RUN)("Centro Gerencial — /api/gerencial/resumen (multi-tenant
       .set("Authorization", `Bearer ${tokenAdminB}`);
     expect(res.status).toBe(200);
 
-    const vencidas = res.body.indicadores.find((i: any) => i.id === "finanzas.cxp_vencida");
+    const vencidas = res.body.indicadores.find(
+      (i: { id: string; valor?: number }) => i.id === "finanzas.cxp_vencida",
+    );
     expect(vencidas?.valor).toBe(1_000_000);
     const compras = res.body.indicadores.find(
-      (i: any) => i.id === "compras.solicitudes_pendientes",
+      (i: { id: string; valor?: number }) => i.id === "compras.solicitudes_pendientes",
     );
     expect(compras.valor).toBe(1);
 

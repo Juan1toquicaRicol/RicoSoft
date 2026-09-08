@@ -195,14 +195,37 @@ export interface SituacionActual {
   proximaAccion: string | null;
 }
 
+export interface RequisitoProveedorImportacion {
+  id: string;
+  tipo: string;
+  nombre: string;
+  descripcion: string | null;
+  obligatorio: boolean;
+  activo: boolean;
+  orden: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OrdenCompraIntl {
   id: string;
   codigo: string;
   numeroOrden: string;
   incoterm: string;
+  proveedorId: string | null;
   proveedorExtranjero: string;
+  /** Presente solo cuando la orden quedó ligada a un Proveedor real (no
+   * texto libre) — incluye sus requisitos de importación VIGENTES (ver
+   * decisión de referencia viva). */
+  proveedor: {
+    id: string;
+    nombre: string;
+    nit: string;
+    requisitos: RequisitoProveedorImportacion[];
+  } | null;
   paisOrigen: string;
   moneda: string;
+  formaPago: string | null;
   trmPactada: number;
   valorEstimadoTotal: number;
   estado: EstadoOrdenIntl;
@@ -231,6 +254,8 @@ export interface OrdenCompraIntl {
 
 export interface ItemOrdenInput {
   descripcion: string;
+  referencia?: string | null;
+  unidadMedida?: string | null;
   subpartidaArancelariaId?: string | null;
   cantidad: number;
   pesoKg?: number | null;
@@ -241,12 +266,20 @@ export interface ItemOrdenInput {
 export interface CrearOrdenInput {
   numeroOrden: string;
   incoterm: string;
+  proveedorId?: string | null;
   proveedorExtranjero: string;
   paisOrigen: string;
   moneda: string;
   trmPactada: number;
+  formaPago?: string | null;
   observaciones?: string;
   items: ItemOrdenInput[];
+}
+
+export interface TrmOficial {
+  valor: number;
+  vigenciaDesde: string;
+  vigenciaHasta: string;
 }
 
 export interface CrearLoteInput {
@@ -367,6 +400,153 @@ export function useImportaciones() {
   );
 
   return { ordenes, loading, error, refresh, addOrden, anularOrden };
+}
+
+/** Consulta puntual (no un hook con estado propio): el modal de creación la
+ * dispara desde un botón, no la necesita al montar. */
+export async function obtenerTrmOficial(): Promise<TrmOficial> {
+  return fetchAuth("/importaciones/trm-oficial");
+}
+
+export interface ItemBusquedaSiesa {
+  itemRowId: number;
+  descripcion: string | null;
+  referencia: string | null;
+  unidadMedida: string | null;
+}
+
+/**
+ * Autocompletado de ítem para la tabla de "Ítems de la Orden" — mismo
+ * patrón que useProveedorBusqueda (use-proveedores.ts): búsqueda server-side
+ * contra el maestro de Siesa, sin descargar ningún catálogo completo. Si el
+ * tenant no tiene Siesa configurado (`disponible:false`), el consumidor cae
+ * a captura 100% manual — nunca bloquea crear la orden.
+ */
+export function useBuscarItemsSiesa() {
+  const [opciones, setOpciones] = useState<ItemBusquedaSiesa[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [disponible, setDisponible] = useState(true);
+
+  const buscar = useCallback(async (texto: string) => {
+    if (texto.trim().length < 2) {
+      setOpciones([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await fetchAuth(
+        `/importaciones/items-siesa/buscar?search=${encodeURIComponent(texto)}`,
+      );
+      setDisponible(!!data.disponible);
+      setOpciones(data.disponible && Array.isArray(data.items) ? data.items : []);
+    } catch {
+      setOpciones([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { opciones, loading, disponible, buscar };
+}
+
+export interface NuevoRequisitoProveedor {
+  tipo: string;
+  nombre: string;
+  descripcion?: string | null;
+  obligatorio?: boolean;
+  orden?: number;
+}
+
+export interface ActualizarRequisitoProveedor {
+  tipo?: string;
+  nombre?: string;
+  descripcion?: string | null;
+  obligatorio?: boolean;
+  activo?: boolean;
+  orden?: number;
+}
+
+/**
+ * Requisitos de importación de UN proveedor (sección "Proveedores y
+ * requisitos"). Por defecto solo trae los activos; `incluirInactivos`
+ * (pantalla de administración) también trae los desactivados para poder
+ * reactivarlos.
+ */
+export function useRequisitosProveedor(proveedorId: string | undefined, incluirInactivos = false) {
+  const [proveedor, setProveedor] = useState<{ id: string; nombre: string; nit: string } | null>(
+    null,
+  );
+  const [requisitos, setRequisitos] = useState<RequisitoProveedorImportacion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!proveedorId) {
+      setProveedor(null);
+      setRequisitos([]);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const qs = incluirInactivos ? "?incluirInactivos=true" : "";
+      const data = await fetchAuth(`/importaciones/proveedores/${proveedorId}/requisitos${qs}`);
+      setProveedor(data.proveedor);
+      setRequisitos(data.requisitos);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los requisitos del proveedor.");
+    } finally {
+      setLoading(false);
+    }
+  }, [proveedorId, incluirInactivos]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const crearRequisito = useCallback(
+    async (datos: NuevoRequisitoProveedor) => {
+      if (!proveedorId) return;
+      await fetchAuth(`/importaciones/proveedores/${proveedorId}/requisitos`, {
+        method: "POST",
+        body: JSON.stringify(datos),
+      });
+      await refresh();
+    },
+    [proveedorId, refresh],
+  );
+
+  const actualizarRequisito = useCallback(
+    async (requisitoId: string, datos: ActualizarRequisitoProveedor) => {
+      await fetchAuth(`/importaciones/proveedores/requisitos/${requisitoId}`, {
+        method: "PATCH",
+        body: JSON.stringify(datos),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarRequisito = useCallback(
+    async (requisitoId: string) => {
+      await fetchAuth(`/importaciones/proveedores/requisitos/${requisitoId}`, {
+        method: "DELETE",
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return {
+    proveedor,
+    requisitos,
+    loading,
+    error,
+    refresh,
+    crearRequisito,
+    actualizarRequisito,
+    eliminarRequisito,
+  };
 }
 
 export function useOrdenCompraIntl(id: string | undefined) {

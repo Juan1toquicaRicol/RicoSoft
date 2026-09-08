@@ -127,8 +127,8 @@ function GestionHumana() {
       await eliminarEmpleado(empleadoAEliminar.id);
       toast.success(`Expediente de ${empleadoAEliminar.nombres} eliminado.`);
       setEmpleadoAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar el expediente.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar el expediente.");
     } finally {
       setEliminandoEmpleado(false);
     }
@@ -160,7 +160,8 @@ function GestionHumana() {
 
   const [permisoForm, setPermisoForm] = useState({
     empleadoId: "",
-    tipoPermiso: "Vacaciones" as const,
+    tipoPermiso: "Vacaciones" as
+      "Vacaciones" | "Licencia Médica" | "Cita Médica" | "Calamidad Doméstica" | "Otro",
     fechaInicio: new Date().toISOString().split("T")[0],
     fechaFin: new Date().toISOString().split("T")[0],
     dias: 1,
@@ -256,8 +257,8 @@ function GestionHumana() {
         fechaContratacion: empForm.fechaContratacion,
         salarioActual: Number(empForm.salarioActual),
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el colaborador.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el colaborador.");
       return;
     }
     setModalEmpleadoOpen(false);
@@ -283,8 +284,8 @@ function GestionHumana() {
         Number(salarioForm.nuevoSalario),
         salarioForm.motivo,
       );
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el salario.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el salario.");
       return;
     }
     setModalSalarioOpen(false);
@@ -302,8 +303,8 @@ function GestionHumana() {
         dias: Number(permisoForm.dias),
         observaciones: permisoForm.observaciones,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el permiso.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el permiso.");
       return;
     }
     setModalPermisoOpen(false);
@@ -319,8 +320,8 @@ function GestionHumana() {
         motivo: faltaForm.motivo,
         descargos: faltaForm.descargos,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar la falta.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar la falta.");
       return;
     }
     setModalFaltaOpen(false);
@@ -532,8 +533,12 @@ function GestionHumana() {
                                   liquidarEmpleado(
                                     emp.id,
                                     new Date().toISOString().split("T")[0],
-                                  ).catch((err: any) =>
-                                    toast.error(err.message || "Error al liquidar el colaborador."),
+                                  ).catch((err: unknown) =>
+                                    toast.error(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "Error al liquidar el colaborador.",
+                                    ),
                                   );
                                 }
                               }}
@@ -673,8 +678,10 @@ function GestionHumana() {
                               size="xs"
                               variant="success"
                               onClick={() =>
-                                updateEstadoPermiso(p.id, "Aprobado").catch((err: any) =>
-                                  toast.error(err.message || "Error al aprobar."),
+                                updateEstadoPermiso(p.id, "Aprobado").catch((err: unknown) =>
+                                  toast.error(
+                                    err instanceof Error ? err.message : "Error al aprobar.",
+                                  ),
                                 )
                               }
                               className="h-7 text-[11px]"
@@ -685,8 +692,10 @@ function GestionHumana() {
                               size="xs"
                               variant="destructive"
                               onClick={() =>
-                                updateEstadoPermiso(p.id, "Rechazado").catch((err: any) =>
-                                  toast.error(err.message || "Error al rechazar."),
+                                updateEstadoPermiso(p.id, "Rechazado").catch((err: unknown) =>
+                                  toast.error(
+                                    err instanceof Error ? err.message : "Error al rechazar.",
+                                  ),
                                 )
                               }
                               className="h-7 text-[11px]"
@@ -1132,7 +1141,14 @@ function GestionHumana() {
                 </Label>
                 <Select
                   value={permisoForm.tipoPermiso}
-                  onValueChange={(val: any) => setPermisoForm({ ...permisoForm, tipoPermiso: val })}
+                  onValueChange={(
+                    val:
+                      | "Vacaciones"
+                      | "Licencia Médica"
+                      | "Cita Médica"
+                      | "Calamidad Doméstica"
+                      | "Otro",
+                  ) => setPermisoForm({ ...permisoForm, tipoPermiso: val })}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />
@@ -1252,7 +1268,9 @@ function GestionHumana() {
               </Label>
               <Select
                 value={faltaForm.gravedad}
-                onValueChange={(val: any) => setFaltaForm({ ...faltaForm, gravedad: val })}
+                onValueChange={(val: GravedadStrike) =>
+                  setFaltaForm({ ...faltaForm, gravedad: val })
+                }
               >
                 <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                   <SelectValue />

@@ -36,12 +36,6 @@ export interface DashboardServicios {
   proximosVencimientos: number;
 }
 
-export interface DashboardContratos {
-  activos: number;
-  valorContratadoActivo: number;
-  proximosAVencer: number;
-}
-
 export interface DashboardDespachos {
   total: number;
   enProceso: number;
@@ -54,7 +48,6 @@ export interface DashboardResumen {
   solicitudes?: DashboardSolicitudes;
   creditos?: DashboardCreditos;
   servicios?: DashboardServicios;
-  contratos?: DashboardContratos;
   despachos?: DashboardDespachos;
   importaciones?: DashboardImportaciones;
 }

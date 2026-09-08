@@ -371,13 +371,38 @@ export const registrarPagoCredito = async (req: AuthenticatedRequest, res: Respo
         .json({ message: "El monto del pago no puede ser mayor al saldo pendiente." });
     }
 
-    const nuevoSaldo = saldoActual - montoNum;
-    const nuevoEstado = calcularEstado(nuevoSaldo, credito.vence);
+    // Decremento atómico condicionado al saldo REAL en BD en el momento del
+    // UPDATE (no al valor leído arriba, que puede estar obsoleto): dos abonos
+    // concurrentes sobre el mismo crédito, de otro modo, leerían el mismo
+    // saldoActual y el segundo pisaría (lost update) el descuento del
+    // primero. `updateMany` con `saldo: { gte: montoNum }` en el WHERE hace
+    // que SQL Server evalúe esa condición contra el valor vigente de la fila
+    // en el instante de la escritura — si el otro abono ya se aplicó y dejó
+    // el saldo por debajo de este monto, count queda en 0 en vez de
+    // sobre-restar.
+    const resultado = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.creditoCliente.updateMany({
+        where: { id, tenantId, eliminado: false, saldo: { gte: montoNum } },
+        data: { saldo: { decrement: montoNum } },
+      });
+      if (count === 0) return null;
 
-    const actualizado = await prisma.creditoCliente.update({
-      where: { id },
-      data: { saldo: nuevoSaldo, estado: nuevoEstado },
+      const actual = await tx.creditoCliente.findUniqueOrThrow({ where: { id } });
+      const nuevoSaldo = Number(actual.saldo);
+      return tx.creditoCliente.update({
+        where: { id },
+        data: { estado: calcularEstado(nuevoSaldo, actual.vence) },
+      });
     });
+
+    if (!resultado) {
+      return res.status(409).json({
+        message:
+          "El saldo cambió mientras se procesaba este pago (probablemente otro abono concurrente). Verifica el saldo actual e inténtalo de nuevo.",
+      });
+    }
+    const actualizado = resultado;
+    const nuevoSaldo = Number(actualizado.saldo);
 
     await prisma.auditoria.create({
       data: {

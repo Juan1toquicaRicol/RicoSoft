@@ -105,6 +105,23 @@ export const crearDepartamento = async (req: AuthenticatedRequest, res: Response
     if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
       return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
     }
+    // Un departamento GENERAL (tenantId: null) es visible/editable por TODOS
+    // los tenants vía whereAlcance — mismo riesgo que un Rol GENERAL
+    // (roles.controller.ts), solo un superadmin puede crearlos.
+    if (alcance === "GENERAL" && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede crear departamentos de alcance general.",
+      });
+    }
+    // esSistemas=true en un departamento otorga TODOS los permisos del
+    // sistema a cualquiera que quede asignado a él (calcularPermisosEfectivos
+    // en lib/permissions.ts) — equivalente a isSuperadmin. Crear uno nuevo
+    // con esa bandera activa debe requerir la misma autoridad.
+    if (esSistemas && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede crear un departamento marcado como Sistemas.",
+      });
+    }
 
     // El alcance lo decide el body (GENERAL/TENANT), pero el tenant al que
     // queda ligado un departamento TENANT sale SIEMPRE de la sesión — nunca
@@ -149,6 +166,17 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
       return res.status(404).json({ message: "Departamento no encontrado." });
     }
 
+    // esSistemas=true otorga TODOS los permisos del sistema a quien quede
+    // asignado ahí (ver calcularPermisosEfectivos) — activarlo, o tocar
+    // cualquier campo de un departamento que YA lo tiene, requiere la misma
+    // autoridad que ser superadmin.
+    if ((esSistemas === true || existente.esSistemas) && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message:
+          "Solo un superadministrador puede modificar un departamento marcado como Sistemas.",
+      });
+    }
+
     let nuevoTenantId: string | null | undefined;
     if (alcance !== undefined) {
       if (alcance !== "GENERAL" && alcance !== "TENANT") {
@@ -156,6 +184,14 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
       }
       const eraGeneral = existente.tenantId === null;
       const seraGeneral = alcance === "GENERAL";
+      // Mismo riesgo que un Rol GENERAL: un departamento ya GENERAL, o que
+      // esté a punto de convertirse en uno, es visible/editable por
+      // cualquier tenant vía whereAlcance.
+      if ((eraGeneral || seraGeneral) && !req.user!.isSuperadmin) {
+        return res.status(403).json({
+          message: "Solo un superadministrador puede modificar departamentos de alcance general.",
+        });
+      }
       if (eraGeneral && !seraGeneral) {
         // GENERAL -> TENANT: si algún usuario/membresía de OTRO tenant ya lo
         // usa, esa gente se quedaría con una referencia a un departamento
@@ -220,6 +256,12 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
     });
     if (!departamento) {
       return res.status(404).json({ message: "Departamento no encontrado." });
+    }
+    if ((departamento.tenantId === null || departamento.esSistemas) && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message:
+          "Solo un superadministrador puede eliminar un departamento de alcance general o marcado como Sistemas.",
+      });
     }
     if (departamento._count.usuarios > 0 || departamento._count.membresias > 0) {
       return res.status(409).json({

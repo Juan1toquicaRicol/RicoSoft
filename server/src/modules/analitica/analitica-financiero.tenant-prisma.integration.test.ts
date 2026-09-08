@@ -196,7 +196,6 @@ describe.skipIf(!RUN)(
       await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.pago.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.factura.deleteMany({ where: { tenantId: { in: tenantIds } } });
-      await prisma.contrato.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.servicioSuscripcion.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.proveedor.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });

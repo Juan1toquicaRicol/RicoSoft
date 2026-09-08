@@ -290,6 +290,34 @@ export async function descargarCotizacionProveedor(solicitudId: string, cotizaci
 }
 
 /**
+ * Variante de `agregarCotizacion` (ver useCotizacionesProveedor) que no
+ * depende de un hook ya montado sobre una solicitud — se usa para subir
+ * las 2-3 cotizaciones iniciales justo después de crear la solicitud, en el
+ * mismo formulario de creación, sin necesidad de abrir el cuadro comparativo
+ * por separado.
+ */
+export async function agregarCotizacionProveedor(
+  solicitudId: string,
+  data: {
+    proveedorId?: string;
+    proveedorNombre?: string;
+    proveedorNit?: string;
+    valorTotalCOP: number;
+    tiempoEntregaDias: number;
+    archivo: File;
+  },
+) {
+  const formData = new FormData();
+  if (data.proveedorId) formData.append("proveedorId", data.proveedorId);
+  if (data.proveedorNombre) formData.append("proveedorNombre", data.proveedorNombre);
+  if (data.proveedorNit) formData.append("proveedorNit", data.proveedorNit);
+  formData.append("valorTotalCOP", String(data.valorTotalCOP));
+  formData.append("tiempoEntregaDias", String(data.tiempoEntregaDias));
+  formData.append("archivo", data.archivo);
+  return fetchAuthUpload(`/solicitudes-compra/${solicitudId}/cotizaciones`, formData);
+}
+
+/**
  * Solicitudes de compra que todavía pueden recibir una factura (selector
  * "Solicitud de compra relacionada" en Recepcionar Factura). Se resuelve
  * server-side: prioriza el proveedor de la factura (proveedorId) y ya trae

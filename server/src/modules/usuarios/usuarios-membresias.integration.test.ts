@@ -36,6 +36,13 @@ describe.skipIf(!RUN)(
     let usuarioObjetivoBId: string; // usuario normal, nativo de B
     let departamentoBId: string;
     let rolBId: string;
+    // Fase 5.4.1 hardening — escalación de privilegios (ver informe de auditoría)
+    let departamentoSistemasAId: string;
+    let departamentoNormalAId: string;
+    let rolLimitadoId: string; // usuarios.crear + usuarios.cambiar_rol + usuarios.cambiar_departamento
+    let rolPrivilegiadoId: string; // lo mismo + usuarios.eliminar (excede al actor limitado)
+    let tokenActorLimitado: string;
+    let usuarioObjetivoAId: string; // usuario normal, nativo de A, para las pruebas de escalación
 
     const login = async (email: string): Promise<string> => {
       const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
@@ -118,9 +125,64 @@ describe.skipIf(!RUN)(
       usuarioObjetivoBId = usuarioObjetivoB.id;
       void adminB;
 
+      // --- Fixtures de hardening (Fase 5.4.1) ---
+      const departamentoSistemasA = await prisma.departamento.create({
+        data: { tenantId: tenantAId, nombre: `Sistemas A ${sufijo}`, esSistemas: true },
+      });
+      departamentoSistemasAId = departamentoSistemasA.id;
+      const departamentoNormalA = await prisma.departamento.create({
+        data: { tenantId: tenantAId, nombre: `Normal A ${sufijo}`, esSistemas: false },
+      });
+      departamentoNormalAId = departamentoNormalA.id;
+
+      const rolLimitado = await prisma.rol.create({
+        data: {
+          tenantId: tenantAId,
+          nombre: `Limitado ${sufijo}`,
+          permisos: JSON.stringify([
+            "usuarios.crear",
+            "usuarios.cambiar_rol",
+            "usuarios.cambiar_departamento",
+          ]),
+        },
+      });
+      rolLimitadoId = rolLimitado.id;
+      const rolPrivilegiado = await prisma.rol.create({
+        data: {
+          tenantId: tenantAId,
+          nombre: `Privilegiado ${sufijo}`,
+          permisos: JSON.stringify(["usuarios.crear", "usuarios.eliminar"]),
+        },
+      });
+      rolPrivilegiadoId = rolPrivilegiado.id;
+
+      await prisma.user.create({
+        data: {
+          tenantId: tenantAId,
+          email: `um-tp-actor-limitado-${sufijo}@test.ricosoft.local`,
+          passwordHash,
+          nombre: "Actor Limitado",
+          rolId: rolLimitado.id,
+          isSuperadmin: false,
+          activo: true,
+        },
+      });
+      const usuarioObjetivoA = await prisma.user.create({
+        data: {
+          tenantId: tenantAId,
+          email: `um-tp-objetivo-a-${sufijo}@test.ricosoft.local`,
+          passwordHash,
+          nombre: "Objetivo A",
+          isSuperadmin: false,
+          activo: true,
+        },
+      });
+      usuarioObjetivoAId = usuarioObjetivoA.id;
+
       tokenA = await login(`um-tp-admin-a-${sufijo}@test.ricosoft.local`);
       tokenB = await login(`um-tp-admin-b-${sufijo}@test.ricosoft.local`);
       tokenSinPermiso = await login(`um-tp-sinpermiso-${sufijo}@test.ricosoft.local`);
+      tokenActorLimitado = await login(`um-tp-actor-limitado-${sufijo}@test.ricosoft.local`);
     });
 
     afterAll(async () => {
@@ -200,7 +262,7 @@ describe.skipIf(!RUN)(
     it("Tenant A no ve a un usuario de Tenant B en su propio listado", async () => {
       const res = await request(app).get("/api/usuarios").set("Authorization", `Bearer ${tokenA}`);
       expect(res.status).toBe(200);
-      expect(res.body.data.some((u: any) => u.id === usuarioObjetivoBId)).toBe(false);
+      expect(res.body.data.some((u: { id: string }) => u.id === usuarioObjetivoBId)).toBe(false);
     });
 
     // ---- Administración de usuarios: operaciones propias funcionan ----
@@ -328,6 +390,136 @@ describe.skipIf(!RUN)(
         .get("/api/membresias/tenants")
         .set("Authorization", `Bearer ${tokenSinPermiso}`);
       expect(res.status).toBe(403);
+    });
+
+    // ---- Fase 5.4.1 — hardening de escalación de privilegios ----
+
+    it("un superadmin no puede otorgarse una membresía a sí mismo (409), no se crea", async () => {
+      const adminA = await prisma.user.findFirstOrThrow({
+        where: { email: `um-tp-admin-a-${sufijo}@test.ricosoft.local` },
+      });
+      const res = await request(app)
+        .post(`/api/membresias/usuarios/${adminA.id}`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ tenantId: tenantBId });
+      expect(res.status).toBe(409);
+
+      const membresias = await prisma.membresia.findMany({ where: { userId: adminA.id } });
+      expect(membresias).toHaveLength(0);
+    });
+
+    it("un superadmin no puede administrar su propia membresía existente para auto-otorgarse isSuperadmin (409)", async () => {
+      // crearMembresia ya bloquea el auto-otorgamiento (prueba anterior), así
+      // que la única forma de que exista una membresía propia hoy es un dato
+      // heredado de antes de este fix (o creado fuera de la API) — se
+      // fabrica ese escenario directo en BD para probar el guard de
+      // actualizarMembresia de forma aislada.
+      const adminA = await prisma.user.findFirstOrThrow({
+        where: { email: `um-tp-admin-a-${sufijo}@test.ricosoft.local` },
+      });
+      const membresiaPropia = await prisma.membresia.create({
+        data: { userId: adminA.id, tenantId: tenantBId, isSuperadmin: false, activo: true },
+      });
+
+      const escalada = await request(app)
+        .patch(`/api/membresias/${membresiaPropia.id}`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ isSuperadmin: true });
+      expect(escalada.status).toBe(409);
+
+      const sinTocar = await prisma.membresia.findUnique({ where: { id: membresiaPropia.id } });
+      expect(sinTocar?.isSuperadmin).toBe(false);
+
+      await prisma.membresia.delete({ where: { id: membresiaPropia.id } });
+    });
+
+    it("asignarDepartamentoUsuario: un actor NO superadmin no puede asignar un departamento marcado como Sistemas (403), no cambia", async () => {
+      const res = await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/departamento`)
+        .set("Authorization", `Bearer ${tokenActorLimitado}`)
+        .send({ departamentoId: departamentoSistemasAId });
+      expect(res.status).toBe(403);
+
+      const sinTocar = await prisma.user.findUnique({ where: { id: usuarioObjetivoAId } });
+      expect(sinTocar?.departamentoId).not.toBe(departamentoSistemasAId);
+    });
+
+    it("asignarDepartamentoUsuario: un superadmin SÍ puede asignar un departamento marcado como Sistemas", async () => {
+      const res = await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/departamento`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ departamentoId: departamentoSistemasAId });
+      expect(res.status).toBe(200);
+      expect(res.body.departamentoId).toBe(departamentoSistemasAId);
+
+      // Revertir para no interferir con otras pruebas.
+      await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/departamento`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ departamentoId: departamentoNormalAId });
+    });
+
+    it("asignarDepartamentoUsuario: un actor NO superadmin SÍ puede asignar un departamento normal", async () => {
+      const res = await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/departamento`)
+        .set("Authorization", `Bearer ${tokenActorLimitado}`)
+        .send({ departamentoId: departamentoNormalAId });
+      expect(res.status).toBe(200);
+    });
+
+    it("crearUsuario: un actor no puede asignar al crear un rol que otorgue un permiso que él mismo no tiene (403), no se crea el usuario", async () => {
+      // esDominioCorporativoValido exige un dominio de la lista permitida
+      // (crearUsuario, a diferencia de los fixtures de arriba, sí pasa por
+      // esa validación real) — no puede usarse test.ricosoft.local aquí.
+      const emailNuevo = `um-tp-escalado-${sufijo}@ricol.com.co`;
+      const res = await request(app)
+        .post("/api/usuarios")
+        .set("Authorization", `Bearer ${tokenActorLimitado}`)
+        .send({
+          nombre: "Intento Escalado",
+          email: emailNuevo,
+          password: "ClaveSegura123",
+          rolId: rolPrivilegiadoId,
+        });
+      expect(res.status).toBe(403);
+
+      const noCreado = await prisma.user.findUnique({ where: { email: emailNuevo } });
+      expect(noCreado).toBeNull();
+    });
+
+    it("crearUsuario: un actor SÍ puede asignar un rol que es subconjunto de sus propios permisos", async () => {
+      const emailNuevo = `um-tp-rol-valido-${sufijo}@ricol.com.co`;
+      const res = await request(app)
+        .post("/api/usuarios")
+        .set("Authorization", `Bearer ${tokenActorLimitado}`)
+        .send({
+          nombre: "Rol Válido",
+          email: emailNuevo,
+          password: "ClaveSegura123",
+          rolId: rolLimitadoId,
+        });
+      expect(res.status).toBe(201);
+      await prisma.user.delete({ where: { id: res.body.id } });
+    });
+
+    it("asignarRolUsuario: un actor no puede reasignar un rol que otorgue un permiso que él mismo no tiene (403), no cambia", async () => {
+      const res = await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/rol`)
+        .set("Authorization", `Bearer ${tokenActorLimitado}`)
+        .send({ rolId: rolPrivilegiadoId });
+      expect(res.status).toBe(403);
+
+      const sinTocar = await prisma.user.findUnique({ where: { id: usuarioObjetivoAId } });
+      expect(sinTocar?.rolId).not.toBe(rolPrivilegiadoId);
+    });
+
+    it("asignarRolUsuario: un superadmin SÍ puede asignar el rol privilegiado (no aplica el guard de escalación)", async () => {
+      const res = await request(app)
+        .patch(`/api/usuarios/${usuarioObjetivoAId}/rol`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ rolId: rolPrivilegiadoId });
+      expect(res.status).toBe(200);
+      expect(res.body.rolId).toBe(rolPrivilegiadoId);
     });
   },
 );

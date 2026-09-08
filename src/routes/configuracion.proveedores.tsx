@@ -5,7 +5,6 @@ import {
   Plus,
   Trash2,
   FileText,
-  FileSignature,
   ShoppingCart,
   Cloud,
   User,
@@ -211,7 +210,7 @@ function ProveedoresConfigPage() {
             Proveedores
           </h1>
           <p className="text-sm text-slate-500">
-            Catálogo compartido de proveedores, usado por Facturas y Contratos.
+            Catálogo compartido de proveedores, usado por Facturas y Solicitudes de Compra.
           </p>
         </div>
         {puedeCrear && (
@@ -410,10 +409,6 @@ function ProveedoresConfigPage() {
                             <FileText className="h-3.5 w-3.5 text-slate-400" />{" "}
                             {p.facturasAsociadas}
                           </span>
-                          <span className="flex items-center gap-1" title="Contratos">
-                            <FileSignature className="h-3.5 w-3.5 text-slate-400" />{" "}
-                            {p.contratosAsociados}
-                          </span>
                           <span className="flex items-center gap-1" title="Solicitudes de compra">
                             <ShoppingCart className="h-3.5 w-3.5 text-slate-400" />{" "}
                             {p.solicitudesAsociadas}
@@ -454,7 +449,6 @@ function ProveedoresConfigPage() {
                         )}
                         {puedeEliminar &&
                           p.facturasAsociadas === 0 &&
-                          p.contratosAsociados === 0 &&
                           p.solicitudesAsociadas === 0 && (
                             <button
                               onClick={() => handleEliminar(p)}

@@ -247,7 +247,6 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
       creditos?: unknown;
       servicios?: unknown;
       importaciones?: unknown;
-      contratos?: unknown;
       despachos?: unknown;
     } = {};
 
@@ -373,20 +372,6 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
         .slice(0, 5)
         .map((c) => ({ cliente: c.cliente, saldo: Number(c.saldo) }));
       resultado.creditos = { total: creditos.length, totalSaldo, pendientes, topDeudores };
-    }
-
-    if (puede("contratos.ver")) {
-      const contratos = await req.tenantPrisma!.contrato.findMany({
-        where: { tenantId, eliminado: false, estado: "Activo" },
-        select: { valorContratado: true, fechaFin: true },
-      });
-      const en30Dias = new Date(ahora.getTime() + 30 * 24 * 60 * 60 * 1000);
-      resultado.contratos = {
-        activos: contratos.length,
-        valorContratadoActivo: contratos.reduce((acc, c) => acc + Number(c.valorContratado), 0),
-        proximosAVencer: contratos.filter((c) => c.fechaFin >= ahora && c.fechaFin <= en30Dias)
-          .length,
-      };
     }
 
     if (puede("despachos.ver")) {

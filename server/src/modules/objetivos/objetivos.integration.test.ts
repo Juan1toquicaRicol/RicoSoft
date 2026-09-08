@@ -133,8 +133,8 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
       .get("/api/objetivos")
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((o: any) => o.id === objetivoBId)).toBe(false);
-    expect(res.body.some((o: any) => o.id === creado.body.id)).toBe(true);
+    expect(res.body.some((o: { id: string }) => o.id === objetivoBId)).toBe(false);
+    expect(res.body.some((o: { id: string }) => o.id === creado.body.id)).toBe(true);
   });
 
   it("Tenant A no puede leer, editar ni eliminar el objetivo de Tenant B (404)", async () => {
@@ -294,7 +294,7 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
     const listado = await request(app)
       .get("/api/objetivos")
       .set("Authorization", `Bearer ${tokenAdminA}`);
-    expect(listado.body.some((o: any) => o.id === creado.body.id)).toBe(false);
+    expect(listado.body.some((o: { id: string }) => o.id === creado.body.id)).toBe(false);
 
     const auditoria = await prisma.auditoria.findFirst({
       where: { tenantId: tenantAId, entidadId: creado.body.id, accion: "OBJETIVO_ELIMINADO" },

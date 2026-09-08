@@ -630,7 +630,8 @@ describe.skipIf(!RUN)(
         // no asumir que el sufijo solo puede coincidir en el nombre.
         expect(
           busqueda.body.items.every(
-            (p: any) => p.nombre.includes(sufijo) || p.nit.includes(sufijo),
+            (p: { nombre: string; nit: string }) =>
+              p.nombre.includes(sufijo) || p.nit.includes(sufijo),
           ),
         ).toBe(true);
         // Aislamiento: ningún resultado devuelto pertenece al tenant B (el
@@ -643,7 +644,9 @@ describe.skipIf(!RUN)(
         const busquedaTenantB = await request(app)
           .get(`/api/proveedores?search=${encodeURIComponent(nitUnico)}`)
           .set("Authorization", `Bearer ${tokenAdminB}`);
-        expect(busquedaTenantB.body.items.some((p: any) => p.nit === nitUnico)).toBe(false);
+        expect(busquedaTenantB.body.items.some((p: { nit: string }) => p.nit === nitUnico)).toBe(
+          false,
+        );
       });
     });
   },

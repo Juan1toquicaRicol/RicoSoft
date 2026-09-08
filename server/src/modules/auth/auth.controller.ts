@@ -17,7 +17,8 @@ export const registerController = async (req: Request, res: Response) => {
     const nuevoUsuario = await registerUserService({ nombre, email, password, departamentoId });
 
     return res.status(201).json({
-      message: "Usuario registrado exitosamente en la base de datos.",
+      message:
+        "Registro recibido. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
       user: nuevoUsuario,
     });
   } catch (error) {

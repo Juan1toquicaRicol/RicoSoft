@@ -56,13 +56,6 @@ const CATALOGO_DEFECTO: Array<{
     permisoClave: "servicios.ver",
   },
   {
-    clave: "contratos",
-    nombre: "Contratos",
-    ruta: "/contratos",
-    icono: "FileSignature",
-    permisoClave: "contratos.ver",
-  },
-  {
     clave: "reglas",
     nombre: "Motor de Reglas",
     ruta: "/reglas",
@@ -292,6 +285,19 @@ export const actualizarModulo = async (req: AuthenticatedRequest, res: Response)
     if (!existente) {
       return res.status(404).json({ message: "Módulo no encontrado." });
     }
+    if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
+      return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
+    }
+    // Un módulo ya GENERAL (tenantId: null) es visible/editable por TODOS los
+    // tenants vía whereAlcance — mismo riesgo que un Rol/Departamento GENERAL
+    // (ver roles.controller.ts), solo un superadmin puede tocarlo o convertir
+    // uno TENANT en GENERAL.
+    const tocaAlcanceGeneral = existente.tenantId === null || alcance === "GENERAL";
+    if (tocaAlcanceGeneral && !req.user!.isSuperadmin) {
+      return res.status(403).json({
+        message: "Solo un superadministrador puede modificar módulos de alcance general.",
+      });
+    }
 
     if (departamentoId) {
       const departamento = await prisma.departamento.findFirst({
@@ -304,9 +310,6 @@ export const actualizarModulo = async (req: AuthenticatedRequest, res: Response)
 
     let nuevoTenantId: string | null | undefined;
     if (alcance !== undefined) {
-      if (alcance !== "GENERAL" && alcance !== "TENANT") {
-        return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });
-      }
       const eraGeneral = existente.tenantId === null;
       const seraGeneral = alcance === "GENERAL";
       if (eraGeneral && !seraGeneral) {

@@ -94,8 +94,12 @@ describe.skipIf(!RUN)("Proveedores — piloto tenant-prisma (Fase 2, multi-tenan
   it("Test 1 — lectura aislada: el listado de A nunca incluye proveedores de B", async () => {
     const res = await request(app).get("/api/proveedores").set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.items.some((p: any) => p.id === proveedorBId)).toBe(false);
-    expect(res.body.items.some((p: any) => p.nombre === "Proveedor de A")).toBe(true);
+    expect(res.body.items.some((p: { id: string; nombre: string }) => p.id === proveedorBId)).toBe(
+      false,
+    );
+    expect(
+      res.body.items.some((p: { id: string; nombre: string }) => p.nombre === "Proveedor de A"),
+    ).toBe(true);
   });
 
   it("Test 3/4 (vía update propio de contrato) — actualizar un proveedor de otro tenant se comporta como inexistente (404), y no lo modifica", async () => {
@@ -157,7 +161,9 @@ describe.skipIf(!RUN)("Proveedores — piloto tenant-prisma (Fase 2, multi-tenan
   it("Test 8 — listado/count aislado también desde Tenant B (no ve proveedores de A)", async () => {
     const res = await request(app).get("/api/proveedores").set("Authorization", `Bearer ${tokenB}`);
     expect(res.status).toBe(200);
-    expect(res.body.items.some((p: any) => p.nombre === "Proveedor de A")).toBe(false);
+    expect(
+      res.body.items.some((p: { id: string; nombre: string }) => p.nombre === "Proveedor de A"),
+    ).toBe(false);
     expect(res.body.total).toBeGreaterThanOrEqual(1);
   });
 

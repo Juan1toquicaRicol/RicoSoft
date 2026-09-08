@@ -152,8 +152,8 @@ function Creditos() {
         saldo: Number(form.saldo),
         vence: form.vence,
       });
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el crédito.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el crédito.");
       return;
     }
     setModalOpen(false);
@@ -185,8 +185,8 @@ function Creditos() {
       await registrarPago(creditoAPagar.id, montoPago);
       toast.success(`Pago de ${money(montoPago)} registrado para ${creditoAPagar.cliente}.`);
       setCreditoAPagar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar el pago.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible registrar el pago.");
     } finally {
       setAplicandoPago(false);
     }
@@ -199,8 +199,8 @@ function Creditos() {
       await marcarPazYSalvo(creditoAPazYSalvo.id);
       toast.success(`${creditoAPazYSalvo.cliente} quedó en paz y salvo.`);
       setCreditoAPazYSalvo(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible marcar paz y salvo.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible marcar paz y salvo.");
     } finally {
       setAplicandoPazYSalvo(false);
     }
@@ -213,8 +213,8 @@ function Creditos() {
       await eliminarCredito(creditoAEliminar.id);
       toast.success(`Crédito de ${creditoAEliminar.cliente} eliminado.`);
       setCreditoAEliminar(null);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible eliminar el crédito.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible eliminar el crédito.");
     } finally {
       setEliminando(false);
     }

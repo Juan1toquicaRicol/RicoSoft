@@ -217,7 +217,9 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(detalle.status).toBe(200);
     expect(detalle.body.eventos.length).toBeGreaterThanOrEqual(3); // PREPARANDO, PREPARADO, PENDIENTE_CARGUE, CARGANDO
-    expect(detalle.body.eventos.some((e: any) => e.accion === "ESTADO_CARGANDO")).toBe(true);
+    expect(
+      detalle.body.eventos.some((e: { accion: string }) => e.accion === "ESTADO_CARGANDO"),
+    ).toBe(true);
   });
 
   it("registra y resuelve una novedad", async () => {
@@ -265,7 +267,7 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
       .get("/api/despachos")
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(listado.status).toBe(200);
-    expect(listado.body.items.some((d: any) => d.id === despachoBId)).toBe(false);
+    expect(listado.body.items.some((d: { id: string }) => d.id === despachoBId)).toBe(false);
 
     // Confirmación independiente contra el cliente Prisma base — el despacho de B sigue intacto.
     const enDb = await prisma.despacho.findUnique({ where: { id: despachoBId } });

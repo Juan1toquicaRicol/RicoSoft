@@ -259,8 +259,8 @@ function DetalleOrdenIntl() {
       toast.success("Lote registrado.");
       setModalLoteOpen(false);
       setLoteForm({ ...loteVacio });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar el lote.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible registrar el lote.");
     } finally {
       setGuardandoLote(false);
     }
@@ -271,8 +271,10 @@ function DetalleOrdenIntl() {
     try {
       await actualizarEstadoLote(lote.id, siguienteEstado);
       toast.success(`Lote ${lote.blAwb} → ${siguienteEstado}.`);
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar el estado del lote.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "No fue posible actualizar el estado del lote.",
+      );
     } finally {
       setAccionEnCurso(null);
     }
@@ -285,8 +287,10 @@ function DetalleOrdenIntl() {
       toast.success(
         `Lote ${lote.blAwb} recibido en planta (pre-compra). Costeo provisional generado.`,
       );
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar el ingreso a planta.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "No fue posible registrar el ingreso a planta.",
+      );
     } finally {
       setAccionEnCurso(null);
     }
@@ -301,8 +305,8 @@ function DetalleOrdenIntl() {
       toast.success(`Costeo del lote ${loteLiquidando.blAwb} liquidado.`);
       setLoteLiquidando(null);
       setLiquidacionForm({ ...liquidacionVacia });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible liquidar el costeo.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible liquidar el costeo.");
     } finally {
       setLiquidando(false);
     }
@@ -317,8 +321,8 @@ function DetalleOrdenIntl() {
       toast.success("Actividad registrada.");
       setModalActividadOpen(false);
       setActividadForm({ ...actividadVacia });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar la actividad.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible registrar la actividad.");
     } finally {
       setGuardandoActividad(false);
     }
@@ -329,8 +333,8 @@ function DetalleOrdenIntl() {
     try {
       await completarActividad(actividadId);
       toast.success("Actividad completada.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible completar la actividad.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible completar la actividad.");
     } finally {
       setAccionEnCurso(null);
     }
@@ -345,8 +349,8 @@ function DetalleOrdenIntl() {
       toast.success("Novedad registrada.");
       setModalNovedadOpen(false);
       setNovedadForm({ ...novedadVacia });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar la novedad.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible registrar la novedad.");
     } finally {
       setGuardandoNovedad(false);
     }
@@ -357,8 +361,8 @@ function DetalleOrdenIntl() {
     try {
       await resolverNovedad(novedadId);
       toast.success("Novedad resuelta.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible resolver la novedad.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible resolver la novedad.");
     } finally {
       setAccionEnCurso(null);
     }
@@ -373,8 +377,8 @@ function DetalleOrdenIntl() {
       toast.success("Obligación registrada.");
       setModalPagoOpen(false);
       setPagoForm({ ...pagoVacio });
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible registrar el pago.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible registrar el pago.");
     } finally {
       setGuardandoPago(false);
     }
@@ -385,8 +389,8 @@ function DetalleOrdenIntl() {
     try {
       await marcarPagoPagado(pagoId);
       toast.success("Pago marcado como pagado.");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible actualizar el pago.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible actualizar el pago.");
     } finally {
       setAccionEnCurso(null);
     }
@@ -400,8 +404,8 @@ function DetalleOrdenIntl() {
       toast.success("Importación cerrada.");
       setModalCerrarOpen(false);
       setJustificacionCierre("");
-    } catch (err: any) {
-      setErrorCierre(err.message || "No fue posible cerrar la importación.");
+    } catch (err: unknown) {
+      setErrorCierre(err instanceof Error ? err.message : "No fue posible cerrar la importación.");
     } finally {
       setCerrando(false);
     }
@@ -509,6 +513,70 @@ function DetalleOrdenIntl() {
           </p>
         </div>
       </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-4">
+        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
+          <p className="text-[10px] uppercase font-bold text-slate-500">Proveedor</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{orden.proveedorExtranjero}</p>
+          {orden.proveedor ? (
+            <p className="text-[11px] text-slate-500">NIT {orden.proveedor.nit} · en catálogo</p>
+          ) : (
+            <p className="text-[11px] text-slate-500">Proveedor no vinculado al catálogo</p>
+          )}
+        </div>
+        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
+          <p className="text-[10px] uppercase font-bold text-slate-500">País de Origen</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{orden.paisOrigen}</p>
+        </div>
+        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
+          <p className="text-[10px] uppercase font-bold text-slate-500">Incoterm</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{orden.incoterm}</p>
+        </div>
+        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
+          <p className="text-[10px] uppercase font-bold text-slate-500">Forma de Pago</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{orden.formaPago ?? "—"}</p>
+        </div>
+      </div>
+
+      {orden.proveedor && orden.proveedor.requisitos.length > 0 && (
+        <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
+          <div className="border-b border-slate-200 p-4 bg-slate-50/80">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+              Requisitos del Proveedor
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Vigentes hoy para {orden.proveedor.nombre} — administrados en Importaciones →
+              Proveedores y Requisitos.
+            </p>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {orden.proveedor.requisitos.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Badge
+                  variant="outline"
+                  className="border-slate-300 bg-slate-50 text-slate-600 text-[10px]"
+                >
+                  {r.tipo}
+                </Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{r.nombre}</p>
+                  {r.descripcion && (
+                    <p className="text-[11px] text-slate-500 truncate">{r.descripcion}</p>
+                  )}
+                </div>
+                {r.obligatorio && (
+                  <Badge
+                    variant="outline"
+                    className="border-slate-300 bg-slate-900 text-white text-[10px] shrink-0"
+                  >
+                    Obligatorio
+                  </Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
         <div className="border-b border-slate-200 p-4 bg-slate-50/80">
@@ -1566,8 +1634,8 @@ function DocumentoExpedienteSlot({
     try {
       await onSubir(loteId, tipo, file);
       toast.success(`${etiqueta} adjuntado.`);
-    } catch (err: any) {
-      toast.error(err.message || `Error al subir ${etiqueta}.`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : `Error al subir ${etiqueta}.`);
     } finally {
       setSubiendo(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1578,8 +1646,8 @@ function DocumentoExpedienteSlot({
     try {
       const blob = await onDescargar(loteId, tipo);
       window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
     }
   };
 
@@ -1587,8 +1655,8 @@ function DocumentoExpedienteSlot({
     if (!confirm(`¿Eliminar el documento "${etiqueta}"?`)) return;
     try {
       await onEliminar(loteId, tipo);
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el documento.");
     }
   };
 
@@ -1704,8 +1772,8 @@ function ExpedienteAduaneroPanel({
       await onActualizar(lote.id, form);
       toast.success("Expediente aduanero actualizado.");
       setEditando(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el expediente.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el expediente.");
     } finally {
       setGuardando(false);
     }
@@ -1896,8 +1964,8 @@ function VistosBuenosPanel({
       toast.success("Visto bueno registrado.");
       setForm({ entidad: "", numero: "", fecha: "" });
       setFormAbierto(false);
-    } catch (err: any) {
-      toast.error(err.message || "Error al registrar el visto bueno.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el visto bueno.");
     } finally {
       setGuardando(false);
     }
@@ -1907,8 +1975,8 @@ function VistosBuenosPanel({
     try {
       await onActualizar(vb.id, { estado });
       toast.success(`${vb.entidad}: ${estado}.`);
-    } catch (err: any) {
-      toast.error(err.message || "Error al actualizar el visto bueno.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el visto bueno.");
     }
   };
 
@@ -1917,8 +1985,8 @@ function VistosBuenosPanel({
     try {
       await onSubirDocumento(vb.id, file);
       toast.success("Documento adjuntado.");
-    } catch (err: any) {
-      toast.error(err.message || "Error al subir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al subir el documento.");
     } finally {
       setSubiendoId(null);
     }
@@ -1928,8 +1996,8 @@ function VistosBuenosPanel({
     try {
       const blob = await onDescargarDocumento(vb.id);
       window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err: any) {
-      toast.error(err.message || "No fue posible abrir el documento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
     }
   };
 

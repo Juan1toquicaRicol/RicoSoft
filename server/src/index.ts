@@ -1,6 +1,11 @@
 import "dotenv/config";
 import { createApp } from "./app";
 import { prisma } from "./config/prisma";
+import { recuperarSincronizacionesBiometricoInterrumpidas } from "./jobs/crosschex-recovery";
+import { iniciarSchedulerCrossChex } from "./jobs/crosschex-sync.job";
+import { iniciarSchedulerServiciosRenovacion } from "./jobs/servicios-renovacion.job";
+import { iniciarSchedulerIngestaCorreos } from "./modules/importaciones/importaciones-bandeja-ingesta.job";
+import { iniciarSchedulerProcesamientoCorreos } from "./modules/importaciones/importaciones-bandeja-procesamiento.job";
 
 if (!process.env.JWT_SECRET) {
   throw new Error(
@@ -47,10 +52,33 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-recuperarSincronizacionesInterrumpidas()
-  .catch((err) => console.error("Error recuperando sincronizaciones de Siesa interrumpidas:", err))
-  .finally(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor listo en http://localhost:${PORT}`);
-    });
+Promise.all([
+  recuperarSincronizacionesInterrumpidas().catch((err) =>
+    console.error("Error recuperando sincronizaciones de Siesa interrumpidas:", err),
+  ),
+  recuperarSincronizacionesBiometricoInterrumpidas()
+    .then((count) => {
+      if (count > 0) {
+        console.log(
+          `⚠️  ${count} sincronización(es) biométrica(s) interrumpida(s) marcada(s) como FALLIDO al arrancar.`,
+        );
+      }
+    })
+    .catch((err) =>
+      console.error("Error recuperando sincronizaciones biométricas interrumpidas:", err),
+    ),
+]).finally(() => {
+  // El scheduler se registra DESPUÉS de que la recuperación de corridas
+  // huérfanas terminó — así, si el proceso anterior dejó un lock
+  // EN_CURSO stale, ya está limpio antes de que el primer tick del cron
+  // intente adquirirlo. No dispara ninguna sincronización de inmediato,
+  // solo programa (ver iniciarSchedulerCrossChex): la primera corrida real
+  // ocurre en el siguiente tick del cron, no hay ejecución duplicada.
+  iniciarSchedulerCrossChex();
+  iniciarSchedulerServiciosRenovacion();
+  iniciarSchedulerIngestaCorreos();
+  iniciarSchedulerProcesamientoCorreos();
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor listo en http://localhost:${PORT}`);
   });
+});

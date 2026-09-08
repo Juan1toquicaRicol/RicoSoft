@@ -200,7 +200,9 @@ describe.skipIf(!RUN)("Logística — Motor de Decisiones (multi-tenant real)", 
     expect(typeof res.body.novedades[0].diasAbierta).toBe("number");
     expect(res.body.porTipo).toEqual([{ clave: "PRODUCTO_FALTANTE", cantidad: 1 }]);
     // Nunca debe aparecer la novedad de Tenant B.
-    expect(res.body.novedades.some((n: any) => n.clienteNombre === "Cliente B")).toBe(false);
+    expect(
+      res.body.novedades.some((n: { clienteNombre: string }) => n.clienteNombre === "Cliente B"),
+    ).toBe(false);
   });
 
   it("ambos endpoints responden 403 sin el permiso despachos.ver", async () => {

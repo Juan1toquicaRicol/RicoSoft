@@ -171,7 +171,7 @@ describe.skipIf(!RUN)("Fase G — acciones del Centro de Decisiones (multi-tenan
         .get("/api/plan-produccion")
         .set("Authorization", `Bearer ${tokenAdminA}`);
       expect(listado.status).toBe(200);
-      expect(listado.body.some((p: any) => p.id === planBId)).toBe(false);
+      expect(listado.body.some((p: { id: string }) => p.id === planBId)).toBe(false);
 
       const cambio = await request(app)
         .patch(`/api/plan-produccion/${planBId}/estado`)
@@ -272,7 +272,7 @@ describe.skipIf(!RUN)("Fase G — acciones del Centro de Decisiones (multi-tenan
         .get("/api/gestion-liquidacion")
         .set("Authorization", `Bearer ${tokenAdminA}`);
       expect(listado.status).toBe(200);
-      expect(listado.body.some((g: any) => g.id === gestionBId)).toBe(false);
+      expect(listado.body.some((g: { id: string }) => g.id === gestionBId)).toBe(false);
 
       const cambio = await request(app)
         .patch(`/api/gestion-liquidacion/${gestionBId}/estado`)
@@ -289,7 +289,7 @@ describe.skipIf(!RUN)("Fase G — acciones del Centro de Decisiones (multi-tenan
         .get("/api/gestion-liquidacion")
         .set("Authorization", `Bearer ${tokenAdminB}`);
       expect(res.status).toBe(200);
-      expect(res.body.some((g: any) => g.id === gestionBId)).toBe(true);
+      expect(res.body.some((g: { id: string }) => g.id === gestionBId)).toBe(true);
     });
   });
 });

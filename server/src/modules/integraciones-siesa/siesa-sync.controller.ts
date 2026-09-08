@@ -1,9 +1,14 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
 import { ejecutarSincronizacion } from "./siesa-sync.service";
 
-function serializarLog(log: any) {
+type LogConIniciadoPor = Prisma.SincronizacionSiesaLogGetPayload<{
+  include: { iniciadoPor: { select: { id: true; nombre: true } } };
+}>;
+
+function serializarLog(log: LogConIniciadoPor) {
   return {
     id: log.id,
     ciaId: log.ciaId,

@@ -66,6 +66,7 @@ import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context
 import {
   useSolicitudes,
   useCotizacionesProveedor,
+  agregarCotizacionProveedor,
   descargarCotizacionSolicitud,
   descargarCotizacionProveedor,
 } from "@/hooks/use-solicitudes";
@@ -79,6 +80,16 @@ import { money, Prioridad } from "@/lib/data";
 
 const PRIORIDADES_SOLICITUD: Prioridad[] = ["Baja", "Media", "Alta", "Urgente"];
 const PROVEEDOR_MANUAL = "__manual__";
+
+interface FilaCotizacion {
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorNit: string;
+  valorTotalCOP: number;
+  tiempoEntregaDias: number;
+  archivo: File | null;
+  proveedorSeleccionado: ProveedorOpcion | null;
+}
 
 // Búsqueda opcional para prellenar el formulario de nueva solicitud desde
 // otra pantalla (ej. "Necesidades de abastecimiento" en Inventario) — nunca
@@ -113,14 +124,10 @@ function SolicitudesCompraPage() {
     error,
     refresh: refrescarSolicitudes,
     addSolicitudCompra,
-    subirCotizacionSolicitud,
     updateEstadoSolicitudCompra,
     eliminarSolicitudCompra,
   } = useSolicitudes();
   const { departamentos } = useDepartamentosPublico();
-  const [proveedorSeleccionadoNombre, setProveedorSeleccionadoNombre] = useState<
-    string | undefined
-  >();
   const [proveedorCotizacionSeleccionado, setProveedorCotizacionSeleccionado] =
     useState<ProveedorOpcion | null>(null);
   const { user } = useSession();
@@ -342,32 +349,52 @@ function SolicitudesCompraPage() {
     empresaId: empresaBloqueada || "RC",
     area: "Sistemas",
     solicitanteId: "",
-    proveedorId: "",
     item: prellenado.item ?? "",
     descripcion: prellenado.item
       ? "Generado desde Inventario > Necesidades de abastecimiento — revisa cantidad/proveedor antes de enviar."
       : "",
     cantidad: prellenado.cantidad ? Math.ceil(prellenado.cantidad) : 1,
-    valorEstimado: 500000,
     prioridad: "Media" as Prioridad,
   });
-  const [cotizacion, setCotizacion] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const cotizacionInputRef = useRef<HTMLInputElement>(null);
 
   const areaDepartamentoId = departamentos.find((d) => d.nombre === form.area)?.id;
   const { usuarios: usuariosArea, loading: cargandoUsuariosArea } =
     useUsuariosPorDepartamento(areaDepartamentoId);
-  // Cada departamento puede tener proveedores propios (p. ej. los de
-  // Producción no deberían ofrecerse al crear una SC de Comercial): un
-  // proveedor sin departamento asignado ("general") sigue apareciendo para
-  // cualquier área. Búsqueda server-side (ver Fase 11/12 del plan Siesa):
-  // ya no se descarga el catálogo completo para filtrarlo en el cliente.
+  // Cotizaciones de proveedor cargadas de una vez en el mismo modal de
+  // creación (2 o 3, la regla de negocio del cuadro comparativo) — se suben
+  // justo después de crear la solicitud, sin necesidad de abrir el cuadro
+  // comparativo por separado.
+  const filaCotizacionVacia: FilaCotizacion = {
+    proveedorId: "",
+    proveedorNombre: "",
+    proveedorNit: "",
+    valorTotalCOP: 0,
+    tiempoEntregaDias: 0,
+    archivo: null,
+    proveedorSeleccionado: null,
+  };
+  const [filasCotizacion, setFilasCotizacion] = useState<FilaCotizacion[]>([
+    { ...filaCotizacionVacia },
+    { ...filaCotizacionVacia },
+  ]);
+  const [formVersion, setFormVersion] = useState(0);
   const {
-    opciones: proveedoresDelArea,
-    loading: buscandoProveedoresArea,
-    buscar: buscarProveedoresArea,
+    opciones: proveedoresParaCotizar,
+    loading: buscandoProveedoresParaCotizar,
+    buscar: buscarProveedoresParaCotizar,
   } = useProveedorBusqueda(areaDepartamentoId);
+
+  const actualizarFilaCotizacion = (index: number, patch: Partial<FilaCotizacion>) => {
+    setFilasCotizacion((filas) => filas.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  };
+  const agregarFilaCotizacion = () => {
+    if (filasCotizacion.length >= 3) return;
+    setFilasCotizacion((filas) => [...filas, { ...filaCotizacionVacia }]);
+  };
+  const quitarFilaCotizacion = (index: number) => {
+    setFilasCotizacion((filas) => (filas.length > 1 ? filas.filter((_, i) => i !== index) : filas));
+  };
 
   const filteredSolicitudes = useMemo(() => {
     if (empresaActiva === "ALL") return solicitudesCompra;
@@ -399,51 +426,84 @@ function SolicitudesCompraPage() {
         toast.error("Selecciona el responsable del departamento.");
       return;
     }
+    // Filas que el usuario empezó a llenar (con proveedor elegido) deben
+    // quedar completas antes de intentar guardar — una fila totalmente vacía
+    // simplemente se ignora (no todas las filas son obligatorias).
+    const filasIncompletas = filasCotizacion.some(
+      (f) =>
+        f.proveedorId &&
+        (!f.archivo ||
+          f.valorTotalCOP <= 0 ||
+          (f.proveedorId === PROVEEDOR_MANUAL && (!f.proveedorNombre || !f.proveedorNit))),
+    );
+    if (filasIncompletas) {
+      toast.error(
+        "Completa proveedor, valor y documento de cada cotización que hayas empezado a llenar (o quítala).",
+      );
+      return;
+    }
+    const filasCompletas = filasCotizacion.filter((f) => f.proveedorId && f.archivo);
+    // Sin un campo de valor estimado en el formulario, se toma como estimado
+    // inicial el promedio de las cotizaciones ya cargadas (0 si todavía no
+    // hay ninguna) — se corrige solo al aprobar, con el valor real de la
+    // cotización ganadora (ver solicitudes.controller.ts).
+    const valorEstimadoInicial = filasCompletas.length
+      ? Math.round(
+          filasCompletas.reduce((sum, f) => sum + f.valorTotalCOP, 0) / filasCompletas.length,
+        )
+      : 0;
     setGuardando(true);
     try {
       const creada = await addSolicitudCompra({
         empresaId: form.empresaId,
         area: form.area,
         solicitanteId: form.solicitanteId,
-        proveedorId: form.proveedorId || undefined,
         item: form.item,
         descripcion: form.descripcion,
         cantidad: Number(form.cantidad),
-        valorEstimado: Number(form.valorEstimado),
+        valorEstimado: valorEstimadoInicial,
         prioridad: form.prioridad,
       });
-      if (cotizacion) {
+      let cotizacionesConError = 0;
+      for (const fila of filasCompletas) {
         try {
-          await subirCotizacionSolicitud(creada.id, cotizacion);
-        } catch (err: unknown) {
-          toast.error(
-            err instanceof Error
-              ? err.message
-              : "La solicitud se creó, pero no fue posible adjuntar la cotización.",
-          );
+          await agregarCotizacionProveedor(creada.id, {
+            proveedorId: fila.proveedorId === PROVEEDOR_MANUAL ? undefined : fila.proveedorId,
+            proveedorNombre:
+              fila.proveedorId === PROVEEDOR_MANUAL ? fila.proveedorNombre : undefined,
+            proveedorNit: fila.proveedorId === PROVEEDOR_MANUAL ? fila.proveedorNit : undefined,
+            valorTotalCOP: fila.valorTotalCOP,
+            tiempoEntregaDias: fila.tiempoEntregaDias,
+            archivo: fila.archivo!,
+          });
+        } catch {
+          cotizacionesConError += 1;
         }
       }
+      if (cotizacionesConError > 0) {
+        toast.error(
+          `La solicitud se creó, pero ${cotizacionesConError} cotización(es) no se pudieron registrar. Agrégalas desde el detalle de la solicitud.`,
+        );
+      }
+      await refrescarSolicitudes();
+      setModalOpen(false);
+      setForm({
+        empresaId: empresaBloqueada || "RC",
+        area: "Sistemas",
+        solicitanteId: "",
+        item: "",
+        descripcion: "",
+        cantidad: 1,
+        prioridad: "Media",
+      });
+      setFilasCotizacion([{ ...filaCotizacionVacia }, { ...filaCotizacionVacia }]);
+      setFormVersion((v) => v + 1);
+      toast.success("Solicitud registrada.");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al registrar la solicitud.");
+    } finally {
       setGuardando(false);
-      return;
     }
-    setGuardando(false);
-    setModalOpen(false);
-    setProveedorSeleccionadoNombre(undefined);
-    setForm({
-      empresaId: empresaBloqueada || "RC",
-      area: "Sistemas",
-      solicitanteId: "",
-      proveedorId: "",
-      item: "",
-      descripcion: "",
-      cantidad: 1,
-      valorEstimado: 500000,
-      prioridad: "Media",
-    });
-    setCotizacion(null);
-    if (cotizacionInputRef.current) cotizacionInputRef.current.value = "";
   };
 
   return (
@@ -496,16 +556,13 @@ function SolicitudesCompraPage() {
                 Ítem Solicitado
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Proveedor
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Departamento / Solicitante
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
                 Cant.
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Valor Estimado
+                Menor valor
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Prioridad
@@ -522,7 +579,7 @@ function SolicitudesCompraPage() {
             {gruposSolicitudes.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
                 {grupo.clave && (
-                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={10} />
+                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
                 )}
                 {grupo.filas.map((sol) => (
                   <TableRow key={sol.id}>
@@ -566,9 +623,6 @@ function SolicitudesCompraPage() {
                         {sol.descripcion || "-"}
                       </p>
                     </TableCell>
-                    <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">
-                      {sol.proveedor || "—"}
-                    </TableCell>
                     <TableCell className="px-4 py-3">
                       <p className="font-semibold text-slate-900">{sol.solicitante}</p>
                       <p className="text-[11px] text-slate-500">{sol.area}</p>
@@ -577,7 +631,9 @@ function SolicitudesCompraPage() {
                       {sol.cantidad}
                     </TableCell>
                     <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                      {money(sol.valorEstimado)}
+                      {sol.cotizacionesResumen.menorValor != null
+                        ? money(sol.cotizacionesResumen.menorValor)
+                        : "—"}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-xs text-slate-500">
                       {sol.prioridad}
@@ -666,7 +722,7 @@ function SolicitudesCompraPage() {
             ))}
             {filteredSolicitudes.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={10} className="p-0">
+                <TableCell colSpan={9} className="p-0">
                   {loading ? (
                     <div className="py-12 text-center text-xs text-slate-500">
                       Cargando solicitudes...
@@ -694,7 +750,7 @@ function SolicitudesCompraPage() {
 
       {/* MODAL CREAR SOLICITUD DE COMPRA */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white border-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-900 font-bold">
               Nueva Solicitud de Compra Interna
@@ -739,10 +795,7 @@ function SolicitudesCompraPage() {
                 </Label>
                 <Select
                   value={form.area}
-                  onValueChange={(val) => {
-                    setForm({ ...form, area: val, solicitanteId: "", proveedorId: "" });
-                    setProveedorSeleccionadoNombre(undefined);
-                  }}
+                  onValueChange={(val) => setForm({ ...form, area: val, solicitanteId: "" })}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
                     <SelectValue />
@@ -805,46 +858,150 @@ function SolicitudesCompraPage() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="proveedor" className="text-xs font-semibold text-slate-700">
-                Proveedor (opcional)
-              </Label>
-              <Combobox
-                value={form.proveedorId || "__none__"}
-                onValueChange={(val) => {
-                  const proveedorId = val === "__none__" ? "" : val;
-                  setForm({ ...form, proveedorId });
-                  const elegido = proveedoresDelArea.find((p) => p.id === val);
-                  setProveedorSeleccionadoNombre(elegido ? elegido.nombre : undefined);
-                }}
-                placeholder="Sin proveedor asociado"
-                searchPlaceholder="Buscar por nombre o NIT..."
-                emptyText="Ningún proveedor coincide."
-                onSearchChange={buscarProveedoresArea}
-                loadingOptions={buscandoProveedoresArea}
-                selectedLabel={proveedorSeleccionadoNombre}
-                options={[
-                  { value: "__none__", label: "Sin proveedor asociado" },
-                  ...proveedoresDelArea.map((p) => ({ value: p.id, label: p.nombre })),
-                ]}
-              />
-              {proveedoresDelArea.length === 0 && !buscandoProveedoresArea && (
-                <p className="text-[11px] font-semibold text-slate-600">
-                  {`No hay proveedores asignados al departamento "${form.area}" (o disponibles en general).`}{" "}
-                  <Link to="/configuracion/proveedores" className="font-semibold underline">
-                    Créalos en Configuración
-                  </Link>{" "}
-                  si ya sabes a quién se le va a comprar.
-                </p>
-              )}
-            </div>
+            <p className="-mt-1 text-[11px] font-semibold text-slate-600">
+              El proveedor se define en el cuadro comparativo de cotizaciones, no aquí: después de
+              guardar podrás registrar las 2 o 3 cotizaciones y elegir la ganadora.
+            </p>
             {areaDepartamentoId && !cargandoUsuariosArea && usuariosArea.length === 0 && (
               <p className="-mt-2 text-[11px] font-semibold text-slate-600">
                 No hay usuarios asignados a "{form.area}". Asígnalos en Configuración &gt; Usuarios.
               </p>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-700">
+                    Cotizaciones de proveedor ({filasCotizacion.length}/3)
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Carga las 2 o 3 cotizaciones ahora mismo; el ganador se elige después de
+                    guardar, desde el detalle de la solicitud.
+                  </p>
+                </div>
+                {filasCotizacion.length < 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="h-7 shrink-0 gap-1 text-[11px]"
+                    onClick={agregarFilaCotizacion}
+                  >
+                    <Plus className="h-3 w-3" /> Agregar cotización
+                  </Button>
+                )}
+              </div>
+
+              {filasCotizacion.map((fila, index) => (
+                <div
+                  key={index}
+                  className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-slate-600">Cotización {index + 1}</p>
+                    {filasCotizacion.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => quitarFilaCotizacion(index)}
+                        className="text-slate-400 hover:text-slate-900"
+                        title="Quitar cotización"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  <Combobox
+                    value={fila.proveedorId}
+                    onValueChange={(val) => {
+                      const elegido = proveedoresParaCotizar.find((p) => p.id === val) ?? null;
+                      actualizarFilaCotizacion(index, {
+                        proveedorId: val,
+                        proveedorNombre: "",
+                        proveedorNit: "",
+                        proveedorSeleccionado: elegido,
+                      });
+                    }}
+                    placeholder="Selecciona un proveedor (opcional)"
+                    searchPlaceholder="Buscar por nombre o NIT..."
+                    emptyText="Ningún proveedor coincide."
+                    onSearchChange={buscarProveedoresParaCotizar}
+                    loadingOptions={buscandoProveedoresParaCotizar}
+                    selectedLabel={fila.proveedorSeleccionado?.nombre}
+                    options={[
+                      ...proveedoresParaCotizar.map((p) => ({ value: p.id, label: p.nombre })),
+                      { value: PROVEEDOR_MANUAL, label: "Otro proveedor (no está en el catálogo)" },
+                    ]}
+                  />
+                  {fila.proveedorId === PROVEEDOR_MANUAL ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Nombre del proveedor *"
+                        value={fila.proveedorNombre}
+                        onChange={(e) =>
+                          actualizarFilaCotizacion(index, { proveedorNombre: e.target.value })
+                        }
+                        className="h-8 text-xs border-slate-300"
+                      />
+                      <Input
+                        placeholder="NIT *"
+                        value={fila.proveedorNit}
+                        onChange={(e) =>
+                          actualizarFilaCotizacion(index, { proveedorNit: e.target.value })
+                        }
+                        className="h-8 text-xs border-slate-300"
+                      />
+                    </div>
+                  ) : (
+                    fila.proveedorId && (
+                      <Input
+                        disabled
+                        value={fila.proveedorSeleccionado?.nit ?? ""}
+                        placeholder="NIT"
+                        className="h-8 text-xs border-slate-300 bg-slate-50 text-slate-500"
+                      />
+                    )
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Valor total (COP) *"
+                      value={fila.valorTotalCOP || ""}
+                      onChange={(e) =>
+                        actualizarFilaCotizacion(index, { valorTotalCOP: Number(e.target.value) })
+                      }
+                      className="h-8 text-xs border-slate-300"
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Entrega (días) *"
+                      value={fila.tiempoEntregaDias || ""}
+                      onChange={(e) =>
+                        actualizarFilaCotizacion(index, {
+                          tiempoEntregaDias: Number(e.target.value),
+                        })
+                      }
+                      className="h-8 text-xs border-slate-300"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <Input
+                      key={`${index}-${formVersion}`}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) =>
+                        actualizarFilaCotizacion(index, { archivo: e.target.files?.[0] || null })
+                      }
+                      className="h-8 text-xs border-slate-300 file:mr-2 file:text-xs file:font-semibold"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="cantidad" className="text-xs font-semibold text-slate-700">
                   Cantidad
@@ -877,18 +1034,6 @@ function SolicitudesCompraPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="valorEstimado" className="text-xs font-semibold text-slate-700">
-                  Valor Estimado (COP)
-                </Label>
-                <Input
-                  type="number"
-                  id="valorEstimado"
-                  value={form.valorEstimado}
-                  onChange={(e) => setForm({ ...form, valorEstimado: Number(e.target.value) })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
             </div>
 
             <div className="space-y-1">
@@ -902,24 +1047,6 @@ function SolicitudesCompraPage() {
                 onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
                 className="h-9 text-xs border-slate-300"
               />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="cotizacion" className="text-xs font-semibold text-slate-700">
-                Cotización adjunta (opcional)
-              </Label>
-              <div className="flex items-center gap-2">
-                <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                <Input
-                  ref={cotizacionInputRef}
-                  type="file"
-                  id="cotizacion"
-                  accept=".pdf,.png,.jpg,.jpeg,.webp"
-                  onChange={(e) => setCotizacion(e.target.files?.[0] || null)}
-                  className="h-9 text-xs border-slate-300 file:mr-2 file:text-xs file:font-semibold"
-                />
-              </div>
-              <p className="text-[11px] text-slate-500">PDF, PNG, JPG o WEBP. Máximo 10MB.</p>
             </div>
 
             <DialogFooter className="mt-4">

@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { ClasificacionFuncionalItem } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { listarItemsMaestroSiesa } from "../integraciones-siesa/siesa-inventario.service";
@@ -31,7 +32,9 @@ async function resolverCiaSiesa(tenantId: string): Promise<number | null> {
   return tenant?.siesaCiaId ?? null;
 }
 
-const serializarClasificacion = (c: any) => ({
+const serializarClasificacion = (
+  c: ClasificacionFuncionalItem & { _count?: { asignaciones: number } },
+) => ({
   id: c.id,
   codigo: c.codigo,
   nombre: c.nombre,

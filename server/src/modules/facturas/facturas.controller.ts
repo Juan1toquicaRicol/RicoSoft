@@ -9,7 +9,7 @@ import { UPLOADS_DIR, moverArchivoDefinitivo } from "../../middleware/upload.mid
 import { notificarPorPermiso, crearNotificacion } from "../../lib/notificaciones";
 
 const ESTADOS_VALIDOS = ["Pendiente", "Aprobada", "Pagada", "Rechazada"];
-const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Crítica"];
+const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Crítica", "Urgente"];
 const MONEDAS_VALIDAS = ["COP", "USD"];
 
 // Una solicitud de compra puede vincularse a UNA O VARIAS facturas (compras
@@ -67,11 +67,6 @@ function serializar(f: FacturaConRelaciones) {
     nit: f.nit,
     servicioId: f.servicioId,
     servicio: f.servicioRel ? { id: f.servicioRel.id, nombre: f.servicioRel.nombreServicio } : null,
-    contratoId: f.contratoId,
-    contratoRel: f.contratoRel
-      ? { id: f.contratoRel.id, proveedor: f.contratoRel.proveedor }
-      : null,
-    contrato: f.contrato,
     solicitudCompraId: f.solicitudCompraId,
     // Trazabilidad: SC de origen -> cotización ganadora (proveedor, valor,
     // tiempo de entrega) -> quién aprobó la SC. Null cuando la factura no
@@ -140,7 +135,6 @@ function serializar(f: FacturaConRelaciones) {
 const INCLUDE_FACTURA = {
   historial: { orderBy: { createdAt: "asc" as const } },
   servicioRel: { select: { id: true, nombreServicio: true, costo: true } },
-  contratoRel: { select: { id: true, proveedor: true } },
   // Trazabilidad completa: de dónde salió esta factura (SC -> cotización
   // ganadora del cuadro comparativo -> proveedor, y quién aprobó la SC).
   solicitudCompraRel: {
@@ -272,8 +266,6 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       proveedor,
       nit,
       servicioId,
-      contratoId,
-      contrato,
       solicitudCompraId,
       centroCostos,
       area,
@@ -289,19 +281,19 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       datosPago,
     } = req.body;
 
-    // Una factura se relaciona con UNA sola cosa: solicitud de compra,
-    // servicio/suscripción o contrato — nunca varias a la vez (evita un
-    // origen ambiguo de "por qué se aprobó esta factura sola").
-    if ([solicitudCompraId, servicioId, contratoId].filter(Boolean).length > 1) {
+    // Una factura se relaciona con UNA sola cosa: solicitud de compra o
+    // servicio/suscripción — nunca ambas a la vez (evita un origen ambiguo de
+    // "por qué se aprobó esta factura sola").
+    if ([solicitudCompraId, servicioId].filter(Boolean).length > 1) {
       return res.status(400).json({
         message:
-          "Una factura solo puede relacionarse con una solicitud de compra, un servicio o un contrato — no varios a la vez.",
+          "Una factura solo puede relacionarse con una solicitud de compra o un servicio — no ambos a la vez.",
       });
     }
 
-    // El servicio/contrato relacionados son opcionales (no toda factura
-    // corresponde a un servicio recurrente), pero si se envían deben existir
-    // en el mismo tenant (IDOR) — igual que proveedor y responsable.
+    // El servicio relacionado es opcional (no toda factura corresponde a un
+    // servicio recurrente), pero si se envía debe existir en el mismo tenant
+    // (IDOR) — igual que proveedor y responsable.
     let servicioDb: Awaited<ReturnType<typeof prisma.servicioSuscripcion.findFirst>> = null;
     if (servicioId) {
       servicioDb = await req.tenantPrisma!.servicioSuscripcion.findFirst({
@@ -309,14 +301,6 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
       });
       if (!servicioDb) {
         return res.status(404).json({ message: "El servicio seleccionado no existe." });
-      }
-    }
-    if (contratoId) {
-      const contratoDb = await req.tenantPrisma!.contrato.findFirst({
-        where: { id: contratoId, tenantId, eliminado: false },
-      });
-      if (!contratoDb) {
-        return res.status(404).json({ message: "El contrato seleccionado no existe." });
       }
     }
     // Solicitud de compra que dio origen a esta factura: cierra el ciclo
@@ -460,8 +444,6 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
           proveedor: proveedorNombre,
           nit: proveedorNit,
           servicioId: servicioId || null,
-          contratoId: contratoId || null,
-          contrato: contrato || null,
           solicitudCompraId: solicitudCompraId || null,
           centroCostos: centroCostos || null,
           area,

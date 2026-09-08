@@ -19,6 +19,7 @@ import {
   type NivelIndicador,
 } from "@/hooks/use-gerencial";
 import { useObjetivos, useResumenObjetivo } from "@/hooks/use-objetivos";
+import { elegirObjetivoActivoGerencial } from "@/lib/objetivos-activo";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
@@ -184,39 +185,87 @@ function SeccionCategoria({
 }
 
 /**
- * Resumen del objetivo comercial ACTIVO más reciente — primera cosa que ve
- * Gerencia al entrar al Centro Gerencial (a petición explícita: "el
- * objetivo es una decisión de Gerencia, debe verse de primero"). Solo
- * lectura, igual que el resto de Centro Gerencial: el CRUD completo vive en
- * /comercial/objetivos, acá solo se resume y se enlaza.
+ * Vistazo del objetivo comercial vigente — primera cosa que ve Gerencia al
+ * entrar al Centro Gerencial (a petición explícita: "el objetivo es una
+ * decisión de Gerencia, debe verse de primero"). Solo lectura, igual que el
+ * resto de Centro Gerencial: el CRUD y el análisis completo (ritmo detallado,
+ * comparativo anual, contribución por vendedor) viven en
+ * /comercial/objetivos — acá solo se muestran los 4 KPIs mínimos para decidir
+ * si vale la pena entrar a mirar el detalle, para no duplicar toda esa
+ * pantalla dos veces. NINGUNA fórmula se recalcula acá: se reutiliza tal
+ * cual el mismo hook (useResumenObjetivo) que usa esa pantalla, solo se
+ * decide CUÁL objetivo mostrar (elegirObjetivoActivoGerencial).
+ *
+ * No se filtra por año calendario: un objetivo ANUAL o TRIMESTRAL puede
+ * cruzar el límite de año (p. ej. oct-2025 a sep-2026) y seguir vigente hoy
+ * aunque su campo `anio` sea el del año en que empezó.
  */
 function ResumenObjetivosGerencial() {
-  const anioActual = new Date().getFullYear();
-  const { objetivos, loading: cargandoLista } = useObjetivos({
-    nivel: "EMPRESA",
-    anio: anioActual,
-  });
-  const objetivoActivoId = objetivos[0]?.id ?? null;
-  const { resumen, loading: cargandoResumen } = useResumenObjetivo(objetivoActivoId);
+  const { objetivos, loading: cargandoLista } = useObjetivos({ nivel: "EMPRESA" });
+  const objetivoActivo = elegirObjetivoActivoGerencial(objetivos);
+  const { resumen, loading: cargandoResumen } = useResumenObjetivo(objetivoActivo?.id ?? null);
 
   if (cargandoLista) return null;
-  if (!objetivoActivoId) return null;
+
+  if (!objetivoActivo) {
+    return (
+      <div className="mb-6">
+        <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <Target className="h-3.5 w-3.5" /> Objetivo comercial
+        </h2>
+        <div className="panel flex items-center justify-between gap-3 bg-white border-slate-200 p-4 shadow-2xs">
+          <p className="text-xs text-slate-500">
+            No hay ningún objetivo comercial de empresa configurado todavía.
+          </p>
+          <Link
+            to="/comercial/objetivos"
+            className="shrink-0 text-[11px] font-semibold text-blue-700 hover:underline"
+          >
+            Configurar en Objetivos →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (cargandoResumen)
     return <p className="mb-4 text-xs text-slate-500">Cargando objetivo comercial...</p>;
-  if (!resumen.disponible || !resumen.objetivo || !resumen.cumplimiento) return null;
 
-  const { objetivo, cumplimiento, ritmo } = resumen;
+  // "Siesa no disponible" es un caso distinto de "sin objetivo": el
+  // objetivo existe y tiene una meta, pero no se puede calcular la venta
+  // real porque este tenant no tiene compañía Siesa configurada (o Siesa no
+  // respondió) — nunca se debe mostrar $0 como si realmente no hubiera
+  // ventas.
+  if (!resumen.disponible || !resumen.cumplimiento) {
+    return (
+      <div className="mb-6">
+        <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <Target className="h-3.5 w-3.5" /> Objetivo comercial
+        </h2>
+        <div className="panel flex items-start gap-2 bg-amber-50 border-amber-200 p-4 text-[11px] text-amber-800 shadow-2xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {resumen.motivo ||
+              "No fue posible calcular la venta real de este objetivo en este momento."}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const { cumplimiento, ritmo } = resumen;
 
   return (
-    <div className="mb-6 space-y-3">
+    <div className="mb-6">
       <Link to="/comercial/objetivos" className="block group">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-700">
             <Target className="h-3.5 w-3.5" /> Objetivo comercial ·{" "}
-            {objetivo.tipoPeriodo.toLowerCase()}
+            {objetivoActivo.tipoPeriodo.toLowerCase()}
+            {objetivoActivo.estadoDerivado === "CERRADO" && " · cerrado"}
           </h2>
           <span className="text-[11px] font-semibold text-blue-700 group-hover:underline">
-            Ver detalle →
+            Ver objetivo completo (ritmo, comparativo y vendedores) →
           </span>
         </div>
 
@@ -242,56 +291,20 @@ function ResumenObjetivosGerencial() {
               className="cursor-pointer transition-all hover:border-blue-400"
             />
             <StatCard
-              label="Faltante"
-              value={money(cumplimiento.faltanteValor ?? 0)}
+              label="Ritmo"
+              value={ritmo ? ritmo.ritmo : "—"}
+              hint={
+                ritmo
+                  ? `${ritmo.pctMetaCumplida}% vs. ${ritmo.pctTiempoTranscurrido}% del tiempo`
+                  : undefined
+              }
               icon={TrendingDown}
+              enfasis={ritmo?.ritmo === "ATRASADO" ? "atencion" : "default"}
               className="cursor-pointer transition-all hover:border-blue-400"
             />
           </div>
         )}
       </Link>
-
-      {ritmo && (
-        <div className="panel bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-blue-600 transition-all"
-              style={{ width: `${Math.min(ritmo.pctMetaCumplida, 100)}%` }}
-            />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-500">
-                Tiempo transcurrido
-              </p>
-              <p className="num text-sm font-bold text-slate-900">{ritmo.pctTiempoTranscurrido}%</p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-500">Meta cumplida</p>
-              <p className="num text-sm font-bold text-slate-900">{ritmo.pctMetaCumplida}%</p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-500">Ritmo</p>
-              <p
-                className={cn(
-                  "text-sm font-bold",
-                  ritmo.ritmo === "ADELANTADO" ? "text-blue-700" : "text-slate-600",
-                )}
-              >
-                {ritmo.ritmo}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-500">
-                Proyección de cierre
-              </p>
-              <p className="num text-sm font-bold text-slate-900">
-                {money(ritmo.proyeccionLineal)}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

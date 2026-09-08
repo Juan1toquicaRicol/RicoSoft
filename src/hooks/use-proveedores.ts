@@ -20,7 +20,6 @@ export interface Proveedor {
   origen?: "SIESA" | "MANUAL";
   ultimaSincronizacion?: string | null;
   facturasAsociadas: number;
-  contratosAsociados: number;
   solicitudesAsociadas: number;
 }
 
@@ -126,7 +125,7 @@ export interface ProveedorOpcion {
 
 /**
  * Búsqueda server-side para elegir UN proveedor dentro de un formulario
- * (Facturas, Contratos, Servicios, Solicitudes de Compra/Cotizaciones) — ver
+ * (Facturas, Servicios, Solicitudes de Compra/Cotizaciones) — ver
  * <Combobox onSearchChange=.../>. Nunca descarga el catálogo completo: solo
  * trae los ~25 resultados que coinciden con lo que el usuario escribió,
  * filtrados por departamento si aplica. Empieza con una carga inicial vacía

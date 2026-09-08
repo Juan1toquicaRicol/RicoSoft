@@ -31,7 +31,6 @@ export function useServicios() {
       nombreServicio: string;
       descripcion?: string;
       proveedorId: string;
-      contratoId?: string;
       periodicidad: string;
       costo: number;
       moneda: string;
@@ -43,6 +42,32 @@ export function useServicios() {
       observaciones?: string;
     }) => {
       await fetchAuth("/servicios", { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const actualizarSuscripcion = useCallback(
+    async (
+      id: string,
+      data: {
+        empresaId: string;
+        area: string;
+        nombreServicio: string;
+        descripcion?: string;
+        proveedorId: string;
+        periodicidad: string;
+        costo: number;
+        moneda: string;
+        fechaInicio?: string;
+        fechaFin?: string;
+        diaVencimiento?: number;
+        fechaRenovacion: string;
+        responsableId: string;
+        observaciones?: string;
+      },
+    ) => {
+      await fetchAuth(`/servicios/${id}`, { method: "PUT", body: JSON.stringify(data) });
       await refresh();
     },
     [refresh],
@@ -70,6 +95,7 @@ export function useServicios() {
     error,
     refresh,
     addSuscripcion,
+    actualizarSuscripcion,
     toggleEstadoSuscripcion,
     eliminarSuscripcion,
   };

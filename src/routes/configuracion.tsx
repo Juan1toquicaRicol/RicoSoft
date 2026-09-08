@@ -1,6 +1,16 @@
 import { useEffect } from "react";
 import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ShieldCheck, Users, Key, Building2, LayoutGrid, Truck, Cloud } from "lucide-react";
+import {
+  ShieldCheck,
+  Users,
+  Key,
+  Building2,
+  Award,
+  Bell,
+  LayoutGrid,
+  Truck,
+  Cloud,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -53,6 +63,20 @@ function Configuracion() {
       icon: Building2,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.DEPARTAMENTOS_VER),
+    },
+    {
+      to: "/configuracion/perfiles-funcionales",
+      label: "Perfiles Funcionales",
+      icon: Award,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.PERFILES_FUNCIONALES_VER),
+    },
+    {
+      to: "/configuracion/reglas-destinatarios",
+      label: "Reglas de Destinatarios",
+      icon: Bell,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_VER),
     },
     {
       to: "/configuracion/proveedores",

@@ -134,8 +134,16 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     expect(res.status).toBe(200);
     expect(res.body.codigo).toMatch(/^IMP-\d{4}-\d{3}$/);
     expect(res.body.actividades.length).toBeGreaterThanOrEqual(1); // "Confirmar orden..." + las del lote
-    expect(res.body.actividades.some((a: any) => a.nombre.includes("Confirmar orden"))).toBe(true);
-    expect(res.body.actividades.some((a: any) => a.etapa === "Documentación")).toBe(true);
+    expect(
+      res.body.actividades.some((a: { nombre: string; etapa?: string }) =>
+        a.nombre.includes("Confirmar orden"),
+      ),
+    ).toBe(true);
+    expect(
+      res.body.actividades.some(
+        (a: { nombre: string; etapa?: string }) => a.etapa === "Documentación",
+      ),
+    ).toBe(true);
   });
 
   it("registra una actividad manual con fecha límite vencida y el motor de seguimiento genera una novedad automática al consultar el detalle", async () => {
@@ -156,7 +164,8 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     expect(detalle.status).toBe(200);
 
     const novedadAutomatica = detalle.body.novedades.find(
-      (n: any) => n.automatica && n.descripcion.includes("Actividad de prueba vencida"),
+      (n: { automatica: boolean; descripcion: string }) =>
+        n.automatica && n.descripcion.includes("Actividad de prueba vencida"),
     );
     expect(novedadAutomatica).toBeTruthy();
     expect(novedadAutomatica.tipo).toBe("Retraso");
@@ -171,7 +180,7 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     const detalle = await request(app)
       .get(`/api/importaciones/${ordenAId}`)
       .set("Authorization", `Bearer ${tokenAAdmin}`);
-    const coincidencias = detalle.body.novedades.filter((n: any) =>
+    const coincidencias = detalle.body.novedades.filter((n: { descripcion: string }) =>
       n.descripcion.includes("Actividad de prueba vencida"),
     );
     expect(coincidencias).toHaveLength(1);
@@ -182,7 +191,7 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
       .get(`/api/importaciones/${ordenAId}`)
       .set("Authorization", `Bearer ${tokenAAdmin}`);
     const actividad = detalleAntes.body.actividades.find(
-      (a: any) => a.nombre === "Actividad de prueba vencida",
+      (a: { nombre: string; etapa?: string }) => a.nombre === "Actividad de prueba vencida",
     );
     expect(actividad).toBeTruthy();
 
@@ -196,7 +205,7 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     const detalleDespues = await request(app)
       .get(`/api/importaciones/${ordenAId}`)
       .set("Authorization", `Bearer ${tokenAAdmin}`);
-    const novedad = detalleDespues.body.novedades.find((n: any) =>
+    const novedad = detalleDespues.body.novedades.find((n: { descripcion: string }) =>
       n.descripcion.includes("Actividad de prueba vencida"),
     );
     expect(novedad.estado).toBe("Resuelta");
@@ -264,7 +273,8 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     expect(res.body.fechaCierre).toBeTruthy();
     expect(
       res.body.historial.some(
-        (h: any) => h.accion.includes("cerrada") && h.detalle?.includes("Cierre de prueba"),
+        (h: { accion: string; detalle?: string | null }) =>
+          h.accion.includes("cerrada") && h.detalle?.includes("Cierre de prueba"),
       ),
     ).toBe(true);
 

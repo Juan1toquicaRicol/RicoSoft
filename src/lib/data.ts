@@ -20,9 +20,6 @@ export interface Factura {
   nit: string;
   servicioId?: string | null;
   servicio?: { id: string; nombre: string } | null;
-  contratoId?: string | null;
-  contratoRel?: { id: string; proveedor: string } | null;
-  contrato?: string;
   solicitudCompraId?: string | null;
   // Trazabilidad completa: SC de origen -> cotización ganadora del cuadro
   // comparativo (proveedor, valor, tiempo de entrega) -> quién la aprobó.
@@ -186,6 +183,7 @@ export interface SolicitudCompra {
     minimo: number;
     maximo: number;
     tieneGanadora: boolean;
+    menorValor: number | null;
   };
   factura?: { id: string; numero: string; estado: string } | null;
   // Confirmación del solicitante original de que recibió físicamente el
@@ -235,8 +233,6 @@ export interface ServicioSuscripcion {
   descripcion?: string | null;
   proveedorId?: string | null;
   proveedor: string;
-  contratoId?: string | null;
-  contratoRel?: { id: string; proveedor: string } | null;
   periodicidad: PeriodicidadServicio;
   costo: number;
   moneda: "COP" | "USD";
@@ -248,6 +244,9 @@ export interface ServicioSuscripcion {
   responsableId?: string | null;
   responsableArea: string;
   observaciones?: string | null;
+  // Solo viene presente en el detalle (GET /servicios/:id), reconstruido a
+  // partir de Auditoria — ver obtenerServicio en el backend.
+  historial?: { fecha: string; actor: string; accion: string; detalle?: string }[];
 }
 
 // Utility formatting functions

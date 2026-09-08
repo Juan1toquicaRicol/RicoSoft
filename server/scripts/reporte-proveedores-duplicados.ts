@@ -39,7 +39,6 @@ async function main() {
         _count: {
           select: {
             facturas: true,
-            contratos: true,
             servicios: true,
             solicitudesCompra: true,
             cotizaciones: true,
@@ -57,7 +56,6 @@ async function main() {
     for (const f of filas) {
       const relaciones =
         f._count.facturas +
-        f._count.contratos +
         f._count.servicios +
         f._count.solicitudesCompra +
         f._count.cotizaciones;

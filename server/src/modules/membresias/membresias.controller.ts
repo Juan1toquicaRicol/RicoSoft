@@ -92,6 +92,15 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
     // Forma del body ya validada por validarBody(crearMembresiaSchema).
     const { tenantId, rolId, isSuperadmin } = req.body;
 
+    // Nadie puede otorgarse una membresía a sí mismo, ni siquiera un
+    // superadmin: el chequeo de abajo ("el objetivo debe ser nativo de tu
+    // empresa actual") se cumple trivialmente cuando el objetivo eres tú
+    // mismo, lo que permitía auto-concederse isSuperadmin en CUALQUIER otro
+    // tenant del sistema sin que nadie más interviniera.
+    if (userId === req.user!.id) {
+      return res.status(409).json({ message: "No puedes otorgarte una membresía a ti mismo." });
+    }
+
     const usuario = await prisma.user.findUnique({ where: { id: userId } });
     if (!usuario) {
       return res.status(404).json({ message: "Usuario no encontrado." });
@@ -100,9 +109,9 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
     // Un superadmin solo puede otorgar acceso adicional a gente que es
     // nativamente de SU empresa actual. Sin este chequeo, cualquier
     // superadmin de cualquier tenant podría crear/editar membresías de un
-    // usuario ajeno a su empresa (incluyéndose a sí mismo) hacia CUALQUIER
-    // otro tenant del sistema, incluyendo isSuperadmin=true — una escalación
-    // de privilegios cross-tenant completa.
+    // usuario ajeno a su empresa hacia CUALQUIER otro tenant del sistema,
+    // incluyendo isSuperadmin=true — una escalación de privilegios
+    // cross-tenant completa.
     if (usuario.tenantId !== req.user!.tenantId) {
       return res
         .status(403)
@@ -187,6 +196,13 @@ export const actualizarMembresia = async (req: AuthenticatedRequest, res: Respon
     });
     if (!membresia) {
       return res.status(404).json({ message: "Membresía no encontrada." });
+    }
+    // Mismo motivo que en crearMembresia: nadie administra su propia
+    // membresía, así ya la tuviera de antes (evita usar este endpoint para
+    // auto-otorgarse isSuperadmin en una empresa a la que ya tenía acceso
+    // regular).
+    if (membresia.userId === req.user!.id) {
+      return res.status(409).json({ message: "No puedes administrar tu propia membresía." });
     }
     // Mismo límite que en crearMembresia: solo se administran membresías de
     // usuarios nativos de la empresa actual del superadmin que llama.

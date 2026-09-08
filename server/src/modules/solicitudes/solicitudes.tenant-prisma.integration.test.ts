@@ -161,8 +161,8 @@ describe.skipIf(!RUN)(
         .get("/api/solicitudes-compra")
         .set("Authorization", `Bearer ${tokenA}`);
       expect(res.status).toBe(200);
-      expect(res.body.some((s: any) => s.id === solicitudBId)).toBe(false);
-      expect(res.body.some((s: any) => s.id === creada.body.id)).toBe(true);
+      expect(res.body.some((s: { id: string }) => s.id === solicitudBId)).toBe(false);
+      expect(res.body.some((s: { id: string }) => s.id === creada.body.id)).toBe(true);
     });
 
     it("GET /:id devuelve el detalle de una solicitud propia de Tenant A", async () => {
@@ -284,7 +284,7 @@ describe.skipIf(!RUN)(
         .get(`/api/solicitudes-compra/${solicitudBId}/cotizaciones`)
         .set("Authorization", `Bearer ${tokenB}`);
       expect(res.status).toBe(200);
-      expect(res.body.some((c: any) => c.id === cotizacionBId)).toBe(true);
+      expect(res.body.some((c: { id: string }) => c.id === cotizacionBId)).toBe(true);
     });
 
     it("paginación del historial de compras: envelope paginado con ?page, array plano sin él, aislado por tenant", async () => {
@@ -318,7 +318,9 @@ describe.skipIf(!RUN)(
       expect(pagina1PorEstado.body.page).toBe(1);
       expect(pagina1PorEstado.body.pageSize).toBe(2);
       expect(pagina1PorEstado.body.total).toBeGreaterThanOrEqual(3);
-      expect(pagina1PorEstado.body.items.every((s: any) => s.id !== solicitudBId)).toBe(true);
+      expect(pagina1PorEstado.body.items.every((s: { id: string }) => s.id !== solicitudBId)).toBe(
+        true,
+      );
 
       // Sin `page`, sigue devolviendo el array plano de siempre.
       const sinPage = await request(app)

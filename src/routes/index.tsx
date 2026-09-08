@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Clock,
-  FileSignature,
   FileText,
   PackageCheck,
   Ship,
@@ -58,8 +57,7 @@ function DistribucionEstados({ datos }: { datos: { etiqueta: string; valor: numb
 
 function DashboardExecutive() {
   const { resumen, loading, error } = useDashboard();
-  const { facturas, solicitudes, creditos, servicios, contratos, despachos, importaciones } =
-    resumen;
+  const { facturas, solicitudes, creditos, servicios, despachos, importaciones } = resumen;
 
   const sinAccesoAIndicadores =
     !loading &&
@@ -68,7 +66,6 @@ function DashboardExecutive() {
     !solicitudes &&
     !creditos &&
     !servicios &&
-    !contratos &&
     !despachos &&
     !importaciones;
 
@@ -310,39 +307,6 @@ function DashboardExecutive() {
                   hint="Requieren gestión (faltantes, dirección, rechazo...)"
                   icon={AlertTriangle}
                   enfasis={despachos.novedadesAbiertas > 0 ? "atencion" : "default"}
-                  className="cursor-pointer transition-all hover:border-blue-400"
-                />
-              </div>
-            </Link>
-          </section>
-        )}
-
-        {!loading && contratos && contratos.activos > 0 && (
-          <section className="space-y-3">
-            <Link to="/contratos" className="block group">
-              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 group-hover:text-blue-700">
-                <FileSignature className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />{" "}
-                Contratos de proveedores
-              </h2>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <StatCard
-                  label="Contratos activos"
-                  value={String(contratos.activos)}
-                  icon={FileSignature}
-                  className="cursor-pointer transition-all hover:border-blue-400"
-                />
-                <StatCard
-                  label="Valor contratado activo"
-                  value={money(contratos.valorContratadoActivo)}
-                  icon={Wallet}
-                  className="cursor-pointer transition-all hover:border-blue-400"
-                />
-                <StatCard
-                  label="Próximos a vencer"
-                  value={String(contratos.proximosAVencer)}
-                  hint="En los próximos 30 días"
-                  icon={AlertTriangle}
-                  enfasis={contratos.proximosAVencer > 0 ? "atencion" : "default"}
                   className="cursor-pointer transition-all hover:border-blue-400"
                 />
               </div>

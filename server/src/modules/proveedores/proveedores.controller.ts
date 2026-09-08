@@ -42,7 +42,7 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
         where,
         include: {
           departamento: { select: { id: true, nombre: true } },
-          _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } },
+          _count: { select: { facturas: true, solicitudesCompra: true } },
         },
         orderBy: { nombre: "asc" },
         skip: (page - 1) * limit,
@@ -69,7 +69,6 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
         origen: p.origen,
         ultimaSincronizacion: p.ultimaSincronizacion,
         facturasAsociadas: p._count.facturas,
-        contratosAsociados: p._count.contratos,
         solicitudesAsociadas: p._count.solicitudesCompra,
       })),
       page,
@@ -158,7 +157,6 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
         ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
         : null,
       facturasAsociadas: 0,
-      contratosAsociados: 0,
       solicitudesAsociadas: 0,
     });
   } catch (error) {
@@ -251,7 +249,7 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       },
       include: {
         departamento: { select: { id: true, nombre: true } },
-        _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } },
+        _count: { select: { facturas: true, solicitudesCompra: true } },
       },
     });
 
@@ -291,7 +289,6 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
         ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
         : null,
       facturasAsociadas: proveedor._count.facturas,
-      contratosAsociados: proveedor._count.contratos,
       solicitudesAsociadas: proveedor._count.solicitudesCompra,
     });
   } catch (error) {
@@ -301,8 +298,8 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
 };
 
 /**
- * Elimina un proveedor solo si no tiene facturas, contratos ni solicitudes de
- * compra asociadas (integridad referencial); si los tiene, se le pide al
+ * Elimina un proveedor solo si no tiene facturas ni solicitudes de compra
+ * asociadas (integridad referencial); si los tiene, se le pide al
  * administrador desactivarlo en su lugar, igual que con Departamentos.
  */
 export const eliminarProveedor = async (req: AuthenticatedRequest, res: Response) => {
@@ -312,16 +309,15 @@ export const eliminarProveedor = async (req: AuthenticatedRequest, res: Response
 
     const proveedor = await req.tenantPrisma!.proveedor.findFirst({
       where: { id, tenantId },
-      include: { _count: { select: { facturas: true, contratos: true, solicitudesCompra: true } } },
+      include: { _count: { select: { facturas: true, solicitudesCompra: true } } },
     });
     if (!proveedor) {
       return res.status(404).json({ message: "Proveedor no encontrado." });
     }
-    const totalAsociados =
-      proveedor._count.facturas + proveedor._count.contratos + proveedor._count.solicitudesCompra;
+    const totalAsociados = proveedor._count.facturas + proveedor._count.solicitudesCompra;
     if (totalAsociados > 0) {
       return res.status(409).json({
-        message: `No se puede eliminar: hay ${totalAsociados} registro(s) (facturas/contratos/solicitudes de compra) asociados a este proveedor. Desactívalo en su lugar.`,
+        message: `No se puede eliminar: hay ${totalAsociados} registro(s) (facturas/solicitudes de compra) asociados a este proveedor. Desactívalo en su lugar.`,
       });
     }
 
@@ -348,10 +344,9 @@ export const eliminarProveedor = async (req: AuthenticatedRequest, res: Response
 
 /**
  * Resumen financiero de un proveedor: navegación consolidada
- * Proveedor -> Facturas -> Pagos -> Contratos -> Servicios sin salir de la
- * ficha del proveedor. Todas las consultas van filtradas por tenantId
- * además de req.tenantPrisma (defensa en profundidad), igual que el resto
- * del módulo.
+ * Proveedor -> Facturas -> Pagos -> Servicios sin salir de la ficha del
+ * proveedor. Todas las consultas van filtradas por tenantId además de
+ * req.tenantPrisma (defensa en profundidad), igual que el resto del módulo.
  */
 export const obtenerResumenFinancieroProveedor = async (
   req: AuthenticatedRequest,
@@ -366,7 +361,7 @@ export const obtenerResumenFinancieroProveedor = async (
       return res.status(404).json({ message: "Proveedor no encontrado." });
     }
 
-    const [facturas, pagosAgg, contratos, contratosAgg, serviciosActivos] = await Promise.all([
+    const [facturas, pagosAgg, serviciosActivos] = await Promise.all([
       req.tenantPrisma!.factura.findMany({
         where: { proveedorId: id, tenantId, eliminado: false },
         select: { id: true, total: true, estado: true },
@@ -374,11 +369,6 @@ export const obtenerResumenFinancieroProveedor = async (
       req.tenantPrisma!.pago.aggregate({
         where: { tenantId, estado: "Confirmado", factura: { proveedorId: id } },
         _sum: { valor: true },
-      }),
-      req.tenantPrisma!.contrato.count({ where: { proveedorId: id, tenantId, eliminado: false } }),
-      req.tenantPrisma!.contrato.aggregate({
-        where: { proveedorId: id, tenantId, eliminado: false },
-        _sum: { valorContratado: true },
       }),
       req.tenantPrisma!.servicioSuscripcion.count({
         where: { proveedorId: id, tenantId, eliminado: false, estado: "Activo" },
@@ -399,10 +389,6 @@ export const obtenerResumenFinancieroProveedor = async (
         totalFacturado,
         totalPagado,
         saldoPendiente: totalFacturado - totalPagado,
-      },
-      contratos: {
-        activos: contratos,
-        valorTotal: Number(contratosAgg._sum.valorContratado ?? 0),
       },
       servicios: { activos: serviciosActivos },
     });

@@ -84,7 +84,9 @@ describe.skipIf(!RUN)("Permisos — catálogo dinámico (multi-tenant real)", ()
     const primera = await request(app).get("/api/permisos").set("Authorization", `Bearer ${token}`);
     expect(primera.status).toBe(200);
     expect(primera.body.length).toBeGreaterThan(50);
-    expect(primera.body.every((p: any) => p.esSistema)).toBe(true);
+    expect(
+      primera.body.every((p: { esSistema: boolean; id: string; codigo: string }) => p.esSistema),
+    ).toBe(true);
 
     const segunda = await request(app).get("/api/permisos").set("Authorization", `Bearer ${token}`);
     expect(segunda.status).toBe(200);
@@ -144,7 +146,9 @@ describe.skipIf(!RUN)("Permisos — catálogo dinámico (multi-tenant real)", ()
 
   it("no permite eliminar ni editar el código de un permiso del sistema, y aísla el catálogo por tenant", async () => {
     const lista = await request(app).get("/api/permisos").set("Authorization", `Bearer ${token}`);
-    const permisoSistema = lista.body.find((p: any) => p.esSistema);
+    const permisoSistema = lista.body.find(
+      (p: { esSistema: boolean; id: string; codigo: string }) => p.esSistema,
+    );
     expect(permisoSistema).toBeTruthy();
 
     const eliminar = await request(app)

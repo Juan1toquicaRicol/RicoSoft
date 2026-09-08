@@ -34,6 +34,19 @@ export const PERMISOS_SISTEMA = {
   DEPARTAMENTOS_EDITAR: "departamentos.editar",
   DEPARTAMENTOS_ELIMINAR: "departamentos.eliminar",
 
+  // Módulo Perfiles Funcionales
+  PERFILES_FUNCIONALES_VER: "perfiles_funcionales.ver",
+  PERFILES_FUNCIONALES_CREAR: "perfiles_funcionales.crear",
+  PERFILES_FUNCIONALES_EDITAR: "perfiles_funcionales.editar",
+  PERFILES_FUNCIONALES_ELIMINAR: "perfiles_funcionales.eliminar",
+  PERFILES_FUNCIONALES_ASIGNAR: "perfiles_funcionales.asignar",
+
+  // Módulo Reglas de Destinatarios
+  REGLAS_DESTINATARIOS_VER: "reglas_destinatarios.ver",
+  REGLAS_DESTINATARIOS_CREAR: "reglas_destinatarios.crear",
+  REGLAS_DESTINATARIOS_EDITAR: "reglas_destinatarios.editar",
+  REGLAS_DESTINATARIOS_ELIMINAR: "reglas_destinatarios.eliminar",
+
   // Módulo Proveedores
   PROVEEDORES_VER: "proveedores.ver",
   PROVEEDORES_CREAR: "proveedores.crear",
@@ -74,12 +87,6 @@ export const PERMISOS_SISTEMA = {
   SERVICIOS_EDITAR: "servicios.editar",
   SERVICIOS_ELIMINAR: "servicios.eliminar",
 
-  // Módulo Contratos
-  CONTRATOS_VER: "contratos.ver",
-  CONTRATOS_CREAR: "contratos.crear",
-  CONTRATOS_EDITAR: "contratos.editar",
-  CONTRATOS_ELIMINAR: "contratos.eliminar",
-
   // Módulo Motor de Reglas
   REGLAS_VER: "reglas.ver",
   REGLAS_CREAR: "reglas.crear",
@@ -114,6 +121,14 @@ export const PERMISOS_SISTEMA = {
   IMPORTACIONES_RECIBIR: "importaciones.recibir",
   IMPORTACIONES_LIQUIDAR: "importaciones.liquidar",
   IMPORTACIONES_ELIMINAR: "importaciones.eliminar",
+  IMPORTACIONES_REQUISITOS_VER: "importaciones.requisitos_ver",
+  IMPORTACIONES_REQUISITOS_CREAR: "importaciones.requisitos_crear",
+  IMPORTACIONES_REQUISITOS_EDITAR: "importaciones.requisitos_editar",
+  IMPORTACIONES_REQUISITOS_ELIMINAR: "importaciones.requisitos_eliminar",
+  IMPORTACIONES_CORREOS_VER: "importaciones.correos_ver",
+  IMPORTACIONES_CORREOS_PROCESAR: "importaciones.correos_procesar",
+  IMPORTACIONES_CORREOS_RESOLVER: "importaciones.correos_resolver",
+  IMPORTACIONES_CORREOS_CONFIGURAR: "importaciones.correos_configurar",
   INTEGRACION_SIESA_VER: "integracion_siesa.ver",
   INTEGRACION_SIESA_SINCRONIZAR: "integracion_siesa.sincronizar",
   INVENTARIO_CONFIGURAR: "inventario.configurar",
@@ -131,6 +146,10 @@ export const PERMISOS_SISTEMA = {
   OBJETIVOS_EDITAR: "objetivos.editar",
   OBJETIVOS_ELIMINAR: "objetivos.eliminar",
   OBJETIVOS_ASIGNAR: "objetivos.asignar",
+  BIOMETRICO_VER: "biometrico.ver",
+  BIOMETRICO_SINCRONIZAR: "biometrico.sincronizar",
+  BIOMETRICO_ASOCIAR: "biometrico.asociar",
+  BIOMETRICO_CONFIGURAR: "biometrico.configurar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -142,6 +161,8 @@ export interface PermisoDefinicion {
     | "Roles"
     | "Permisos"
     | "Departamentos"
+    | "Perfiles Funcionales"
+    | "Reglas de Destinatarios"
     | "Proveedores"
     | "Configuración"
     | "Módulos"
@@ -149,7 +170,6 @@ export interface PermisoDefinicion {
     | "Facturas"
     | "Solicitudes de Compra"
     | "Servicios"
-    | "Contratos"
     | "Motor de Reglas"
     | "Créditos"
     | "Gestión Humana"
@@ -293,6 +313,64 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     descripcion: "Permite eliminar departamentos del sistema.",
   },
 
+  // Perfiles Funcionales
+  {
+    id: PERMISOS_SISTEMA.PERFILES_FUNCIONALES_VER,
+    modulo: "Perfiles Funcionales",
+    nombre: "Ver perfiles funcionales",
+    descripcion: "Permite listar los perfiles funcionales de cada área.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PERFILES_FUNCIONALES_CREAR,
+    modulo: "Perfiles Funcionales",
+    nombre: "Crear perfiles funcionales",
+    descripcion: "Permite registrar nuevos perfiles dentro de un área.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PERFILES_FUNCIONALES_EDITAR,
+    modulo: "Perfiles Funcionales",
+    nombre: "Editar perfiles funcionales",
+    descripcion: "Permite modificar nombre, estado o si un perfil es jefe de área.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PERFILES_FUNCIONALES_ELIMINAR,
+    modulo: "Perfiles Funcionales",
+    nombre: "Eliminar perfiles funcionales",
+    descripcion: "Permite eliminar un perfil funcional sin usuarios asignados.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PERFILES_FUNCIONALES_ASIGNAR,
+    modulo: "Perfiles Funcionales",
+    nombre: "Asignar usuarios a perfiles",
+    descripcion: "Permite agregar o quitar usuarios de un perfil funcional.",
+  },
+
+  // Reglas de Destinatarios
+  {
+    id: PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_VER,
+    modulo: "Reglas de Destinatarios",
+    nombre: "Ver reglas de destinatarios",
+    descripcion: "Permite listar quién recibe cada tipo de alerta/evento.",
+  },
+  {
+    id: PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_CREAR,
+    modulo: "Reglas de Destinatarios",
+    nombre: "Crear reglas de destinatarios",
+    descripcion: "Permite definir nuevos destinatarios para un evento.",
+  },
+  {
+    id: PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_EDITAR,
+    modulo: "Reglas de Destinatarios",
+    nombre: "Editar reglas de destinatarios",
+    descripcion: "Permite modificar una regla existente y agregar o quitar sus destinatarios.",
+  },
+  {
+    id: PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_ELIMINAR,
+    modulo: "Reglas de Destinatarios",
+    nombre: "Eliminar reglas de destinatarios",
+    descripcion: "Permite eliminar una regla de destinatarios.",
+  },
+
   // Proveedores
   {
     id: PERMISOS_SISTEMA.PROVEEDORES_VER,
@@ -316,7 +394,7 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.PROVEEDORES_ELIMINAR,
     modulo: "Proveedores",
     nombre: "Eliminar proveedores",
-    descripcion: "Permite eliminar un proveedor sin facturas ni contratos asociados.",
+    descripcion: "Permite eliminar un proveedor sin facturas ni solicitudes de compra asociadas.",
   },
 
   // Configuración
@@ -461,32 +539,6 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Servicios",
     nombre: "Eliminar servicios",
     descripcion: "Permite eliminar un servicio o suscripción registrada.",
-  },
-
-  // Contratos
-  {
-    id: PERMISOS_SISTEMA.CONTRATOS_VER,
-    modulo: "Contratos",
-    nombre: "Ver contratos",
-    descripcion: "Permite consultar los contratos de proveedores.",
-  },
-  {
-    id: PERMISOS_SISTEMA.CONTRATOS_CREAR,
-    modulo: "Contratos",
-    nombre: "Crear contratos",
-    descripcion: "Permite registrar nuevos contratos.",
-  },
-  {
-    id: PERMISOS_SISTEMA.CONTRATOS_EDITAR,
-    modulo: "Contratos",
-    nombre: "Editar contratos",
-    descripcion: "Permite modificar contratos existentes.",
-  },
-  {
-    id: PERMISOS_SISTEMA.CONTRATOS_ELIMINAR,
-    modulo: "Contratos",
-    nombre: "Eliminar contratos",
-    descripcion: "Permite eliminar un contrato registrado.",
   },
 
   // Motor de Reglas
@@ -651,6 +703,54 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Importaciones",
     nombre: "Anular órdenes de compra internacionales",
     descripcion: "Permite anular una orden de compra internacional.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_VER,
+    modulo: "Importaciones",
+    nombre: "Ver proveedores y requisitos",
+    descripcion: "Permite consultar los requisitos de importación registrados por proveedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_CREAR,
+    modulo: "Importaciones",
+    nombre: "Crear requisitos de proveedor",
+    descripcion: "Permite registrar nuevos requisitos de importación para un proveedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_EDITAR,
+    modulo: "Importaciones",
+    nombre: "Editar requisitos de proveedor",
+    descripcion: "Permite editar, activar/desactivar y reordenar los requisitos de un proveedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_ELIMINAR,
+    modulo: "Importaciones",
+    nombre: "Eliminar requisitos de proveedor",
+    descripcion: "Permite eliminar un requisito de importación de un proveedor.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER,
+    modulo: "Importaciones",
+    nombre: "Ver Bandeja de Correos",
+    descripcion: "Permite consultar los correos ingeridos por la Bandeja Inteligente de Importaciones.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_PROCESAR,
+    modulo: "Importaciones",
+    nombre: "Reprocesar correos de la Bandeja",
+    descripcion: "Permite reencolar manualmente un correo para que la Bandeja lo vuelva a procesar.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER,
+    modulo: "Importaciones",
+    nombre: "Resolver excepciones de la Bandeja",
+    descripcion: "Permite resolver ambigüedades/inconsistencias detectadas por la Bandeja Inteligente.",
+  },
+  {
+    id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR,
+    modulo: "Importaciones",
+    nombre: "Ver configuración de la Bandeja",
+    descripcion: "Permite consultar el estado de la sincronización de correo (sin exponer secretos).",
   },
   {
     id: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,

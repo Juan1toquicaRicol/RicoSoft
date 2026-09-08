@@ -21,6 +21,14 @@ import { prisma } from "../config/prisma";
  *    modelo nuevo con aislamiento vía relación (en vez de tenantId
  *    directo) debe seguir haciéndolo manualmente; esta extensión no lo
  *    cubre por diseño.
+ *  - ImportacionCorreo / ImportacionExcepcion (Bandeja Inteligente de
+ *    Importaciones): tenantId es NULLABLE — con un único buzón central
+ *    compartido por varios tenants, el tenant de un correo se desconoce
+ *    hasta identificar su proveedor. Forzar tenantId en el where/create
+ *    rompería la fase de ingesta (tenant aún null) y el triage de
+ *    superadmin de correos sin proveedor identificado. Aislamiento manual
+ *    en importaciones-bandeja.controller.ts, mismo patrón ya usado por
+ *    OrdenCompraIntl (tampoco está en esta lista).
  *
  * LIMITACIÓN CONOCIDA — escrituras anidadas: esta extensión solo
  * intercepta la operación de nivel superior (p. ej. el create de
@@ -33,7 +41,6 @@ import { prisma } from "../config/prisma";
 const MODELOS_TENANT_SCOPED = new Set([
   "Auditoria",
   "Colaborador",
-  "Contrato",
   "CosteoImportacionDetalle",
   "CotizacionProveedor",
   "CreditoCliente",
@@ -65,6 +72,10 @@ const MODELOS_TENANT_SCOPED = new Set([
   "ItemClasificacionAsignada",
   "InboxItem",
   "Objetivo",
+  "PerfilFuncional",
+  "UsuarioPerfilFuncional",
+  "ReglaDestinatarios",
+  "RequisitoProveedorImportacion",
 ]);
 
 /** Convención de Prisma: el accessor del cliente es el nombre del modelo

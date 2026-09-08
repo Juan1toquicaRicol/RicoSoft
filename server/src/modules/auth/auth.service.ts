@@ -81,9 +81,14 @@ export const registerUserService = async (data: {
     );
   }
 
-  // El departamento debe existir y pertenecer al mismo tenant y estar activo
+  // El departamento debe existir, pertenecer al mismo tenant y estar activo.
+  // esSistemas=true se excluye explícitamente: calcularPermisosEfectivos
+  // (lib/permissions.ts) le da a cualquier usuario de un departamento así
+  // TODOS los permisos del sistema, igual que un superadmin — un autoregistro
+  // público jamás puede aterrizar ahí, sin importar qué tan "correcto" luzca
+  // el dominio de correo.
   const departamento = await prisma.departamento.findFirst({
-    where: { id: departamentoId, tenantId: tenant.id, activo: true },
+    where: { id: departamentoId, tenantId: tenant.id, activo: true, esSistemas: false },
   });
   if (!departamento) {
     throw new Error("El departamento seleccionado no es válido.");
@@ -92,7 +97,11 @@ export const registerUserService = async (data: {
   // Crear el usuario en SQL Server. rol/isSuperadmin/rolId NUNCA se toman del
   // body de la petición (ni siquiera están en la firma de esta función): un
   // autoregistro siempre entra como colaborador sin rol asignado, con cero
-  // permisos hasta que un administrador se lo dé explícitamente.
+  // permisos. activo:false a propósito: el dominio de correo solo prueba que
+  // el formato es corporativo, no que quien se registró controla esa bandeja
+  // (no hay verificación de correo) — la cuenta queda pendiente de que un
+  // administrador la active explícitamente (mismo endpoint que ya existe
+  // para activar/desactivar usuarios).
   const nuevoUsuario = await prisma.user.create({
     data: {
       nombre,
@@ -101,7 +110,7 @@ export const registerUserService = async (data: {
       tenantId: tenant.id,
       departamentoId: departamento.id,
       rol: "USER",
-      activo: true,
+      activo: false,
     },
     select: {
       id: true,
@@ -173,16 +182,19 @@ export const loginUserService = async (data: {
     where: { email: emailLimpio },
   });
 
+  const MENSAJE_CREDENCIALES_INVALIDAS = "Credenciales inválidas. Correo o contraseña incorrectos.";
+
   if (!usuario) {
-    throw new Error("Credenciales inválidas. Correo o contraseña incorrectos.");
+    throw new Error(MENSAJE_CREDENCIALES_INVALIDAS);
   }
 
-  // Verificar estado de la cuenta
-  if (!usuario.activo) {
-    throw new Error("La cuenta se encuentra inactiva.");
-  }
-
-  // Comparar contraseñas
+  // Comparar contraseñas ANTES de revelar el estado de la cuenta: si el
+  // estado (activa/inactiva) se comprobara primero, un correo existente pero
+  // desactivado respondería distinto a uno inexistente, permitiendo
+  // enumerar qué cuentas existen (y cuáles fueron desactivadas) sin conocer
+  // ninguna contraseña. Solo después de confirmar la contraseña correcta se
+  // revela el motivo específico (cuenta inactiva) — en ese punto quien
+  // pregunta ya demostró conocer la credencial real.
   const esPasswordValida = await bcrypt.compare(password, usuario.passwordHash);
 
   if (!esPasswordValida) {
@@ -199,7 +211,13 @@ export const loginUserService = async (data: {
         detalle: `Intento de inicio de sesión con contraseña incorrecta para ${usuario.email}.`,
       },
     });
-    throw new Error("Credenciales inválidas. Correo o contraseña incorrectos.");
+    throw new Error(MENSAJE_CREDENCIALES_INVALIDAS);
+  }
+
+  // Recién aquí, con la contraseña ya confirmada, es seguro revelar el
+  // estado de la cuenta.
+  if (!usuario.activo) {
+    throw new Error("La cuenta se encuentra inactiva.");
   }
 
   await prisma.user.update({

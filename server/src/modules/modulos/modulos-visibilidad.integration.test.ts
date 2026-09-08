@@ -134,7 +134,7 @@ describe.skipIf(!RUN)("Módulos — visibilidad por acceso efectivo (multi-tenan
       .get("/api/modulos/menu")
       .set("Authorization", `Bearer ${tokenSinPermiso}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((m: any) => m.id === moduloGeneralConPermisoId)).toBe(false);
+    expect(res.body.some((m: { id: string }) => m.id === moduloGeneralConPermisoId)).toBe(false);
   });
 
   it("el mismo módulo SÍ aparece para un superadmin (bypass existente, sin cambios de código)", async () => {
@@ -142,7 +142,7 @@ describe.skipIf(!RUN)("Módulos — visibilidad por acceso efectivo (multi-tenan
       .get("/api/modulos/menu")
       .set("Authorization", `Bearer ${tokenAdminA}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((m: any) => m.id === moduloGeneralConPermisoId)).toBe(true);
+    expect(res.body.some((m: { id: string }) => m.id === moduloGeneralConPermisoId)).toBe(true);
   });
 
   it("el mismo módulo SÍ aparece para un usuario con el permiso concreto", async () => {
@@ -167,7 +167,7 @@ describe.skipIf(!RUN)("Módulos — visibilidad por acceso efectivo (multi-tenan
     const token = await login(`modulos-conpermiso-${sufijo}@test.ricosoft.local`);
 
     const res = await request(app).get("/api/modulos/menu").set("Authorization", `Bearer ${token}`);
-    expect(res.body.some((m: any) => m.id === moduloGeneralConPermisoId)).toBe(true);
+    expect(res.body.some((m: { id: string }) => m.id === moduloGeneralConPermisoId)).toBe(true);
 
     await prisma.auditoria.deleteMany({ where: { usuarioId: conPermiso.id } });
     await prisma.user.delete({ where: { id: conPermiso.id } });
@@ -186,7 +186,7 @@ describe.skipIf(!RUN)("Módulos — visibilidad por acceso efectivo (multi-tenan
     const listado = await request(app)
       .get("/api/modulos")
       .set("Authorization", `Bearer ${tokenAdminB}`);
-    expect(listado.body.some((m: any) => m.id === moduloExclusivoAId)).toBe(false);
+    expect(listado.body.some((m: { id: string }) => m.id === moduloExclusivoAId)).toBe(false);
 
     // Intentar modificarlo directamente por id -> 404.
     const intento = await request(app)
@@ -213,7 +213,7 @@ describe.skipIf(!RUN)("Módulos — visibilidad por acceso efectivo (multi-tenan
       const res = await request(app)
         .get("/api/modulos/menu")
         .set("Authorization", `Bearer ${tokenAdminA}`);
-      expect(res.body.some((m: any) => m.id === moduloGeneralConPermisoId)).toBe(false);
+      expect(res.body.some((m: { id: string }) => m.id === moduloGeneralConPermisoId)).toBe(false);
     } finally {
       await prisma.modulo.update({
         where: { id: moduloGeneralConPermisoId },

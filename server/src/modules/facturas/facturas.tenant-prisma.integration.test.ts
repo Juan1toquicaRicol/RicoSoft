@@ -31,7 +31,6 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
   let proveedorAId: string;
   let proveedorBId: string;
   let solicitudBId: string;
-  let contratoBId: string;
   let servicioBId: string;
   let facturaBId: string;
   let pagoBId: string;
@@ -137,21 +136,6 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
     });
     solicitudBId = solicitudB.id;
 
-    const contratoB = await prisma.contrato.create({
-      data: {
-        tenantId: tenantBId,
-        empresaId: "001",
-        proveedor: "Proveedor de B",
-        responsable: "Responsable B",
-        area: "Administración",
-        valorContratado: 1000000,
-        fechaInicio: new Date(),
-        fechaFin: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        estado: "Activo",
-      },
-    });
-    contratoBId = contratoB.id;
-
     const servicioB = await prisma.servicioSuscripcion.create({
       data: {
         tenantId: tenantBId,
@@ -212,7 +196,6 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
     });
     await prisma.solicitudCompra.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.servicioSuscripcion.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.contrato.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.proveedor.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -231,8 +214,8 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
 
     const res = await request(app).get("/api/facturas").set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((f: any) => f.id === facturaBId)).toBe(false);
-    expect(res.body.some((f: any) => f.id === creada.body.id)).toBe(true);
+    expect(res.body.some((f: { id: string }) => f.id === facturaBId)).toBe(false);
+    expect(res.body.some((f: { id: string }) => f.id === creada.body.id)).toBe(true);
   });
 
   it("2. Tenant A no puede obtener una factura de Tenant B (404)", async () => {
@@ -332,18 +315,6 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
     expect(enDb).toBeNull();
   });
 
-  it("11. Crear una factura referenciando un Contrato de otro tenant falla (404)", async () => {
-    const numero = `FAC-CONT-B-${sufijo}`;
-    const res = await request(app)
-      .post("/api/facturas")
-      .set("Authorization", `Bearer ${tokenA}`)
-      .send(datosFacturaBase({ numero, contratoId: contratoBId }));
-    expect(res.status).toBe(404);
-
-    const enDb = await prisma.factura.findFirst({ where: { tenantId: tenantAId, numero } });
-    expect(enDb).toBeNull();
-  });
-
   it("12. Crear una factura referenciando un ServicioSuscripcion de otro tenant falla (404)", async () => {
     const numero = `FAC-SERV-B-${sufijo}`;
     const res = await request(app)
@@ -388,7 +359,7 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
     expect(pagina1.body.total).toBe(3);
     expect(pagina1.body.totalPages).toBe(2);
     // Ninguna factura de B se cuela aunque coincidiera con el término de búsqueda.
-    expect(pagina1.body.items.every((f: any) => f.id !== facturaBId)).toBe(true);
+    expect(pagina1.body.items.every((f: { id: string }) => f.id !== facturaBId)).toBe(true);
 
     const pagina2 = await request(app)
       .get("/api/facturas")
@@ -670,7 +641,7 @@ describe.skipIf(!RUN)("Facturas + Pagos — piloto tenant-prisma (Fase 4, multi-
     const listado = await request(app)
       .get("/api/facturas")
       .set("Authorization", `Bearer ${tokenA}`);
-    expect(listado.body.some((f: any) => f.id === facturaBId)).toBe(false);
+    expect(listado.body.some((f: { id: string }) => f.id === facturaBId)).toBe(false);
 
     const intento = await request(app)
       .delete(`/api/facturas/${facturaBId}`)

@@ -66,6 +66,53 @@ describe("calcularRangoComparativoAnual", () => {
     expect(rangoAnterior.hasta).toEqual(diaUTC(2025, 10, 1));
   });
 
+  it("objetivo TRIMESTRAL en curso: el rango actual cubre los 3 meses transcurridos, no solo el mes en curso", () => {
+    const { rangoActual, rangoAnterior } = calcularRangoComparativoAnual(
+      diaUTC(2026, 7, 1),
+      diaUTC(2026, 9, 30),
+      diaUTC(2026, 9, 15),
+    );
+    // Debe arrancar en julio (inicio del trimestre), no en septiembre.
+    expect(rangoActual.desde).toEqual(diaUTC(2026, 7, 1));
+    expect(rangoActual.hasta).toEqual(diaUTC(2026, 9, 16));
+    expect(rangoAnterior.desde).toEqual(diaUTC(2025, 7, 1));
+    expect(rangoAnterior.hasta).toEqual(diaUTC(2025, 9, 16));
+  });
+
+  it("objetivo ANUAL en curso: el rango actual cubre desde enero, no solo el mes en curso", () => {
+    const { rangoActual, rangoAnterior } = calcularRangoComparativoAnual(
+      diaUTC(2026, 1, 1),
+      diaUTC(2026, 12, 31),
+      diaUTC(2026, 9, 15),
+    );
+    expect(rangoActual.desde).toEqual(diaUTC(2026, 1, 1));
+    expect(rangoActual.hasta).toEqual(diaUTC(2026, 9, 16));
+    expect(rangoAnterior.desde).toEqual(diaUTC(2025, 1, 1));
+    expect(rangoAnterior.hasta).toEqual(diaUTC(2025, 9, 16));
+  });
+
+  it("objetivo ANUAL ya cerrado: usa el año calendario completo, no se corta en el mes en que se consultó", () => {
+    const { rangoActual, rangoAnterior } = calcularRangoComparativoAnual(
+      diaUTC(2026, 1, 1),
+      diaUTC(2026, 12, 31),
+      diaUTC(2027, 3, 1),
+    );
+    expect(rangoActual.desde).toEqual(diaUTC(2026, 1, 1));
+    expect(rangoActual.hasta).toEqual(diaUTC(2027, 1, 1));
+    expect(rangoAnterior.desde).toEqual(diaUTC(2025, 1, 1));
+    expect(rangoAnterior.hasta).toEqual(diaUTC(2026, 1, 1));
+  });
+
+  it("rango PERSONALIZADO arbitrario (no calza con mes/trimestre/año): igual respeta exactamente fechaInicio/fechaFin", () => {
+    const { rangoActual } = calcularRangoComparativoAnual(
+      diaUTC(2026, 3, 10),
+      diaUTC(2026, 5, 22),
+      diaUTC(2026, 4, 1),
+    );
+    expect(rangoActual.desde).toEqual(diaUTC(2026, 3, 10));
+    expect(rangoActual.hasta).toEqual(diaUTC(2026, 4, 2));
+  });
+
   it("maneja correctamente un rango que cruza 29 de febrero (año bisiesto)", () => {
     const { rangoActual, rangoAnterior } = calcularRangoComparativoAnual(
       diaUTC(2024, 2, 20),
@@ -119,6 +166,18 @@ describe("calcularRitmo", () => {
       5_000_000_000,
     );
     expect(r.ritmo).toBe("ATRASADO");
+  });
+
+  it("objetivo ANUAL: tiempo transcurrido se calcula sobre los 365 días del año, no sobre el mes en curso", () => {
+    const r = calcularRitmo(
+      diaUTC(2026, 1, 1),
+      diaUTC(2026, 12, 31),
+      diaUTC(2026, 7, 2), // día 183 de 365
+      1_800_000_000,
+      3_650_000_000,
+    );
+    expect(r.pctTiempoTranscurrido).toBeCloseTo(50.1, 0);
+    expect(r.pctMetaCumplida).toBeCloseTo(49.3, 0);
   });
 
   it("no divide por cero el primer día del período", () => {

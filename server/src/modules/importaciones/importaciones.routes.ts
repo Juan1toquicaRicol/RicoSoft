@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
 import {
   validarExpedienteIdParaArchivo,
@@ -27,6 +28,8 @@ import {
 import {
   listarOrdenesCompraIntl,
   obtenerOrdenCompraIntl,
+  obtenerTrmOficialController,
+  buscarItemsOrdenCompraIntl,
   crearOrdenCompraIntl,
   crearLoteImportacion,
   actualizarEstadoLote,
@@ -49,12 +52,61 @@ import {
   actualizarEstadoPagoImportacion,
   cerrarOrdenCompraIntl,
 } from "./importaciones.controller";
+import {
+  listarRequisitosProveedor,
+  crearRequisitoProveedor,
+  actualizarRequisitoProveedor,
+  eliminarRequisitoProveedor,
+} from "./importaciones-requisitos-proveedor.controller";
+import {
+  crearRequisitoProveedorSchema,
+  actualizarRequisitoProveedorSchema,
+} from "./importaciones-requisitos-proveedor.schemas";
 
 const router = Router();
 
 router.use(authenticateJWT);
+router.use(attachTenantPrisma);
+
+// Proveedores y requisitos — antes de "/:id" a propósito (mismo motivo que
+// /trm-oficial: si quedara después, Express interpretaría "proveedores"
+// como un :id).
+router.get(
+  "/proveedores/:proveedorId/requisitos",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_VER),
+  listarRequisitosProveedor,
+);
+router.post(
+  "/proveedores/:proveedorId/requisitos",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_CREAR),
+  validarBody(crearRequisitoProveedorSchema),
+  crearRequisitoProveedor,
+);
+router.patch(
+  "/proveedores/requisitos/:requisitoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_EDITAR),
+  validarBody(actualizarRequisitoProveedorSchema),
+  actualizarRequisitoProveedor,
+);
+router.delete(
+  "/proveedores/requisitos/:requisitoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_ELIMINAR),
+  eliminarRequisitoProveedor,
+);
 
 router.get("/", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), listarOrdenesCompraIntl);
+// Antes de "/:id" a propósito: si quedara después, Express interpretaría
+// "trm-oficial" como un :id y nunca llegaría a este handler.
+router.get(
+  "/trm-oficial",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
+  obtenerTrmOficialController,
+);
+router.get(
+  "/items-siesa/buscar",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
+  buscarItemsOrdenCompraIntl,
+);
 router.get("/:id", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), obtenerOrdenCompraIntl);
 router.post(
   "/",
