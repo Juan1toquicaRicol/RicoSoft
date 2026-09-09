@@ -210,9 +210,11 @@ type VistoBueno = Prisma.VistoBuenoAduaneroGetPayload<Record<string, never>>;
 type ExpedienteConVistosBuenos = Prisma.ExpedienteAduaneroGetPayload<Record<string, never>> & {
   vistosBuenos?: VistoBueno[];
 };
+type ContenedorLote = Prisma.ContenedorLoteGetPayload<Record<string, never>>;
 type LoteConDetalle = Prisma.LoteImportacionGetPayload<Record<string, never>> & {
   expediente?: ExpedienteConVistosBuenos | null;
   costeos?: CosteoDetalle[];
+  contenedores?: ContenedorLote[];
 };
 type HistorialConEvidencia = Prisma.ImportacionHistorialGetPayload<Record<string, never>>;
 type Actividad = Prisma.ImportacionActividadGetPayload<Record<string, never>>;
@@ -376,22 +378,77 @@ const serializarExpediente = (e: ExpedienteConVistosBuenos) => ({
   vistosBuenos: (e.vistosBuenos ?? []).map(serializarVistoBueno),
 });
 
-const serializarLote = (l: LoteConDetalle) => ({
-  id: l.id,
-  ordenCompraId: l.ordenCompraId,
-  blAwb: l.blAwb,
-  contenedor: l.contenedor,
-  precinto: l.precinto,
-  puertoOrigen: l.puertoOrigen,
-  puertoDestino: l.puertoDestino,
-  naviera: l.naviera,
-  fechaEmbarque: l.fechaEmbarque,
-  fechaLlegadaEstimada: l.fechaLlegadaEstimada,
-  fechaLlegadaReal: l.fechaLlegadaReal,
-  estado: l.estado,
-  expediente: l.expediente ? serializarExpediente(l.expediente) : null,
-  costeos: (l.costeos ?? []).map(serializarCosteo),
+const serializarContenedor = (c: ContenedorLote) => ({
+  id: c.id,
+  numero: c.numero,
+  ultimoEvento: c.ultimoEvento,
+  ultimoEventoFecha: c.ultimoEventoFecha,
+  eventos: (() => {
+    if (!c.eventosJson) return [];
+    try {
+      const valor = JSON.parse(c.eventosJson);
+      return Array.isArray(valor) ? valor : [];
+    } catch {
+      return [];
+    }
+  })(),
 });
+
+const serializarLote = (l: LoteConDetalle) => {
+  // Variación de ETA (§5): diferencia entre lo que informó el proveedor
+  // (fechaLlegadaEstimada) y lo que calcula el tracking marítimo en vivo
+  // (etaTrackingActual) — puramente informativo, nunca se persiste como
+  // "la" fecha oficial (esa sigue siendo fechaLlegadaEstimada).
+  const variacionEtaDias =
+    l.fechaLlegadaEstimada && l.etaTrackingActual
+      ? Math.round(
+          (l.etaTrackingActual.getTime() - l.fechaLlegadaEstimada.getTime()) /
+            (24 * 60 * 60 * 1000),
+        )
+      : null;
+
+  return {
+    id: l.id,
+    ordenCompraId: l.ordenCompraId,
+    blAwb: l.blAwb,
+    contenedor: l.contenedor,
+    precinto: l.precinto,
+    puertoOrigen: l.puertoOrigen,
+    puertoDestino: l.puertoDestino,
+    naviera: l.naviera,
+    forwarder: l.forwarder,
+    booking: l.booking,
+    fechaEmbarque: l.fechaEmbarque,
+    fechaLlegadaEstimada: l.fechaLlegadaEstimada,
+    fechaLlegadaReal: l.fechaLlegadaReal,
+    estado: l.estado,
+    buque:
+      l.buqueNombre || l.buqueImo || l.buqueMmsi
+        ? { nombre: l.buqueNombre, imo: l.buqueImo, mmsi: l.buqueMmsi }
+        : null,
+    tracking: {
+      estado: l.estadoTracking,
+      proveedor: l.proveedorTracking,
+      ultimoError: l.ultimoErrorTracking,
+      ultimaSincronizacion: l.ultimaSincronizacionTracking,
+      etaActual: l.etaTrackingActual,
+      variacionEtaDias,
+      posicion:
+        l.ultimaPosicionLat != null && l.ultimaPosicionLon != null
+          ? {
+              lat: l.ultimaPosicionLat,
+              lon: l.ultimaPosicionLon,
+              fecha: l.ultimaPosicionFecha,
+              velocidadNudos: l.velocidadNudos,
+              rumboGrados: l.rumboGrados,
+            }
+          : null,
+    },
+    contenedores: (l.contenedores ?? []).map(serializarContenedor),
+    expediente: l.expediente ? serializarExpediente(l.expediente) : null,
+    costeos: (l.costeos ?? []).map(serializarCosteo),
+  };
+};
 
 const serializarOrden = (o: OrdenParaSerializar) => ({
   id: o.id,
@@ -478,6 +535,7 @@ const INCLUDE_ORDEN_DETALLE = {
     include: {
       expediente: { include: { vistosBuenos: true } },
       costeos: { orderBy: { fechaLiquidacion: "desc" as const } },
+      contenedores: { orderBy: { numero: "asc" as const } },
     },
   },
   historial: { orderBy: { createdAt: "asc" as const } },
@@ -864,6 +922,11 @@ export const crearLoteImportacion = async (req: AuthenticatedRequest, res: Respo
       naviera,
       fechaEmbarque,
       fechaLlegadaEstimada,
+      booking,
+      forwarder,
+      buqueNombre,
+      buqueImo,
+      buqueMmsi,
     } = req.body;
 
     const lote = await prisma.loteImportacion.create({
@@ -878,6 +941,11 @@ export const crearLoteImportacion = async (req: AuthenticatedRequest, res: Respo
         naviera: naviera ?? null,
         fechaEmbarque: fechaEmbarque ? new Date(fechaEmbarque) : null,
         fechaLlegadaEstimada: fechaLlegadaEstimada ? new Date(fechaLlegadaEstimada) : null,
+        booking: booking ?? null,
+        forwarder: forwarder ?? null,
+        buqueNombre: buqueNombre ?? null,
+        buqueImo: buqueImo ?? null,
+        buqueMmsi: buqueMmsi ?? null,
       },
     });
 
@@ -975,6 +1043,150 @@ export const actualizarEstadoLote = async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     console.error("Error al actualizar estado del lote:", error);
     return res.status(500).json({ message: "Error al actualizar el estado del lote." });
+  }
+};
+
+/**
+ * Edita los datos de embarque/buque de un lote (Tracking Marítimo V1) —
+ * PATCH parcial, nunca toca estado/costeo/expediente (eso sigue en sus
+ * propios endpoints). Estos son justo los campos que la Bandeja Inteligente
+ * identifica de los correos del proveedor (booking, BL, buque, puertos) y
+ * que Comercio Exterior también puede completar/corregir a mano.
+ */
+export const actualizarEmbarqueLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const {
+      blAwb,
+      contenedor,
+      precinto,
+      puertoOrigen,
+      puertoDestino,
+      naviera,
+      booking,
+      forwarder,
+      buqueNombre,
+      buqueImo,
+      buqueMmsi,
+      fechaEmbarque,
+      fechaLlegadaEstimada,
+    } = req.body;
+
+    const actualizado = await prisma.loteImportacion.update({
+      where: { id: lote.id },
+      data: {
+        ...(typeof blAwb === "string" && blAwb.trim() ? { blAwb: blAwb.trim() } : {}),
+        ...(contenedor !== undefined ? { contenedor: contenedor || null } : {}),
+        ...(precinto !== undefined ? { precinto: precinto || null } : {}),
+        ...(typeof puertoOrigen === "string" && puertoOrigen.trim()
+          ? { puertoOrigen: puertoOrigen.trim() }
+          : {}),
+        ...(typeof puertoDestino === "string" && puertoDestino.trim()
+          ? { puertoDestino: puertoDestino.trim() }
+          : {}),
+        ...(naviera !== undefined ? { naviera: naviera || null } : {}),
+        ...(booking !== undefined ? { booking: booking || null } : {}),
+        ...(forwarder !== undefined ? { forwarder: forwarder || null } : {}),
+        ...(buqueNombre !== undefined ? { buqueNombre: buqueNombre || null } : {}),
+        ...(buqueImo !== undefined ? { buqueImo: buqueImo || null } : {}),
+        ...(buqueMmsi !== undefined ? { buqueMmsi: buqueMmsi || null } : {}),
+        ...(fechaEmbarque !== undefined
+          ? { fechaEmbarque: fechaEmbarque ? new Date(fechaEmbarque) : null }
+          : {}),
+        ...(fechaLlegadaEstimada !== undefined
+          ? { fechaLlegadaEstimada: fechaLlegadaEstimada ? new Date(fechaLlegadaEstimada) : null }
+          : {}),
+      },
+      include: { contenedores: { orderBy: { numero: "asc" } } },
+    });
+
+    await prisma.importacionHistorial.create({
+      data: {
+        ordenCompraId: lote.ordenCompraId,
+        actor: req.user!.nombre,
+        accion: "Datos de embarque actualizados",
+        detalle: `Lote ${lote.id.slice(0, 8)} — BL/AWB ${actualizado.blAwb}.`,
+        etapa: "Embarque",
+      },
+    });
+
+    return res.json(serializarLote(actualizado));
+  } catch (error) {
+    console.error("Error al actualizar el embarque del lote:", error);
+    return res.status(500).json({ message: "Error al actualizar los datos de embarque." });
+  }
+};
+
+export const crearContenedorLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const numeroContenedor = String(req.body.numero).trim().toUpperCase();
+    const existente = await prisma.contenedorLote.findFirst({
+      where: { loteId: lote.id, numero: numeroContenedor },
+    });
+    if (existente) {
+      return res
+        .status(409)
+        .json({ message: `El contenedor "${numeroContenedor}" ya está registrado en este lote.` });
+    }
+
+    const contenedor = await prisma.contenedorLote.create({
+      data: { loteId: lote.id, numero: numeroContenedor },
+    });
+
+    return res.status(201).json(serializarContenedor(contenedor));
+  } catch (error) {
+    console.error("Error al agregar contenedor:", error);
+    return res.status(500).json({ message: "Error al agregar el contenedor." });
+  }
+};
+
+export const eliminarContenedorLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const contenedor = await prisma.contenedorLote.findFirst({
+      where: { id: req.params.contenedorId, lote: { id: req.params.id, tenantId } },
+    });
+    if (!contenedor) return res.status(404).json({ message: "Contenedor no encontrado." });
+
+    await prisma.contenedorLote.delete({ where: { id: contenedor.id } });
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Error al eliminar contenedor:", error);
+    return res.status(500).json({ message: "Error al eliminar el contenedor." });
+  }
+};
+
+/**
+ * Sincronización manual de un lote concreto contra el proveedor de tracking
+ * marítimo — mismo motor que el job periódico (embarques-tracking.job.ts),
+ * llamado puntualmente para no esperar al próximo ciclo. Reutiliza el mismo
+ * provider/estado que el job (nunca duplica la lógica de comparación de
+ * ETA/eventos).
+ */
+export const sincronizarTrackingLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+
+    const { sincronizarUnLote } = await import("./embarques-tracking.job");
+    await sincronizarUnLote(lote.id);
+
+    const actualizado = await prisma.loteImportacion.findUnique({
+      where: { id: lote.id },
+      include: { contenedores: { orderBy: { numero: "asc" } } },
+    });
+    return res.json(serializarLote(actualizado!));
+  } catch (error) {
+    console.error("Error al sincronizar el tracking del lote:", error);
+    return res.status(500).json({ message: "Error al sincronizar el tracking marítimo." });
   }
 };
 

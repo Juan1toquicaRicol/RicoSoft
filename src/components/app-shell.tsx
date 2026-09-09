@@ -37,6 +37,7 @@ import {
   Gauge,
   ShoppingBag,
   Tags,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -79,6 +80,7 @@ const ICONOS_MODULO: Record<string, LucideIcon> = {
   Gauge,
   ShoppingBag,
   Truck,
+  ClipboardCheck,
 };
 
 interface AppShellProps {

@@ -17,6 +17,18 @@ export const TIPOS_REQUISITO_VALIDOS = [
   "ESPECIFICACION",
 ];
 
+/** Mismo patrón que parsearMateriales en proveedores.controller.ts — un
+ * valor corrupto/preexistente no debe tumbar la pantalla. */
+function parsearMateriales(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const valor = JSON.parse(json);
+    return Array.isArray(valor) ? valor.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Lista los requisitos ACTIVOS de un proveedor, ordenados por `orden` —
  * usado tanto por la pantalla de administración (con `?incluirInactivos=true`
@@ -31,7 +43,13 @@ export const listarRequisitosProveedor = async (req: AuthenticatedRequest, res: 
     const { proveedorId } = req.params;
     const proveedor = await req.tenantPrisma!.proveedor.findFirst({
       where: { id: proveedorId },
-      select: { id: true, nombre: true, nit: true },
+      select: {
+        id: true,
+        nombre: true,
+        nit: true,
+        paisOrigen: true,
+        materialesHabituales: true,
+      },
     });
     if (!proveedor) return res.status(404).json({ message: "Proveedor no encontrado." });
 
@@ -41,10 +59,60 @@ export const listarRequisitosProveedor = async (req: AuthenticatedRequest, res: 
       orderBy: { orden: "asc" },
     });
 
-    return res.json({ proveedor, requisitos });
+    return res.json({
+      proveedor: {
+        ...proveedor,
+        materialesHabituales: parsearMateriales(proveedor.materialesHabituales),
+      },
+      requisitos,
+    });
   } catch (error) {
     console.error("Error al listar requisitos del proveedor:", error);
     return res.status(500).json({ message: "Error al obtener los requisitos del proveedor." });
+  }
+};
+
+/**
+ * Proveedores que YA tienen algo configurado (país de origen, materiales
+ * habituales o al menos un requisito) — para mostrarlos de una vez en
+ * "Proveedores y Requisitos" sin tener que volver a buscarlos uno por uno en
+ * el selector. Un proveedor sin ninguno de los tres nunca aparece aquí (sería
+ * ruido: la lista completa de proveedores ya existe en Configuración).
+ */
+export const listarProveedoresConfigurados = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const proveedores = await req.tenantPrisma!.proveedor.findMany({
+      where: {
+        OR: [
+          { paisOrigen: { not: null } },
+          { materialesHabituales: { not: null } },
+          { requisitosImportacion: { some: {} } },
+        ],
+      },
+      select: {
+        id: true,
+        nombre: true,
+        nit: true,
+        paisOrigen: true,
+        materialesHabituales: true,
+        _count: { select: { requisitosImportacion: true } },
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    return res.json(
+      proveedores.map((p) => ({
+        id: p.id,
+        nombre: p.nombre,
+        nit: p.nit,
+        paisOrigen: p.paisOrigen,
+        materialesHabituales: parsearMateriales(p.materialesHabituales),
+        totalRequisitos: p._count.requisitosImportacion,
+      })),
+    );
+  } catch (error) {
+    console.error("Error al listar proveedores configurados:", error);
+    return res.status(500).json({ message: "Error al obtener los proveedores configurados." });
   }
 };
 

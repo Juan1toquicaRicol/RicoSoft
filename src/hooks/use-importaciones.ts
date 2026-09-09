@@ -61,6 +61,56 @@ export interface ExpedienteAduanero {
   vistosBuenos: VistoBuenoAduanero[];
 }
 
+// BOOKED | GATE_IN | LOADED | DEPARTED | TRANSSHIPMENT | ARRIVED_PORT |
+// DISCHARGED | DELIVERED — mismo catálogo EXACTO que
+// EVENTOS_CONTENEDOR_VALIDOS en maritime-tracking-provider.ts.
+export type EventoContenedorTipo =
+  | "BOOKED"
+  | "GATE_IN"
+  | "LOADED"
+  | "DEPARTED"
+  | "TRANSSHIPMENT"
+  | "ARRIVED_PORT"
+  | "DISCHARGED"
+  | "DELIVERED";
+
+export interface EventoContenedor {
+  tipo: EventoContenedorTipo;
+  fecha: string;
+  ubicacion: string | null;
+}
+
+export interface ContenedorLote {
+  id: string;
+  numero: string;
+  ultimoEvento: EventoContenedorTipo | null;
+  ultimoEventoFecha: string | null;
+  eventos: EventoContenedor[];
+}
+
+// PENDIENTE (nunca sincronizado) | ACTIVO | SIN_DATOS | ERROR — mismo
+// catálogo EXACTO que LoteImportacion.estadoTracking en el backend.
+export type EstadoTracking = "PENDIENTE" | "ACTIVO" | "SIN_DATOS" | "ERROR";
+
+export interface TrackingLote {
+  estado: EstadoTracking;
+  proveedor: string | null;
+  ultimoError: string | null;
+  ultimaSincronizacion: string | null;
+  etaActual: string | null;
+  /** Diferencia en días entre el ETA del tracking marítimo y el ETA
+   * informado por el proveedor (fechaLlegadaEstimada) — positivo = retraso,
+   * negativo = adelanto. Null si todavía no hay ambos datos para comparar. */
+  variacionEtaDias: number | null;
+  posicion: {
+    lat: number;
+    lon: number;
+    fecha: string | null;
+    velocidadNudos: number | null;
+    rumboGrados: number | null;
+  } | null;
+}
+
 export interface LoteImportacion {
   id: string;
   ordenCompraId: string;
@@ -70,10 +120,15 @@ export interface LoteImportacion {
   puertoOrigen: string;
   puertoDestino: string;
   naviera: string | null;
+  forwarder: string | null;
+  booking: string | null;
   fechaEmbarque: string | null;
   fechaLlegadaEstimada: string | null;
   fechaLlegadaReal: string | null;
   estado: EstadoLoteImportacion;
+  buque: { nombre: string | null; imo: string | null; mmsi: string | null } | null;
+  tracking: TrackingLote;
+  contenedores: ContenedorLote[];
   expediente: ExpedienteAduanero | null;
   costeos: CosteoImportacionDetalle[];
 }
@@ -291,7 +346,14 @@ export interface CrearLoteInput {
   naviera?: string;
   fechaEmbarque?: string;
   fechaLlegadaEstimada?: string;
+  booking?: string;
+  forwarder?: string;
+  buqueNombre?: string;
+  buqueImo?: string;
+  buqueMmsi?: string;
 }
+
+export type ActualizarEmbarqueInput = Partial<CrearLoteInput>;
 
 export interface LiquidarCosteoInput {
   trmLiquidacion: number;
@@ -466,6 +528,44 @@ export interface ActualizarRequisitoProveedor {
   orden?: number;
 }
 
+export interface ProveedorConfigurado {
+  id: string;
+  nombre: string;
+  nit: string;
+  paisOrigen: string | null;
+  materialesHabituales: string[];
+  totalRequisitos: number;
+}
+
+/**
+ * Proveedores que ya tienen algo configurado (país, materiales o al menos un
+ * requisito) — para "Proveedores y Requisitos", así quedan visibles de una
+ * vez sin tener que volver a buscarlos en el selector cada vez que se entra
+ * a la página.
+ */
+export function useProveedoresConfigurados() {
+  const [proveedores, setProveedores] = useState<ProveedorConfigurado[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAuth("/importaciones/proveedores/configurados");
+      setProveedores(Array.isArray(data) ? data : []);
+    } catch {
+      setProveedores([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { proveedores, loading, refresh };
+}
+
 /**
  * Requisitos de importación de UN proveedor (sección "Proveedores y
  * requisitos"). Por defecto solo trae los activos; `incluirInactivos`
@@ -473,9 +573,13 @@ export interface ActualizarRequisitoProveedor {
  * reactivarlos.
  */
 export function useRequisitosProveedor(proveedorId: string | undefined, incluirInactivos = false) {
-  const [proveedor, setProveedor] = useState<{ id: string; nombre: string; nit: string } | null>(
-    null,
-  );
+  const [proveedor, setProveedor] = useState<{
+    id: string;
+    nombre: string;
+    nit: string;
+    paisOrigen: string | null;
+    materialesHabituales: string[];
+  } | null>(null);
   const [requisitos, setRequisitos] = useState<RequisitoProveedorImportacion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -537,6 +641,22 @@ export function useRequisitosProveedor(proveedorId: string | undefined, incluirI
     [refresh],
   );
 
+  // Configuración general del proveedor mismo (no un requisito): país de
+  // origen y materiales habituales — instant-persist, igual que el toggle de
+  // "activo" de un requisito: no hay botón "Guardar" que se pueda perder al
+  // cambiar de módulo.
+  const actualizarConfiguracionProveedor = useCallback(
+    async (datos: { paisOrigen?: string; materialesHabituales?: string[] }) => {
+      if (!proveedorId) return;
+      await fetchAuth(`/proveedores/${proveedorId}`, {
+        method: "PATCH",
+        body: JSON.stringify(datos),
+      });
+      await refresh();
+    },
+    [proveedorId, refresh],
+  );
+
   return {
     proveedor,
     requisitos,
@@ -546,6 +666,7 @@ export function useRequisitosProveedor(proveedorId: string | undefined, incluirI
     crearRequisito,
     actualizarRequisito,
     eliminarRequisito,
+    actualizarConfiguracionProveedor,
   };
 }
 
@@ -554,21 +675,29 @@ export function useOrdenCompraIntl(id: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const refresh = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await fetchAuth(`/importaciones/${id}`);
-      setOrden(data);
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error cargando la orden de compra internacional.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const refresh = useCallback(
+    async (opciones: { silencioso?: boolean } = {}) => {
+      if (!id) return;
+      if (!opciones.silencioso) setLoading(true);
+      setError("");
+      try {
+        const data = await fetchAuth(`/importaciones/${id}`);
+        setOrden(data);
+      } catch (err: unknown) {
+        // Un refresco en segundo plano (polling) que falla no debe tapar la
+        // página con un mensaje de error — el usuario sigue viendo los
+        // últimos datos cargados; solo se muestra si es la carga inicial.
+        if (!opciones.silencioso) {
+          setError(
+            err instanceof Error ? err.message : "Error cargando la orden de compra internacional.",
+          );
+        }
+      } finally {
+        if (!opciones.silencioso) setLoading(false);
+      }
+    },
+    [id],
+  );
 
   useEffect(() => {
     refresh();
@@ -581,6 +710,46 @@ export function useOrdenCompraIntl(id: string | undefined) {
       await refresh();
     },
     [id, refresh],
+  );
+
+  const actualizarEmbarqueLote = useCallback(
+    async (loteId: string, data: ActualizarEmbarqueInput) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/embarque`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const agregarContenedor = useCallback(
+    async (loteId: string, numero: string) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/contenedores`, {
+        method: "POST",
+        body: JSON.stringify({ numero }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarContenedor = useCallback(
+    async (loteId: string, contenedorId: string) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/contenedores/${contenedorId}`, {
+        method: "DELETE",
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const sincronizarTracking = useCallback(
+    async (loteId: string) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/tracking/sincronizar`, { method: "POST" });
+      await refresh();
+    },
+    [refresh],
   );
 
   const actualizarEstadoLote = useCallback(
@@ -775,6 +944,10 @@ export function useOrdenCompraIntl(id: string | undefined) {
     refresh,
     addLote,
     actualizarEstadoLote,
+    actualizarEmbarqueLote,
+    agregarContenedor,
+    eliminarContenedor,
+    sincronizarTracking,
     recibirPreCompraPlanta,
     liquidarCosteoImportacion,
     actualizarExpediente,

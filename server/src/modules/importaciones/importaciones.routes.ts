@@ -13,6 +13,8 @@ import {
   crearLoteImportacionSchema,
   crearOrdenCompraIntlSchema,
   actualizarEstadoLoteSchema,
+  actualizarEmbarqueLoteSchema,
+  crearContenedorLoteSchema,
   liquidarCosteoImportacionSchema,
   actualizarExpedienteAduaneroSchema,
   crearVistoBuenoSchema,
@@ -33,6 +35,10 @@ import {
   crearOrdenCompraIntl,
   crearLoteImportacion,
   actualizarEstadoLote,
+  actualizarEmbarqueLote,
+  crearContenedorLote,
+  eliminarContenedorLote,
+  sincronizarTrackingLote,
   recibirPreCompraPlanta,
   liquidarCosteoImportacion,
   anularOrdenCompraIntl,
@@ -54,6 +60,7 @@ import {
 } from "./importaciones.controller";
 import {
   listarRequisitosProveedor,
+  listarProveedoresConfigurados,
   crearRequisitoProveedor,
   actualizarRequisitoProveedor,
   eliminarRequisitoProveedor,
@@ -71,6 +78,11 @@ router.use(attachTenantPrisma);
 // Proveedores y requisitos — antes de "/:id" a propósito (mismo motivo que
 // /trm-oficial: si quedara después, Express interpretaría "proveedores"
 // como un :id).
+router.get(
+  "/proveedores/configurados",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_VER),
+  listarProveedoresConfigurados,
+);
 router.get(
   "/proveedores/:proveedorId/requisitos",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_VER),
@@ -131,6 +143,31 @@ router.patch(
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
   validarBody(actualizarEstadoLoteSchema),
   actualizarEstadoLote,
+);
+// Tracking Marítimo V1 — embarque/buque/contenedores del lote. Mismo
+// permiso que el resto de la gestión de tránsito (booking/BL/naviera ya
+// vivían ahí; buque/tracking es la misma responsabilidad operativa).
+router.patch(
+  "/lotes/:id/embarque",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(actualizarEmbarqueLoteSchema),
+  actualizarEmbarqueLote,
+);
+router.post(
+  "/lotes/:id/contenedores",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(crearContenedorLoteSchema),
+  crearContenedorLote,
+);
+router.delete(
+  "/lotes/:id/contenedores/:contenedorId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  eliminarContenedorLote,
+);
+router.post(
+  "/lotes/:id/tracking/sincronizar",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  sincronizarTrackingLote,
 );
 router.patch(
   "/lotes/:id/recibir-pre-compra",

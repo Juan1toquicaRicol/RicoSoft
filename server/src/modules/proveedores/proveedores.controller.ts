@@ -1,6 +1,20 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { whereAlcance } from "../../lib/alcance";
+
+/** `materialesHabituales` se guarda como JSON (mismo patrón que
+ * ImportacionExcepcion.candidatos) — un valor corrupto/preexistente no debe
+ * tumbar el listado completo de proveedores. */
+function parsearMateriales(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const valor = JSON.parse(json);
+    return Array.isArray(valor) ? valor.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Búsqueda/listado paginado server-side (Fase 11/12 del plan Siesa): con
@@ -66,6 +80,8 @@ export const listarProveedores = async (req: AuthenticatedRequest, res: Response
         departamento: p.departamento
           ? { id: p.departamento.id, nombre: p.departamento.nombre }
           : null,
+        paisOrigen: p.paisOrigen,
+        materialesHabituales: parsearMateriales(p.materialesHabituales),
         origen: p.origen,
         ultimaSincronizacion: p.ultimaSincronizacion,
         facturasAsociadas: p._count.facturas,
@@ -86,8 +102,18 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
   try {
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(crearProveedorSchema).
-    const { nombre, nit, contacto, telefono, email, condicionesPago, datosPago, departamentoId } =
-      req.body;
+    const {
+      nombre,
+      nit,
+      contacto,
+      telefono,
+      email,
+      condicionesPago,
+      datosPago,
+      departamentoId,
+      paisOrigen,
+      materialesHabituales,
+    } = req.body;
 
     const nitLimpio = nit.trim();
     const existente = await req.tenantPrisma!.proveedor.findFirst({
@@ -104,7 +130,7 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
     let departamentoIdFinal: string | null = null;
     if (typeof departamentoId === "string" && departamentoId.trim()) {
       const departamentoDb = await prisma.departamento.findFirst({
-        where: { id: departamentoId, tenantId },
+        where: { id: departamentoId, ...whereAlcance(tenantId) },
       });
       if (!departamentoDb) {
         return res.status(404).json({ message: "El departamento seleccionado no existe." });
@@ -126,6 +152,10 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
             : null,
         datosPago: typeof datosPago === "string" && datosPago.trim() ? datosPago.trim() : null,
         departamentoId: departamentoIdFinal,
+        paisOrigen: typeof paisOrigen === "string" && paisOrigen ? paisOrigen : null,
+        materialesHabituales: Array.isArray(materialesHabituales)
+          ? JSON.stringify(materialesHabituales)
+          : null,
       },
       include: { departamento: { select: { id: true, nombre: true } } },
     });
@@ -156,6 +186,8 @@ export const crearProveedor = async (req: AuthenticatedRequest, res: Response) =
       departamento: proveedor.departamento
         ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
         : null,
+      paisOrigen: proveedor.paisOrigen,
+      materialesHabituales: parsearMateriales(proveedor.materialesHabituales),
       facturasAsociadas: 0,
       solicitudesAsociadas: 0,
     });
@@ -180,6 +212,8 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       datosPago,
       activo,
       departamentoId,
+      paisOrigen,
+      materialesHabituales,
     } = req.body;
 
     const existente = await req.tenantPrisma!.proveedor.findFirst({ where: { id, tenantId } });
@@ -246,6 +280,16 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
           : {}),
         ...(typeof activo === "boolean" ? { activo } : {}),
         ...(departamentoIdFinal !== undefined ? { departamentoId: departamentoIdFinal } : {}),
+        ...(paisOrigen !== undefined
+          ? { paisOrigen: typeof paisOrigen === "string" && paisOrigen ? paisOrigen : null }
+          : {}),
+        ...(materialesHabituales !== undefined
+          ? {
+              materialesHabituales: Array.isArray(materialesHabituales)
+                ? JSON.stringify(materialesHabituales)
+                : null,
+            }
+          : {}),
       },
       include: {
         departamento: { select: { id: true, nombre: true } },
@@ -288,6 +332,8 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
       departamento: proveedor.departamento
         ? { id: proveedor.departamento.id, nombre: proveedor.departamento.nombre }
         : null,
+      paisOrigen: proveedor.paisOrigen,
+      materialesHabituales: parsearMateriales(proveedor.materialesHabituales),
       facturasAsociadas: proveedor._count.facturas,
       solicitudesAsociadas: proveedor._count.solicitudesCompra,
     });

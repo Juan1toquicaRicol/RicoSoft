@@ -389,6 +389,17 @@ model Proveedor {
   /// proveedores existentes antes de este campo siguen apareciendo en todas
   /// partes sin necesidad de migrarlos uno por uno.
   departamentoId           String?               @db.UniqueIdentifier
+  /// País de origen del proveedor (mismo catálogo que
+  /// OrdenCompraIntl.paisOrigen — PAISES_VALIDOS en proveedores.controller.ts).
+  /// Null = no configurado todavía; no bloquea nada del proveedor, solo
+  /// alimenta el país que se sugiere/hereda al registrar una nueva orden de
+  /// compra internacional para este proveedor.
+  paisOrigen               String?               @db.VarChar(100)
+  /// Materiales que este proveedor usualmente importa (texto libre por
+  /// etiqueta, ej. "Telas", "Hilos") — JSON array de strings, igual patrón
+  /// que ImportacionExcepcion.candidatos. Solo informativo/de referencia
+  /// rápida en la ficha del proveedor, no valida contra ningún catálogo.
+  materialesHabituales     String?               @db.Text
   /// Identidad técnica estable del tercero en Siesa (t200_mm_terceros.f200_rowid),
   /// independiente del NIT — el NIT es un dato de negocio que puede
   /// corregirse en Siesa; este campo es lo que evita crear un proveedor
@@ -1713,18 +1724,85 @@ model LoteImportacion {
   puertoDestino        String                     @db.VarChar(100)
   naviera              String?                    @db.VarChar(255)
   fechaEmbarque        DateTime?
+  /// ETA informada por el proveedor/naviera (dato comercial, viene del
+  /// correo/documento) — se sigue llamando así por compatibilidad; en el
+  /// tracking marítimo (§Tracking V1) es "ETA proveedor" frente a
+  /// etaTrackingActual, que es la estimación en vivo del AIS.
   fechaLlegadaEstimada DateTime?
   fechaLlegadaReal     DateTime?
   estado               String                     @default("En tránsito") @db.VarChar(30)
   createdAt            DateTime                   @default(now())
+  /// Identificación del booking (distinto del BL/AWB, que ya existe) —
+  /// llega típicamente antes que el BL en el ciclo de vida real del
+  /// embarque, extraído por la Bandeja Inteligente de un correo de booking.
+  booking              String?                    @db.VarChar(100)
+  forwarder            String?                    @db.VarChar(255)
+  /// Identificación del buque — IMO/MMSI son los identificadores estables
+  /// que usa cualquier proveedor de tracking marítimo (AIS); el nombre solo
+  /// es para mostrar en pantalla, nunca se usa para buscar (puede repetirse
+  /// entre buques, IMO no).
+  buqueNombre          String?                    @db.VarChar(255)
+  buqueImo             String?                    @db.VarChar(20)
+  buqueMmsi            String?                    @db.VarChar(20)
+  /// ETA calculada en vivo por el proveedor de tracking marítimo (AIS),
+  /// independiente de fechaLlegadaEstimada (la que informó el proveedor
+  /// comercial) — la comparación entre ambas es lo que genera la alerta de
+  /// variación de ETA. Nunca se escribe automáticamente sobre
+  /// fechaLlegadaEstimada: son dos datos con dueños distintos (proveedor vs
+  /// AIS) que deben poder divergir y compararse.
+  etaTrackingActual    DateTime?
+  ultimaPosicionLat    Float?
+  ultimaPosicionLon    Float?
+  ultimaPosicionFecha  DateTime?
+  velocidadNudos       Float?
+  rumboGrados          Float?
+  /// PENDIENTE (nunca sincronizado) | ACTIVO (última sincronización con
+  /// datos) | SIN_DATOS (el proveedor de tracking no encontró el buque/IMO)
+  /// | ERROR (la última consulta falló — ver ultimoErrorTracking).
+  estadoTracking       String                     @default("PENDIENTE") @db.VarChar(20)
+  /// Nombre del adapter de MaritimeTrackingProvider que produjo el último
+  /// dato (ej. "mock", "vesselfinder") — permite cambiar de proveedor sin
+  /// perder trazabilidad de qué proveedor originó cada sincronización.
+  proveedorTracking    String?                    @db.VarChar(50)
+  ultimoErrorTracking  String?                    @db.Text
+  ultimaSincronizacionTracking DateTime?
   tenant               Tenant                     @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
   ordenCompra          OrdenCompraIntl            @relation(fields: [ordenCompraId], references: [id])
   expediente           ExpedienteAduanero?
   costeos              CosteoImportacionDetalle[]
   actividades          ImportacionActividad[]
+  contenedores         ContenedorLote[]
 
   @@index([tenantId, estado])
   @@index([ordenCompraId])
+}
+
+/// Contenedores de un lote/embarque — un lote puede tener varios (antes solo
+/// se registraba uno en LoteImportacion.contenedor, que se conserva para no
+/// romper datos existentes; los contenedores adicionales o con tracking
+/// propio viven aquí). El tracking marítimo por contenedor es más relevante
+/// operacionalmente que la posición del buque (ver Tracking Marítimo V1):
+/// saber en qué evento de la naviera está cada contenedor (booking, gate-in,
+/// cargado, zarpó, transbordo, arribo, descargado, entregado).
+model ContenedorLote {
+  id              String          @id @default(uuid()) @db.UniqueIdentifier
+  loteId          String          @db.UniqueIdentifier
+  numero          String          @db.VarChar(20)
+  /// BOOKED | GATE_IN | LOADED | DEPARTED | TRANSSHIPMENT | ARRIVED_PORT |
+  /// DISCHARGED | DELIVERED — catálogo cerrado validado en código.
+  ultimoEvento    String?         @db.VarChar(30)
+  ultimoEventoFecha DateTime?
+  /// Historial completo de eventos como JSON array de
+  /// {tipo, fecha, ubicacion} — mismo patrón que
+  /// ImportacionExcepcion.candidatos/Proveedor.materialesHabituales (JSON
+  /// como texto, sin tabla propia: es de solo lectura para el usuario, no
+  /// se consulta ni filtra por campo individual).
+  eventosJson     String?         @db.Text
+  createdAt       DateTime        @default(now())
+  lote            LoteImportacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  @@unique([loteId, numero])
+  @@index([loteId])
 }
 
 /// Soporte documental DIAN de un lote. DIM, factura comercial y certificado

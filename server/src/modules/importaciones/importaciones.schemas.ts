@@ -43,10 +43,39 @@ export const crearLoteImportacionSchema = z.object({
   naviera: z.string().nullish(),
   fechaEmbarque: z.string().nullish(),
   fechaLlegadaEstimada: z.string().nullish(),
+  // Tracking Marítimo V1 — opcionales al crear el lote (normalmente llegan
+  // después, vía Bandeja Inteligente o edición manual).
+  booking: z.string().nullish(),
+  forwarder: z.string().nullish(),
+  buqueNombre: z.string().nullish(),
+  buqueImo: z.string().nullish(),
+  buqueMmsi: z.string().nullish(),
 });
 
 export const actualizarEstadoLoteSchema = z.object({
   estado: z.string(textoObligatorio("El estado es obligatorio.")),
+});
+
+/** Edición de los datos de embarque/buque de un lote — todo opcional,
+ * PATCH parcial (mismo criterio que actualizarProveedorSchema). */
+export const actualizarEmbarqueLoteSchema = z.object({
+  blAwb: z.string().nullish(),
+  contenedor: z.string().nullish(),
+  precinto: z.string().nullish(),
+  puertoOrigen: z.string().nullish(),
+  puertoDestino: z.string().nullish(),
+  naviera: z.string().nullish(),
+  booking: z.string().nullish(),
+  forwarder: z.string().nullish(),
+  buqueNombre: z.string().nullish(),
+  buqueImo: z.string().nullish(),
+  buqueMmsi: z.string().nullish(),
+  fechaEmbarque: z.string().nullish(),
+  fechaLlegadaEstimada: z.string().nullish(),
+});
+
+export const crearContenedorLoteSchema = z.object({
+  numero: z.string(textoObligatorio("El número de contenedor es obligatorio.")).trim().min(1),
 });
 
 export const liquidarCosteoImportacionSchema = z.object({

@@ -6,6 +6,7 @@ import { iniciarSchedulerCrossChex } from "./jobs/crosschex-sync.job";
 import { iniciarSchedulerServiciosRenovacion } from "./jobs/servicios-renovacion.job";
 import { iniciarSchedulerIngestaCorreos } from "./modules/importaciones/importaciones-bandeja-ingesta.job";
 import { iniciarSchedulerProcesamientoCorreos } from "./modules/importaciones/importaciones-bandeja-procesamiento.job";
+import { iniciarSchedulerTrackingEmbarques } from "./modules/importaciones/embarques-tracking.job";
 
 if (!process.env.JWT_SECRET) {
   throw new Error(
@@ -78,6 +79,7 @@ Promise.all([
   iniciarSchedulerServiciosRenovacion();
   iniciarSchedulerIngestaCorreos();
   iniciarSchedulerProcesamientoCorreos();
+  iniciarSchedulerTrackingEmbarques();
   app.listen(PORT, () => {
     console.log(`🚀 Servidor listo en http://localhost:${PORT}`);
   });

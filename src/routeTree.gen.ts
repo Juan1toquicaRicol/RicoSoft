@@ -24,6 +24,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as OportunidadesRouteImport } from './routes/oportunidades'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PlanProduccionRouteImport } from './routes/plan-produccion'
+import { Route as ProveedoresRequisitosRouteImport } from './routes/proveedores-requisitos'
 import { Route as ProyeccionRouteImport } from './routes/proyeccion'
 import { Route as ReglasRouteImport } from './routes/reglas'
 import { Route as TomaFisicaRouteImport } from './routes/toma-fisica'
@@ -46,7 +47,7 @@ import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
 import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 import { Route as ImportacionesIndexRouteImport } from './routes/importaciones.index'
 import { Route as ImportacionesIdRouteImport } from './routes/importaciones.$id'
-import { Route as ImportacionesProveedoresRequisitosRouteImport } from './routes/importaciones.proveedores-requisitos'
+import { Route as ImportacionesNuevaRouteImport } from './routes/importaciones.nueva'
 import { Route as LogisticaCumplimientoRouteImport } from './routes/logistica.cumplimiento'
 import { Route as LogisticaNovedadesAbiertasRouteImport } from './routes/logistica.novedades-abiertas'
 import { Route as ServiciosIndexRouteImport } from './routes/servicios.index'
@@ -130,6 +131,11 @@ const PerfilRoute = PerfilRouteImport.update({
 const PlanProduccionRoute = PlanProduccionRouteImport.update({
   id: '/plan-produccion',
   path: '/plan-produccion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProveedoresRequisitosRoute = ProveedoresRequisitosRouteImport.update({
+  id: '/proveedores-requisitos',
+  path: '/proveedores-requisitos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProyeccionRoute = ProyeccionRouteImport.update({
@@ -248,12 +254,11 @@ const ImportacionesIdRoute = ImportacionesIdRouteImport.update({
   path: '/importaciones/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ImportacionesProveedoresRequisitosRoute =
-  ImportacionesProveedoresRequisitosRouteImport.update({
-    id: '/importaciones/proveedores-requisitos',
-    path: '/importaciones/proveedores-requisitos',
-    getParentRoute: () => rootRouteImport,
-  } as any)
+const ImportacionesNuevaRoute = ImportacionesNuevaRouteImport.update({
+  id: '/importaciones/nueva',
+  path: '/importaciones/nueva',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LogisticaCumplimientoRoute = LogisticaCumplimientoRouteImport.update({
   id: '/logistica/cumplimiento',
   path: '/logistica/cumplimiento',
@@ -318,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
   '/plan-produccion': typeof PlanProduccionRoute
+  '/proveedores-requisitos': typeof ProveedoresRequisitosRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
@@ -337,7 +343,7 @@ export interface FileRoutesByFullPath {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/proveedores-requisitos': typeof ImportacionesProveedoresRequisitosRoute
+  '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -366,6 +372,7 @@ export interface FileRoutesByTo {
   '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
   '/plan-produccion': typeof PlanProduccionRoute
+  '/proveedores-requisitos': typeof ProveedoresRequisitosRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
@@ -385,7 +392,7 @@ export interface FileRoutesByTo {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/proveedores-requisitos': typeof ImportacionesProveedoresRequisitosRoute
+  '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -416,6 +423,7 @@ export interface FileRoutesById {
   '/oportunidades': typeof OportunidadesRoute
   '/perfil': typeof PerfilRoute
   '/plan-produccion': typeof PlanProduccionRoute
+  '/proveedores-requisitos': typeof ProveedoresRequisitosRoute
   '/proyeccion': typeof ProyeccionRoute
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
@@ -435,7 +443,7 @@ export interface FileRoutesById {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/proveedores-requisitos': typeof ImportacionesProveedoresRequisitosRoute
+  '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -467,6 +475,7 @@ export interface FileRouteTypes {
     | '/oportunidades'
     | '/perfil'
     | '/plan-produccion'
+    | '/proveedores-requisitos'
     | '/proyeccion'
     | '/reglas'
     | '/toma-fisica'
@@ -486,7 +495,7 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/proveedores-requisitos'
+    | '/importaciones/nueva'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -515,6 +524,7 @@ export interface FileRouteTypes {
     | '/oportunidades'
     | '/perfil'
     | '/plan-produccion'
+    | '/proveedores-requisitos'
     | '/proyeccion'
     | '/reglas'
     | '/toma-fisica'
@@ -534,7 +544,7 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/proveedores-requisitos'
+    | '/importaciones/nueva'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -564,6 +574,7 @@ export interface FileRouteTypes {
     | '/oportunidades'
     | '/perfil'
     | '/plan-produccion'
+    | '/proveedores-requisitos'
     | '/proyeccion'
     | '/reglas'
     | '/toma-fisica'
@@ -583,7 +594,7 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/proveedores-requisitos'
+    | '/importaciones/nueva'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -614,6 +625,7 @@ export interface RootRouteChildren {
   OportunidadesRoute: typeof OportunidadesRoute
   PerfilRoute: typeof PerfilRoute
   PlanProduccionRoute: typeof PlanProduccionRoute
+  ProveedoresRequisitosRoute: typeof ProveedoresRequisitosRoute
   ProyeccionRoute: typeof ProyeccionRoute
   ReglasRoute: typeof ReglasRoute
   TomaFisicaRoute: typeof TomaFisicaRouteWithChildren
@@ -622,7 +634,7 @@ export interface RootRouteChildren {
   ComercialObjetivosRoute: typeof ComercialObjetivosRoute
   FacturasIdRoute: typeof FacturasIdRoute
   ImportacionesIdRoute: typeof ImportacionesIdRoute
-  ImportacionesProveedoresRequisitosRoute: typeof ImportacionesProveedoresRequisitosRoute
+  ImportacionesNuevaRoute: typeof ImportacionesNuevaRoute
   LogisticaCumplimientoRoute: typeof LogisticaCumplimientoRoute
   LogisticaNovedadesAbiertasRoute: typeof LogisticaNovedadesAbiertasRoute
   ServiciosIdRoute: typeof ServiciosIdRoute
@@ -740,6 +752,13 @@ declare module '@tanstack/react-router' {
       path: '/plan-produccion'
       fullPath: '/plan-produccion'
       preLoaderRoute: typeof PlanProduccionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proveedores-requisitos': {
+      id: '/proveedores-requisitos'
+      path: '/proveedores-requisitos'
+      fullPath: '/proveedores-requisitos'
+      preLoaderRoute: typeof ProveedoresRequisitosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/proyeccion': {
@@ -896,11 +915,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacionesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/importaciones/proveedores-requisitos': {
-      id: '/importaciones/proveedores-requisitos'
-      path: '/importaciones/proveedores-requisitos'
-      fullPath: '/importaciones/proveedores-requisitos'
-      preLoaderRoute: typeof ImportacionesProveedoresRequisitosRouteImport
+    '/importaciones/nueva': {
+      id: '/importaciones/nueva'
+      path: '/importaciones/nueva'
+      fullPath: '/importaciones/nueva'
+      preLoaderRoute: typeof ImportacionesNuevaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logistica/cumplimiento': {
@@ -1041,6 +1060,7 @@ const rootRouteChildren: RootRouteChildren = {
   OportunidadesRoute: OportunidadesRoute,
   PerfilRoute: PerfilRoute,
   PlanProduccionRoute: PlanProduccionRoute,
+  ProveedoresRequisitosRoute: ProveedoresRequisitosRoute,
   ProyeccionRoute: ProyeccionRoute,
   ReglasRoute: ReglasRoute,
   TomaFisicaRoute: TomaFisicaRouteWithChildren,
@@ -1049,8 +1069,7 @@ const rootRouteChildren: RootRouteChildren = {
   ComercialObjetivosRoute: ComercialObjetivosRoute,
   FacturasIdRoute: FacturasIdRoute,
   ImportacionesIdRoute: ImportacionesIdRoute,
-  ImportacionesProveedoresRequisitosRoute:
-    ImportacionesProveedoresRequisitosRoute,
+  ImportacionesNuevaRoute: ImportacionesNuevaRoute,
   LogisticaCumplimientoRoute: LogisticaCumplimientoRoute,
   LogisticaNovedadesAbiertasRoute: LogisticaNovedadesAbiertasRoute,
   ServiciosIdRoute: ServiciosIdRoute,

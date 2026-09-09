@@ -116,6 +116,12 @@ function DetalleCorreoBandeja() {
       actions={
         <div className="flex items-center gap-2">
           <Link
+            to="/importaciones"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Volver a Importaciones
+          </Link>
+          <Link
             to="/importaciones/bandeja"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
           >

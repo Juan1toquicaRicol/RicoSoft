@@ -1,13 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  Anchor,
   ArrowLeft,
   CheckCircle2,
   Lock,
+  MapPin,
   Package,
   Plus,
+  RefreshCw,
   Ship,
   Upload,
+  X,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -48,14 +52,17 @@ import {
   usePollingOrdenCompraIntl,
   ETIQUETA_RESPONSABLE_TIPO,
   ETIQUETA_TIPO_NOVEDAD,
+  type ActualizarEmbarqueInput,
   type ActualizarExpedienteInput,
   type ActualizarVistoBuenoInput,
+  type ContenedorLote,
   type CrearActividadInput,
   type CrearLoteInput,
   type CrearNovedadInput,
   type CrearPagoInput,
   type CrearVistoBuenoInput,
   type EtapaImportacion,
+  type EventoContenedorTipo,
   type LiquidarCosteoInput,
   type LoteImportacion,
   type ResponsableTipo,
@@ -67,6 +74,7 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money } from "@/lib/data";
+import { cn } from "@/lib/utils";
 import { requirePermisoGuard } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/importaciones/$id")({
@@ -170,6 +178,10 @@ function DetalleOrdenIntl() {
     refresh,
     addLote,
     actualizarEstadoLote,
+    actualizarEmbarqueLote,
+    agregarContenedor,
+    eliminarContenedor,
+    sincronizarTracking,
     recibirPreCompraPlanta,
     liquidarCosteoImportacion,
     actualizarExpediente,
@@ -190,7 +202,7 @@ function DetalleOrdenIntl() {
   } = useOrdenCompraIntl(id);
   const { user } = useSession();
 
-  usePollingOrdenCompraIntl(useCallback(() => refresh(), [refresh]));
+  usePollingOrdenCompraIntl(useCallback(() => refresh({ silencioso: true }), [refresh]));
 
   const puedeCrear = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CREAR);
   const puedeGestionarTransito = hasPermission(
@@ -742,6 +754,15 @@ function DetalleOrdenIntl() {
                     </Table>
                   </div>
                 )}
+
+                <EmbarqueTrackingPanel
+                  lote={lote}
+                  canManage={puedeGestionarTransito}
+                  onEditar={actualizarEmbarqueLote}
+                  onAgregarContenedor={agregarContenedor}
+                  onEliminarContenedor={eliminarContenedor}
+                  onSincronizar={sincronizarTracking}
+                />
 
                 <ExpedienteAduaneroPanel
                   lote={lote}
@@ -1722,6 +1743,378 @@ function DocumentoExpedienteSlot({
       ) : (
         <p className="mt-1.5 text-[11px] text-slate-400">Sin adjuntar</p>
       )}
+    </div>
+  );
+}
+
+// Mismo catálogo EXACTO que EVENTOS_CONTENEDOR_VALIDOS en
+// maritime-tracking-provider.ts — se usa también como la línea de tiempo
+// operacional del embarque (§6/§7 de la especificación): el evento más
+// avanzado entre todos los contenedores del lote define "dónde va" el
+// embarque. Sin datos de contenedores todavía, el timeline simplemente no
+// tiene nada que marcar como completado — nunca se inventa un estado.
+const EVENTOS_CONTENEDOR_ORDEN: EventoContenedorTipo[] = [
+  "BOOKED",
+  "GATE_IN",
+  "LOADED",
+  "DEPARTED",
+  "TRANSSHIPMENT",
+  "ARRIVED_PORT",
+  "DISCHARGED",
+  "DELIVERED",
+];
+const ETIQUETA_EVENTO_CONTENEDOR: Record<EventoContenedorTipo, string> = {
+  BOOKED: "Booking confirmado",
+  GATE_IN: "Contenedor en puerto de origen",
+  LOADED: "Carga realizada",
+  DEPARTED: "Buque zarpó",
+  TRANSSHIPMENT: "Transbordo",
+  ARRIVED_PORT: "Arribo a puerto",
+  DISCHARGED: "Descarga",
+  DELIVERED: "Entrega",
+};
+
+interface EmbarqueTrackingPanelProps {
+  lote: LoteImportacion;
+  canManage: boolean;
+  onEditar: (loteId: string, data: ActualizarEmbarqueInput) => Promise<void>;
+  onAgregarContenedor: (loteId: string, numero: string) => Promise<void>;
+  onEliminarContenedor: (loteId: string, contenedorId: string) => Promise<void>;
+  onSincronizar: (loteId: string) => Promise<void>;
+}
+
+function EmbarqueTrackingPanel({
+  lote,
+  canManage,
+  onEditar,
+  onAgregarContenedor,
+  onEliminarContenedor,
+  onSincronizar,
+}: EmbarqueTrackingPanelProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({
+    booking: lote.booking ?? "",
+    forwarder: lote.forwarder ?? "",
+    buqueNombre: lote.buque?.nombre ?? "",
+    buqueImo: lote.buque?.imo ?? "",
+    buqueMmsi: lote.buque?.mmsi ?? "",
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [nuevoContenedor, setNuevoContenedor] = useState("");
+  const [agregandoContenedor, setAgregandoContenedor] = useState(false);
+
+  const abrirEditar = () => {
+    setForm({
+      booking: lote.booking ?? "",
+      forwarder: lote.forwarder ?? "",
+      buqueNombre: lote.buque?.nombre ?? "",
+      buqueImo: lote.buque?.imo ?? "",
+      buqueMmsi: lote.buque?.mmsi ?? "",
+    });
+    setModalOpen(true);
+  };
+
+  const handleGuardar = async () => {
+    setGuardando(true);
+    try {
+      await onEditar(lote.id, form);
+      toast.success("Datos de embarque actualizados.");
+      setModalOpen(false);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el embarque.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const handleSincronizar = async () => {
+    setSincronizando(true);
+    try {
+      await onSincronizar(lote.id);
+      toast.success("Tracking sincronizado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al sincronizar el tracking.");
+    } finally {
+      setSincronizando(false);
+    }
+  };
+
+  const handleAgregarContenedor = async () => {
+    if (!nuevoContenedor.trim()) return;
+    setAgregandoContenedor(true);
+    try {
+      await onAgregarContenedor(lote.id, nuevoContenedor.trim());
+      setNuevoContenedor("");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al agregar el contenedor.");
+    } finally {
+      setAgregandoContenedor(false);
+    }
+  };
+
+  const tieneAlgoDeEmbarque =
+    lote.booking ||
+    lote.buque ||
+    lote.contenedores.length > 0 ||
+    lote.tracking.estado !== "PENDIENTE";
+  if (!tieneAlgoDeEmbarque && !canManage) return null;
+
+  // Etapa más avanzada entre todos los contenedores — ver comentario en
+  // EVENTOS_CONTENEDOR_ORDEN. -1 = ningún contenedor con eventos todavía.
+  const indiceActual = lote.contenedores.reduce((max, c) => {
+    const idx = c.ultimoEvento ? EVENTOS_CONTENEDOR_ORDEN.indexOf(c.ultimoEvento) : -1;
+    return Math.max(max, idx);
+  }, -1);
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          <Anchor className="h-3.5 w-3.5" /> Embarque
+        </h4>
+        <div className="flex items-center gap-1.5">
+          {canManage && (lote.buque?.imo || lote.buque?.mmsi) && (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={sincronizando}
+              onClick={handleSincronizar}
+              className="h-7 text-[11px] font-bold gap-1"
+            >
+              <RefreshCw className={cn("h-3 w-3", sincronizando && "animate-spin")} />
+              {sincronizando ? "Sincronizando..." : "Sincronizar ahora"}
+            </Button>
+          )}
+          {canManage && (
+            <Button size="xs" variant="outline" onClick={abrirEditar} className="h-7 text-[11px]">
+              Editar
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-[10px] uppercase font-bold text-slate-500">Buque</p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-800">
+            {lote.buque?.nombre || "Sin configurar"}
+          </p>
+          {(lote.buque?.imo || lote.buque?.mmsi) && (
+            <p className="text-[10px] text-slate-500">
+              {lote.buque?.imo && `IMO ${lote.buque.imo}`}
+              {lote.buque?.imo && lote.buque?.mmsi && " · "}
+              {lote.buque?.mmsi && `MMSI ${lote.buque.mmsi}`}
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-[10px] uppercase font-bold text-slate-500">Booking / Forwarder</p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-800">{lote.booking || "—"}</p>
+          {lote.forwarder && <p className="text-[10px] text-slate-500">{lote.forwarder}</p>}
+        </div>
+        <div>
+          <p className="text-[10px] uppercase font-bold text-slate-500">
+            ETA proveedor / ETA actual
+          </p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-800">
+            {lote.fechaLlegadaEstimada
+              ? new Date(lote.fechaLlegadaEstimada).toLocaleDateString("es-CO")
+              : "—"}
+            {lote.tracking.etaActual &&
+              ` → ${new Date(lote.tracking.etaActual).toLocaleDateString("es-CO")}`}
+          </p>
+          {lote.tracking.variacionEtaDias != null && lote.tracking.variacionEtaDias !== 0 && (
+            <p
+              className={cn(
+                "flex items-center gap-1 text-[10px] font-semibold",
+                lote.tracking.variacionEtaDias > 0 ? "text-amber-700" : "text-blue-700",
+              )}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {lote.tracking.variacionEtaDias > 0
+                ? `Retraso estimado: ${lote.tracking.variacionEtaDias} día(s)`
+                : `Adelanto estimado: ${Math.abs(lote.tracking.variacionEtaDias)} día(s)`}
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-[10px] uppercase font-bold text-slate-500">Tracking</p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-800">
+            {
+              {
+                PENDIENTE: "Sin sincronizar",
+                ACTIVO: "Activo",
+                SIN_DATOS: "Sin datos del proveedor",
+                ERROR: "Error en la última sincronización",
+              }[lote.tracking.estado]
+            }
+          </p>
+          {lote.tracking.posicion && (
+            <p className="flex items-center gap-1 text-[10px] text-slate-500">
+              <MapPin className="h-3 w-3 shrink-0" />
+              {lote.tracking.posicion.velocidadNudos?.toFixed(1)} kn
+              {lote.tracking.posicion.fecha &&
+                ` · ${new Date(lote.tracking.posicion.fecha).toLocaleString("es-CO")}`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Contenedores</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {lote.contenedores.map((c: ContenedorLote) => (
+            <Badge
+              key={c.id}
+              variant="outline"
+              className="border-slate-300 bg-slate-50 text-slate-700 gap-1 pr-1 text-[10px]"
+            >
+              {c.numero}
+              {c.ultimoEvento && (
+                <span className="text-slate-400">
+                  · {ETIQUETA_EVENTO_CONTENEDOR[c.ultimoEvento]}
+                </span>
+              )}
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => onEliminarContenedor(lote.id, c.id)}
+                  aria-label={`Quitar contenedor ${c.numero}`}
+                  className="rounded-full p-0.5 hover:bg-slate-200 text-slate-500 hover:text-slate-900"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </Badge>
+          ))}
+          {lote.contenedores.length === 0 && (
+            <p className="text-[11px] text-slate-500">Sin contenedores registrados.</p>
+          )}
+        </div>
+        {canManage && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <Input
+              value={nuevoContenedor}
+              onChange={(e) => setNuevoContenedor(e.target.value)}
+              placeholder='Ej: "MSCU1234567"'
+              disabled={agregandoContenedor}
+              className="h-8 max-w-[180px] text-[11px] border-slate-300"
+            />
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={handleAgregarContenedor}
+              disabled={agregandoContenedor || !nuevoContenedor.trim()}
+              className="h-8 text-[11px] font-bold gap-1"
+            >
+              <Plus className="h-3 w-3" /> Agregar
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {indiceActual >= 0 && (
+        <div>
+          <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+            Línea de tiempo del embarque
+          </p>
+          <ul className="space-y-0.5">
+            {EVENTOS_CONTENEDOR_ORDEN.map((evento, idx) => (
+              <li
+                key={evento}
+                className={cn(
+                  "flex items-center gap-1.5 text-[11px]",
+                  idx < indiceActual
+                    ? "text-slate-500"
+                    : idx === indiceActual
+                      ? "font-bold text-slate-900"
+                      : "text-slate-400",
+                )}
+              >
+                <span className="w-3 shrink-0 text-center">
+                  {idx < indiceActual ? "✓" : idx === indiceActual ? "●" : "○"}
+                </span>
+                {ETIQUETA_EVENTO_CONTENEDOR[evento]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Editar datos de embarque</DialogTitle>
+            <DialogDescription className="text-slate-500">BL/AWB {lote.blAwb}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Booking</Label>
+                <Input
+                  value={form.booking}
+                  onChange={(e) => setForm({ ...form, booking: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Forwarder</Label>
+                <Input
+                  value={form.forwarder}
+                  onChange={(e) => setForm({ ...form, forwarder: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Nombre del buque</Label>
+              <Input
+                value={form.buqueNombre}
+                onChange={(e) => setForm({ ...form, buqueNombre: e.target.value })}
+                className="h-9 text-xs border-slate-300"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">IMO</Label>
+                <Input
+                  value={form.buqueImo}
+                  onChange={(e) => setForm({ ...form, buqueImo: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">MMSI</Label>
+                <Input
+                  value={form.buqueMmsi}
+                  onChange={(e) => setForm({ ...form, buqueMmsi: e.target.value })}
+                  className="h-9 text-xs border-slate-300"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              IMO/MMSI identifican el buque ante el proveedor de tracking marítimo — sin al menos
+              uno de los dos, el embarque no puede sincronizarse automáticamente.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalOpen(false)}
+              disabled={guardando}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" onClick={handleGuardar} disabled={guardando}>
+              {guardando ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

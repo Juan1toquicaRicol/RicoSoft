@@ -71,6 +71,18 @@ describe("RegexDocumentExtractionProvider", () => {
     expect(campoEta?.pagina).toBe(1);
   });
 
+  it("packing list: distingue cantidad comercial de peso total (§ propuesta cantidad vs peso)", async () => {
+    const textoPackingList = "PACKING LIST - PO-4587\n500 SACOS DE 25 KG C/U\nPESO NETO: 12.500 KG";
+    const resultado = await provider.extraer(Buffer.from(textoPackingList, "utf-8"), "text/plain");
+    const porCampo = Object.fromEntries(resultado.campos.map((c) => [c.campo, c.valor]));
+
+    // La cantidad comercial es 500 (lo que va en el ítem de la orden), nunca
+    // el peso — mezclarlos es justo el error que un humano puede cometer.
+    expect(porCampo.cantidadComercial).toBe("500");
+    expect(porCampo.unidadComercial).toBe("SACOS DE 25 KG C/U");
+    expect(porCampo.pesoTotalKg).toBe("12.500");
+  });
+
   it("un documento sin ningún campo reconocible no lanza, solo devuelve una lista vacía", async () => {
     const resultado = await provider.extraer(
       Buffer.from("Este documento no tiene ningún dato reconocible.", "utf-8"),

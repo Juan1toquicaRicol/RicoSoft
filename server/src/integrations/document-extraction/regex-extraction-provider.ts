@@ -50,6 +50,62 @@ const REGLAS: ReglaExtraccion[] = [
   { campo: "puertoDestino", patron: /\b(?:Port\s*of\s*Discharge|POD)[\s:]*([A-Za-z\s,]{3,60})/i },
 ];
 
+/**
+ * Cantidad comercial (bultos) vs peso total — un Packing List típico dice
+ * algo como "500 SACOS DE 25 KG C/U ... PESO NETO: 12.500 KG": la cantidad
+ * comercial es 500 (lo que va en el ítem de la orden), NO el peso. Estos dos
+ * datos van en campos separados a propósito (misma distinción que
+ * ItemOrdenCompraIntl.cantidad vs .pesoKg) — mezclarlos sería justo el error
+ * que un humano puede cometer al leer el documento de corrido.
+ *
+ * El valor extraído se guarda TAL CUAL aparece en el texto (sin normalizar
+ * separadores de miles, que son ambiguos entre locales: "12.500" puede ser
+ * doce mil quinientos o doce coma cinco) — es un dato para que un humano
+ * revise/confirme, no algo que se escriba solo en la orden (§12: la
+ * automatización propone, nunca decide cantidades).
+ */
+const REGLA_BULTOS =
+  /(\d[\d.,]*)\s*(SACOS?|BOLSAS?|BAGS?|BULTOS?|CAJAS?|BOXES?|PALLETS?|TAMBORES?|DRUMS?)\s*(?:DE|OF)?\s*(\d[\d.,]*)\s*KG(?:\s*(?:C\/U|CADA\s*UNO|EACH))?/i;
+const REGLA_PESO_TOTAL = /\b(?:PESO\s*NETO|NET\s*WEIGHT)[\s:]*(\d[\d.,]*)\s*KG\b/i;
+
+function extraerCantidadYPeso(texto: string, paginas: string[]): CampoExtraido[] {
+  const encontrados: CampoExtraido[] = [];
+
+  const matchBultos = texto.match(REGLA_BULTOS);
+  if (matchBultos) {
+    const [textoCompleto, cantidad, tipoBulto, pesoUnitario] = matchBultos;
+    const evidencia = contextoAlrededorDe(texto, matchBultos.index ?? 0, textoCompleto.length);
+    const pagina = paginaDelFragmento(paginas, textoCompleto);
+    encontrados.push({
+      campo: "cantidadComercial",
+      valor: cantidad,
+      pagina,
+      confianza: 1,
+      evidencia,
+    });
+    encontrados.push({
+      campo: "unidadComercial",
+      valor: `${tipoBulto.toUpperCase()} DE ${pesoUnitario} KG C/U`,
+      pagina,
+      confianza: 1,
+      evidencia,
+    });
+  }
+
+  const matchPeso = texto.match(REGLA_PESO_TOTAL);
+  if (matchPeso) {
+    encontrados.push({
+      campo: "pesoTotalKg",
+      valor: matchPeso[1],
+      pagina: paginaDelFragmento(paginas, matchPeso[0]),
+      confianza: 1,
+      evidencia: contextoAlrededorDe(texto, matchPeso.index ?? 0, matchPeso[0].length),
+    });
+  }
+
+  return encontrados;
+}
+
 function contextoAlrededorDe(texto: string, indice: number, largo: number): string {
   const inicio = Math.max(0, indice - 30);
   const fin = Math.min(texto.length, indice + largo + 30);
@@ -86,6 +142,8 @@ function extraerDeTexto(texto: string, paginas: string[]): CampoExtraido[] {
     });
     camposYaEncontrados.add(regla.campo);
   }
+
+  encontrados.push(...extraerCantidadYPeso(texto, paginas));
 
   return encontrados;
 }

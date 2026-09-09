@@ -93,6 +93,16 @@ function ProveedoresConfigPage() {
   const [formPago, setFormPago] = useState({ condicionesPago: "", datosPago: "" });
   const [guardandoPago, setGuardandoPago] = useState(false);
 
+  const [editandoDatos, setEditandoDatos] = useState<Proveedor | null>(null);
+  const [formDatos, setFormDatos] = useState({
+    nombre: "",
+    nit: "",
+    contacto: "",
+    telefono: "",
+    email: "",
+  });
+  const [guardandoDatos, setGuardandoDatos] = useState(false);
+
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
       case "estado":
@@ -169,6 +179,35 @@ function ProveedoresConfigPage() {
   const handleAbrirEdicionPago = (p: Proveedor) => {
     setEditandoPago(p);
     setFormPago({ condicionesPago: p.condicionesPago || "", datosPago: p.datosPago || "" });
+  };
+
+  const handleAbrirEdicionDatos = (p: Proveedor) => {
+    setEditandoDatos(p);
+    setFormDatos({
+      nombre: p.nombre,
+      nit: p.nit,
+      contacto: p.contacto || "",
+      telefono: p.telefono || "",
+      email: p.email || "",
+    });
+  };
+
+  const handleGuardarDatos = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editandoDatos) return;
+    if (!formDatos.nombre.trim() || !formDatos.nit.trim()) return;
+    setGuardandoDatos(true);
+    try {
+      await actualizarProveedor(editandoDatos.id, formDatos);
+      toast.success(`Datos de "${formDatos.nombre}" actualizados.`);
+      setEditandoDatos(null);
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al actualizar los datos del proveedor.",
+      );
+    } finally {
+      setGuardandoDatos(false);
+    }
   };
 
   const handleGuardarPago = async (e: React.FormEvent) => {
@@ -437,6 +476,15 @@ function ProveedoresConfigPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleAbrirEdicionDatos(p)}
+                          >
+                            Editar
+                          </Button>
+                        )}
+                        {puedeEditar && (
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => handleAbrirEdicionPago(p)}
                           >
                             Datos de pago
@@ -495,6 +543,61 @@ function ProveedoresConfigPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!editandoDatos} onOpenChange={(open) => !open && setEditandoDatos(null)}>
+        <DialogContent className="bg-white">
+          <DialogHeader>
+            <DialogTitle>Editar proveedor — {editandoDatos?.nombre}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleGuardarDatos} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">Nombre *</label>
+                <Input
+                  required
+                  value={formDatos.nombre}
+                  onChange={(e) => setFormDatos({ ...formDatos, nombre: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">NIT *</label>
+                <Input
+                  required
+                  value={formDatos.nit}
+                  onChange={(e) => setFormDatos({ ...formDatos, nit: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">Persona de contacto</label>
+                <Input
+                  value={formDatos.contacto}
+                  onChange={(e) => setFormDatos({ ...formDatos, contacto: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">Teléfono</label>
+                <Input
+                  value={formDatos.telefono}
+                  onChange={(e) => setFormDatos({ ...formDatos, telefono: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-500">Correo</label>
+                <Input
+                  type="email"
+                  value={formDatos.email}
+                  onChange={(e) => setFormDatos({ ...formDatos, email: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" variant="success" disabled={guardandoDatos}>
+                {guardandoDatos ? "Guardando..." : "Guardar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editandoPago} onOpenChange={(open) => !open && setEditandoPago(null)}>
         <DialogContent className="bg-white">

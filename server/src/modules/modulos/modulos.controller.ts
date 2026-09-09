@@ -153,6 +153,13 @@ const CATALOGO_DEFECTO: Array<{
     icono: "Ship",
     permisoClave: "importaciones.ver",
   },
+  {
+    clave: "proveedores-requisitos",
+    nombre: "Proveedores y Requisitos",
+    ruta: "/proveedores-requisitos",
+    icono: "ClipboardCheck",
+    permisoClave: "importaciones.requisitos_ver",
+  },
 ];
 
 /**

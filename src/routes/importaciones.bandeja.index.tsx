@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, Inbox, Paperclip } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Inbox, Paperclip } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -53,6 +53,14 @@ function BandejaCorreosPage() {
     <AppShell
       title="Bandeja de Correos"
       description="Correos de proveedores de importaciones ingeridos y procesados automáticamente por la Bandeja Inteligente."
+      actions={
+        <Link
+          to="/importaciones"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Volver a Importaciones
+        </Link>
+      }
     >
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 p-4 bg-slate-50/80">

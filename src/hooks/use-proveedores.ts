@@ -15,6 +15,9 @@ export interface Proveedor {
   // para cualquier departamento (ver comentario en schema.prisma).
   departamentoId: string | null;
   departamento: { id: string; nombre: string } | null;
+  // País de origen (mismo catálogo que OrdenCompraIntl.paisOrigen); null = no
+  // configurado todavía.
+  paisOrigen: string | null;
   // Origen SIESA/MANUAL y última sincronización — ver plan de integración
   // Siesa → Proveedores. Ausentes en respuestas de antes de esa migración.
   origen?: "SIESA" | "MANUAL";
@@ -32,6 +35,7 @@ export interface DatosProveedor {
   condicionesPago?: string;
   datosPago?: string;
   departamentoId?: string | null;
+  paisOrigen?: string | null;
 }
 
 /**
@@ -121,6 +125,7 @@ export interface ProveedorOpcion {
   id: string;
   nombre: string;
   nit: string;
+  paisOrigen?: string | null;
 }
 
 /**
