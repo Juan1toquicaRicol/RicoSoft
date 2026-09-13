@@ -27,6 +27,36 @@ export const actualizarConfiguracionInventarioSchema = z
       })
       .min(1, "factorSeguridad no puede ser menor a 1.")
       .max(5, "factorSeguridad no puede ser mayor a 5."),
+    // Umbrales adicionales (auditoría de datos hardcodeados): opcionales para
+    // no romper llamadores existentes que solo mandan los campos de arriba —
+    // si se omiten, el upsert conserva el valor por defecto de la columna.
+    umbralVariabilidadAltaDemanda: z
+      .number()
+      .min(0, "umbralVariabilidadAltaDemanda debe ser mayor o igual a 0.")
+      .optional(),
+    umbralPerdidaRotacionDemanda: z
+      .number()
+      .min(0, "umbralPerdidaRotacionDemanda debe ser mayor o igual a 0.")
+      .max(1, "umbralPerdidaRotacionDemanda debe ser menor o igual a 1.")
+      .optional(),
+    umbralTendenciaFuertePctDemanda: z
+      .number()
+      .min(0, "umbralTendenciaFuertePctDemanda debe ser mayor o igual a 0.")
+      .optional(),
+    umbralAlertaTrmPct: z
+      .number()
+      .min(0, "umbralAlertaTrmPct debe ser mayor o igual a 0.")
+      .optional(),
+    plazoCreditoDiasDefecto: z
+      .number()
+      .int("plazoCreditoDiasDefecto debe ser un entero.")
+      .min(1, "plazoCreditoDiasDefecto debe ser mayor o igual a 1.")
+      .optional(),
+    minimoCotizacionesSolicitud: z
+      .number()
+      .int("minimoCotizacionesSolicitud debe ser un entero.")
+      .min(1, "minimoCotizacionesSolicitud debe ser mayor o igual a 1.")
+      .optional(),
   })
   .refine((v) => v.diasVendible < v.diasExceso, {
     message: "diasVendible debe ser menor que diasExceso.",

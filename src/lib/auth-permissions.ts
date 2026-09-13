@@ -56,6 +56,7 @@ export const PERMISOS_SISTEMA = {
   // Módulo Configuración Global
   CONFIGURACION_VER: "configuracion.ver",
   CONFIGURACION_EDITAR: "configuracion.editar",
+  CONFIGURACION_CATALOGOS: "configuracion.catalogos",
 
   // Módulo Gestión de Módulos (catálogo de módulos principales por departamento)
   MODULOS_VER: "modulos.ver",
@@ -409,6 +410,13 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     modulo: "Configuración",
     nombre: "Modificar configuración",
     descripcion: "Permite alterar parámetros del sistema.",
+  },
+  {
+    id: PERMISOS_SISTEMA.CONFIGURACION_CATALOGOS,
+    modulo: "Configuración",
+    nombre: "Gestionar catálogos",
+    descripcion:
+      "Permite crear, editar y eliminar valores de catálogos de referencia (incoterms, monedas, países, métodos de pago, motivos de novedad, etc.).",
   },
 
   // Módulos

@@ -19,86 +19,18 @@ import {
 import { evaluarCondicionesCierre } from "../../domain/importaciones/condiciones-cierre";
 import { obtenerTrmOficial } from "../../integrations/trm/trm.service";
 import { buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller";
 import { buscarItemsOrdenSchema } from "./importaciones.schemas";
 import type { z } from "zod";
 import type { itemOrdenSchema } from "./importaciones.schemas";
 
 type ItemOrdenBody = z.infer<typeof itemOrdenSchema>;
 
-const INCOTERMS_VALIDOS = [
-  "EXW",
-  "FCA",
-  "FAS",
-  "FOB",
-  "CFR",
-  "CIF",
-  "CPT",
-  "CIP",
-  "DAP",
-  "DPU",
-  "DDP",
-];
-const MONEDAS_VALIDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
-/**
- * País de origen normalizado (Fase de mejora del módulo, ver auditoría):
- * antes era texto libre ("China"/"china"/"CHINA" como valores distintos).
- * Mismo patrón que INCOTERMS_VALIDOS/MONEDAS_VALIDAS — una lista de
- * referencia estática validada en código, sin tabla propia (no hay
- * necesidad de administrar países desde una pantalla, ni datos adicionales
- * por país todavía). El frontend mantiene la MISMA lista literal (igual que
- * ya pasa con incoterm/moneda), no hay un paquete compartido en este repo.
- */
-const PAISES_VALIDOS = [
-  "Alemania",
-  "Arabia Saudita",
-  "Argentina",
-  "Bélgica",
-  "Bolivia",
-  "Brasil",
-  "Canadá",
-  "Chile",
-  "China",
-  "Colombia",
-  "Corea del Sur",
-  "Costa Rica",
-  "Ecuador",
-  "Emiratos Árabes Unidos",
-  "España",
-  "Estados Unidos",
-  "Francia",
-  "Guatemala",
-  "Hong Kong",
-  "India",
-  "Indonesia",
-  "Israel",
-  "Italia",
-  "Japón",
-  "Malasia",
-  "México",
-  "Países Bajos",
-  "Panamá",
-  "Perú",
-  "Polonia",
-  "Portugal",
-  "Reino Unido",
-  "República Dominicana",
-  "Singapur",
-  "Sudáfrica",
-  "Suiza",
-  "Tailandia",
-  "Taiwán",
-  "Turquía",
-  "Vietnam",
-];
-const FORMAS_PAGO_VALIDAS = [
-  "Anticipado",
-  "Carta de crédito",
-  "Crédito 30 días",
-  "Crédito 60 días",
-  "Crédito 90 días",
-  "Contra entrega",
-];
-const UNIDADES_MEDIDA_VALIDAS = ["KG", "TON", "SACO25KG", "SACO50KG", "LT", "UND"];
+// Incoterm/Moneda/País de origen/Forma de pago/Unidad de medida: antes
+// arrays hardcodeados aquí (y duplicados en el frontend) — ahora viven en
+// CatalogoValor (auditoría de datos hardcodeados) y se consultan vía
+// obtenerClavesActivasCatalogo (caché corta, ver módulo catalogos). El
+// GET /api/catalogos?tipo=... es la fuente que consume el frontend.
 const ESTADOS_ORDEN_VALIDOS = ["Borrador", "Confirmada", "Cerrada", "Anulada"];
 // Validación de forma en el controlador, mismo patrón que ESTADOS_ORDEN_VALIDOS
 // arriba — no una máquina de estados con transiciones: la regla de negocio de
@@ -180,19 +112,7 @@ const RESPONSABLE_TIPOS_VALIDOS = [
   "Otro",
 ];
 const ESTADOS_ACTIVIDAD_VALIDOS = ["Pendiente", "EnCurso", "Completada", "Bloqueada", "Omitida"];
-const TIPOS_NOVEDAD_VALIDOS = [
-  "Retraso",
-  "DocumentoFaltante",
-  "Inconsistencia",
-  "Dano",
-  "Faltante",
-  "ProblemaAduanero",
-  "ProblemaProveedor",
-  "ProblemaTransporte",
-  "ProblemaFinanciero",
-  "Bloqueo",
-  "Otro",
-];
+// TIPOS_NOVEDAD_VALIDOS: ahora en CatalogoValor (tipo="MOTIVO_NOVEDAD_IMPORTACION").
 const ORIGENES_NOVEDAD_VALIDOS = ["Interno", "Externo", "PorDeterminar"];
 const PRIORIDADES_NOVEDAD_VALIDAS = ["Alta", "Media", "Baja"];
 const ESTADOS_NOVEDAD_VALIDOS = ["Abierta", "EnGestion", "Resuelta"];
@@ -886,22 +806,28 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
       }
     }
 
-    if (!INCOTERMS_VALIDOS.includes(incoterm)) {
+    const [incotermsValidos, paisesValidos, monedasValidas, formasPagoValidas] = await Promise.all([
+      obtenerClavesActivasCatalogo(tenantId, "INCOTERM"),
+      obtenerClavesActivasCatalogo(tenantId, "PAIS_ORIGEN"),
+      obtenerClavesActivasCatalogo(tenantId, "MONEDA"),
+      obtenerClavesActivasCatalogo(tenantId, "FORMA_PAGO"),
+    ]);
+    if (!incotermsValidos.has(incoterm)) {
       return res.status(400).json({
-        message: `Incoterm inválido. Valores permitidos: ${INCOTERMS_VALIDOS.join(", ")}.`,
+        message: `Incoterm inválido. Valores permitidos: ${[...incotermsValidos].join(", ")}.`,
       });
     }
-    if (!PAISES_VALIDOS.includes(paisOrigen)) {
+    if (!paisesValidos.has(paisOrigen)) {
       return res.status(400).json({ message: "El país de origen seleccionado no es válido." });
     }
-    if (!MONEDAS_VALIDAS.includes(moneda)) {
-      return res
-        .status(400)
-        .json({ message: `Moneda inválida. Valores permitidos: ${MONEDAS_VALIDAS.join(", ")}.` });
-    }
-    if (formaPago != null && !FORMAS_PAGO_VALIDAS.includes(formaPago)) {
+    if (!monedasValidas.has(moneda)) {
       return res.status(400).json({
-        message: `Forma de pago inválida. Valores permitidos: ${FORMAS_PAGO_VALIDAS.join(", ")}.`,
+        message: `Moneda inválida. Valores permitidos: ${[...monedasValidas].join(", ")}.`,
+      });
+    }
+    if (formaPago != null && !formasPagoValidas.has(formaPago)) {
+      return res.status(400).json({
+        message: `Forma de pago inválida. Valores permitidos: ${[...formasPagoValidas].join(", ")}.`,
       });
     }
     // Sin catálogo local de proveedores extranjeros duplicado: si viene
@@ -922,10 +848,11 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
     if (!Number.isFinite(trm) || trm <= 0) {
       return res.status(400).json({ message: "La TRM pactada debe ser un número mayor a cero." });
     }
+    const unidadesMedidaValidas = await obtenerClavesActivasCatalogo(tenantId, "UNIDAD_MEDIDA");
     for (const item of items as ItemOrdenBody[]) {
-      if (item.unidadMedida != null && !UNIDADES_MEDIDA_VALIDAS.includes(item.unidadMedida)) {
+      if (item.unidadMedida != null && !unidadesMedidaValidas.has(item.unidadMedida)) {
         return res.status(400).json({
-          message: `Unidad de medida inválida en "${item.descripcion}". Valores permitidos: ${UNIDADES_MEDIDA_VALIDAS.join(", ")}.`,
+          message: `Unidad de medida inválida en "${item.descripcion}". Valores permitidos: ${[...unidadesMedidaValidas].join(", ")}.`,
         });
       }
     }
@@ -2258,9 +2185,13 @@ export const crearNovedadImportacion = async (req: AuthenticatedRequest, res: Re
       accionRequerida,
     } = req.body;
 
-    if (!TIPOS_NOVEDAD_VALIDOS.includes(tipo)) {
+    const tiposNovedadValidos = await obtenerClavesActivasCatalogo(
+      tenantId,
+      "MOTIVO_NOVEDAD_IMPORTACION",
+    );
+    if (!tiposNovedadValidos.has(tipo)) {
       return res.status(400).json({
-        message: `Tipo de novedad inválido. Valores permitidos: ${TIPOS_NOVEDAD_VALIDOS.join(", ")}.`,
+        message: `Tipo de novedad inválido. Valores permitidos: ${[...tiposNovedadValidos].join(", ")}.`,
       });
     }
     if (!descripcion || typeof descripcion !== "string" || !descripcion.trim()) {

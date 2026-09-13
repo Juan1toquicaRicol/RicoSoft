@@ -3,11 +3,8 @@ import { AlertTriangle, CheckCircle2, Circle, Clock } from "lucide-react";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { money } from "@/lib/data";
 import { cn } from "@/lib/utils";
-import {
-  ETIQUETA_RESPONSABLE_TIPO,
-  ETIQUETA_TIPO_NOVEDAD,
-  type OrdenCompraIntl,
-} from "@/hooks/use-importaciones";
+import { ETIQUETA_RESPONSABLE_TIPO, type OrdenCompraIntl } from "@/hooks/use-importaciones";
+import { useCatalogo } from "@/hooks/use-catalogos";
 
 function formatearFechaUTC(valor: string | Date): string {
   const fecha = new Date(valor);
@@ -346,6 +343,10 @@ export function ImportacionProgreso({ orden }: { orden: OrdenCompraIntl }) {
 /* ------------------------------------------------------------------ */
 
 export function ImportacionAccionesPendientes({ orden }: { orden: OrdenCompraIntl }) {
+  const { data: motivosNovedad } = useCatalogo("MOTIVO_NOVEDAD_IMPORTACION");
+  const etiquetaTipoNovedad = (clave: string) =>
+    motivosNovedad.find((m) => m.clave === clave)?.etiqueta ?? clave;
+
   const actividadesPendientes = orden.actividades
     .filter((a) => a.estado === "Pendiente" || a.estado === "EnCurso")
     .sort((a, b) => {
@@ -421,7 +422,7 @@ export function ImportacionAccionesPendientes({ orden }: { orden: OrdenCompraInt
                     )}
                   >
                     <span className="truncate font-semibold text-slate-800">
-                      {ETIQUETA_TIPO_NOVEDAD[n.tipo]}
+                      {etiquetaTipoNovedad(n.tipo)}
                     </span>
                     <span className="shrink-0 text-slate-500">Prioridad {n.prioridad}</span>
                   </li>

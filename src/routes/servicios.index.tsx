@@ -68,6 +68,7 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money, PeriodicidadServicio, type ServicioSuscripcion } from "@/lib/data";
+import { PLAZO_CREDITO_DIAS_DEFECTO } from "@/lib/constantes-negocio";
 
 export const Route = createFileRoute("/servicios/")({
   head: () => ({
@@ -143,7 +144,9 @@ function ServiciosPage() {
     periodicidad: "Mensual" as PeriodicidadServicio,
     costo: 350000,
     moneda: "COP" as "COP" | "USD",
-    fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    fechaRenovacion: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
     responsableId: "",
   });
 
@@ -240,7 +243,9 @@ function ServiciosPage() {
       periodicidad: "Mensual",
       costo: 350000,
       moneda: "COP",
-      fechaRenovacion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      fechaRenovacion: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
       responsableId: "",
     });
     setProveedorSeleccionadoNombre(undefined);

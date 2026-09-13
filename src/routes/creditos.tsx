@@ -70,6 +70,7 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import type { CreditoCliente } from "@/lib/data";
+import { PLAZO_CREDITO_DIAS_DEFECTO } from "@/lib/constantes-negocio";
 
 const OPCIONES_ESTADO_CREDITO = ["Todos", "Al día", "Por vencer", "Vencido", "Paz y Salvo"];
 const OPCIONES_ESTADO_SIESA = ["Todos", "Al día", "Por vencer", "Vencido"];
@@ -110,7 +111,9 @@ function Creditos() {
     cliente: "",
     cupo: 5000000,
     saldo: 0,
-    vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    vence: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
   });
 
   const [creditoAPagar, setCreditoAPagar] = useState<CreditoCliente | null>(null);
@@ -161,7 +164,9 @@ function Creditos() {
       cliente: "",
       cupo: 5000000,
       saldo: 0,
-      vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      vence: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
     });
   };
 

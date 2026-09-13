@@ -21,7 +21,10 @@
     "asignar-dominio-tenant": "tsx scripts/asignar-dominio-tenant.ts",
     "ci:preparar-db-integracion": "tsx scripts/ci-preparar-db-integracion.ts",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.mts"
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "lint": "cd .. && eslint server",
+    "typecheck": "tsc --noEmit"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

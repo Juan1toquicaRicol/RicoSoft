@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createApp } from "./app";
 import { prisma } from "./config/prisma";
+import { cerrarSiesaPool } from "./config/siesa";
 import { recuperarSincronizacionesBiometricoInterrumpidas } from "./jobs/crosschex-recovery";
 import { iniciarSchedulerCrossChex } from "./jobs/crosschex-sync.job";
 import { iniciarSchedulerServiciosRenovacion } from "./jobs/servicios-renovacion.job";
@@ -16,6 +17,10 @@ if (!process.env.JWT_SECRET) {
 
 const app = createApp();
 const PORT = process.env.PORT || 4000;
+
+// Referencia al servidor HTTP, necesaria para poder cerrarlo ordenadamente
+// (server.close()) desde los handlers de señales definidos más abajo.
+let server: ReturnType<typeof app.listen> | undefined;
 
 /**
  * Recuperación de sincronizaciones de Siesa interrumpidas (Fase 8 del plan):
@@ -53,6 +58,64 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
+/**
+ * Cierre ordenado ante SIGTERM/SIGINT (PM2 restart/stop, Ctrl+C, etc.):
+ * deja de aceptar conexiones HTTP nuevas, cierra las conexiones a las bases
+ * de datos (Prisma y el pool de Siesa) y solo entonces termina el proceso.
+ * Un timeout de seguridad evita que el proceso quede colgado para siempre
+ * si algún cierre no resuelve (p. ej. una conexión de Siesa a medio abrir).
+ */
+let cerrandoOrdenadamente = false;
+async function cerrarOrdenadamente(señal: string) {
+  if (cerrandoOrdenadamente) return;
+  cerrandoOrdenadamente = true;
+
+  console.log(`🛑 Señal ${señal} recibida, cerrando el servidor ordenadamente...`);
+
+  const timeoutSeguridad = setTimeout(() => {
+    console.error("⏱️  El cierre ordenado no terminó a tiempo, forzando salida del proceso.");
+    process.exit(1);
+  }, 10_000);
+  // No debe mantener el proceso vivo solo por este timer.
+  timeoutSeguridad.unref();
+
+  try {
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server!.close((err) => (err ? reject(err) : resolve()));
+      });
+      console.log("✅ Servidor HTTP cerrado, no acepta más conexiones.");
+    }
+
+    await prisma.$disconnect();
+    console.log("✅ Conexión a la base de datos (Prisma) cerrada.");
+
+    await cerrarSiesaPool();
+    console.log("✅ Pool de conexión a Siesa cerrado.");
+
+    clearTimeout(timeoutSeguridad);
+    console.log("👋 Cierre ordenado completo.");
+    process.exit(0);
+  } catch (err) {
+    console.error("Error durante el cierre ordenado:", err);
+    clearTimeout(timeoutSeguridad);
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => {
+  cerrarOrdenadamente("SIGTERM").catch((err) => {
+    console.error("Error inesperado cerrando ordenadamente:", err);
+    process.exit(1);
+  });
+});
+process.on("SIGINT", () => {
+  cerrarOrdenadamente("SIGINT").catch((err) => {
+    console.error("Error inesperado cerrando ordenadamente:", err);
+    process.exit(1);
+  });
+});
+
 Promise.all([
   recuperarSincronizacionesInterrumpidas().catch((err) =>
     console.error("Error recuperando sincronizaciones de Siesa interrumpidas:", err),
@@ -80,7 +143,7 @@ Promise.all([
   iniciarSchedulerIngestaCorreos();
   iniciarSchedulerProcesamientoCorreos();
   iniciarSchedulerTrackingEmbarques();
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`🚀 Servidor listo en http://localhost:${PORT}`);
   });
 });

@@ -15,8 +15,6 @@ export interface Pago {
   createdAt: string;
 }
 
-export const METODOS_PAGO: string[] = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
-
 /** Pagos de una factura concreta: soporta pagos parciales (una factura puede
  * tener varios) y expone el saldo pendiente calculado en backend. */
 export function usePagosFactura(facturaId: string | undefined) {

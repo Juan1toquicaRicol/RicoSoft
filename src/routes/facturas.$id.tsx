@@ -57,7 +57,8 @@ import {
 import { money } from "@/lib/data";
 import { siglaEmpresa } from "@/lib/tenant-context";
 import { useFacturas, usePollingFacturas } from "@/hooks/use-facturas";
-import { usePagosFactura, METODOS_PAGO, type Pago } from "@/hooks/use-pagos";
+import { usePagosFactura, type Pago } from "@/hooks/use-pagos";
+import { useCatalogo } from "@/hooks/use-catalogos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
@@ -510,6 +511,11 @@ function RegistrarPagoModal({
     observaciones: "",
   });
   const [guardando, setGuardando] = useState(false);
+  const {
+    data: metodosPago,
+    isLoading: cargandoMetodosPago,
+    error: errorMetodosPago,
+  } = useCatalogo("METODO_PAGO");
 
   // Cada vez que se abre el modal, precarga el saldo pendiente actual como
   // valor sugerido (lo normal es pagar el saldo completo; el usuario puede
@@ -600,19 +606,25 @@ function RegistrarPagoModal({
               </Label>
               <Select
                 value={form.metodoPago}
+                disabled={cargandoMetodosPago}
                 onValueChange={(val) => setForm({ ...form, metodoPago: val })}
               >
                 <SelectTrigger id="pago-metodo" className="h-9 text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder={cargandoMetodosPago ? "Cargando..." : undefined} />
                 </SelectTrigger>
                 <SelectContent>
-                  {METODOS_PAGO.map((m) => (
-                    <SelectItem key={m} value={m} className="text-xs">
-                      {m}
+                  {metodosPago.map((m) => (
+                    <SelectItem key={m.id} value={m.clave} className="text-xs">
+                      {m.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errorMetodosPago && (
+                <p className="text-[11px] text-red-600">
+                  No se pudieron cargar los métodos de pago.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="pago-referencia" className="text-xs font-semibold">

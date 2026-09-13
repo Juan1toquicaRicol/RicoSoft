@@ -59,7 +59,6 @@ import {
   useOrdenCompraIntl,
   usePollingOrdenCompraIntl,
   ETIQUETA_RESPONSABLE_TIPO,
-  ETIQUETA_TIPO_NOVEDAD,
   type ActualizarEmbarqueInput,
   type ActualizarExpedienteInput,
   type ActualizarVistoBuenoInput,
@@ -80,6 +79,7 @@ import {
   type VistoBuenoAduanero,
   TIPOS_DOCUMENTO_ORDEN_INTL,
 } from "@/hooks/use-importaciones";
+import { useCatalogo } from "@/hooks/use-catalogos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
@@ -134,20 +134,6 @@ const RESPONSABLE_TIPOS: ResponsableTipo[] = [
   "Naviera",
   "Otro",
 ];
-const TIPOS_NOVEDAD: TipoNovedad[] = [
-  "Retraso",
-  "DocumentoFaltante",
-  "Inconsistencia",
-  "Dano",
-  "Faltante",
-  "ProblemaAduanero",
-  "ProblemaProveedor",
-  "ProblemaTransporte",
-  "ProblemaFinanciero",
-  "Bloqueo",
-  "Otro",
-];
-
 const actividadVacia: CrearActividadInput = {
   nombre: "",
   etapa: "Documentación",
@@ -181,6 +167,13 @@ const liquidacionVacia: LiquidarCosteoInput = {
 
 function DetalleOrdenIntl() {
   const { id } = Route.useParams();
+  const {
+    data: motivosNovedad,
+    isLoading: cargandoMotivosNovedad,
+    error: errorMotivosNovedad,
+  } = useCatalogo("MOTIVO_NOVEDAD_IMPORTACION");
+  const etiquetaTipoNovedad = (clave: string) =>
+    motivosNovedad.find((m) => m.clave === clave)?.etiqueta ?? clave;
   const {
     orden,
     loading,
@@ -980,7 +973,7 @@ function DetalleOrdenIntl() {
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-bold text-slate-800">
-                          {ETIQUETA_TIPO_NOVEDAD[n.tipo]}
+                          {etiquetaTipoNovedad(n.tipo)}
                           {n.automatica && (
                             <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
                               Automática
@@ -1542,19 +1535,25 @@ function DetalleOrdenIntl() {
               <Label className="text-xs font-semibold text-slate-700">Tipo</Label>
               <Select
                 value={novedadForm.tipo}
+                disabled={cargandoMotivosNovedad}
                 onValueChange={(v) => setNovedadForm({ ...novedadForm, tipo: v as TipoNovedad })}
               >
                 <SelectTrigger className="h-9 text-xs border-slate-300">
-                  <SelectValue />
+                  <SelectValue placeholder={cargandoMotivosNovedad ? "Cargando..." : undefined} />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                  {TIPOS_NOVEDAD.map((t) => (
-                    <SelectItem key={t} value={t} className="text-xs">
-                      {ETIQUETA_TIPO_NOVEDAD[t]}
+                  {motivosNovedad.map((m) => (
+                    <SelectItem key={m.id} value={m.clave} className="text-xs">
+                      {m.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errorMotivosNovedad && (
+                <p className="text-[11px] text-red-600">
+                  No se pudieron cargar los motivos de novedad.
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">Descripción *</Label>

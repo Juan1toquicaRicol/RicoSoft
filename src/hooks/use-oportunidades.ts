@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
-export const ACCIONES_CONTACTO = [
+// Valores válidos de negocio (mismo enum que el backend espera) — ya no se
+// usan para poblar las opciones visibles del <Select> (eso viene del
+// catálogo ACCION_CONTACTO_OPORTUNIDAD/RESULTADO_CONTACTO_OPORTUNIDAD vía
+// useCatalogo), solo para tipar y para la lógica de negocio de abajo
+// (RESULTADOS_TERMINALES).
+const ACCIONES_CONTACTO_VALIDAS = [
   "Llamada",
   "WhatsApp",
   "Correo",
@@ -11,9 +16,9 @@ export const ACCIONES_CONTACTO = [
   "Seguimiento",
   "Otro",
 ] as const;
-export type AccionContacto = (typeof ACCIONES_CONTACTO)[number];
+export type AccionContacto = (typeof ACCIONES_CONTACTO_VALIDAS)[number];
 
-export const RESULTADOS_CONTACTO = [
+const RESULTADOS_CONTACTO_VALIDOS = [
   "Contactado",
   "SinRespuesta",
   "Interesado",
@@ -23,20 +28,9 @@ export const RESULTADOS_CONTACTO = [
   "NoInteresado",
   "VentaRealizada",
 ] as const;
-export type ResultadoContacto = (typeof RESULTADOS_CONTACTO)[number];
+export type ResultadoContacto = (typeof RESULTADOS_CONTACTO_VALIDOS)[number];
 
 export const RESULTADOS_TERMINALES = new Set<ResultadoContacto>(["NoInteresado", "VentaRealizada"]);
-
-export const ETIQUETA_RESULTADO: Record<ResultadoContacto, string> = {
-  Contactado: "Contactado",
-  SinRespuesta: "Sin respuesta",
-  Interesado: "Interesado",
-  CotizacionSolicitada: "Cotización solicitada",
-  CotizacionEnviada: "Cotización enviada",
-  EnNegociacion: "En negociación",
-  NoInteresado: "No interesado",
-  VentaRealizada: "Venta realizada",
-};
 
 export interface SeguimientoOportunidad {
   id: string;

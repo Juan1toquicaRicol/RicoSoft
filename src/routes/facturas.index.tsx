@@ -74,6 +74,7 @@ import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money, EstadoFactura, PrioridadOptions } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { PLAZO_CREDITO_DIAS_DEFECTO } from "@/lib/constantes-negocio";
 
 export const Route = createFileRoute("/facturas/")({
   head: () => ({
@@ -211,7 +212,9 @@ function FacturasPage() {
     solicitudCompraId: "",
     area: "",
     responsableId: "",
-    vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    vence: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
     subtotal: "",
     iva: "",
     prioridad: "Media",
@@ -353,7 +356,9 @@ function FacturasPage() {
       solicitudCompraId: "",
       area: "",
       responsableId: "",
-      vence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      vence: new Date(Date.now() + PLAZO_CREDITO_DIAS_DEFECTO * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
       subtotal: "",
       iva: "",
       prioridad: "Media",

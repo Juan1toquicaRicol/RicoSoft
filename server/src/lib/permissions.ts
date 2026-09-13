@@ -38,6 +38,7 @@ export const PERMISOS_SISTEMA = {
   PROVEEDORES_ELIMINAR: "proveedores.eliminar",
   CONFIGURACION_VER: "configuracion.ver",
   CONFIGURACION_EDITAR: "configuracion.editar",
+  CONFIGURACION_CATALOGOS: "configuracion.catalogos",
   MODULOS_VER: "modulos.ver",
   MODULOS_GESTIONAR: "modulos.gestionar",
   AUDITORIA_VER: "auditoria.ver",

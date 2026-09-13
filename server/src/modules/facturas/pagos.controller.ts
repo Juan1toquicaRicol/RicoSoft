@@ -7,8 +7,7 @@ import {
   UPLOADS_DIR_COMPROBANTES,
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
-
-const METODOS_PAGO_VALIDOS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
+import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller";
 
 // M-10 (hardening 2026-09-02): bajo dos pagos concurrentes reales sobre la
 // misma factura, SQL Server puede resolver el conflicto de escritura entre
@@ -153,7 +152,8 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
     // Forma del body ya validada por validarBody(registrarPagoSchema).
     const { fecha, valor, metodoPago, referencia, observaciones } = req.body;
 
-    if (!METODOS_PAGO_VALIDOS.includes(metodoPago)) {
+    const metodosPagoValidos = await obtenerClavesActivasCatalogo(tenantId, "METODO_PAGO");
+    if (!metodosPagoValidos.has(metodoPago)) {
       return res.status(400).json({ message: "El método de pago no es válido." });
     }
     const valorNum = Number(valor);

@@ -28,9 +28,19 @@ import type { VentaMensualProductoSiesa } from "../modules/integraciones-siesa/s
  *   anterior era realmente >0 — un producto que nunca vendió antes no
  *   puede estar "perdiendo" algo que no tenía).
  */
-const UMBRAL_VARIABILIDAD_ALTA = 0.75;
-const UMBRAL_PERDIDA_ROTACION = 0.5;
-const UMBRAL_TENDENCIA_FUERTE_PCT = 20;
+export interface UmbralesDemandaSiesa {
+  umbralVariabilidadAlta: number;
+  umbralPerdidaRotacion: number;
+  umbralTendenciaFuertePct: number;
+}
+
+/** Valores por defecto — usados si el tenant no configuró los suyos en
+ * ConfiguracionInventario (ver módulo inventario.controller.ts). */
+export const UMBRALES_DEMANDA_DEFECTO: UmbralesDemandaSiesa = {
+  umbralVariabilidadAlta: 0.75,
+  umbralPerdidaRotacion: 0.5,
+  umbralTendenciaFuertePct: 20,
+};
 const VENTANA_MESES = 12;
 
 function mesesAtras(ahora: Date, n: number): { anio: number; mes: number } {
@@ -86,7 +96,9 @@ export interface PronosticoDemandaSiesa {
 export function calcularPronosticoDemandaSiesa(
   ventasMensuales: VentaMensualProductoSiesa[],
   ahora: Date,
+  umbrales: UmbralesDemandaSiesa = UMBRALES_DEMANDA_DEFECTO,
 ): PronosticoDemandaSiesa {
+  const { umbralVariabilidadAlta, umbralPerdidaRotacion, umbralTendenciaFuertePct } = umbrales;
   const meses = Array.from({ length: VENTANA_MESES }, (_, i) => mesesAtras(ahora, i + 1));
   const ultimos3 = meses.slice(0, 3);
   const anteriores3 = meses.slice(3, 6);
@@ -143,13 +155,13 @@ export function calcularPronosticoDemandaSiesa(
 
     const avgBaseAnterior = promedio(nueveAnteriores.map((m) => p.porMes.get(claveMes(m)) ?? 0));
     const perdiendoRotacion =
-      avgBaseAnterior > 0 && avgUltimos3 < avgBaseAnterior * UMBRAL_PERDIDA_ROTACION;
+      avgBaseAnterior > 0 && avgUltimos3 < avgBaseAnterior * umbralPerdidaRotacion;
 
     const desviacion = desviacionEstandar(serie12, ventaPromedioMensual);
     const coeficienteVariacion =
       ventaPromedioMensual > 0 ? desviacion / ventaPromedioMensual : null;
     const demandaIrregular =
-      coeficienteVariacion !== null && coeficienteVariacion > UMBRAL_VARIABILIDAD_ALTA;
+      coeficienteVariacion !== null && coeficienteVariacion > umbralVariabilidadAlta;
 
     productos.push({
       itemRowId,
@@ -175,9 +187,7 @@ export function calcularPronosticoDemandaSiesa(
     .slice(0, 15);
 
   const tendenciaFuerte = productos
-    .filter(
-      (p) => p.tendenciaPct !== null && Math.abs(p.tendenciaPct) >= UMBRAL_TENDENCIA_FUERTE_PCT,
-    )
+    .filter((p) => p.tendenciaPct !== null && Math.abs(p.tendenciaPct) >= umbralTendenciaFuertePct)
     .sort((a, b) => Math.abs(b.tendenciaPct!) - Math.abs(a.tendenciaPct!))
     .slice(0, 15);
 

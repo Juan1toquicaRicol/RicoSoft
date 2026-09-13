@@ -12,7 +12,7 @@ import {
   calcularResumenInventarioSiesa,
   UMBRALES_INVENTARIO_DEFECTO,
 } from "../../lib/inventario-siesa";
-import { calcularPronosticoDemandaSiesa } from "../../lib/demanda-siesa";
+import { calcularPronosticoDemandaSiesa, UMBRALES_DEMANDA_DEFECTO } from "../../lib/demanda-siesa";
 import { calcularProduccionRecomendadaSiesa } from "../../lib/produccion-siesa";
 import { calcularOportunidadComercialSiesa } from "../../lib/oportunidad-comercial-siesa";
 import {
@@ -56,6 +56,13 @@ async function obtenerUmbralesInventario(req: AuthenticatedRequest, tenantId: st
           factorSeguridad: config.factorSeguridad,
         }
       : UMBRALES_INVENTARIO_OBJETIVO_DEFECTO,
+    demanda: config
+      ? {
+          umbralVariabilidadAlta: config.umbralVariabilidadAltaDemanda,
+          umbralPerdidaRotacion: config.umbralPerdidaRotacionDemanda,
+          umbralTendenciaFuertePct: config.umbralTendenciaFuertePctDemanda,
+        }
+      : UMBRALES_DEMANDA_DEFECTO,
   };
 }
 
@@ -134,10 +141,17 @@ export const obtenerPronosticoDemandaGerencial = async (
   const desde = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 13, 1));
 
   try {
-    const ventasMensuales = await leerVentasMensualesPorProductoSiesa(tenant.siesaCiaId, desde);
+    const [ventasMensuales, umbrales] = await Promise.all([
+      leerVentasMensualesPorProductoSiesa(tenant.siesaCiaId, desde),
+      obtenerUmbralesInventario(req, tenantId),
+    ]);
     // `todos` es de uso interno (ver produccion-siesa.ts) — no se expone en
     // este endpoint, que solo alimenta el dashboard de demanda.
-    const { todos: _todos, ...pronostico } = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
+    const { todos: _todos, ...pronostico } = calcularPronosticoDemandaSiesa(
+      ventasMensuales,
+      ahora,
+      umbrales.demanda,
+    );
     return res.json({ disponible: true, ...pronostico });
   } catch (error) {
     console.error("Error al calcular el pronóstico de demanda desde Siesa:", error);
@@ -177,11 +191,12 @@ export const obtenerProduccionRecomendadaGerencial = async (
   const desde = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 13, 1));
 
   try {
-    const [ventasMensuales, existencias] = await Promise.all([
+    const [ventasMensuales, existencias, umbrales] = await Promise.all([
       leerVentasMensualesPorProductoSiesa(tenant.siesaCiaId, desde),
       leerExistenciasSiesa(tenant.siesaCiaId),
+      obtenerUmbralesInventario(req, tenantId),
     ]);
-    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
+    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora, umbrales.demanda);
     const recomendaciones = calcularProduccionRecomendadaSiesa(pronostico.todos, existencias);
     return res.json({ disponible: true, recomendaciones });
   } catch (error) {
@@ -267,7 +282,7 @@ export const obtenerCoberturaGerencial = async (req: AuthenticatedRequest, res: 
       leerExistenciasSiesa(tenant.siesaCiaId),
       obtenerUmbralesInventario(req, tenantId),
     ]);
-    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
+    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora, umbrales.demanda);
     return res.json({
       disponible: true,
       ...calcularResumenCoberturaSiesa(existencias, pronostico.todos, umbrales.cobertura),
@@ -307,12 +322,13 @@ export const obtenerAbastecimientoGerencial = async (req: AuthenticatedRequest, 
   const desde = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 13, 1));
 
   try {
-    const [ventasMensuales, existencias, bom] = await Promise.all([
+    const [ventasMensuales, existencias, bom, umbrales] = await Promise.all([
       leerVentasMensualesPorProductoSiesa(tenant.siesaCiaId, desde),
       leerExistenciasSiesa(tenant.siesaCiaId),
       leerListaMaterialesSiesa(tenant.siesaCiaId),
+      obtenerUmbralesInventario(req, tenantId),
     ]);
-    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
+    const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora, umbrales.demanda);
     const produccionRecomendada = calcularProduccionRecomendadaSiesa(pronostico.todos, existencias);
     const necesidades = calcularNecesidadesAbastecimientoSiesa(
       produccionRecomendada,
@@ -368,7 +384,7 @@ export async function construirContextoPlaneacionSiesa(
     ]);
 
   const resumenInventario = calcularResumenInventarioSiesa(existencias, ahora, umbrales.inventario);
-  const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora);
+  const pronostico = calcularPronosticoDemandaSiesa(ventasMensuales, ahora, umbrales.demanda);
   const produccionRecomendada = calcularProduccionRecomendadaSiesa(pronostico.todos, existencias);
   const necesidadesAbastecimiento = calcularNecesidadesAbastecimientoSiesa(
     produccionRecomendada,

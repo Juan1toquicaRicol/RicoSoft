@@ -33,13 +33,11 @@ import {
 import {
   useSeguimientoOportunidad,
   useProximosSeguimientos,
-  ACCIONES_CONTACTO,
-  RESULTADOS_CONTACTO,
   RESULTADOS_TERMINALES,
-  ETIQUETA_RESULTADO,
   type AccionContacto,
   type ResultadoContacto,
 } from "@/hooks/use-oportunidades";
+import { useCatalogo } from "@/hooks/use-catalogos";
 import { formatCantidad, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -421,6 +419,9 @@ function TarjetaOportunidadCliente({
   );
 
   const seguimiento = useSeguimientoOportunidad(abierto ? clienteRowId : null);
+  const { data: resultadosCatalogo } = useCatalogo("RESULTADO_CONTACTO_OPORTUNIDAD");
+  const etiquetaResultado = (clave: string) =>
+    resultadosCatalogo.find((r) => r.clave === clave)?.etiqueta ?? clave;
 
   const handleToggle = async () => {
     const next = !abierto;
@@ -452,7 +453,7 @@ function TarjetaOportunidadCliente({
               variant="outline"
               className="border-slate-200 bg-slate-50 text-[10px] text-slate-600"
             >
-              {ETIQUETA_RESULTADO[seguimiento.estadoActual]}
+              {etiquetaResultado(seguimiento.estadoActual)}
             </Badge>
           )}
         </div>
@@ -611,6 +612,19 @@ function SeguimientoComercial({
   const [proximaFecha, setProximaFecha] = useState("");
   const [guardando, setGuardando] = useState(false);
 
+  const {
+    data: accionesCatalogo,
+    isLoading: cargandoAcciones,
+    error: errorAcciones,
+  } = useCatalogo("ACCION_CONTACTO_OPORTUNIDAD");
+  const {
+    data: resultadosCatalogo,
+    isLoading: cargandoResultados,
+    error: errorResultados,
+  } = useCatalogo("RESULTADO_CONTACTO_OPORTUNIDAD");
+  const etiquetaResultado = (clave: string) =>
+    resultadosCatalogo.find((r) => r.clave === clave)?.etiqueta ?? clave;
+
   const esTerminal = RESULTADOS_TERMINALES.has(resultado);
 
   const handleGuardar = async () => {
@@ -667,33 +681,47 @@ function SeguimientoComercial({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-[11px]">Acción de contacto</Label>
-              <Select value={accion} onValueChange={(v) => setAccion(v as AccionContacto)}>
+              <Select
+                value={accion}
+                disabled={cargandoAcciones}
+                onValueChange={(v) => setAccion(v as AccionContacto)}
+              >
                 <SelectTrigger className="h-8 bg-white text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder={cargandoAcciones ? "Cargando..." : undefined} />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                  {ACCIONES_CONTACTO.map((a) => (
-                    <SelectItem key={a} value={a} className="text-xs">
-                      {a}
+                  {accionesCatalogo.map((a) => (
+                    <SelectItem key={a.id} value={a.clave} className="text-xs">
+                      {a.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errorAcciones && (
+                <p className="text-[11px] text-red-600">No se pudieron cargar las acciones.</p>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">Resultado</Label>
-              <Select value={resultado} onValueChange={(v) => setResultado(v as ResultadoContacto)}>
+              <Select
+                value={resultado}
+                disabled={cargandoResultados}
+                onValueChange={(v) => setResultado(v as ResultadoContacto)}
+              >
                 <SelectTrigger className="h-8 bg-white text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder={cargandoResultados ? "Cargando..." : undefined} />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                  {RESULTADOS_CONTACTO.map((r) => (
-                    <SelectItem key={r} value={r} className="text-xs">
-                      {ETIQUETA_RESULTADO[r]}
+                  {resultadosCatalogo.map((r) => (
+                    <SelectItem key={r.id} value={r.clave} className="text-xs">
+                      {r.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errorResultados && (
+                <p className="text-[11px] text-red-600">No se pudieron cargar los resultados.</p>
+              )}
             </div>
           </div>
           <div className="space-y-1">
@@ -756,7 +784,7 @@ function SeguimientoComercial({
               <li key={s.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">
-                    {s.accion} · {ETIQUETA_RESULTADO[s.resultado]}
+                    {s.accion} · {etiquetaResultado(s.resultado)}
                   </span>
                   <span className="text-[11px] text-slate-400">
                     {new Date(s.createdAt).toLocaleString("es-CO", { timeZone: "UTC" })}

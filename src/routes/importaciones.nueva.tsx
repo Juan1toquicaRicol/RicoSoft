@@ -57,6 +57,7 @@ import {
   type TipoDocumentoOrdenIntl,
 } from "@/hooks/use-importaciones";
 import { useProveedorBusqueda } from "@/hooks/use-proveedores";
+import { useCatalogo } from "@/hooks/use-catalogos";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { money } from "@/lib/data";
 import { requirePermisoGuard } from "@/lib/route-guards";
@@ -76,72 +77,15 @@ export const Route = createFileRoute("/importaciones/nueva")({
   component: NuevaOrdenIntlPage,
 });
 
-const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
 const MONEDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
-// Mismo catálogo que FORMAS_PAGO_VALIDAS/UNIDADES_MEDIDA_VALIDAS en
-// importaciones.controller.ts — si cambia uno, cambia el otro.
-const FORMAS_PAGO = [
-  "Anticipado",
-  "Carta de crédito",
-  "Crédito 30 días",
-  "Crédito 60 días",
-  "Crédito 90 días",
-  "Contra entrega",
-];
-const UNIDADES_MEDIDA = ["KG", "TON", "SACO25KG", "SACO50KG", "LT", "UND"];
-// Misma lista EXACTA que PAISES_VALIDOS en importaciones.controller.ts —
-// país de origen normalizado (antes era texto libre: "China"/"china"/
-// "CHINA" como valores distintos). Sin paquete compartido en este repo
-// (mismo criterio que INCOTERMS/MONEDAS, ya duplicados así).
-const PAISES = [
-  "Alemania",
-  "Arabia Saudita",
-  "Argentina",
-  "Bélgica",
-  "Bolivia",
-  "Brasil",
-  "Canadá",
-  "Chile",
-  "China",
-  "Colombia",
-  "Corea del Sur",
-  "Costa Rica",
-  "Ecuador",
-  "Emiratos Árabes Unidos",
-  "España",
-  "Estados Unidos",
-  "Francia",
-  "Guatemala",
-  "Hong Kong",
-  "India",
-  "Indonesia",
-  "Israel",
-  "Italia",
-  "Japón",
-  "Malasia",
-  "México",
-  "Países Bajos",
-  "Panamá",
-  "Perú",
-  "Polonia",
-  "Portugal",
-  "Reino Unido",
-  "República Dominicana",
-  "Singapur",
-  "Sudáfrica",
-  "Suiza",
-  "Tailandia",
-  "Taiwán",
-  "Turquía",
-  "Vietnam",
-];
 /** La unidad que trae Siesa es texto libre del ERP (ej. "Kg", "UN", "Ton") —
  * solo se autocompleta si coincide EXACTO (sin distinguir mayúsculas) con
- * una de nuestras unidades válidas; si no, se deja para elegir a mano en vez
- * de forzar un valor que luego el backend rechazaría (400). */
-function mapearUnidadSiesa(unidad: string | null): string | undefined {
+ * una de nuestras unidades válidas (catálogo UNIDAD_MEDIDA); si no, se deja
+ * para elegir a mano en vez de forzar un valor que luego el backend
+ * rechazaría (400). */
+function mapearUnidadSiesa(unidad: string | null, unidadesValidas: string[]): string | undefined {
   if (!unidad) return undefined;
-  return UNIDADES_MEDIDA.find((u) => u.toLowerCase() === unidad.trim().toLowerCase());
+  return unidadesValidas.find((u) => u.toLowerCase() === unidad.trim().toLowerCase());
 }
 // Umbral a partir del cual se avisa que la tasa pactada se aleja de la
 // oficial del día — no bloquea el guardado, solo informa (la tasa pactada
@@ -279,6 +223,26 @@ function NuevaOrdenIntlPage() {
   } = useProveedorBusqueda();
   const { opciones: responsableOpciones, loading: cargandoResponsables } =
     useResponsablesImportacion();
+  const {
+    data: incoterms,
+    isLoading: cargandoIncoterms,
+    error: errorIncoterms,
+  } = useCatalogo("INCOTERM");
+  const {
+    data: paises,
+    isLoading: cargandoPaises,
+    error: errorPaises,
+  } = useCatalogo("PAIS_ORIGEN");
+  const {
+    data: formasPago,
+    isLoading: cargandoFormasPago,
+    error: errorFormasPago,
+  } = useCatalogo("FORMA_PAGO");
+  const {
+    data: unidadesMedida,
+    isLoading: cargandoUnidadesMedida,
+    error: errorUnidadesMedida,
+  } = useCatalogo("UNIDAD_MEDIDA");
 
   const [guardando, setGuardando] = useState(false);
   // Documentos iniciales (Cotización/Proforma Invoice/Oferta comercial/
@@ -685,19 +649,25 @@ function NuevaOrdenIntlPage() {
                 <Label className="text-xs font-semibold text-slate-700">Incoterm *</Label>
                 <Select
                   value={form.incoterm}
+                  disabled={cargandoIncoterms}
                   onValueChange={(val) => setForm({ ...form, incoterm: val })}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
+                    <SelectValue placeholder={cargandoIncoterms ? "Cargando..." : undefined} />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    {INCOTERMS.map((i) => (
-                      <SelectItem key={i} value={i} className="text-xs">
-                        {i}
+                    {incoterms.map((i) => (
+                      <SelectItem key={i.id} value={i.clave} className="text-xs">
+                        {i.clave}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errorIncoterms && (
+                  <p className="text-[11px] text-red-600">
+                    No se pudieron cargar los Incoterms: {errorIncoterms}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Lugar pactado</Label>
@@ -720,6 +690,7 @@ function NuevaOrdenIntlPage() {
                 </Label>
                 <Select
                   value={form.paisOrigen || undefined}
+                  disabled={cargandoPaises}
                   onValueChange={(val) => setForm({ ...form, paisOrigen: val })}
                 >
                   <SelectTrigger
@@ -730,12 +701,14 @@ function NuevaOrdenIntlPage() {
                         "border-red-400 focus-visible:ring-red-300",
                     )}
                   >
-                    <SelectValue placeholder="Selecciona un país..." />
+                    <SelectValue
+                      placeholder={cargandoPaises ? "Cargando..." : "Selecciona un país..."}
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 max-h-64">
-                    {PAISES.map((p) => (
-                      <SelectItem key={p} value={p} className="text-xs">
-                        {p}
+                    {paises.map((p) => (
+                      <SelectItem key={p.id} value={p.clave} className="text-xs">
+                        {p.etiqueta}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -745,6 +718,11 @@ function NuevaOrdenIntlPage() {
                 </p>
                 {intentoGuardar && !form.paisOrigen && (
                   <p className="text-[11px] text-red-600">El país de origen es obligatorio.</p>
+                )}
+                {errorPaises && (
+                  <p className="text-[11px] text-red-600">
+                    No se pudieron cargar los países: {errorPaises}
+                  </p>
                 )}
               </div>
               <div className="space-y-1">
@@ -856,19 +834,27 @@ function NuevaOrdenIntlPage() {
                 <Label className="text-xs font-semibold text-slate-700">Forma de Pago</Label>
                 <Select
                   value={form.formaPago || undefined}
+                  disabled={cargandoFormasPago}
                   onValueChange={(val) => setForm({ ...form, formaPago: val })}
                 >
                   <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue placeholder="Selecciona..." />
+                    <SelectValue
+                      placeholder={cargandoFormasPago ? "Cargando..." : "Selecciona..."}
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200">
-                    {FORMAS_PAGO.map((f) => (
-                      <SelectItem key={f} value={f} className="text-xs">
-                        {f}
+                    {formasPago.map((f) => (
+                      <SelectItem key={f.id} value={f.clave} className="text-xs">
+                        {f.etiqueta}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errorFormasPago && (
+                  <p className="text-[11px] text-red-600">
+                    No se pudieron cargar las formas de pago: {errorFormasPago}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Condición de pago</Label>
@@ -1032,7 +1018,10 @@ function NuevaOrdenIntlPage() {
                                   descripcion: op.descripcion || next[idx].descripcion,
                                   referencia: op.referencia || next[idx].referencia,
                                   unidadMedida:
-                                    mapearUnidadSiesa(op.unidadMedida) ?? next[idx].unidadMedida,
+                                    mapearUnidadSiesa(
+                                      op.unidadMedida,
+                                      unidadesMedida.map((u) => u.clave),
+                                    ) ?? next[idx].unidadMedida,
                                   _origen: "siesa",
                                 };
                                 setItems(next);
@@ -1068,6 +1057,7 @@ function NuevaOrdenIntlPage() {
                         <TableCell className="px-2 py-1.5">
                           <Select
                             value={item.unidadMedida ?? undefined}
+                            disabled={cargandoUnidadesMedida}
                             onValueChange={(val) => {
                               const next = [...items];
                               next[idx] = { ...next[idx], unidadMedida: val };
@@ -1082,16 +1072,23 @@ function NuevaOrdenIntlPage() {
                                   "border-red-400 focus-visible:ring-red-300",
                               )}
                             >
-                              <SelectValue placeholder="—" />
+                              <SelectValue
+                                placeholder={cargandoUnidadesMedida ? "Cargando..." : "—"}
+                              />
                             </SelectTrigger>
                             <SelectContent className="bg-white border-slate-200">
-                              {UNIDADES_MEDIDA.map((u) => (
-                                <SelectItem key={u} value={u} className="text-xs">
-                                  {u}
+                              {unidadesMedida.map((u) => (
+                                <SelectItem key={u.id} value={u.clave} className="text-xs">
+                                  {u.clave}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          {errorUnidadesMedida && (
+                            <p className="mt-0.5 text-[10px] text-red-600">
+                              Error cargando unidades.
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell className="px-2 py-1.5">
                           <Input

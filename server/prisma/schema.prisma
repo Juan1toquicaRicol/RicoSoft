@@ -72,6 +72,8 @@ model Tenant {
   requisitosProveedorImportacion RequisitoProveedorImportacion[]
   correosImportacion             ImportacionCorreo[]
   excepcionesImportacion         ImportacionExcepcion[]
+  catalogosValor                 CatalogoValor[]
+  plantillasNotificacion         PlantillaNotificacion[]
 }
 
 model User {
@@ -848,8 +850,67 @@ model ConfiguracionInventario {
   coberturaObjetivoDias Int      @default(45)
   /// Multiplicador de seguridad sobre el inventario objetivo (1.0 = sin margen extra; 1.2 = 20% adicional de colchón).
   factorSeguridad       Float    @default(1.0)
+  /// Variabilidad de demanda (coeficiente de variación) a partir de la cual se considera "alta" — lib/demanda-siesa.ts.
+  umbralVariabilidadAltaDemanda    Float @default(0.75)
+  /// Fracción de pérdida de rotación a partir de la cual se marca como relevante — lib/demanda-siesa.ts.
+  umbralPerdidaRotacionDemanda     Float @default(0.5)
+  /// Porcentaje de tendencia (creciente/decreciente) a partir del cual se considera "fuerte" — lib/demanda-siesa.ts.
+  umbralTendenciaFuertePctDemanda  Float @default(20)
+  /// Porcentaje de diferencia entre TRM oficial y TRM de la orden a partir del cual se alerta al usuario.
+  umbralAlertaTrmPct              Float @default(2)
+  /// Plazo de crédito/renovación por defecto (días) cuando no se especifica uno propio.
+  plazoCreditoDiasDefecto         Int   @default(30)
+  /// Mínimo de cotizaciones de proveedor requeridas para poder aprobar una SolicitudCompra.
+  minimoCotizacionesSolicitud     Int   @default(3)
   updatedAt             DateTime @updatedAt
   tenant                Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+/// Catálogo genérico de valores de referencia (comercio internacional, CRM,
+/// notificaciones, etc.) — reemplaza arrays hardcodeados duplicados entre
+/// backend y frontend. tenantId = NULL significa alcance GENERAL (visible
+/// para todos los tenants); con valor = exclusivo de esa empresa. Mismo
+/// patrón que Departamento/Rol/Modulo (ver lib/alcance.ts, whereAlcance).
+model CatalogoValor {
+  id        String   @id @default(uuid()) @db.UniqueIdentifier
+  /// Discriminador: "INCOTERM" | "MONEDA" | "PAIS_ORIGEN" | "FORMA_PAGO" |
+  /// "UNIDAD_MEDIDA" | "METODO_PAGO" | "MOTIVO_NOVEDAD_IMPORTACION" |
+  /// "ACCION_CONTACTO_OPORTUNIDAD" | "RESULTADO_CONTACTO_OPORTUNIDAD".
+  tipo      String   @db.VarChar(60)
+  /// Valor estable usado por el código/datos ya guardados (ej. "FOB") — nunca
+  /// se debe cambiar una clave existente sin migrar los datos que la usan.
+  clave     String   @db.VarChar(100)
+  etiqueta  String   @db.VarChar(255)
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  tenantId  String?  @db.UniqueIdentifier
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tipo, clave, tenantId])
+  @@index([tipo, tenantId, activo])
+}
+
+/// Plantilla de texto para notificaciones in-app, reemplazando template
+/// literals embebidos en controllers. tenantId = NULL significa alcance
+/// GENERAL (compartida por todos los tenants). El texto soporta placeholders
+/// "{{nombrePlaceholder}}" que cada emisor reemplaza según su evento —
+/// documentar los placeholders soportados de cada tipoEvento en el emisor.
+model PlantillaNotificacion {
+  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId   String?  @db.UniqueIdentifier
+  /// Clave estable del evento que dispara la notificación, ej.
+  /// "SOLICITUD_PENDIENTE_APROBACION", "SOLICITUD_RESUELTA", "FACTURA_VENCE_PRONTO".
+  tipoEvento String   @db.VarChar(100)
+  titulo     String   @db.VarChar(255)
+  mensaje    String   @db.NVarChar(Max)
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tipoEvento, tenantId])
 }
 
 /// Plan de producción con estados — Etapa J del módulo Producción &

@@ -192,20 +192,6 @@ export type TipoNovedad =
   | "Bloqueo"
   | "Otro";
 
-export const ETIQUETA_TIPO_NOVEDAD: Record<TipoNovedad, string> = {
-  Retraso: "Retraso",
-  DocumentoFaltante: "Documento faltante",
-  Inconsistencia: "Inconsistencia",
-  Dano: "Daño",
-  Faltante: "Faltante",
-  ProblemaAduanero: "Problema aduanero",
-  ProblemaProveedor: "Problema con el proveedor",
-  ProblemaTransporte: "Problema de transporte",
-  ProblemaFinanciero: "Problema financiero",
-  Bloqueo: "Bloqueo",
-  Otro: "Otro",
-};
-
 export type OrigenNovedad = "Interno" | "Externo" | "PorDeterminar";
 export type PrioridadNovedad = "Alta" | "Media" | "Baja";
 export type EstadoNovedad = "Abierta" | "EnGestion" | "Resuelta";
