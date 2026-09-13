@@ -360,7 +360,8 @@ function DetalleSolicitud() {
                         {f.numero}
                       </Link>
                       <p className="text-[11px] text-slate-500">
-                        {f.proveedor} · {new Date(f.fecha).toLocaleDateString("es-CO")} ·{" "}
+                        {f.proveedor} ·{" "}
+                        {new Date(f.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })} ·{" "}
                         {money(f.total)}
                       </p>
                     </div>
@@ -835,7 +836,7 @@ function TrazabilidadSolicitud({
   solicitud: import("@/lib/data").SolicitudCompra;
   facturasRelacionadas: import("@/lib/data").Factura[];
 }) {
-  const eventos: { fecha: string; titulo: string; detalle?: string }[] = [
+  const eventos: { fecha: string; titulo: string; detalle?: string; soloFecha?: boolean }[] = [
     { fecha: solicitud.fechaSolicitud, titulo: "Solicitud creada", detalle: solicitud.solicitante },
   ];
   if (solicitud.fechaResolucion) {
@@ -847,9 +848,12 @@ function TrazabilidadSolicitud({
   }
   for (const f of facturasRelacionadas) {
     eventos.push({
+      // f.fecha es una fecha-sin-hora (medianoche UTC) — se formatea aparte
+      // en UTC para no retroceder un día en zonas horarias negativas.
       fecha: f.fecha,
       titulo: `Factura ${f.numero} vinculada`,
       detalle: `${f.proveedor} · ${money(f.total)}`,
+      soloFecha: true,
     });
   }
   if (solicitud.recepcion) {
@@ -870,7 +874,11 @@ function TrazabilidadSolicitud({
             <span className="absolute left-[4.5px] top-5 h-[calc(100%+0.5rem)] w-px bg-border" />
           )}
           <p className="text-xs font-semibold">{ev.titulo}</p>
-          <p className="text-[10px] text-slate-500">{new Date(ev.fecha).toLocaleString("es-CO")}</p>
+          <p className="text-[10px] text-slate-500">
+            {ev.soloFecha
+              ? new Date(ev.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })
+              : new Date(ev.fecha).toLocaleString("es-CO")}
+          </p>
           {ev.detalle && <p className="mt-1 text-xs text-slate-500 italic">{ev.detalle}</p>}
         </li>
       ))}

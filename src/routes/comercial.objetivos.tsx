@@ -173,7 +173,8 @@ function ComercialObjetivosPage() {
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
                 )}
               >
-                {o.tipoPeriodo} · {new Date(o.fechaInicio).toLocaleDateString("es-CO")}
+                {o.tipoPeriodo} ·{" "}
+                {new Date(o.fechaInicio).toLocaleDateString("es-CO", { timeZone: "UTC" })}
               </button>
             ))}
           </div>
@@ -287,8 +288,13 @@ function ObjetivoDetalle({
   const { objetivo, cumplimiento, comparativo, ritmo } = resumen;
   if (!objetivo || !cumplimiento) return null;
 
-  const fInicio = new Date(objetivo.fechaInicio).toLocaleDateString("es-CO");
-  const fFin = new Date(objetivo.fechaFin).toLocaleDateString("es-CO");
+  // fechaInicio/fechaFin se guardan como medianoche UTC (ver comentario de
+  // `serializar` en objetivos.controller.ts) — se formatean forzando
+  // timeZone: "UTC" para no mostrar un día antes en zonas horarias
+  // negativas (ej. Colombia, UTC-5), mismo criterio ya usado en
+  // oportunidades.tsx.
+  const fInicio = new Date(objetivo.fechaInicio).toLocaleDateString("es-CO", { timeZone: "UTC" });
+  const fFin = new Date(objetivo.fechaFin).toLocaleDateString("es-CO", { timeZone: "UTC" });
 
   return (
     <div className="space-y-4">
@@ -631,8 +637,9 @@ function ObjetivosVendedorSeccion({
                   {o.vendedorSiesaNombre ?? "Sin nombre"}
                 </TableCell>
                 <TableCell className="text-xs text-slate-600">
-                  {o.tipoPeriodo} · {new Date(o.fechaInicio).toLocaleDateString("es-CO")} –{" "}
-                  {new Date(o.fechaFin).toLocaleDateString("es-CO")}
+                  {o.tipoPeriodo} ·{" "}
+                  {new Date(o.fechaInicio).toLocaleDateString("es-CO", { timeZone: "UTC" })} –{" "}
+                  {new Date(o.fechaFin).toLocaleDateString("es-CO", { timeZone: "UTC" })}
                 </TableCell>
                 <TableCell className="num text-right text-xs text-slate-800">
                   {o.metaValor != null ? money(o.metaValor) : "—"}

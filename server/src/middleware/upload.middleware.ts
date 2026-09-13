@@ -213,3 +213,16 @@ const documentoVistoBueno = crearUploadArchivo("vistos-buenos-aduaneros");
 export const UPLOADS_DIR_VISTOS_BUENOS = documentoVistoBueno.UPLOADS_DIR;
 export const validarVistoBuenoIdParaArchivo = documentoVistoBueno.validarIdParaArchivo;
 export const uploadDocumentoVistoBueno = documentoVistoBueno.uploadArchivo;
+
+// Documentos iniciales de una OrdenCompraIntl (Cotización/Proforma Invoice/
+// Oferta comercial/Otros): :id en la URL es el id de la propia orden (que
+// SÍ ya existe cuando se sube el primer documento — a diferencia del
+// patrón de cotizacion-proveedor, aquí no hace falta crear nada al vuelo).
+// A diferencia de expedientes/vistos-buenos (un archivo por campo fijo),
+// puede haber varios documentos del mismo tipo, así que cada subida crea
+// una fila nueva en OrdenCompraIntlDocumento en vez de reemplazar una ruta
+// existente (ver controller).
+const documentoOrdenCompraIntl = crearUploadArchivo("ordenes-compra-intl");
+export const UPLOADS_DIR_ORDENES_COMPRA_INTL = documentoOrdenCompraIntl.UPLOADS_DIR;
+export const validarOrdenIdParaArchivo = documentoOrdenCompraIntl.validarIdParaArchivo;
+export const uploadDocumentoOrdenCompraIntl = documentoOrdenCompraIntl.uploadArchivo;

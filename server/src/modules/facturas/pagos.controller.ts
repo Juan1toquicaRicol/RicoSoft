@@ -401,6 +401,17 @@ export const subirComprobantePago = async (req: AuthenticatedRequest, res: Respo
       },
     });
 
+    await req.tenantPrisma!.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        accion: "PAGO_COMPROBANTE_ADJUNTADO",
+        detalle: `${req.user!.nombre} adjuntó "${archivo.originalname}" como comprobante del pago de la factura "${factura.numero}"`,
+        entidadTipo: "Pago",
+        entidadId: pagoId,
+      },
+    });
+
     return res.status(201).json(serializarPago(actualizado));
   } catch (error) {
     console.error("Error al subir comprobante de pago:", error);

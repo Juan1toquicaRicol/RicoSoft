@@ -75,8 +75,12 @@ function DetalleServicio() {
     const porMes = new Map<string, { year: number; month: number; total: number }>();
     for (const f of facturas) {
       const d = new Date(f.fecha);
-      const clave = `${d.getFullYear()}-${d.getMonth()}`;
-      const actual = porMes.get(clave) ?? { year: d.getFullYear(), month: d.getMonth(), total: 0 };
+      const clave = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      const actual = porMes.get(clave) ?? {
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth(),
+        total: 0,
+      };
       actual.total += f.total;
       porMes.set(clave, actual);
     }
@@ -193,10 +197,10 @@ function DetalleServicio() {
                         </Link>
                       </TableCell>
                       <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
-                        {new Date(f.fecha).toLocaleDateString("es-CO")}
+                        {new Date(f.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })}
                       </TableCell>
                       <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
-                        {new Date(f.vence).toLocaleDateString("es-CO")}
+                        {new Date(f.vence).toLocaleDateString("es-CO", { timeZone: "UTC" })}
                       </TableCell>
                       <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">
                         {money(f.total, f.moneda)}
@@ -372,15 +376,28 @@ function DatosServicioPanel({ servicio, puedeEditar, onChange }: DatosServicioPa
     ["Empresa", siglaEmpresa(servicio.empresaId)],
     ["Periodicidad", servicio.periodicidad],
     ["Responsable", servicio.responsableArea],
-    ["Próxima renovación", new Date(servicio.fechaRenovacion).toLocaleDateString("es-CO")],
+    [
+      "Próxima renovación",
+      new Date(servicio.fechaRenovacion).toLocaleDateString("es-CO", { timeZone: "UTC" }),
+    ],
     ...(servicio.diaVencimiento
       ? [["Día de vencimiento", `Día ${servicio.diaVencimiento} de cada mes`]]
       : []),
     ...(servicio.fechaInicio
-      ? [["Activo desde", new Date(servicio.fechaInicio).toLocaleDateString("es-CO")]]
+      ? [
+          [
+            "Activo desde",
+            new Date(servicio.fechaInicio).toLocaleDateString("es-CO", { timeZone: "UTC" }),
+          ],
+        ]
       : []),
     ...(servicio.fechaFin
-      ? [["Fecha de finalización", new Date(servicio.fechaFin).toLocaleDateString("es-CO")]]
+      ? [
+          [
+            "Fecha de finalización",
+            new Date(servicio.fechaFin).toLocaleDateString("es-CO", { timeZone: "UTC" }),
+          ],
+        ]
       : []),
   ] as [string, string][];
 

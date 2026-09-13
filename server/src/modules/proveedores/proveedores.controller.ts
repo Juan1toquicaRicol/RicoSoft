@@ -239,7 +239,7 @@ export const actualizarProveedor = async (req: AuthenticatedRequest, res: Respon
     if (departamentoId !== undefined) {
       if (typeof departamentoId === "string" && departamentoId.trim()) {
         const departamentoDb = await prisma.departamento.findFirst({
-          where: { id: departamentoId, tenantId },
+          where: { id: departamentoId, ...whereAlcance(tenantId) },
         });
         if (!departamentoDb) {
           return res.status(404).json({ message: "El departamento seleccionado no existe." });

@@ -7,6 +7,8 @@ import {
   uploadDocumentoExpediente,
   validarVistoBuenoIdParaArchivo,
   uploadDocumentoVistoBueno,
+  validarOrdenIdParaArchivo,
+  uploadDocumentoOrdenCompraIntl,
 } from "../../middleware/upload.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import {
@@ -32,6 +34,7 @@ import {
   obtenerOrdenCompraIntl,
   obtenerTrmOficialController,
   buscarItemsOrdenCompraIntl,
+  listarResponsablesImportacion,
   crearOrdenCompraIntl,
   crearLoteImportacion,
   actualizarEstadoLote,
@@ -50,6 +53,9 @@ import {
   actualizarVistoBueno,
   subirDocumentoVistoBueno,
   obtenerDocumentoVistoBueno,
+  subirDocumentoOrdenCompraIntl,
+  obtenerDocumentoOrdenCompraIntl,
+  eliminarDocumentoOrdenCompraIntl,
   crearActividadImportacion,
   actualizarActividadImportacion,
   crearNovedadImportacion,
@@ -119,6 +125,14 @@ router.get(
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
   buscarItemsOrdenCompraIntl,
 );
+// Usuarios activos del tenant para el selector "Responsable de la
+// importación" — mismo patrón que /usuarios/por-departamento (no requiere
+// el permiso administrativo "usuarios.ver", basta con poder crear órdenes).
+router.get(
+  "/responsables",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
+  listarResponsablesImportacion,
+);
 router.get("/:id", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), obtenerOrdenCompraIntl);
 router.post(
   "/",
@@ -130,6 +144,28 @@ router.delete(
   "/:id",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_ELIMINAR),
   anularOrdenCompraIntl,
+);
+
+// Documentos iniciales de la orden (Cotización/Proforma Invoice/Oferta
+// comercial/Otros) — reutiliza IMPORTACIONES_CREAR (misma responsabilidad
+// que registrar la orden) para subir/eliminar, e IMPORTACIONES_VER para
+// descargar, sin crear un permiso nuevo.
+router.get(
+  "/:id/documentos/:documentoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
+  obtenerDocumentoOrdenCompraIntl,
+);
+router.post(
+  "/:id/documentos/:tipo",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
+  validarOrdenIdParaArchivo,
+  uploadDocumentoOrdenCompraIntl,
+  subirDocumentoOrdenCompraIntl,
+);
+router.delete(
+  "/:id/documentos/:documentoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
+  eliminarDocumentoOrdenCompraIntl,
 );
 
 router.post(

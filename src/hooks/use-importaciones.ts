@@ -8,6 +8,11 @@ export type EstadoLoteImportacion =
 export interface ItemOrdenCompraIntl {
   id: string;
   descripcion: string;
+  referencia: string | null;
+  /** Código con el que el proveedor identifica el ítem en su cotización —
+   * texto libre, para uso futuro de la Bandeja Inteligente. */
+  referenciaProveedor: string | null;
+  unidadMedida: string | null;
   subpartidaArancelariaId: string | null;
   subpartida: { id: string; subpartida: string; descripcion: string } | null;
   cantidad: number;
@@ -250,6 +255,27 @@ export interface SituacionActual {
   proximaAccion: string | null;
 }
 
+// Cotización | Proforma Invoice | Oferta comercial | Otros — mismo catálogo
+// EXACTO que TIPOS_DOCUMENTO_ORDEN en importaciones.controller.ts.
+export type TipoDocumentoOrdenIntl = "cotizacion" | "proforma" | "oferta-comercial" | "otros";
+
+export const TIPOS_DOCUMENTO_ORDEN_INTL: { tipo: TipoDocumentoOrdenIntl; etiqueta: string }[] = [
+  { tipo: "cotizacion", etiqueta: "Cotización" },
+  { tipo: "proforma", etiqueta: "Proforma Invoice" },
+  { tipo: "oferta-comercial", etiqueta: "Oferta comercial" },
+  { tipo: "otros", etiqueta: "Otros" },
+];
+
+export interface DocumentoOrdenCompraIntl {
+  id: string;
+  tipo: string;
+  nombreOriginal: string;
+  mime: string;
+  tamano: number;
+  subidoPorNombre: string | null;
+  createdAt: string;
+}
+
 export interface RequisitoProveedorImportacion {
   id: string;
   tipo: string;
@@ -266,7 +292,12 @@ export interface OrdenCompraIntl {
   id: string;
   codigo: string;
   numeroOrden: string;
+  /** Fecha explícita de la orden pactada con el proveedor — distinta de
+   * createdAt (timestamp de auditoría del registro). */
+  fechaOrden: string;
   incoterm: string;
+  /** Lugar pactado del Incoterm (ej. "Shanghai, China") — texto libre. */
+  lugarPactado: string | null;
   proveedorId: string | null;
   proveedorExtranjero: string;
   /** Presente solo cuando la orden quedó ligada a un Proveedor real (no
@@ -281,7 +312,12 @@ export interface OrdenCompraIntl {
   paisOrigen: string;
   moneda: string;
   formaPago: string | null;
+  condicionPago: string | null;
+  detallePago: string | null;
   trmPactada: number;
+  tasaCambioFecha: string | null;
+  tasaCambioFuente: string | null;
+  fechaRequeridaLlegada: string | null;
   valorEstimadoTotal: number;
   estado: EstadoOrdenIntl;
   fechaEstimadaCierre: string | null;
@@ -304,12 +340,14 @@ export interface OrdenCompraIntl {
   actividades: ActividadImportacion[];
   novedades: NovedadImportacion[];
   pagos: PagoImportacion[];
+  documentos: DocumentoOrdenCompraIntl[];
   situacionActual: SituacionActual;
 }
 
 export interface ItemOrdenInput {
   descripcion: string;
   referencia?: string | null;
+  referenciaProveedor?: string | null;
   unidadMedida?: string | null;
   subpartidaArancelariaId?: string | null;
   cantidad: number;
@@ -320,13 +358,21 @@ export interface ItemOrdenInput {
 
 export interface CrearOrdenInput {
   numeroOrden: string;
+  fechaOrden?: string;
   incoterm: string;
+  lugarPactado?: string | null;
   proveedorId?: string | null;
-  proveedorExtranjero: string;
+  proveedorExtranjero?: string;
   paisOrigen: string;
   moneda: string;
   trmPactada: number;
+  tasaCambioFecha?: string | null;
+  tasaCambioFuente?: string | null;
   formaPago?: string | null;
+  condicionPago?: string | null;
+  detallePago?: string | null;
+  fechaRequeridaLlegada?: string | null;
+  responsableId?: string | null;
   observaciones?: string;
   items: ItemOrdenInput[];
 }
@@ -419,6 +465,22 @@ export interface CrearPagoInput {
   observaciones?: string;
 }
 
+/**
+ * Sube un documento inicial a una orden ya creada — función standalone (no
+ * depende de useOrdenCompraIntl) para el formulario de creación
+ * (importaciones.nueva.tsx), que solo conoce el id de la orden recién
+ * registrada, no tiene el hook de detalle montado todavía.
+ */
+export async function subirDocumentoOrdenCompraIntlStandalone(
+  ordenId: string,
+  tipo: TipoDocumentoOrdenIntl,
+  file: File,
+) {
+  const formData = new FormData();
+  formData.append("archivo", file);
+  return fetchAuthUpload(`/importaciones/${ordenId}/documentos/${tipo}`, formData);
+}
+
 export function useImportaciones() {
   const [ordenes, setOrdenes] = useState<OrdenCompraIntl[]>([]);
   const [loading, setLoading] = useState(true);
@@ -447,8 +509,16 @@ export function useImportaciones() {
 
   const addOrden = useCallback(
     async (data: CrearOrdenInput) => {
-      await fetchAuth("/importaciones", { method: "POST", body: JSON.stringify(data) });
+      // Devuelve la orden creada (con su id) para que el formulario de
+      // creación pueda subir los "Documentos iniciales" inmediatamente
+      // después — la orden ya existe en ese momento, así que se reutiliza
+      // el mismo endpoint de documentos que usa la pantalla de detalle.
+      const creada = (await fetchAuth("/importaciones", {
+        method: "POST",
+        body: JSON.stringify(data),
+      })) as OrdenCompraIntl;
       await refresh();
+      return creada;
     },
     [refresh],
   );
@@ -509,6 +579,41 @@ export function useBuscarItemsSiesa() {
   }, []);
 
   return { opciones, loading, disponible, buscar };
+}
+
+export interface ResponsableImportacionOpcion {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * Usuarios activos del tenant para el selector "Responsable de la
+ * importación" del formulario de creación — no reemplaza al creador de la
+ * orden (queda registrado en el historial/auditoría igual que antes).
+ */
+export function useResponsablesImportacion() {
+  const [opciones, setOpciones] = useState<ResponsableImportacionOpcion[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelado = false;
+    setLoading(true);
+    fetchAuth("/importaciones/responsables")
+      .then((data) => {
+        if (!cancelado) setOpciones(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelado) setOpciones([]);
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  return { opciones, loading };
 }
 
 export interface NuevoRequisitoProveedor {
@@ -859,6 +964,28 @@ export function useOrdenCompraIntl(id: string | undefined) {
     return fetchAuthBlob(`/importaciones/vistos-buenos/${vistoId}/documento`);
   }, []);
 
+  const subirDocumentoOrden = useCallback(
+    async (ordenId: string, tipo: TipoDocumentoOrdenIntl, file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/importaciones/${ordenId}/documentos/${tipo}`, formData);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarDocumentoOrden = useCallback(
+    async (ordenId: string, documentoId: string) => {
+      await fetchAuth(`/importaciones/${ordenId}/documentos/${documentoId}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const descargarDocumentoOrden = useCallback(async (ordenId: string, documentoId: string) => {
+    return fetchAuthBlob(`/importaciones/${ordenId}/documentos/${documentoId}`);
+  }, []);
+
   const crearActividad = useCallback(
     async (data: CrearActividadInput) => {
       if (!id) return;
@@ -958,6 +1085,9 @@ export function useOrdenCompraIntl(id: string | undefined) {
     actualizarVistoBueno,
     subirDocumentoVistoBueno,
     descargarDocumentoVistoBueno,
+    subirDocumentoOrden,
+    eliminarDocumentoOrden,
+    descargarDocumentoOrden,
     crearActividad,
     completarActividad,
     crearNovedad,

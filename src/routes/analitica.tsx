@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronLeft, ChevronRight, Info, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Info, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -20,10 +20,10 @@ import {
   useHistoricoVentas,
   useVentasGerencial,
   useVentasPorVendedor,
-  useClientesVenta,
 } from "@/hooks/use-analitica";
-import { useContextoProducto } from "@/hooks/use-ventas";
 import { compact, formatCantidad, money } from "@/lib/data";
+import { AnaliticaConstructor, MisAnalisisLista } from "@/components/analitica-constructor";
+import type { AnalisisGuardado, ConfiguracionAnalisis } from "@/hooks/use-analitica-constructor";
 
 const HISTORICO_PAGE_SIZE = 20;
 
@@ -83,7 +83,82 @@ const tooltipStyle = {
   color: "var(--popover-foreground)",
 };
 
+type VistaAnalitica = "resumen" | "mis-analisis" | "constructor";
+
 function Analitica() {
+  const [vista, setVista] = useState<VistaAnalitica>("resumen");
+  const [analisisAAbrir, setAnalisisAAbrir] = useState<{
+    nombre: string;
+    configuracion: ConfiguracionAnalisis;
+  } | null>(null);
+
+  function crearAnalisis() {
+    setAnalisisAAbrir(null);
+    setVista("constructor");
+  }
+
+  function abrirAnalisisGuardado(a: AnalisisGuardado) {
+    setAnalisisAAbrir({ nombre: a.nombre, configuracion: a.configuracion });
+    setVista("constructor");
+  }
+
+  return (
+    <AppShell
+      title="Analítica"
+      description="Comparativos interactivos del gasto documental y ventas (calculado desde facturas y Siesa)"
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="inline-flex h-9 items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setVista("resumen")}
+            className={`cursor-pointer rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+              vista === "resumen" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"
+            }`}
+          >
+            Resumen
+          </button>
+          <button
+            type="button"
+            onClick={() => setVista("mis-analisis")}
+            className={`cursor-pointer rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+              vista === "mis-analisis" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"
+            }`}
+          >
+            Mis análisis
+          </button>
+        </div>
+        <Button onClick={crearAnalisis} className="gap-2">
+          <Plus className="h-4 w-4" /> Crear análisis
+        </Button>
+      </div>
+
+      {vista === "constructor" && (
+        <AnaliticaConstructor
+          key={analisisAAbrir ? `abierto-${analisisAAbrir.nombre}` : "nuevo"}
+          nombreInicial={analisisAAbrir?.nombre}
+          configuracionInicial={analisisAAbrir?.configuracion}
+          onGuardado={() => setVista("mis-analisis")}
+        />
+      )}
+
+      {vista === "mis-analisis" && (
+        <MisAnalisisLista onAbrir={abrirAnalisisGuardado} onCrear={crearAnalisis} />
+      )}
+
+      {vista === "resumen" && <AnaliticaResumen />}
+    </AppShell>
+  );
+}
+
+/**
+ * Contenido histórico de Analítica (los paneles fijos previos a la P0 de
+ * constructor de análisis): sigue reutilizando exactamente los mismos hooks
+ * y endpoints de siempre — la lógica/cálculos no se tocan, solo se movieron
+ * bajo la pestaña "Resumen" (ver Analitica arriba) para dejar espacio a
+ * "Mis análisis" y al constructor configurable.
+ */
+function AnaliticaResumen() {
   const { ventas, loading: cargandoVentas } = useVentasGerencial();
   const vendedoresVentas = useVentasPorVendedor();
   const cargandoVendedores = vendedoresVentas.loading;
@@ -124,8 +199,6 @@ function Analitica() {
     historicoCargado,
   );
 
-  const clientesVenta = useClientesVenta({ limite: 20 });
-
   useEffect(() => {
     setHistoricoPage(1);
   }, [drillDown]);
@@ -143,32 +216,29 @@ function Analitica() {
   }, [historicoDesde, historicoHasta, historicoBusquedaDebounced]);
 
   return (
-    <AppShell
-      title="Analítica"
-      description="Comparativos interactivos del gasto documental y ventas (calculado desde facturas y Siesa)"
-    >
+    <>
       {ventas.disponible && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500">
           <span>
             Clientes en riesgo (inactivos y con caídas fuertes) ahora vive en{" "}
-            <Link to="/ventas" className="font-semibold text-blue-700 hover:underline">
-              Ventas
+            <Link to="/oportunidades" className="font-semibold text-blue-700 hover:underline">
+              Oportunidades
             </Link>
-            , el centro operativo comercial.
+            .
           </span>
         </div>
       )}
 
       {ventas.disponible && ventas.periodoActual && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {/* "¿Qué está pasando AHORA?" primero — actividad de hoy antes
               que cualquier corte mensual/histórico. */}
-          <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
+          <div className="panel p-4 bg-white border-slate-200 shadow-2xs sm:col-span-2">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Ventas hoy · $
+              Total de ventas hoy
             </p>
-            <p className="num mt-1 text-lg font-bold text-slate-900">
-              {vendedoresVentas.resumenHoy ? compact(vendedoresVentas.resumenHoy.neto) : "—"}
+            <p className="num mt-1 text-3xl font-bold text-slate-900">
+              {vendedoresVentas.resumenHoy ? money(vendedoresVentas.resumenHoy.neto) : "—"}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
               {vendedoresVentas.resumenHoy
@@ -189,26 +259,12 @@ function Analitica() {
               Solo productos vendidos por kilo (Siesa)
             </p>
           </div>
-          <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
-            <p
-              className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-500"
-              title="Ticket promedio = valor promedio por documento de venta (factura) del período — la misma unidad transaccional que usa Siesa para un documento de venta."
-            >
-              Ticket promedio <Info className="h-3 w-3 text-slate-400" />
-            </p>
-            <p className="num mt-1 text-lg font-bold text-slate-900">
-              {money(ventas.periodoActual.ticketPromedio)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {ventas.periodoActual.documentos} documentos este mes
-            </p>
-          </div>
-          <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
+          <div className="panel p-4 bg-white border-slate-200 shadow-2xs sm:col-span-2">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Venta del mes
             </p>
             <p className="num mt-1 text-lg font-bold text-slate-900">
-              {compact(ventas.periodoActual.neto)}
+              {money(ventas.periodoActual.neto)}
             </p>
             {ventas.variacionNetaPct !== null && ventas.variacionNetaPct !== undefined && (
               <p
@@ -219,82 +275,53 @@ function Analitica() {
               </p>
             )}
           </div>
+          <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Ventas mes · kg/Toneladas
+            </p>
+            <p className="num mt-1 text-lg font-bold text-slate-900">
+              {vendedoresVentas.resumenMes
+                ? formatCantidad(vendedoresVentas.resumenMes.kilos, "KG")
+                : "—"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Solo productos vendidos por kilo (Siesa)
+            </p>
+          </div>
         </div>
       )}
 
       {ventas.disponible && (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="panel p-5 bg-white border-slate-200 shadow-2xs lg:col-span-2">
-            <h2 className="text-sm font-bold text-slate-900">Evolución de ventas</h2>
-            <p className="text-xs text-slate-500">Ventas netas mensuales (Siesa)</p>
-            <div className="mt-4 h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={(ventas.serieMensual ?? []).map((m) => ({
-                    mes: MESES_CORTOS_VENTAS[m.mes],
-                    neto: m.neto,
-                  }))}
-                >
-                  <CartesianGrid vertical={false} stroke="var(--border)" />
-                  <XAxis
-                    dataKey="mes"
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={12}
-                    stroke="var(--muted-foreground)"
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={12}
-                    stroke="var(--muted-foreground)"
-                    tickFormatter={(v) => compact(v)}
-                  />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => money(v)} />
-                  <Bar dataKey="neto" fill="var(--chart-1)" radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
-            <h2 className="text-sm font-bold text-slate-900">Top clientes del mes</h2>
-            {(ventas.topClientes ?? []).length === 0 && (
-              <p className="mt-4 text-xs text-slate-500">Sin ventas registradas este mes.</p>
-            )}
-            <ul className="mt-4 space-y-4">
-              {(ventas.topClientes ?? []).map((c) => (
-                <li
-                  key={c.clienteRowId ?? c.clienteNombre}
-                  className={c.clienteRowId ? "cursor-pointer" : undefined}
-                  title={c.clienteRowId ? "Ver documentos de este cliente" : undefined}
-                  onClick={() =>
-                    c.clienteRowId &&
-                    setDrillDown({
-                      tipo: "cliente",
-                      id: c.clienteRowId,
-                      nombre: c.clienteNombre ?? "Cliente",
-                    })
-                  }
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate text-xs font-semibold text-slate-800">
-                      {c.clienteNombre ?? "Cliente sin nombre"}
-                    </span>
-                    <span className="num shrink-0 text-xs text-slate-500">{compact(c.neto)}</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-blue-800"
-                      style={{
-                        width: `${(c.neto / (ventas.topClientes?.[0]?.neto ?? 1)) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">{c.documentos} documentos</p>
-                </li>
-              ))}
-            </ul>
+        <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+          <h2 className="text-sm font-bold text-slate-900">Evolución de ventas</h2>
+          <p className="text-xs text-slate-500">Ventas netas mensuales (Siesa)</p>
+          <div className="mt-4 h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={(ventas.serieMensual ?? []).map((m) => ({
+                  mes: MESES_CORTOS_VENTAS[m.mes],
+                  neto: m.neto,
+                }))}
+              >
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis
+                  dataKey="mes"
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke="var(--muted-foreground)"
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke="var(--muted-foreground)"
+                  tickFormatter={(v) => compact(v)}
+                />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => money(v)} />
+                <Bar dataKey="neto" fill="var(--chart-1)" radius={[5, 5, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
@@ -364,123 +391,6 @@ function Analitica() {
           </PanelColapsable>
         )}
 
-      {ventas.disponible && (ventas.topProductosKilos ?? []).length > 0 && (
-        <PanelColapsable
-          className="mt-4"
-          title="Top en kilos"
-          description={`Productos con más kilos vendidos · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "este mes"} (Siesa) · cantidad, referencia y margen/utilidad`}
-        >
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-100/80">
-                <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="w-8" />
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Referencia
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Producto
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Kilos
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Venta neta
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Margen/utilidad
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(ventas.topProductosKilos ?? []).map((p) => (
-                  <FilaProductoKilos
-                    key={p.itemRowId}
-                    producto={p}
-                    onVerDocumentos={() =>
-                      setDrillDown({
-                        tipo: "producto",
-                        id: p.itemRowId,
-                        nombre: p.descripcion ?? "Producto",
-                      })
-                    }
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </PanelColapsable>
-      )}
-
-      {ventas.disponible && (ventas.topClientesPorMargen ?? []).length > 0 && (
-        <PanelColapsable
-          className="mt-4"
-          title="Top clientes por margen"
-          description={`Clientes que más utilidad real dejan · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "este mes"} (Siesa) — no necesariamente los que más compran`}
-        >
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-100/80">
-                <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Cliente
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Venta neta
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Costo
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Margen/utilidad
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Margen %
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(ventas.topClientesPorMargen ?? []).map((c) => (
-                  <TableRow
-                    key={c.clienteRowId ?? c.clienteNombre}
-                    className={
-                      c.clienteRowId
-                        ? "cursor-pointer hover:bg-slate-50/80"
-                        : "hover:bg-slate-50/80"
-                    }
-                    title={c.clienteRowId ? "Ver documentos de este cliente" : undefined}
-                    onClick={() =>
-                      c.clienteRowId &&
-                      setDrillDown({
-                        tipo: "cliente",
-                        id: c.clienteRowId,
-                        nombre: c.clienteNombre ?? "Cliente",
-                      })
-                    }
-                  >
-                    <TableCell className="text-xs font-semibold text-slate-800">
-                      {c.clienteNombre ?? "Cliente sin nombre"}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">
-                      {money(c.neto)}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">
-                      {money(c.costo)}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs font-bold text-slate-900">
-                      {money(c.margen)}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-500">
-                      {c.neto > 0 ? `${((c.margen / c.neto) * 100).toFixed(1)}%` : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </PanelColapsable>
-      )}
-
       {ventas.disponible &&
         vendedoresVentas.disponible &&
         vendedoresVentas.vendedores.length > 0 && (
@@ -533,159 +443,8 @@ function Analitica() {
                 </TableBody>
               </Table>
             </div>
-
-            {vendedoresVentas.topVendedoresPorMargen.length > 0 && (
-              <div className="mt-5 border-t border-slate-200 pt-4">
-                <h3 className="text-xs font-bold text-slate-900">Vendedores por margen</h3>
-                <p className="text-[11px] text-slate-500">
-                  Quién deja más utilidad real este mes, no solo quién más vende
-                </p>
-                <div className="mt-2 overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-100/80">
-                      <TableRow className="hover:bg-slate-100/80">
-                        <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Vendedor
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Venta neta
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Costo
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Margen/utilidad
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Margen %
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {vendedoresVentas.topVendedoresPorMargen.map((v) => (
-                        <TableRow
-                          key={v.vendedorRowId ?? v.vendedorNombre}
-                          className={
-                            v.vendedorRowId
-                              ? "cursor-pointer hover:bg-slate-50/80"
-                              : "hover:bg-slate-50/80"
-                          }
-                          title={v.vendedorRowId ? "Ver documentos de este vendedor" : undefined}
-                          onClick={() =>
-                            v.vendedorRowId &&
-                            setDrillDown({
-                              tipo: "vendedor",
-                              id: v.vendedorRowId,
-                              nombre: v.vendedorNombre ?? "Vendedor",
-                            })
-                          }
-                        >
-                          <TableCell className="text-xs font-semibold text-slate-800">
-                            {v.vendedorNombre ?? "Sin nombre"}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {money(v.neto)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {money(v.costo)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs font-bold text-slate-900">
-                            {money(v.margen)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-500">
-                            {v.neto > 0 ? `${((v.margen / v.neto) * 100).toFixed(1)}%` : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
           </PanelColapsable>
         )}
-
-      {clientesVenta.disponible && clientesVenta.clientes.length > 0 && (
-        <PanelColapsable
-          className="mt-4"
-          title="Clientes — venta, kilos, margen y Pareto"
-          description={`Top ${clientesVenta.clientes.length} clientes · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "mes actual"} (Siesa), ordenados por venta neta · % acumulado = curva de Pareto (¿qué % de clientes concentra el 80% de la venta?)`}
-        >
-          <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-100/80">
-                <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Cliente
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Venta neta
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Kilos
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Margen
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    % individual
-                  </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    % acumulado
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clientesVenta.clientes.map((c) => (
-                  <TableRow
-                    key={c.clienteRowId ?? c.clienteNombre}
-                    className={
-                      c.clienteRowId
-                        ? "cursor-pointer hover:bg-slate-50/80"
-                        : "hover:bg-slate-50/80"
-                    }
-                    title={c.clienteRowId ? "Ver documentos de este cliente" : undefined}
-                    onClick={() =>
-                      c.clienteRowId &&
-                      setDrillDown({
-                        tipo: "cliente",
-                        id: c.clienteRowId,
-                        nombre: c.clienteNombre ?? "Cliente",
-                      })
-                    }
-                  >
-                    <TableCell className="text-xs font-semibold text-slate-800">
-                      <div className="min-w-0 truncate max-w-[220px]">
-                        {c.clienteNombre ?? "Cliente sin nombre"}
-                      </div>
-                      {c.clienteNit && (
-                        <div className="text-[11px] text-slate-400">{c.clienteNit}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">
-                      {money(c.neto)}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">
-                      {c.kilos > 0 ? formatCantidad(c.kilos, "KG") : "—"}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs font-bold text-slate-900">
-                      {money(c.margen)}
-                    </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-500">
-                      {c.pctIndividual}%
-                    </TableCell>
-                    <TableCell
-                      className={`num text-right text-xs font-semibold ${c.pctAcumulado <= 80 ? "text-blue-700" : "text-slate-400"}`}
-                    >
-                      {c.pctAcumulado}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </PanelColapsable>
-      )}
 
       <div className="mt-6 mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -851,121 +610,6 @@ function Analitica() {
           </>
         )}
       </div>
-    </AppShell>
-  );
-}
-
-interface ProductoKilos {
-  itemRowId: number;
-  descripcion: string | null;
-  referencia: string | null;
-  kilos: number;
-  neto: number;
-  costo: number;
-  margen: number;
-}
-
-/**
- * Fila expandible de "Top en kilos": al desplegar, muestra qué clientes
- * reales compran ese producto (reutiliza useContextoProducto — mismo
- * endpoint que ya usa el checker de Ventas, GET /ventas/productos/:id/contexto
- * — nunca un cálculo nuevo en frontend). Carga perezosa: solo consulta al
- * abrir por primera vez.
- */
-function FilaProductoKilos({
-  producto: p,
-  onVerDocumentos,
-}: {
-  producto: ProductoKilos;
-  onVerDocumentos: () => void;
-}) {
-  const [abierto, setAbierto] = useState(false);
-  const { consultar, loading } = useContextoProducto();
-  const [contexto, setContexto] = useState<Awaited<ReturnType<typeof consultar>> | null>(null);
-
-  const handleToggle = async () => {
-    const next = !abierto;
-    setAbierto(next);
-    if (next && !contexto) {
-      try {
-        const data = await consultar(p.itemRowId);
-        setContexto(data);
-      } catch {
-        // El hook ya expone `error`; el detalle simplemente no se llena.
-      }
-    }
-  };
-
-  return (
-    <>
-      <TableRow className="cursor-pointer hover:bg-slate-50/80" onClick={handleToggle}>
-        <TableCell className="w-8">
-          <ChevronDown
-            className={`h-3.5 w-3.5 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`}
-          />
-        </TableCell>
-        <TableCell className="text-xs text-slate-600">{p.referencia ?? "—"}</TableCell>
-        <TableCell className="text-xs font-semibold text-slate-800">
-          {p.descripcion ?? "Producto sin descripción"}
-        </TableCell>
-        <TableCell className="num text-right text-xs text-slate-700">
-          {formatCantidad(p.kilos, "KG")}
-        </TableCell>
-        <TableCell className="num text-right text-xs text-slate-700">{money(p.neto)}</TableCell>
-        <TableCell className="num text-right text-xs text-slate-700">{money(p.margen)}</TableCell>
-      </TableRow>
-      {abierto && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={6} className="bg-slate-50/60 px-6 py-4">
-            {loading && !contexto && (
-              <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando historial de compras...
-              </p>
-            )}
-            {contexto && !contexto.disponible && (
-              <p className="text-xs text-slate-500">
-                {contexto.motivo ?? "Sin datos disponibles."}
-              </p>
-            )}
-            {contexto?.disponible && (
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Clientes que compran este producto (últimos 90 días)
-                </p>
-                {(contexto.clientes ?? []).length === 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">Sin compras recientes.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1.5">
-                    {(contexto.clientes ?? []).map((c) => (
-                      <li
-                        key={c.clienteRowId ?? c.clienteNombre}
-                        className="flex items-center justify-between gap-3 text-xs"
-                      >
-                        <span className="min-w-0 truncate text-slate-700">
-                          {c.clienteNombre ?? "Cliente sin nombre"}
-                        </span>
-                        <span className="num shrink-0 text-slate-500">
-                          {compact(c.cantidadHistorica)} uds · {money(c.netoHistorico)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onVerDocumentos();
-                  }}
-                  className="mt-3 cursor-pointer text-[11px] font-semibold text-blue-700 hover:underline"
-                >
-                  Ver documentos de venta de este producto ↓
-                </button>
-              </div>
-            )}
-          </TableCell>
-        </TableRow>
-      )}
     </>
   );
 }

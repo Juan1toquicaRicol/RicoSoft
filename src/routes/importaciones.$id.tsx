@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Anchor,
   ArrowLeft,
-  CheckCircle2,
   Lock,
   MapPin,
   Package,
@@ -23,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { PanelColapsable } from "@/components/ui/panel-colapsable";
 import {
   Select,
   SelectContent,
@@ -47,6 +45,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ImportacionHeader,
+  ImportacionResumen,
+  ImportacionProgreso,
+  ImportacionAccionesPendientes,
+  ImportacionMercanciaResumen,
+  EstadoVacioPestana,
+  TabCounterBadge,
+} from "@/components/importaciones/orden-detalle";
 import {
   useOrdenCompraIntl,
   usePollingOrdenCompraIntl,
@@ -67,8 +75,10 @@ import {
   type LoteImportacion,
   type ResponsableTipo,
   type TipoDocumentoExpediente,
+  type TipoDocumentoOrdenIntl,
   type TipoNovedad,
   type VistoBuenoAduanero,
+  TIPOS_DOCUMENTO_ORDEN_INTL,
 } from "@/hooks/use-importaciones";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
@@ -192,6 +202,9 @@ function DetalleOrdenIntl() {
     actualizarVistoBueno,
     subirDocumentoVistoBueno,
     descargarDocumentoVistoBueno,
+    subirDocumentoOrden,
+    eliminarDocumentoOrden,
+    descargarDocumentoOrden,
     crearActividad,
     completarActividad,
     crearNovedad,
@@ -445,587 +458,703 @@ function DetalleOrdenIntl() {
         </>
       }
     >
-      {/* "Situación actual" — lo primero que el usuario debe ver, en lenguaje de negocio. */}
-      <div
-        className={`panel rounded-lg p-5 shadow-2xs ${orden.situacionActual.atencion ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"}`}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              {orden.situacionActual.atencion ? (
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-              ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 text-blue-700" />
-              )}
-              Situación actual
-            </p>
-            <p className="mt-1 text-base font-bold text-slate-900">
-              {orden.situacionActual.etapaActual}
-            </p>
-          </div>
-          {orden.situacionActual.atencion && (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
-                Atención
-              </p>
-              <p className="text-sm font-semibold text-slate-800">
-                {orden.situacionActual.atencion}
-              </p>
-              <p className="text-[11px] text-amber-700">
-                {orden.situacionActual.diasRetraso} día(s) de retraso
-              </p>
-            </div>
-          )}
-          {orden.situacionActual.responsable && (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Responsable
-              </p>
-              <p className="text-sm font-semibold text-slate-800">
-                {orden.situacionActual.responsable}
-              </p>
-            </div>
-          )}
-          {orden.situacionActual.proximaAccion && (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Próxima acción
-              </p>
-              <p className="text-sm font-semibold text-slate-800">
-                {orden.situacionActual.proximaAccion}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* 1. Header / centro de control — siempre visible, sin importar la pestaña activa. */}
+      <ImportacionHeader orden={orden} />
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-4">
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Estado</p>
-          <div className="mt-1">
-            <EstadoBadge estado={orden.estado} />
-          </div>
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Moneda / TRM pactada</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">
-            {orden.moneda} · {orden.trmPactada.toLocaleString("es-CO")}
-          </p>
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">FOB × TRM estimado</p>
-          <p className="num mt-1 text-sm font-bold text-slate-900">
-            {money(orden.valorEstimadoTotal, "COP")}
-          </p>
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Responsable de la orden</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">
-            {orden.responsable?.nombre ?? "—"}
-          </p>
-        </div>
-      </div>
+      {/* 5. Navegación por pestañas — reubica el contenido ya existente sin duplicarlo. */}
+      <Tabs defaultValue="resumen" className="mt-4">
+        <TabsList className="flex h-auto flex-wrap justify-start gap-1 bg-slate-100 p-1">
+          <TabsTrigger value="resumen" className="text-xs">
+            Resumen
+          </TabsTrigger>
+          <TabsTrigger value="mercancia" className="text-xs">
+            Mercancía
+            <TabCounterBadge n={orden.items.length} />
+          </TabsTrigger>
+          <TabsTrigger value="documentos" className="text-xs">
+            Documentos
+            <TabCounterBadge n={orden.documentos.length} />
+          </TabsTrigger>
+          <TabsTrigger value="embarques" className="text-xs">
+            Embarques
+            <TabCounterBadge n={orden.lotes.length} />
+          </TabsTrigger>
+          <TabsTrigger value="seguimiento" className="text-xs">
+            Seguimiento
+            <TabCounterBadge
+              n={orden.actividades.filter((a) => a.estado !== "Completada").length}
+            />
+          </TabsTrigger>
+          <TabsTrigger value="novedades" className="text-xs">
+            Novedades
+            <TabCounterBadge n={orden.novedades.filter((n) => n.estado !== "Resuelta").length} />
+          </TabsTrigger>
+          <TabsTrigger value="pagos" className="text-xs">
+            Pagos
+            <TabCounterBadge n={orden.pagos.filter((p) => p.estado === "Pendiente").length} />
+          </TabsTrigger>
+          <TabsTrigger value="auditoria" className="text-xs">
+            Auditoría
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-4">
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Proveedor</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.proveedorExtranjero}</p>
-          {orden.proveedor ? (
-            <p className="text-[11px] text-slate-500">NIT {orden.proveedor.nit} · en catálogo</p>
-          ) : (
-            <p className="text-[11px] text-slate-500">Proveedor no vinculado al catálogo</p>
-          )}
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">País de Origen</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.paisOrigen}</p>
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Incoterm</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.incoterm}</p>
-        </div>
-        <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold text-slate-500">Forma de Pago</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">{orden.formaPago ?? "—"}</p>
-        </div>
-      </div>
+        {/* RESUMEN */}
+        <TabsContent value="resumen" className="space-y-4">
+          <ImportacionResumen orden={orden} />
+          <ImportacionProgreso orden={orden} />
+          <ImportacionAccionesPendientes orden={orden} />
 
-      {orden.proveedor && orden.proveedor.requisitos.length > 0 && (
-        <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
-          <div className="border-b border-slate-200 p-4 bg-slate-50/80">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-              Requisitos del Proveedor
-            </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Vigentes hoy para {orden.proveedor.nombre} — administrados en Importaciones →
-              Proveedores y Requisitos.
-            </p>
-          </div>
-          <ul className="divide-y divide-slate-100">
-            {orden.proveedor.requisitos.map((r) => (
-              <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-                <Badge
-                  variant="outline"
-                  className="border-slate-300 bg-slate-50 text-slate-600 text-[10px]"
-                >
-                  {r.tipo}
-                </Badge>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-slate-800 truncate">{r.nombre}</p>
-                  {r.descripcion && (
-                    <p className="text-[11px] text-slate-500 truncate">{r.descripcion}</p>
-                  )}
-                </div>
-                {r.obligatorio && (
-                  <Badge
-                    variant="outline"
-                    className="border-slate-300 bg-slate-900 text-white text-[10px] shrink-0"
-                  >
-                    Obligatorio
-                  </Badge>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
-        <div className="border-b border-slate-200 p-4 bg-slate-50/80">
-          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-            Ítems de la Orden
-          </h3>
-        </div>
-        <Table>
-          <TableHeader className="bg-slate-100/80">
-            <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">
-                Descripción
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
-                Cantidad
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
-                Valor FOB unit.
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
-                Subtotal FOB
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="text-slate-800 font-medium">
-            {orden.items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="px-4 py-2.5">{item.descripcion}</TableCell>
-                <TableCell className="px-4 py-2.5 text-right font-mono">{item.cantidad}</TableCell>
-                <TableCell className="num px-4 py-2.5 text-right">
-                  {money(item.valorUnitarioFob, orden.moneda)}
-                </TableCell>
-                <TableCell className="num px-4 py-2.5 text-right font-bold">
-                  {money(item.cantidad * item.valorUnitarioFob, orden.moneda)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs mt-4">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/80">
-          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-            <Ship className="h-3.5 w-3.5" /> Lotes de Embarque
-          </h3>
-          {puedeCrear && orden.estado !== "Anulada" && orden.estado !== "Cerrada" && (
-            <Button size="xs" onClick={() => setModalLoteOpen(true)} className="h-7 text-[11px]">
-              <Plus className="h-3 w-3 mr-1" /> Registrar Lote
-            </Button>
-          )}
-        </div>
-
-        {orden.lotes.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-500">
-            Esta orden no tiene lotes registrados todavía.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {orden.lotes.map((lote) => (
-              <div key={lote.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between flex-wrap gap-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">BL/AWB {lote.blAwb}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {lote.puertoOrigen} → {lote.puertoDestino}
-                      {lote.contenedor ? ` · Contenedor ${lote.contenedor}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <EstadoBadge estado={lote.estado} />
-                    {ESTADOS_TRANSITO_MANUAL.includes(lote.estado) && lote.fechaLlegadaEstimada && (
-                      <BarraVencimiento
-                        fecha={lote.fechaLlegadaEstimada}
-                        etiquetaVencido="Debió llegar"
-                        ventanaDias={20}
-                      />
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {puedeGestionarTransito &&
-                    ESTADOS_TRANSITO_MANUAL.includes(lote.estado) &&
-                    ESTADOS_TRANSITO_MANUAL.filter((e) => e !== lote.estado).map((estado) => (
-                      <Button
-                        key={estado}
-                        size="xs"
-                        variant="outline"
-                        disabled={accionEnCurso === lote.id}
-                        onClick={() => handleAvanzarTransito(lote, estado)}
-                        className="h-7 text-[11px] font-bold"
-                      >
-                        Mover a "{estado}"
-                      </Button>
-                    ))}
-                  {puedeRecibir && ESTADOS_TRANSITO_MANUAL.includes(lote.estado) && (
-                    <Button
-                      size="xs"
-                      variant="destructive"
-                      disabled={accionEnCurso === lote.id}
-                      onClick={() => handleRecibirPlanta(lote)}
-                      className="h-7 text-[11px]"
-                    >
-                      <Package className="h-3 w-3 mr-1" /> Recibir en planta (pre-compra)
-                    </Button>
-                  )}
-                  {puedeLiquidar && ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado) && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => {
-                        setLoteLiquidando(lote);
-                        setLiquidacionForm({
-                          ...liquidacionVacia,
-                          trmLiquidacion: orden.trmPactada,
-                        });
-                      }}
-                      className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
-                    >
-                      Liquidar costeo de importación
-                    </Button>
-                  )}
-                </div>
-
-                {lote.costeos.length > 0 && (
-                  <div className="rounded-md border border-slate-200 overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow className="hover:bg-slate-50">
-                          <TableHead className="text-slate-600 font-bold px-3 py-2">Ítem</TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
-                            Costo total COP
-                          </TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
-                            Costo unitario COP
-                          </TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
-                            Dif. cambio COP
-                          </TableHead>
-                          <TableHead className="text-slate-600 font-bold px-3 py-2">Tipo</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {lote.costeos.map((c) => (
-                          <TableRow key={c.id}>
-                            <TableCell className="px-3 py-2">{descripcionItem(c.itemId)}</TableCell>
-                            <TableCell className="num px-3 py-2 text-right font-bold">
-                              {money(c.costoTotalCop, "COP")}
-                            </TableCell>
-                            <TableCell className="num px-3 py-2 text-right">
-                              {money(c.costoUnitarioCop, "COP")}
-                            </TableCell>
-                            <TableCell className="num px-3 py-2 text-right">
-                              {money(c.diferenciaCambioCop, "COP")}
-                            </TableCell>
-                            <TableCell className="px-3 py-2">
-                              <EstadoBadge estado={c.esProvisional ? "Pendiente" : "Aprobada"} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                <EmbarqueTrackingPanel
-                  lote={lote}
-                  canManage={puedeGestionarTransito}
-                  onEditar={actualizarEmbarqueLote}
-                  onAgregarContenedor={agregarContenedor}
-                  onEliminarContenedor={eliminarContenedor}
-                  onSincronizar={sincronizarTracking}
-                />
-
-                <ExpedienteAduaneroPanel
-                  lote={lote}
-                  canManage={puedeGestionarTransito}
-                  onActualizar={actualizarExpediente}
-                  onSubirDocumento={subirDocumentoExpediente}
-                  onEliminarDocumento={eliminarDocumentoExpediente}
-                  onDescargarDocumento={descargarDocumentoExpediente}
-                />
-
-                <VistosBuenosPanel
-                  lote={lote}
-                  canManage={puedeGestionarTransito}
-                  onCrear={crearVistoBueno}
-                  onActualizar={actualizarVistoBueno}
-                  onSubirDocumento={subirDocumentoVistoBueno}
-                  onDescargarDocumento={descargarDocumentoVistoBueno}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Actividades esperadas — el motor de seguimiento en lenguaje de negocio. */}
-      <PanelColapsable
-        className="mt-4"
-        title="Seguimiento"
-        description="Actividades esperadas del proceso — quién debe hacer qué, y para cuándo"
-        actions={
-          puedeGestionarTransito && (
-            <Button
-              size="xs"
-              onClick={() => setModalActividadOpen(true)}
-              className="h-7 text-[11px]"
-            >
-              <Plus className="h-3 w-3 mr-1" /> Agregar actividad
-            </Button>
-          )
-        }
-      >
-        {orden.actividades.length === 0 ? (
-          <p className="text-xs text-slate-500">Sin actividades registradas.</p>
-        ) : (
-          <div className="space-y-2">
-            {orden.actividades.map((a) => {
-              const vencida =
-                a.fechaLimite &&
-                new Date(a.fechaLimite).getTime() < Date.now() &&
-                (a.estado === "Pendiente" || a.estado === "EnCurso");
-              return (
-                <div
-                  key={a.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${
-                    a.estado === "Completada"
-                      ? "border-slate-200 bg-slate-50"
-                      : vencida
-                        ? "border-amber-300 bg-amber-50"
-                        : "border-slate-200"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p
-                      className={`font-bold ${a.estado === "Completada" ? "text-slate-500 line-through" : "text-slate-800"}`}
-                    >
-                      {a.nombre}
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      {a.etapa} · {ETIQUETA_RESPONSABLE_TIPO[a.responsableTipo]}
-                      {a.responsableNombre ? ` (${a.responsableNombre})` : ""}
-                      {a.fechaLimite && (
-                        <> · límite {new Date(a.fechaLimite).toLocaleDateString("es-CO")}</>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <EstadoBadge estado={vencida ? "Vencida" : a.estado} />
-                    {puedeGestionarTransito && a.estado !== "Completada" && (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        disabled={accionEnCurso === a.id}
-                        onClick={() => handleCompletarActividad(a.id)}
-                        className="h-7 text-[11px]"
-                      >
-                        Marcar completada
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </PanelColapsable>
-
-      {/* Novedades — reales, no comentarios; automáticas + manuales. */}
-      <PanelColapsable
-        className="mt-4"
-        title="Novedades"
-        description="Retrasos, documentos faltantes, bloqueos y otros problemas — automáticos o registrados a mano"
-        actions={
-          puedeGestionarTransito && (
-            <Button size="xs" onClick={() => setModalNovedadOpen(true)} className="h-7 text-[11px]">
-              <Plus className="h-3 w-3 mr-1" /> Registrar novedad
-            </Button>
-          )
-        }
-      >
-        {orden.novedades.length === 0 ? (
-          <p className="text-xs text-slate-500">Sin novedades registradas.</p>
-        ) : (
-          <div className="space-y-2">
-            {orden.novedades.map((n) => (
-              <div
-                key={n.id}
-                className={`rounded-lg border px-3 py-2 text-xs ${
-                  n.estado === "Resuelta"
-                    ? "border-slate-200 bg-slate-50"
-                    : n.prioridad === "Alta"
-                      ? "border-red-300 bg-red-50"
-                      : "border-amber-200 bg-amber-50"
-                }`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-bold text-slate-800">
-                    {ETIQUETA_TIPO_NOVEDAD[n.tipo]}
-                    {n.automatica && (
-                      <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                        Automática
-                      </span>
-                    )}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <EstadoBadge estado={n.estado} />
-                    {puedeGestionarTransito && n.estado !== "Resuelta" && (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        disabled={accionEnCurso === n.id}
-                        onClick={() => handleResolverNovedad(n.id)}
-                        className="h-7 text-[11px]"
-                      >
-                        Resolver
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-1 text-slate-600">{n.descripcion}</p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Origen: {n.origen === "PorDeterminar" ? "Por determinar" : n.origen}
-                  {n.responsable ? ` · ${n.responsable}` : ""} · Prioridad {n.prioridad}
+          {orden.proveedor && orden.proveedor.requisitos.length > 0 && (
+            <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+              <div className="border-b border-slate-200 p-4 bg-slate-50/80">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  Requisitos del Proveedor
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Vigentes hoy para {orden.proveedor.nombre} — administrados en Importaciones →
+                  Proveedores y Requisitos.
                 </p>
               </div>
-            ))}
-          </div>
-        )}
-      </PanelColapsable>
+              <ul className="divide-y divide-slate-100">
+                {orden.proveedor.requisitos.map((r) => (
+                  <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <Badge
+                      variant="outline"
+                      className="border-slate-300 bg-slate-50 text-slate-600 text-[10px]"
+                    >
+                      {r.tipo}
+                    </Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-800 truncate">{r.nombre}</p>
+                      {r.descripcion && (
+                        <p className="text-[11px] text-slate-500 truncate">{r.descripcion}</p>
+                      )}
+                    </div>
+                    {r.obligatorio && (
+                      <Badge
+                        variant="outline"
+                        className="border-slate-300 bg-slate-900 text-white text-[10px] shrink-0"
+                      >
+                        Obligatorio
+                      </Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!orden.proveedor && (
+            <p className="text-[11px] text-slate-500">
+              Proveedor no vinculado al catálogo — sin requisitos asociados.
+            </p>
+          )}
+        </TabsContent>
 
-      {/* Pagos / obligaciones. */}
-      <PanelColapsable
-        className="mt-4"
-        title="Pagos"
-        description="Anticipos, saldos, impuestos y demás obligaciones asociadas a esta importación"
-        actions={
-          puedeLiquidar && (
-            <Button size="xs" onClick={() => setModalPagoOpen(true)} className="h-7 text-[11px]">
-              <Plus className="h-3 w-3 mr-1" /> Registrar pago
-            </Button>
-          )
-        }
-      >
-        {orden.pagos.length === 0 ? (
-          <p className="text-xs text-slate-500">Sin pagos registrados.</p>
-        ) : (
-          <div className="overflow-x-auto">
+        {/* MERCANCÍA */}
+        <TabsContent value="mercancia" className="space-y-4">
+          <ImportacionMercanciaResumen orden={orden} />
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="border-b border-slate-200 p-4 bg-slate-50/80">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                Ítems de la Orden
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Cantidad comercial y peso físico son datos distintos del ítem.
+              </p>
+            </div>
             <Table>
               <TableHeader className="bg-slate-100/80">
                 <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Concepto
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">
+                    Descripción
                   </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Valor
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3">
+                    Ref. proveedor
                   </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Vencimiento
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                    Cantidad (comercial)
                   </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Estado
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                    Peso físico
                   </TableHead>
-                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Acción
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                    Valor FOB unit.
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3 text-right">
+                    Subtotal FOB
                   </TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {orden.pagos.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="text-xs font-semibold text-slate-800">
-                      {p.concepto}
+              <TableBody className="text-slate-800 font-medium">
+                {orden.items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="px-4 py-2.5">{item.descripcion}</TableCell>
+                    <TableCell className="px-4 py-2.5 text-slate-500">
+                      {item.referenciaProveedor ?? "—"}
                     </TableCell>
-                    <TableCell className="num text-right text-xs text-slate-700">
-                      {money(p.valor, p.moneda)}
+                    <TableCell className="px-4 py-2.5 text-right font-mono">
+                      {item.cantidad}
+                      {item.unidadMedida ? ` ${item.unidadMedida}` : ""}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-500">
-                      {p.fechaVencimiento
-                        ? new Date(p.fechaVencimiento).toLocaleDateString("es-CO")
-                        : "—"}
+                    <TableCell className="px-4 py-2.5 text-right font-mono text-slate-500">
+                      {item.pesoKg != null ? `${item.pesoKg.toLocaleString("es-CO")} kg` : "—"}
                     </TableCell>
-                    <TableCell>
-                      <EstadoBadge estado={p.estado} />
+                    <TableCell className="num px-4 py-2.5 text-right">
+                      {money(item.valorUnitarioFob, orden.moneda)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {puedeLiquidar && p.estado === "Pendiente" && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled={accionEnCurso === p.id}
-                          onClick={() => handleMarcarPagado(p.id)}
-                          className="h-7 text-[11px]"
-                        >
-                          Marcar pagado
-                        </Button>
-                      )}
+                    <TableCell className="num px-4 py-2.5 text-right font-bold">
+                      {money(item.cantidad * item.valorUnitarioFob, orden.moneda)}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
-        )}
-      </PanelColapsable>
+        </TabsContent>
 
-      <div className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs mt-4">
-        <h2 className="text-sm font-semibold mb-4">Trazabilidad y Auditoría</h2>
-        <ol className="space-y-4">
-          {orden.historial.map((h, i) => (
-            <li key={i} className="relative pl-6">
-              <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-blue-800" />
-              {i < orden.historial.length - 1 && (
-                <span className="absolute left-[4.5px] top-5 h-[calc(100%+0.5rem)] w-px bg-border" />
+        {/* DOCUMENTOS */}
+        <TabsContent value="documentos" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="border-b border-slate-200 p-4 bg-slate-50/80">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                Documentos Iniciales
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Cotización, Proforma Invoice, oferta comercial u otros documentos de soporte de la
+                orden.
+              </p>
+            </div>
+            <div className="p-4">
+              {orden.documentos.length === 0 && !puedeCrear ? (
+                <EstadoVacioPestana
+                  titulo="Sin documentos"
+                  descripcion="Todavía no se ha adjuntado ningún documento inicial a esta orden."
+                />
+              ) : (
+                <DocumentosInicialesPanel
+                  ordenId={orden.id}
+                  documentos={orden.documentos}
+                  canManage={puedeCrear}
+                  onSubir={subirDocumentoOrden}
+                  onEliminar={eliminarDocumentoOrden}
+                  onDescargar={descargarDocumentoOrden}
+                />
               )}
-              <p className="text-xs font-semibold">
-                {h.accion}
-                {h.etapa && (
-                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
-                    {h.etapa}
-                  </span>
-                )}
-              </p>
-              <p className="text-[10px] text-slate-500">
-                {new Date(h.fecha).toLocaleString("es-CO")} · {h.responsable ?? h.actor}
-                {h.origen === "Manual" && h.responsable ? ` (registrado por ${h.actor})` : ""}
-              </p>
-              {h.detalle && <p className="mt-1 text-xs text-slate-500 italic">{h.detalle}</p>}
-            </li>
-          ))}
-          {orden.historial.length === 0 && (
-            <li className="text-xs text-slate-500">Sin eventos registrados.</li>
-          )}
-        </ol>
-      </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* EMBARQUES */}
+        <TabsContent value="embarques" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/80">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                <Ship className="h-3.5 w-3.5" /> Lotes de Embarque
+              </h3>
+              {puedeCrear && orden.estado !== "Anulada" && orden.estado !== "Cerrada" && (
+                <Button
+                  size="xs"
+                  onClick={() => setModalLoteOpen(true)}
+                  className="h-7 text-[11px]"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Registrar Lote
+                </Button>
+              )}
+            </div>
+
+            {orden.lotes.length === 0 ? (
+              <EstadoVacioPestana
+                titulo="Sin lotes de embarque"
+                descripcion="Esta orden no tiene lotes registrados todavía."
+                accion={
+                  puedeCrear &&
+                  orden.estado !== "Anulada" &&
+                  orden.estado !== "Cerrada" && (
+                    <Button
+                      size="xs"
+                      onClick={() => setModalLoteOpen(true)}
+                      className="h-7 text-[11px]"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Registrar Lote
+                    </Button>
+                  )
+                }
+              />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {orden.lotes.map((lote) => (
+                  <div key={lote.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">BL/AWB {lote.blAwb}</p>
+                        <p className="text-[11px] text-slate-500">
+                          {lote.puertoOrigen} → {lote.puertoDestino}
+                          {lote.contenedor ? ` · Contenedor ${lote.contenedor}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <EstadoBadge estado={lote.estado} />
+                        {ESTADOS_TRANSITO_MANUAL.includes(lote.estado) &&
+                          lote.fechaLlegadaEstimada && (
+                            <BarraVencimiento
+                              fecha={lote.fechaLlegadaEstimada}
+                              etiquetaVencido="Debió llegar"
+                              ventanaDias={20}
+                            />
+                          )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {puedeGestionarTransito &&
+                        ESTADOS_TRANSITO_MANUAL.includes(lote.estado) &&
+                        ESTADOS_TRANSITO_MANUAL.filter((e) => e !== lote.estado).map((estado) => (
+                          <Button
+                            key={estado}
+                            size="xs"
+                            variant="outline"
+                            disabled={accionEnCurso === lote.id}
+                            onClick={() => handleAvanzarTransito(lote, estado)}
+                            className="h-7 text-[11px] font-bold"
+                          >
+                            Mover a "{estado}"
+                          </Button>
+                        ))}
+                      {puedeRecibir && ESTADOS_TRANSITO_MANUAL.includes(lote.estado) && (
+                        <Button
+                          size="xs"
+                          variant="destructive"
+                          disabled={accionEnCurso === lote.id}
+                          onClick={() => handleRecibirPlanta(lote)}
+                          className="h-7 text-[11px]"
+                        >
+                          <Package className="h-3 w-3 mr-1" /> Recibir en planta (pre-compra)
+                        </Button>
+                      )}
+                      {puedeLiquidar && ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado) && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => {
+                            setLoteLiquidando(lote);
+                            setLiquidacionForm({
+                              ...liquidacionVacia,
+                              trmLiquidacion: orden.trmPactada,
+                            });
+                          }}
+                          className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
+                        >
+                          Liquidar costeo de importación
+                        </Button>
+                      )}
+                    </div>
+
+                    {lote.costeos.length > 0 && (
+                      <div className="rounded-md border border-slate-200 overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-slate-50">
+                            <TableRow className="hover:bg-slate-50">
+                              <TableHead className="text-slate-600 font-bold px-3 py-2">
+                                Ítem
+                              </TableHead>
+                              <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                                Costo total COP
+                              </TableHead>
+                              <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                                Costo unitario COP
+                              </TableHead>
+                              <TableHead className="text-slate-600 font-bold px-3 py-2 text-right">
+                                Dif. cambio COP
+                              </TableHead>
+                              <TableHead className="text-slate-600 font-bold px-3 py-2">
+                                Tipo
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {lote.costeos.map((c) => (
+                              <TableRow key={c.id}>
+                                <TableCell className="px-3 py-2">
+                                  {descripcionItem(c.itemId)}
+                                </TableCell>
+                                <TableCell className="num px-3 py-2 text-right font-bold">
+                                  {money(c.costoTotalCop, "COP")}
+                                </TableCell>
+                                <TableCell className="num px-3 py-2 text-right">
+                                  {money(c.costoUnitarioCop, "COP")}
+                                </TableCell>
+                                <TableCell className="num px-3 py-2 text-right">
+                                  {money(c.diferenciaCambioCop, "COP")}
+                                </TableCell>
+                                <TableCell className="px-3 py-2">
+                                  <EstadoBadge
+                                    estado={c.esProvisional ? "Pendiente" : "Aprobada"}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+
+                    <EmbarqueTrackingPanel
+                      lote={lote}
+                      canManage={puedeGestionarTransito}
+                      onEditar={actualizarEmbarqueLote}
+                      onAgregarContenedor={agregarContenedor}
+                      onEliminarContenedor={eliminarContenedor}
+                      onSincronizar={sincronizarTracking}
+                    />
+
+                    <ExpedienteAduaneroPanel
+                      lote={lote}
+                      canManage={puedeGestionarTransito}
+                      onActualizar={actualizarExpediente}
+                      onSubirDocumento={subirDocumentoExpediente}
+                      onEliminarDocumento={eliminarDocumentoExpediente}
+                      onDescargarDocumento={descargarDocumentoExpediente}
+                    />
+
+                    <VistosBuenosPanel
+                      lote={lote}
+                      canManage={puedeGestionarTransito}
+                      onCrear={crearVistoBueno}
+                      onActualizar={actualizarVistoBueno}
+                      onSubirDocumento={subirDocumentoVistoBueno}
+                      onDescargarDocumento={descargarDocumentoVistoBueno}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* SEGUIMIENTO — actividades esperadas del proceso, en lenguaje de negocio. */}
+        <TabsContent value="seguimiento" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/80">
+              <div>
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  Seguimiento
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Actividades esperadas del proceso — quién debe hacer qué, y para cuándo.
+                </p>
+              </div>
+              {puedeGestionarTransito && (
+                <Button
+                  size="xs"
+                  onClick={() => setModalActividadOpen(true)}
+                  className="h-7 text-[11px]"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Agregar actividad
+                </Button>
+              )}
+            </div>
+            <div className="p-4">
+              {orden.actividades.length === 0 ? (
+                <EstadoVacioPestana
+                  titulo="Sin actividades"
+                  descripcion="Todavía no hay actividades esperadas registradas para esta importación."
+                  accion={
+                    puedeGestionarTransito && (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalActividadOpen(true)}
+                        className="h-7 text-[11px]"
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Agregar actividad
+                      </Button>
+                    )
+                  }
+                />
+              ) : (
+                <div className="space-y-2">
+                  {orden.actividades.map((a) => {
+                    const vencida =
+                      a.fechaLimite &&
+                      new Date(a.fechaLimite).getTime() < Date.now() &&
+                      (a.estado === "Pendiente" || a.estado === "EnCurso");
+                    return (
+                      <div
+                        key={a.id}
+                        className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${
+                          a.estado === "Completada"
+                            ? "border-slate-200 bg-slate-50"
+                            : vencida
+                              ? "border-amber-300 bg-amber-50"
+                              : "border-slate-200"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className={`font-bold ${a.estado === "Completada" ? "text-slate-500 line-through" : "text-slate-800"}`}
+                          >
+                            {a.nombre}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {a.etapa} · {ETIQUETA_RESPONSABLE_TIPO[a.responsableTipo]}
+                            {a.responsableNombre ? ` (${a.responsableNombre})` : ""}
+                            {a.fechaLimite && (
+                              <> · límite {new Date(a.fechaLimite).toLocaleDateString("es-CO")}</>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <EstadoBadge estado={vencida ? "Vencida" : a.estado} />
+                          {puedeGestionarTransito && a.estado !== "Completada" && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              disabled={accionEnCurso === a.id}
+                              onClick={() => handleCompletarActividad(a.id)}
+                              className="h-7 text-[11px]"
+                            >
+                              Marcar completada
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* NOVEDADES — reales, no comentarios; automáticas + manuales. */}
+        <TabsContent value="novedades" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/80">
+              <div>
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  Novedades
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Retrasos, documentos faltantes, bloqueos y otros problemas — automáticos o
+                  registrados a mano.
+                </p>
+              </div>
+              {puedeGestionarTransito && (
+                <Button
+                  size="xs"
+                  onClick={() => setModalNovedadOpen(true)}
+                  className="h-7 text-[11px]"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Registrar novedad
+                </Button>
+              )}
+            </div>
+            <div className="p-4">
+              {orden.novedades.length === 0 ? (
+                <EstadoVacioPestana
+                  titulo="Sin novedades"
+                  descripcion="No se han detectado ni registrado novedades para esta importación."
+                  accion={
+                    puedeGestionarTransito && (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalNovedadOpen(true)}
+                        className="h-7 text-[11px]"
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Registrar novedad
+                      </Button>
+                    )
+                  }
+                />
+              ) : (
+                <div className="space-y-2">
+                  {orden.novedades.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`rounded-lg border px-3 py-2 text-xs ${
+                        n.estado === "Resuelta"
+                          ? "border-slate-200 bg-slate-50"
+                          : n.prioridad === "Alta"
+                            ? "border-red-300 bg-red-50"
+                            : "border-amber-200 bg-amber-50"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-bold text-slate-800">
+                          {ETIQUETA_TIPO_NOVEDAD[n.tipo]}
+                          {n.automatica && (
+                            <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                              Automática
+                            </span>
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <EstadoBadge estado={n.estado} />
+                          {puedeGestionarTransito && n.estado !== "Resuelta" && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              disabled={accionEnCurso === n.id}
+                              onClick={() => handleResolverNovedad(n.id)}
+                              className="h-7 text-[11px]"
+                            >
+                              Resolver
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="mt-1 text-slate-600">{n.descripcion}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Origen: {n.origen === "PorDeterminar" ? "Por determinar" : n.origen}
+                        {n.responsable ? ` · ${n.responsable}` : ""} · Prioridad {n.prioridad}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* PAGOS / obligaciones. */}
+        <TabsContent value="pagos" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/80">
+              <div>
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Pagos</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Anticipos, saldos, impuestos y demás obligaciones asociadas a esta importación.
+                </p>
+              </div>
+              {puedeLiquidar && (
+                <Button
+                  size="xs"
+                  onClick={() => setModalPagoOpen(true)}
+                  className="h-7 text-[11px]"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Registrar pago
+                </Button>
+              )}
+            </div>
+            <div className="p-4">
+              {orden.pagos.length === 0 ? (
+                <EstadoVacioPestana
+                  titulo="Sin pagos"
+                  descripcion="No se han registrado pagos u obligaciones para esta importación."
+                  accion={
+                    puedeLiquidar && (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalPagoOpen(true)}
+                        className="h-7 text-[11px]"
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Registrar pago
+                      </Button>
+                    )
+                  }
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-100/80">
+                      <TableRow className="hover:bg-slate-100/80">
+                        <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                          Concepto
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                          Valor
+                        </TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                          Vencimiento
+                        </TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                          Estado
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                          Acción
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orden.pagos.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="text-xs font-semibold text-slate-800">
+                            {p.concepto}
+                          </TableCell>
+                          <TableCell className="num text-right text-xs text-slate-700">
+                            {money(p.valor, p.moneda)}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500">
+                            {p.fechaVencimiento
+                              ? new Date(p.fechaVencimiento).toLocaleDateString("es-CO")
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <EstadoBadge estado={p.estado} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {puedeLiquidar && p.estado === "Pendiente" && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                disabled={accionEnCurso === p.id}
+                                onClick={() => handleMarcarPagado(p.id)}
+                                className="h-7 text-[11px]"
+                              >
+                                Marcar pagado
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* AUDITORÍA — visualmente secundaria (compacta, texto pequeño). */}
+        <TabsContent value="auditoria" className="space-y-4">
+          <div className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-4">
+              Trazabilidad y Auditoría
+            </h2>
+            {orden.historial.length === 0 ? (
+              <EstadoVacioPestana
+                titulo="Sin eventos"
+                descripcion="Todavía no hay eventos de auditoría registrados para esta importación."
+              />
+            ) : (
+              <ol className="space-y-4">
+                {orden.historial.map((h, i) => (
+                  <li key={i} className="relative pl-6">
+                    <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-slate-400" />
+                    {i < orden.historial.length - 1 && (
+                      <span className="absolute left-[3.5px] top-4 h-[calc(100%+0.5rem)] w-px bg-slate-200" />
+                    )}
+                    <p className="text-[11px] font-semibold text-slate-700">
+                      {h.accion}
+                      {h.etapa && (
+                        <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                          {h.etapa}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {new Date(h.fecha).toLocaleString("es-CO")} · {h.responsable ?? h.actor}
+                      {h.origen === "Manual" && h.responsable ? ` (registrado por ${h.actor})` : ""}
+                    </p>
+                    {h.detalle && (
+                      <p className="mt-1 text-[11px] text-slate-500 italic">{h.detalle}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* MODAL REGISTRAR LOTE */}
       <Dialog
@@ -1621,6 +1750,133 @@ function DetalleOrdenIntl() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+interface DocumentosInicialesPanelProps {
+  ordenId: string;
+  documentos: {
+    id: string;
+    tipo: string;
+    nombreOriginal: string;
+    mime: string;
+    tamano: number;
+    subidoPorNombre: string | null;
+    createdAt: string;
+  }[];
+  canManage: boolean;
+  onSubir: (ordenId: string, tipo: TipoDocumentoOrdenIntl, file: File) => Promise<void>;
+  onEliminar: (ordenId: string, documentoId: string) => Promise<void>;
+  onDescargar: (ordenId: string, documentoId: string) => Promise<Blob>;
+}
+
+function DocumentosInicialesPanel({
+  ordenId,
+  documentos,
+  canManage,
+  onSubir,
+  onEliminar,
+  onDescargar,
+}: DocumentosInicialesPanelProps) {
+  const [subiendoTipo, setSubiendoTipo] = useState<TipoDocumentoOrdenIntl | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const handleSeleccion = async (tipo: TipoDocumentoOrdenIntl, file: File) => {
+    setSubiendoTipo(tipo);
+    try {
+      await onSubir(ordenId, tipo, file);
+      toast.success("Documento adjuntado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al subir el documento.");
+    } finally {
+      setSubiendoTipo(null);
+    }
+  };
+
+  const handleVer = async (documentoId: string) => {
+    try {
+      const blob = await onDescargar(ordenId, documentoId);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
+    }
+  };
+
+  const handleEliminar = async (documentoId: string, nombre: string) => {
+    if (!confirm(`¿Eliminar el documento "${nombre}"?`)) return;
+    try {
+      await onEliminar(ordenId, documentoId);
+      toast.success("Documento eliminado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el documento.");
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {TIPOS_DOCUMENTO_ORDEN_INTL.map(({ tipo, etiqueta }) => {
+        const documentosDeEsteTipo = documentos.filter((d) => d.tipo === etiqueta);
+        return (
+          <div key={tipo} className="rounded-md border border-slate-200 p-2.5">
+            <p className="text-[10px] uppercase font-bold text-slate-500">{etiqueta}</p>
+            <input
+              ref={(el) => {
+                fileInputRefs.current[tipo] = el;
+              }}
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleSeleccion(tipo, file);
+                e.target.value = "";
+              }}
+            />
+            {documentosDeEsteTipo.length === 0 ? (
+              <p className="mt-1.5 text-[11px] text-slate-400">Sin documentos.</p>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {documentosDeEsteTipo.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between gap-1.5">
+                    <button
+                      type="button"
+                      className="truncate text-left text-[11px] text-blue-700 hover:underline"
+                      onClick={() => handleVer(d.id)}
+                      title={d.nombreOriginal}
+                    >
+                      {d.nombreOriginal}
+                    </button>
+                    {canManage && (
+                      <button
+                        type="button"
+                        className="shrink-0 text-slate-400 hover:text-red-600"
+                        onClick={() => handleEliminar(d.id, d.nombreOriginal)}
+                        title="Eliminar"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canManage && (
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                className="mt-1.5 h-7 w-full text-[11px]"
+                disabled={subiendoTipo === tipo}
+                onClick={() => fileInputRefs.current[tipo]?.click()}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                {subiendoTipo === tipo ? "Subiendo..." : "Adjuntar"}
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

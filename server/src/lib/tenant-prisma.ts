@@ -39,6 +39,7 @@ import { prisma } from "../config/prisma";
  * tenant-scoped debe seguir asignando tenantId a mano en esos hijos.
  */
 const MODELOS_TENANT_SCOPED = new Set([
+  "AnalisisGuardado",
   "Auditoria",
   "Colaborador",
   "CosteoImportacionDetalle",
@@ -76,6 +77,31 @@ const MODELOS_TENANT_SCOPED = new Set([
   "UsuarioPerfilFuncional",
   "ReglaDestinatarios",
   "RequisitoProveedorImportacion",
+  // Los siguientes tienen tenantId NOT NULL sin ninguna semántica especial
+  // (a diferencia de Departamento/Rol/Modulo/ImportacionCorreo/
+  // ImportacionExcepcion, documentados arriba) y se agregaron tras
+  // auditoría: se habían quedado fuera del enforcement automático por
+  // simple omisión al crear el modelo, no por decisión de diseño.
+  // - OrdenCompraIntlDocumento: ya se filtraba manualmente por tenantId en
+  //   importaciones.controller.ts (sin bug activo), pero quedaba sin la
+  //   defensa en profundidad de esta extensión si algún código nuevo
+  //   empezara a usar tenantPrisma para este modelo.
+  // - ConfiguracionInventario: inventario.controller.ts YA usa
+  //   req.tenantPrisma.configuracionInventario con `where:{tenantId}`
+  //   manual (correcto, sin bug activo), pero el comentario de ese archivo
+  //   ("defensa en profundidad con el filtro explícito de tenantId")
+  //   asumía —incorrectamente— que tenantPrisma también reforzaba este
+  //   modelo. Ahora sí lo hace.
+  // - FuenteBiometrica / EmpleadoBiometrico / MarcacionBiometrica /
+  //   SincronizacionBiometricoLog: hoy se filtran manualmente vía prisma
+  //   crudo en el módulo gestion-humana (sin bug activo detectado), pero
+  //   quedaban fuera de esta lista curada sin ninguna razón documentada.
+  "OrdenCompraIntlDocumento",
+  "ConfiguracionInventario",
+  "FuenteBiometrica",
+  "EmpleadoBiometrico",
+  "MarcacionBiometrica",
+  "SincronizacionBiometricoLog",
 ]);
 
 /** Convención de Prisma: el accessor del cliente es el nombre del modelo

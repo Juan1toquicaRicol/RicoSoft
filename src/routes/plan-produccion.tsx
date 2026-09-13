@@ -321,7 +321,7 @@ function PlanProduccionPage() {
                       {formatCantidad(p.cantidadPlaneada, p.unidadMedida)}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">
-                      {new Date(p.fechaPlaneada).toLocaleDateString("es-CO")}
+                      {new Date(p.fechaPlaneada).toLocaleDateString("es-CO", { timeZone: "UTC" })}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">{p.responsable}</TableCell>
                     <TableCell>

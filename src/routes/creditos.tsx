@@ -907,7 +907,7 @@ function PanelCarteraSiesa() {
               size="xs"
               variant="outline"
               disabled={page <= 1 || loading}
-              onClick={() => refresh({ search, page: page - 1 })}
+              onClick={() => refresh({ search, estado: estadoFiltro, page: page - 1 })}
               className="h-7 gap-1 text-[11px] font-bold"
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
@@ -916,7 +916,7 @@ function PanelCarteraSiesa() {
               size="xs"
               variant="outline"
               disabled={page >= totalPages || loading}
-              onClick={() => refresh({ search, page: page + 1 })}
+              onClick={() => refresh({ search, estado: estadoFiltro, page: page + 1 })}
               className="h-7 gap-1 text-[11px] font-bold"
             >
               Siguiente <ChevronRight className="h-3 w-3" />

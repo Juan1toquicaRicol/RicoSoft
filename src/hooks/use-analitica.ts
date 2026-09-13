@@ -205,6 +205,8 @@ export interface VentasPorVendedor {
   /** Top vendedores por margen/utilidad real del mes actual (no por valor vendido). */
   topVendedoresPorMargen: VendedorMargen[];
   resumenHoy: ResumenVentaHoy | null;
+  /** Mismo total que resumenHoy, pero para el mes actual completo. */
+  resumenMes: ResumenVentaHoy | null;
 }
 
 /** Ranking de ventas diarias por vendedor (hoy/ayer/7 días/mes) + detalle de hoy con hora, leído en vivo desde Siesa. */
@@ -215,6 +217,7 @@ export function useVentasPorVendedor() {
     detalleHoy: [],
     topVendedoresPorMargen: [],
     resumenHoy: null,
+    resumenMes: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

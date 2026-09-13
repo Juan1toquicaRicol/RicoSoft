@@ -48,14 +48,25 @@ export const crearPermisoLaboral = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ message: "Los días deben ser un número positivo." });
     }
 
+    const inicioDate = new Date(fechaInicio);
+    const finDate = new Date(fechaFin);
+    if (Number.isNaN(inicioDate.getTime()) || Number.isNaN(finDate.getTime())) {
+      return res.status(400).json({ message: "Las fechas del permiso no son válidas." });
+    }
+    if (finDate < inicioDate) {
+      return res
+        .status(400)
+        .json({ message: "La fecha de fin no puede ser anterior a la fecha de inicio." });
+    }
+
     const permiso = await prisma.permisoLaboral.create({
       data: {
         tenantId,
         empresaId: empleado.empresaId,
         empleadoId,
         tipoPermiso,
-        fechaInicio: new Date(fechaInicio),
-        fechaFin: new Date(fechaFin),
+        fechaInicio: inicioDate,
+        fechaFin: finDate,
         dias: diasNum,
         observaciones: observaciones || null,
       },

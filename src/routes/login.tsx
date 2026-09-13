@@ -48,6 +48,33 @@ interface TenantAccesible {
   subdomain: string;
 }
 
+/**
+ * Panel derecho compartido entre "Iniciar sesión" y "Selecciona tu empresa"
+ * — misma identidad visual en ambas pantallas del flujo de acceso. El fondo
+ * oscuro con textura de puntos es puro CSS (sin imagen extra que cargar);
+ * 3logos.jpg ya trae su propio fondo blanco, por eso va dentro de una
+ * tarjeta blanca en vez de a pantalla completa sobre el degradado.
+ */
+function PanelMarca() {
+  return (
+    <div
+      className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen flex-col items-center justify-center overflow-hidden px-12 py-12 text-white"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 0), linear-gradient(135deg, #0b1526 0%, #0f2247 55%, #123067 100%)",
+        backgroundSize: "24px 24px, 100% 100%",
+      }}
+    >
+      <div className="flex max-w-sm flex-col items-center text-center">
+        <div className="w-full rounded-2xl bg-white p-6 shadow-2xl shadow-black/40">
+          <img src="/3logos.jpg" alt="Ricol, FlexiPack y Green Solutions" className="w-full" />
+        </div>
+        <p className="mt-6 text-sm text-blue-100/60">Un solo sistema para todo el grupo</p>
+      </div>
+    </div>
+  );
+}
+
 function Login() {
   const navigate = useNavigate();
   const { refresh } = useSession();
@@ -253,23 +280,22 @@ function Login() {
                 className="h-12 w-auto"
               />
               <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                RicoSoft · Sistema Multiempresa
+                RicoSoft
               </p>
             </div>
 
             <div className="mb-6">
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                Selecciona la empresa con la que deseas trabajar
+                ¿Con cuál empresa entras?
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Tu cuenta tiene acceso a más de una empresa. Podrás cambiar de empresa después sin
-                cerrar sesión.
+                Puedes cambiar de empresa cuando quieras.
               </p>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-slate-900 border border-slate-900 flex items-start gap-2.5 text-xs text-white font-semibold">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700 font-semibold">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
                 <span>{error}</span>
               </div>
             )}
@@ -321,13 +347,7 @@ function Login() {
           </div>
         </div>
 
-        <div className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen items-center justify-center bg-slate-50 border-l border-slate-200 overflow-hidden">
-          <img
-            src="/3logos.jpg"
-            alt="Nuestras empresas"
-            className="max-w-full max-h-full object-contain p-12"
-          />
-        </div>
+        <PanelMarca />
       </div>
     );
   }
@@ -345,33 +365,31 @@ function Login() {
               className="h-12 w-auto"
             />
             <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-              RicoSoft · Sistema Multiempresa
+              RicoSoft
             </p>
           </div>
 
           {/* Encabezado Dinámico */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              {isRegistering ? "Crear una cuenta" : "Bienvenido de vuelta"}
+              {isRegistering ? "Crear una cuenta" : "Hola de nuevo"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {isRegistering
-                ? "Ingresa tus datos con tu correo corporativo autorizado."
-                : "Ingresa tus credenciales para acceder al sistema."}
+              {isRegistering ? "Con tu correo corporativo." : "Ingresa para continuar."}
             </p>
           </div>
 
           {/* Alertas de Error o Éxito */}
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-slate-900 border border-slate-900 flex items-start gap-2.5 text-xs text-white font-semibold">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700 font-semibold">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
               <span>{error}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-start gap-2.5 text-xs text-blue-800 font-semibold">
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-blue-700" />
+            <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5 text-xs text-emerald-800 font-semibold">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-700" />
               <span>{successMessage}</span>
             </div>
           )}
@@ -396,36 +414,6 @@ function Login() {
                   />
                   <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 </div>
-              </div>
-            )}
-
-            {/* Campo Departamento (Solo visible en Registro) */}
-            {isRegistering && (
-              <div className="space-y-1.5">
-                <Label htmlFor="departamento" className="text-xs font-semibold text-slate-700">
-                  Departamento
-                </Label>
-                <Select value={departamentoId} onValueChange={setDepartamentoId}>
-                  <SelectTrigger
-                    id="departamento"
-                    className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white transition-colors rounded-lg shadow-none"
-                  >
-                    <SelectValue placeholder="Selecciona tu departamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departamentos.length === 0 ? (
-                      <div className="px-2 py-1.5 text-xs text-slate-400">
-                        No hay departamentos disponibles todavía.
-                      </div>
-                    ) : (
-                      departamentos.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.nombre}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
               </div>
             )}
 
@@ -489,6 +477,36 @@ function Login() {
               )}
             </div>
 
+            {/* Campo Departamento (Solo visible en Registro) */}
+            {isRegistering && (
+              <div className="space-y-1.5">
+                <Label htmlFor="departamento" className="text-xs font-semibold text-slate-700">
+                  Departamento
+                </Label>
+                <Select value={departamentoId} onValueChange={setDepartamentoId}>
+                  <SelectTrigger
+                    id="departamento"
+                    className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white transition-colors rounded-lg shadow-none"
+                  >
+                    <SelectValue placeholder="Selecciona tu departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departamentos.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-slate-400">
+                        No hay departamentos disponibles todavía.
+                      </div>
+                    ) : (
+                      departamentos.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Botón Principal */}
             <Button
               type="submit"
@@ -537,25 +555,14 @@ function Login() {
             {/* Footer de seguridad */}
             <p className="flex items-center justify-center gap-1.5 pt-3 text-[11px] text-slate-400">
               <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-              Conexión segura · Datos segmentados por empresa
+              Conexión segura
             </p>
           </form>
-
-          {/* Versión */}
-          <p className="mt-8 text-center text-[10px] text-slate-300 font-medium tracking-widest uppercase">
-            RicoSoft v1.0 — Uso interno corporativo
-          </p>
         </div>
       </div>
 
-      {/* ── Columna Derecha: Solo imagen ── */}
-      <div className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen items-center justify-center bg-slate-50 border-l border-slate-200 overflow-hidden">
-        <img
-          src="/3logos.jpg"
-          alt="Nuestras empresas"
-          className="max-w-full max-h-full object-contain p-12"
-        />
-      </div>
+      {/* ── Columna Derecha: identidad de marca ── */}
+      <PanelMarca />
     </div>
   );
 }

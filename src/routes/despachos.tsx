@@ -146,7 +146,8 @@ function DialogoNuevoDespacho({
                     {d.clienteNombre ?? "Cliente sin nombre"}
                   </p>
                   <p className="text-slate-500">
-                    {d.referencia ?? d.id} · {new Date(d.fecha).toLocaleDateString("es-CO")} ·{" "}
+                    {d.referencia ?? d.id} ·{" "}
+                    {new Date(d.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })} ·{" "}
                     {money(d.neto)}
                   </p>
                 </div>

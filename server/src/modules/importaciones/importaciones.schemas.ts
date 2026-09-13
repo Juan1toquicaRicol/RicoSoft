@@ -13,6 +13,10 @@ export const buscarItemsOrdenSchema = z.object({
 export const itemOrdenSchema = z.object({
   descripcion: z.string(textoObligatorio("La descripción del ítem es obligatoria.")),
   referencia: z.string().nullish(),
+  // Código con el que EL PROVEEDOR identifica el ítem en su cotización —
+  // distinto de `referencia` (interna/Siesa). Uso futuro: Bandeja
+  // Inteligente. Texto libre, nunca obligatorio.
+  referenciaProveedor: z.string().nullish(),
   unidadMedida: z.string().nullish(),
   subpartidaArancelariaId: z.string().uuid().nullish(),
   cantidad: numero,
@@ -23,13 +27,32 @@ export const itemOrdenSchema = z.object({
 
 export const crearOrdenCompraIntlSchema = z.object({
   numeroOrden: z.string(textoObligatorio("El número de orden es obligatorio.")),
+  // Fecha explícita de la orden (default "hoy" en el frontend) — distinta
+  // de createdAt, que sigue siendo el timestamp de auditoría del registro.
+  fechaOrden: z.string().nullish(),
   incoterm: z.string(textoObligatorio("El Incoterm es obligatorio.")),
+  // Lugar pactado del Incoterm (ej. "Shanghai, China") — texto libre, nunca
+  // se infiere de paisOrigen ni de ningún otro campo.
+  lugarPactado: z.string().nullish(),
   proveedorId: z.string().uuid().nullish(),
-  proveedorExtranjero: z.string(textoObligatorio("El proveedor extranjero es obligatorio.")),
+  // Nullable a propósito: solo es obligatorio cuando NO se seleccionó
+  // proveedorId — esa regla XOR se valida en el controlador (no aquí, para
+  // dar un mensaje más específico que "campo obligatorio").
+  proveedorExtranjero: z.string().nullish(),
   paisOrigen: z.string(textoObligatorio("El país de origen es obligatorio.")),
   moneda: z.string(textoObligatorio("La moneda es obligatoria.")),
   trmPactada: numero,
+  // Fecha y fuente (Oficial/Pactada/Manual) de trmPactada — opcionales para
+  // no romper integraciones/scripts que ya crean órdenes sin estos campos.
+  tasaCambioFecha: z.string().nullish(),
+  tasaCambioFuente: z.string().nullish(),
   formaPago: z.string().nullish(),
+  condicionPago: z.string().nullish(),
+  detallePago: z.string().nullish(),
+  fechaRequeridaLlegada: z.string().nullish(),
+  // Selector de "Responsable de la importación" — si no se envía, se sigue
+  // asignando a quien crea la orden (mismo comportamiento de antes).
+  responsableId: z.string().uuid().nullish(),
   observaciones: z.string().nullish(),
   items: z.array(itemOrdenSchema).min(1, "La orden debe tener al menos un ítem."),
 });

@@ -7,6 +7,7 @@ import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import {
   UPLOADS_DIR_EXPEDIENTES,
   UPLOADS_DIR_VISTOS_BUENOS,
+  UPLOADS_DIR_ORDENES_COMPRA_INTL,
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
 import {
@@ -139,6 +140,17 @@ const TIPOS_DOCUMENTO_EXPEDIENTE: Record<TipoDocumentoExpediente, CamposDocument
     etiqueta: "certificado de origen",
   },
 };
+// Documentos iniciales de la orden (Cotización/Proforma Invoice/Oferta
+// comercial/Otros) — slug de URL validado en código, mismo patrón que
+// TIPOS_DOCUMENTO_EXPEDIENTE arriba, pero SIN campos fijos: puede haber
+// varios documentos del mismo tipo (ver OrdenCompraIntlDocumento).
+const TIPOS_DOCUMENTO_ORDEN: Record<string, string> = {
+  cotizacion: "Cotización",
+  proforma: "Proforma Invoice",
+  "oferta-comercial": "Oferta comercial",
+  otros: "Otros",
+};
+
 // Solo los estados previos a la llegada física se cambian a mano desde
 // actualizarEstadoLote. "Liberado pre-compra" lo asigna recibirPreCompraPlanta
 // y "Nacionalizado" lo asigna liquidarCosteoImportacion: ninguno de los dos
@@ -220,6 +232,7 @@ type HistorialConEvidencia = Prisma.ImportacionHistorialGetPayload<Record<string
 type Actividad = Prisma.ImportacionActividadGetPayload<Record<string, never>>;
 type Novedad = Prisma.ImportacionNovedadGetPayload<Record<string, never>>;
 type Pago = Prisma.ImportacionPagoGetPayload<Record<string, never>>;
+type DocumentoOrden = Prisma.OrdenCompraIntlDocumentoGetPayload<Record<string, never>>;
 type RequisitoProveedor = Prisma.RequisitoProveedorImportacionGetPayload<Record<string, never>>;
 type OrdenParaSerializar = Prisma.OrdenCompraIntlGetPayload<Record<string, never>> & {
   responsableUsuario?: { id: string; nombre: string } | null;
@@ -238,6 +251,7 @@ type OrdenParaSerializar = Prisma.OrdenCompraIntlGetPayload<Record<string, never
   actividades?: Actividad[];
   novedades?: Novedad[];
   pagos?: Pago[];
+  documentos?: DocumentoOrden[];
 };
 
 const serializarActividad = (a: Actividad) => ({
@@ -312,6 +326,9 @@ const serializarItem = (item: ItemConSubpartida) => ({
         descripcion: item.subpartida.descripcion,
       }
     : null,
+  referencia: item.referencia,
+  referenciaProveedor: item.referenciaProveedor,
+  unidadMedida: item.unidadMedida,
   cantidad: numero(item.cantidad),
   pesoKg: item.pesoKg !== null && item.pesoKg !== undefined ? numero(item.pesoKg) : null,
   volumenM3:
@@ -454,7 +471,9 @@ const serializarOrden = (o: OrdenParaSerializar) => ({
   id: o.id,
   codigo: o.codigo ?? `IMP-${o.id.slice(0, 8)}`, // fallback legible para órdenes anteriores a esta migración
   numeroOrden: o.numeroOrden,
+  fechaOrden: o.fechaOrden,
   incoterm: o.incoterm,
+  lugarPactado: o.lugarPactado,
   proveedorId: o.proveedorId,
   proveedorExtranjero: o.proveedorExtranjero,
   proveedor: o.proveedor
@@ -470,7 +489,12 @@ const serializarOrden = (o: OrdenParaSerializar) => ({
   paisOrigen: o.paisOrigen,
   moneda: o.moneda,
   formaPago: o.formaPago,
+  condicionPago: o.condicionPago,
+  detallePago: o.detallePago,
   trmPactada: numero(o.trmPactada),
+  tasaCambioFecha: o.tasaCambioFecha,
+  tasaCambioFuente: o.tasaCambioFuente,
+  fechaRequeridaLlegada: o.fechaRequeridaLlegada,
   valorEstimadoTotal: numero(o.valorEstimadoTotal),
   estado: o.estado,
   fechaEstimadaCierre: o.fechaEstimadaCierre,
@@ -497,6 +521,15 @@ const serializarOrden = (o: OrdenParaSerializar) => ({
   actividades: (o.actividades ?? []).map(serializarActividad),
   novedades: (o.novedades ?? []).map(serializarNovedad),
   pagos: (o.pagos ?? []).map(serializarPago),
+  documentos: (o.documentos ?? []).map((d: DocumentoOrden) => ({
+    id: d.id,
+    tipo: d.tipo,
+    nombreOriginal: d.nombreOriginal,
+    mime: d.mime,
+    tamano: d.tamano,
+    subidoPorNombre: d.subidoPorNombre,
+    createdAt: d.createdAt,
+  })),
   // "Situación actual" en lenguaje de negocio — ver domain/importaciones/motor-seguimiento.ts.
   // Se calcula siempre en el servidor, nunca en frontend.
   situacionActual: calcularSituacionActual((o.actividades ?? []).map(aParaSeguimiento), new Date()),
@@ -542,6 +575,7 @@ const INCLUDE_ORDEN_DETALLE = {
   actividades: { orderBy: { fechaLimite: "asc" as const } },
   novedades: { orderBy: { createdAt: "desc" as const } },
   pagos: { orderBy: { fechaVencimiento: "asc" as const } },
+  documentos: { orderBy: { createdAt: "desc" as const } },
 };
 
 async function resolverCiaSiesa(tenantId: string) {
@@ -605,6 +639,29 @@ export const obtenerTrmOficialController = async (_req: AuthenticatedRequest, re
     return res.status(502).json({
       message: error instanceof Error ? error.message : "No fue posible obtener la TRM oficial.",
     });
+  }
+};
+
+/**
+ * Usuarios activos del tenant para el selector "Responsable de la
+ * importación" del formulario de creación — mismo patrón que
+ * listarUsuariosPorDepartamento (usuarios.controller.ts): no exige el
+ * permiso administrativo "usuarios.ver", basta con poder crear órdenes.
+ * NO reemplaza al creador de la orden (req.user, capturado en el
+ * historial/auditoría) ni a ningún otro campo de auditoría existente.
+ */
+export const listarResponsablesImportacion = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const usuarios = await prisma.user.findMany({
+      where: { tenantId, activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+    return res.json(usuarios);
+  } catch (error) {
+    console.error("Error al listar responsables de importación:", error);
+    return res.status(500).json({ message: "Error al obtener los responsables disponibles." });
   }
 };
 
@@ -741,16 +798,93 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
     const tenantId = req.user!.tenantId;
     const {
       numeroOrden,
+      fechaOrden,
       incoterm,
+      lugarPactado,
       proveedorId,
       proveedorExtranjero,
       paisOrigen,
       moneda,
       trmPactada,
+      tasaCambioFecha,
+      tasaCambioFuente,
       formaPago,
+      condicionPago,
+      detallePago,
+      fechaRequeridaLlegada,
+      responsableId,
       observaciones,
       items,
     } = req.body;
+
+    // Proveedor catalogado (proveedorId) O nombre no catalogado
+    // (proveedorExtranjero) — nunca ambos vacíos, nunca los dos usados como
+    // fuentes de verdad simultáneas (si hay proveedorId, el nombre real
+    // SIEMPRE se deriva de él más abajo, ignorando lo que venga en
+    // proveedorExtranjero).
+    if (!proveedorId && !String(proveedorExtranjero ?? "").trim()) {
+      return res.status(400).json({
+        message:
+          'Selecciona un proveedor catalogado o marca "No catalogado / proveedor externo" y escribe su nombre.',
+      });
+    }
+
+    let fechaOrdenParseada = new Date();
+    if (fechaOrden != null) {
+      const parsed = new Date(fechaOrden);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: "La fecha de la orden no es válida." });
+      }
+      fechaOrdenParseada = parsed;
+    }
+
+    let fechaRequeridaLlegadaParseada: Date | null = null;
+    if (fechaRequeridaLlegada != null && fechaRequeridaLlegada !== "") {
+      const parsed = new Date(fechaRequeridaLlegada);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: "La fecha requerida de llegada no es válida." });
+      }
+      if (parsed.getTime() < fechaOrdenParseada.getTime()) {
+        return res.status(400).json({
+          message: "La fecha requerida de llegada no puede ser anterior a la fecha de la orden.",
+        });
+      }
+      const diezAniosMs = 10 * 365 * 24 * 60 * 60 * 1000;
+      if (parsed.getTime() - fechaOrdenParseada.getTime() > diezAniosMs) {
+        return res.status(400).json({
+          message: "La fecha requerida de llegada parece incorrecta (más de 10 años en el futuro).",
+        });
+      }
+      fechaRequeridaLlegadaParseada = parsed;
+    }
+
+    let tasaCambioFechaParseada: Date | null = null;
+    if (tasaCambioFecha != null && tasaCambioFecha !== "") {
+      const parsed = new Date(tasaCambioFecha);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: "La fecha de la tasa de cambio no es válida." });
+      }
+      tasaCambioFechaParseada = parsed;
+    }
+    const TASA_CAMBIO_FUENTES_VALIDAS = ["Oficial", "Pactada", "Manual"];
+    if (tasaCambioFuente != null && !TASA_CAMBIO_FUENTES_VALIDAS.includes(tasaCambioFuente)) {
+      return res.status(400).json({
+        message: `Fuente de tasa de cambio inválida. Valores permitidos: ${TASA_CAMBIO_FUENTES_VALIDAS.join(", ")}.`,
+      });
+    }
+
+    let responsableSeleccionado: { id: string } | null = null;
+    if (responsableId) {
+      responsableSeleccionado = await prisma.user.findFirst({
+        where: { id: responsableId, tenantId, activo: true },
+        select: { id: true },
+      });
+      if (!responsableSeleccionado) {
+        return res
+          .status(404)
+          .json({ message: "El responsable de la importación seleccionado no existe." });
+      }
+    }
 
     if (!INCOTERMS_VALIDOS.includes(incoterm)) {
       return res.status(400).json({
@@ -839,20 +973,28 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
         tenantId,
         codigo,
         numeroOrden,
+        fechaOrden: fechaOrdenParseada,
         incoterm,
+        lugarPactado: lugarPactado?.trim() || null,
         proveedorId: proveedorSeleccionado?.id ?? null,
-        proveedorExtranjero: proveedorSeleccionado?.nombre ?? proveedorExtranjero,
+        proveedorExtranjero: proveedorSeleccionado?.nombre ?? String(proveedorExtranjero).trim(),
         paisOrigen,
         moneda,
         trmPactada: trm,
+        tasaCambioFecha: tasaCambioFechaParseada,
+        tasaCambioFuente: tasaCambioFuente ?? null,
         valorEstimadoTotal,
         formaPago: formaPago ?? null,
+        condicionPago: condicionPago?.trim() || null,
+        detallePago: detallePago?.trim() || null,
+        fechaRequeridaLlegada: fechaRequeridaLlegadaParseada,
         observaciones: observaciones ?? null,
-        responsableId: req.user!.id,
+        responsableId: responsableSeleccionado?.id ?? req.user!.id,
         items: {
           create: items.map((item: ItemOrdenBody) => ({
             descripcion: item.descripcion,
             referencia: item.referencia ?? null,
+            referenciaProveedor: item.referenciaProveedor ?? null,
             unidadMedida: item.unidadMedida ?? null,
             subpartidaArancelariaId: item.subpartidaArancelariaId ?? null,
             cantidad: numero(item.cantidad),
@@ -1815,6 +1957,148 @@ export const obtenerDocumentoVistoBueno = async (req: AuthenticatedRequest, res:
   } catch (error) {
     console.error("Error al obtener documento de visto bueno:", error);
     return res.status(500).json({ message: "Error al obtener el documento." });
+  }
+};
+
+// --- Documentos iniciales de la orden ---
+// Cotización / Proforma Invoice / Oferta comercial / Otros — adjuntados
+// directamente a la OrdenCompraIntl (no al lote/expediente). Reutiliza el
+// mismo storage/validación (tenant, magic bytes, límite 10MB) que
+// expedientes/vistos-buenos, pero con una tabla de filas (varios documentos
+// por tipo), no un campo fijo por documento. NUNCA dispara extracción/IA:
+// es solo asociación de archivos a la orden.
+
+export const subirDocumentoOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipoSlug = req.params.tipo;
+    const etiqueta = TIPOS_DOCUMENTO_ORDEN[tipoSlug];
+    const archivo = (req as AuthenticatedRequest & { file?: Express.Multer.File }).file;
+
+    if (!etiqueta) {
+      if (archivo) fs.unlink(archivo.path, () => {});
+      return res.status(400).json({
+        message: `Tipo de documento inválido. Usa: ${Object.keys(TIPOS_DOCUMENTO_ORDEN).join(", ")}.`,
+      });
+    }
+    if (!archivo) {
+      return res.status(400).json({ message: "No se recibió ningún archivo." });
+    }
+
+    const orden = await prisma.ordenCompraIntl.findFirst({
+      where: { id: req.params.id, tenantId, eliminado: false },
+    });
+    if (!orden) {
+      fs.unlink(archivo.path, () => {});
+      return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
+    }
+
+    // Tenant/orden ya confirmados: recién acá se mueve el archivo de la
+    // carpeta temporal a la carpeta real de esta orden.
+    const rutaDefinitiva = moverArchivoDefinitivo(
+      UPLOADS_DIR_ORDENES_COMPRA_INTL,
+      archivo,
+      orden.id,
+    );
+
+    const [documento] = await prisma.$transaction([
+      prisma.ordenCompraIntlDocumento.create({
+        data: {
+          tenantId,
+          ordenCompraId: orden.id,
+          tipo: etiqueta,
+          nombreOriginal: archivo.originalname,
+          mime: archivo.mimetype,
+          tamano: archivo.size,
+          ruta: rutaDefinitiva,
+          subidoPorNombre: req.user!.nombre,
+        },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: orden.id,
+          actor: req.user!.nombre,
+          accion: `Documento inicial adjuntado (${etiqueta})`,
+          detalle: archivo.originalname,
+        },
+      }),
+    ]);
+
+    return res.status(201).json({
+      id: documento.id,
+      tipo: documento.tipo,
+      nombreOriginal: documento.nombreOriginal,
+      mime: documento.mime,
+      tamano: documento.tamano,
+      subidoPorNombre: documento.subidoPorNombre,
+      createdAt: documento.createdAt,
+    });
+  } catch (error) {
+    console.error("Error al subir documento inicial de la orden:", error);
+    return res.status(500).json({ message: "Error al subir el documento." });
+  }
+};
+
+/**
+ * Sirve un documento inicial de la orden. Igual que en Facturas/Expediente:
+ * nunca se expone un path público, siempre se resuelve primero la orden por
+ * tenant y se lee del disco la ruta guardada en BD (nunca una ruta armada
+ * desde input del cliente).
+ */
+export const obtenerDocumentoOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const documento = await prisma.ordenCompraIntlDocumento.findFirst({
+      where: { id: req.params.documentoId, tenantId, ordenCompraId: req.params.id },
+    });
+    if (!documento) return res.status(404).json({ message: "Documento no encontrado." });
+
+    const rutaAbsoluta = path.join(UPLOADS_DIR_ORDENES_COMPRA_INTL, documento.ruta);
+    if (!fs.existsSync(rutaAbsoluta)) {
+      return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
+    }
+
+    res.setHeader("Content-Type", documento.mime || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(documento.nombreOriginal || "documento")}"`,
+    );
+    return res.sendFile(rutaAbsoluta);
+  } catch (error) {
+    console.error("Error al obtener documento inicial de la orden:", error);
+    return res.status(500).json({ message: "Error al obtener el documento." });
+  }
+};
+
+export const eliminarDocumentoOrdenCompraIntl = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const documento = await prisma.ordenCompraIntlDocumento.findFirst({
+      where: { id: req.params.documentoId, tenantId, ordenCompraId: req.params.id },
+    });
+    if (!documento) return res.status(404).json({ message: "Documento no encontrado." });
+
+    fs.unlink(path.join(UPLOADS_DIR_ORDENES_COMPRA_INTL, documento.ruta), () => {});
+
+    await prisma.$transaction([
+      prisma.ordenCompraIntlDocumento.delete({ where: { id: documento.id } }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: documento.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Documento inicial eliminado (${documento.tipo})`,
+          detalle: documento.nombreOriginal,
+        },
+      }),
+    ]);
+
+    return res.json({ message: "Documento eliminado." });
+  } catch (error) {
+    console.error("Error al eliminar documento inicial de la orden:", error);
+    return res.status(500).json({ message: "Error al eliminar el documento." });
   }
 };
 

@@ -470,7 +470,9 @@ function ServiciosPage() {
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <p className="font-mono text-xs text-slate-500">
-                        {new Date(sub.fechaRenovacion).toLocaleDateString("es-CO")}
+                        {new Date(sub.fechaRenovacion).toLocaleDateString("es-CO", {
+                          timeZone: "UTC",
+                        })}
                       </p>
                       {sub.estado === "Activo" && (
                         <BarraVencimiento

@@ -8,68 +8,70 @@ datasource db {
 }
 
 model Tenant {
-  id                    String                     @id @default(uuid()) @db.UniqueIdentifier
-  nombre                String                     @db.VarChar(255)
-  subdomain             String                     @unique @db.VarChar(255)
-  siesaCiaId            Int?                       @unique
+  id                             String                          @id @default(uuid()) @db.UniqueIdentifier
+  nombre                         String                          @db.VarChar(255)
+  subdomain                      String                          @unique @db.VarChar(255)
+  siesaCiaId                     Int?                            @unique
   /// Dominio de correo corporativo (p. ej. "ricol.com.co") que determina a
   /// qué tenant pertenece un usuario que se autoregistra. Único: dos tenants
   /// no pueden compartir el mismo dominio. Null = el tenant no acepta
   /// autoregistro público por dominio (p. ej. el tenant demo).
-  dominioCorporativo    String?                    @unique @db.VarChar(255)
+  dominioCorporativo             String?                         @unique @db.VarChar(255)
   /// Si es false, nadie puede loguearse/registrarse/seleccionar este tenant,
   /// aunque tenga cuenta o membresía activa ahí.
-  activo                Boolean                    @default(true)
-  createdAt             DateTime                   @default(now())
-  auditorias            Auditoria[]
-  colaboradores         Colaborador[]
-  configuracionInventario ConfiguracionInventario?
-  creditos              CreditoCliente[]
-  departamentos         Departamento[]
-  tomasFisicas          TomaFisica[]
-  planesProduccion      PlanProduccion[]
-  gestionesLiquidacion  GestionLiquidacion[]
-  despachos             Despacho[]
-  empleados             Empleado[]
-  facturas              Factura[]
-  faltas                FaltaStrike[]
-  modulos               Modulo[]
-  notificaciones        Notificacion[]
-  pagos                 Pago[]
-  permisosLaborales     PermisoLaboral[]
-  proveedores           Proveedor[]
-  proyecciones          ProyeccionMensual[]
-  seguimientosOportunidad OportunidadSeguimiento[]
-  reglas                ReglaEnrutamiento[]
-  roles                 Rol[]
-  servicios             ServicioSuscripcion[]
-  solicitudesCompra     SolicitudCompra[]
-  users                 User[]
-  membresias            Membresia[]
-  ordenesCompraIntl     OrdenCompraIntl[]
-  lotesImportacion      LoteImportacion[]
-  expedientesAduaneros  ExpedienteAduanero[]
-  costeosImportacion    CosteoImportacionDetalle[]
-  actividadesImportacion ImportacionActividad[]
-  novedadesImportacion   ImportacionNovedad[]
-  pagosImportacion       ImportacionPago[]
+  activo                         Boolean                         @default(true)
+  createdAt                      DateTime                        @default(now())
+  auditorias                     Auditoria[]
+  colaboradores                  Colaborador[]
+  configuracionInventario        ConfiguracionInventario?
+  creditos                       CreditoCliente[]
+  departamentos                  Departamento[]
+  tomasFisicas                   TomaFisica[]
+  planesProduccion               PlanProduccion[]
+  gestionesLiquidacion           GestionLiquidacion[]
+  despachos                      Despacho[]
+  empleados                      Empleado[]
+  facturas                       Factura[]
+  faltas                         FaltaStrike[]
+  modulos                        Modulo[]
+  notificaciones                 Notificacion[]
+  pagos                          Pago[]
+  permisosLaborales              PermisoLaboral[]
+  proveedores                    Proveedor[]
+  proyecciones                   ProyeccionMensual[]
+  analisisGuardados              AnalisisGuardado[]
+  seguimientosOportunidad        OportunidadSeguimiento[]
+  reglas                         ReglaEnrutamiento[]
+  roles                          Rol[]
+  servicios                      ServicioSuscripcion[]
+  solicitudesCompra              SolicitudCompra[]
+  users                          User[]
+  membresias                     Membresia[]
+  ordenesCompraIntl              OrdenCompraIntl[]
+  lotesImportacion               LoteImportacion[]
+  expedientesAduaneros           ExpedienteAduanero[]
+  costeosImportacion             CosteoImportacionDetalle[]
+  actividadesImportacion         ImportacionActividad[]
+  novedadesImportacion           ImportacionNovedad[]
+  pagosImportacion               ImportacionPago[]
+  documentosOrdenCompraIntl      OrdenCompraIntlDocumento[]
   clasificacionesFuncionalesItem ClasificacionFuncionalItem[]
   itemClasificacionesAsignadas   ItemClasificacionAsignada[]
-  cotizacionesProveedor CotizacionProveedor[]
-  permisosCatalogo      Permiso[]
-  sincronizacionesSiesa SincronizacionSiesaLog[]
-  inboxItems            InboxItem[]
-  objetivos             Objetivo[]
-  fuentesBiometricas    FuenteBiometrica[]
-  empleadosBiometricos  EmpleadoBiometrico[]
-  marcacionesBiometricas MarcacionBiometrica[]
-  sincronizacionesBiometrico SincronizacionBiometricoLog[]
-  perfilesFuncionales   PerfilFuncional[]
-  usuarioPerfilesFuncionales UsuarioPerfilFuncional[]
-  reglasDestinatarios   ReglaDestinatarios[]
+  cotizacionesProveedor          CotizacionProveedor[]
+  permisosCatalogo               Permiso[]
+  sincronizacionesSiesa          SincronizacionSiesaLog[]
+  inboxItems                     InboxItem[]
+  objetivos                      Objetivo[]
+  fuentesBiometricas             FuenteBiometrica[]
+  empleadosBiometricos           EmpleadoBiometrico[]
+  marcacionesBiometricas         MarcacionBiometrica[]
+  sincronizacionesBiometrico     SincronizacionBiometricoLog[]
+  perfilesFuncionales            PerfilFuncional[]
+  usuarioPerfilesFuncionales     UsuarioPerfilFuncional[]
+  reglasDestinatarios            ReglaDestinatarios[]
   requisitosProveedorImportacion RequisitoProveedorImportacion[]
-  correosImportacion    ImportacionCorreo[]
-  excepcionesImportacion ImportacionExcepcion[]
+  correosImportacion             ImportacionCorreo[]
+  excepcionesImportacion         ImportacionExcepcion[]
 }
 
 model User {
@@ -109,6 +111,7 @@ model User {
   inboxItemsResueltos              InboxItem[]                @relation("InboxItemResueltoPor")
   excepcionesImportacionResueltas  ImportacionExcepcion[]     @relation("ImportacionExcepcionResueltoPor")
   perfilesFuncionales              UsuarioPerfilFuncional[]
+  analisisGuardados                AnalisisGuardado[]
   colaborador                      Colaborador?               @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   departamento                     Departamento?              @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rolRel                           Rol?                       @relation(fields: [rolId], references: [id])
@@ -224,14 +227,14 @@ model Auditoria {
 /// solicitud de compra pendiente de aprobar"). No envía correo ni push: es
 /// el centro de notificaciones dentro de RicoSoft.
 model Notificacion {
-  id        String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId  String   @db.UniqueIdentifier
-  usuarioId String   @db.UniqueIdentifier
-  tipo      String   @db.VarChar(50)
-  titulo    String   @db.VarChar(255)
-  mensaje   String   @db.Text
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String   @db.UniqueIdentifier
+  usuarioId   String   @db.UniqueIdentifier
+  tipo        String   @db.VarChar(50)
+  titulo      String   @db.VarChar(255)
+  mensaje     String   @db.Text
   /// Ruta del frontend a la que navegar al hacer click (p. ej. "/facturas").
-  enlace    String?  @db.VarChar(500)
+  enlace      String?  @db.VarChar(500)
   /// Fase 5.4.1: junto con tenantId+usuarioId+tipo, forman la clave de
   /// deduplicación de crearNotificacion() — "este usuario ya fue notificado
   /// de este evento para esta entidad/ciclo concreto" (ej.
@@ -244,12 +247,12 @@ model Notificacion {
   /// entidadTipo/entidadId NULL — así las notificaciones sin entidad (todos
   /// los emisores anteriores a esta fase) NUNCA quedan sujetas a ninguna
   /// restricción de unicidad.
-  entidadTipo String? @db.VarChar(50)
-  entidadId   String? @db.VarChar(100)
-  leida     Boolean  @default(false)
-  createdAt DateTime @default(now())
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  usuario   User     @relation("NotificacionDestinatario", fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entidadTipo String?  @db.VarChar(50)
+  entidadId   String?  @db.VarChar(100)
+  leida       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  usuario     User     @relation("NotificacionDestinatario", fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId, usuarioId, leida])
   @@index([usuarioId, createdAt])
@@ -260,18 +263,18 @@ model Notificacion {
 /// valor = exclusivo de esa empresa. Mismo mecanismo que Rol y Modulo, para
 /// no tener tres formas distintas de expresar lo mismo.
 model Departamento {
-  id            String        @id @default(uuid()) @db.UniqueIdentifier
-  tenantId      String?       @db.UniqueIdentifier
-  nombre        String        @db.VarChar(255)
-  activo        Boolean       @default(true)
-  esSistemas    Boolean       @default(false)
-  colaboradores Colaborador[]
-  modulos       Modulo[]
-  usuarios      User[]
-  membresias    Membresia[]
-  proveedores   Proveedor[]
+  id                  String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId            String?           @db.UniqueIdentifier
+  nombre              String            @db.VarChar(255)
+  activo              Boolean           @default(true)
+  esSistemas          Boolean           @default(false)
+  colaboradores       Colaborador[]
+  modulos             Modulo[]
+  usuarios            User[]
+  membresias          Membresia[]
+  proveedores         Proveedor[]
   perfilesFuncionales PerfilFuncional[]
-  tenant        Tenant?       @relation(fields: [tenantId], references: [id])
+  tenant              Tenant?           @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -366,40 +369,40 @@ model Modulo {
 /// libre, duplicado e inconsistente). El nit es único por tenant para evitar
 /// registrar el mismo proveedor dos veces con nombres ligeramente distintos.
 model Proveedor {
-  id                       String                @id @default(uuid()) @db.UniqueIdentifier
-  tenantId                 String                @db.UniqueIdentifier
-  nombre                   String                @db.VarChar(255)
-  nit                      String                @db.VarChar(50)
-  contacto                 String?               @db.VarChar(255)
-  telefono                 String?               @db.VarChar(50)
-  email                    String?               @db.VarChar(255)
+  id                       String                          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                 String                          @db.UniqueIdentifier
+  nombre                   String                          @db.VarChar(255)
+  nit                      String                          @db.VarChar(50)
+  contacto                 String?                         @db.VarChar(255)
+  telefono                 String?                         @db.VarChar(50)
+  email                    String?                         @db.VarChar(255)
   /// Plazo/términos de pago negociados con el proveedor (texto libre, ej.
   /// "30 días crédito", "Contado"). Se copia como snapshot a Factura al
   /// recibir una factura de este proveedor, pero puede editarse ahí sin
   /// afectar este valor de catálogo.
-  condicionesPago          String?               @db.VarChar(500)
+  condicionesPago          String?                         @db.VarChar(500)
   /// Datos de dónde/cómo pagarle a este proveedor (banco, número de cuenta,
   /// tipo de cuenta, beneficiario). Texto libre porque varía mucho entre
   /// proveedores nacionales/extranjeros y no hay un formato único que valga
   /// la pena estructurar todavía.
-  datosPago                String?               @db.Text
+  datosPago                String?                         @db.Text
   /// Departamento dueño de este proveedor (p. ej. un proveedor de insumos de
   /// Producción no debería ofrecerse al crear una SC de Comercial). Null =
   /// proveedor "general", visible para cualquier departamento — así todos los
   /// proveedores existentes antes de este campo siguen apareciendo en todas
   /// partes sin necesidad de migrarlos uno por uno.
-  departamentoId           String?               @db.UniqueIdentifier
+  departamentoId           String?                         @db.UniqueIdentifier
   /// País de origen del proveedor (mismo catálogo que
   /// OrdenCompraIntl.paisOrigen — PAISES_VALIDOS en proveedores.controller.ts).
   /// Null = no configurado todavía; no bloquea nada del proveedor, solo
   /// alimenta el país que se sugiere/hereda al registrar una nueva orden de
   /// compra internacional para este proveedor.
-  paisOrigen               String?               @db.VarChar(100)
+  paisOrigen               String?                         @db.VarChar(100)
   /// Materiales que este proveedor usualmente importa (texto libre por
   /// etiqueta, ej. "Telas", "Hilos") — JSON array de strings, igual patrón
   /// que ImportacionExcepcion.candidatos. Solo informativo/de referencia
   /// rápida en la ficha del proveedor, no valida contra ningún catálogo.
-  materialesHabituales     String?               @db.Text
+  materialesHabituales     String?                         @db.Text
   /// Identidad técnica estable del tercero en Siesa (t200_mm_terceros.f200_rowid),
   /// independiente del NIT — el NIT es un dato de negocio que puede
   /// corregirse en Siesa; este campo es lo que evita crear un proveedor
@@ -411,16 +414,16 @@ model Proveedor {
   /// "MANUAL" si lo creó un usuario desde RicoSoft. Nunca cambia de MANUAL a
   /// SIESA automáticamente — solo el backfill explícito lo hace, con
   /// vinculación inequívoca.
-  origen                   String                @default("MANUAL") @db.VarChar(20)
+  origen                   String                          @default("MANUAL") @db.VarChar(20)
   ultimaSincronizacion     DateTime?
   /// Si un usuario edita el nombre a mano, se pone en true y la
   /// sincronización deja de sobrescribirlo — evita que un dato corregido a
   /// mano en RicoSoft se revierta silenciosamente en el siguiente sync.
-  nombreEditadoManualmente Boolean               @default(false)
-  activo                   Boolean               @default(true)
-  createdAt                DateTime              @default(now())
-  tenant                   Tenant                @relation(fields: [tenantId], references: [id])
-  departamento             Departamento?         @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  nombreEditadoManualmente Boolean                         @default(false)
+  activo                   Boolean                         @default(true)
+  createdAt                DateTime                        @default(now())
+  tenant                   Tenant                          @relation(fields: [tenantId], references: [id])
+  departamento             Departamento?                   @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   facturas                 Factura[]
   servicios                ServicioSuscripcion[]
   solicitudesCompra        SolicitudCompra[]
@@ -590,48 +593,48 @@ model Pago {
 }
 
 model SolicitudCompra {
-  id                        String                @id @default(uuid()) @db.UniqueIdentifier
-  tenantId                  String                @db.UniqueIdentifier
-  empresaId                 String                @db.VarChar(10)
-  area                      String                @db.VarChar(100)
-  solicitanteId             String?               @db.UniqueIdentifier
-  solicitante               String                @db.VarChar(255)
-  proveedorId               String?               @db.UniqueIdentifier
-  proveedor                 String?               @db.VarChar(255)
-  item                      String                @db.VarChar(255)
-  descripcion               String?               @db.Text
-  cantidad                  Int
-  valorEstimado             Decimal               @db.Decimal(18, 2)
-  prioridad                 String                @default("Media") @db.VarChar(20)
-  estado                    String                @default("Pendiente") @db.VarChar(20)
-  fechaSolicitud            DateTime              @default(now())
-  fechaResolucion           DateTime?
-  resueltoPorId             String?               @db.UniqueIdentifier
-  resueltoPorNombre         String?               @db.VarChar(255)
-  comentarioResolucion      String?               @db.Text
-  cotizacionNombre          String?               @db.VarChar(255)
-  cotizacionRuta            String?               @db.VarChar(500)
-  cotizacionMime            String?               @db.VarChar(100)
-  cotizacionTamano          Int?
-  cotizacionSubidoPorNombre String?               @db.VarChar(255)
-  cotizacionSubidoEn        DateTime?
+  id                           String                @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                     String                @db.UniqueIdentifier
+  empresaId                    String                @db.VarChar(10)
+  area                         String                @db.VarChar(100)
+  solicitanteId                String?               @db.UniqueIdentifier
+  solicitante                  String                @db.VarChar(255)
+  proveedorId                  String?               @db.UniqueIdentifier
+  proveedor                    String?               @db.VarChar(255)
+  item                         String                @db.VarChar(255)
+  descripcion                  String?               @db.Text
+  cantidad                     Int
+  valorEstimado                Decimal               @db.Decimal(18, 2)
+  prioridad                    String                @default("Media") @db.VarChar(20)
+  estado                       String                @default("Pendiente") @db.VarChar(20)
+  fechaSolicitud               DateTime              @default(now())
+  fechaResolucion              DateTime?
+  resueltoPorId                String?               @db.UniqueIdentifier
+  resueltoPorNombre            String?               @db.VarChar(255)
+  comentarioResolucion         String?               @db.Text
+  cotizacionNombre             String?               @db.VarChar(255)
+  cotizacionRuta               String?               @db.VarChar(500)
+  cotizacionMime               String?               @db.VarChar(100)
+  cotizacionTamano             Int?
+  cotizacionSubidoPorNombre    String?               @db.VarChar(255)
+  cotizacionSubidoEn           DateTime?
   /// Confirmación del solicitante original de que recibió físicamente el
   /// producto/servicio. Cierra el ciclo Solicitud->Cotización->Aprobación->
   /// Factura->Pago->Recepción. Solo el propio solicitante puede establecer
   /// estos campos (ver confirmarRecepcionSolicitud), y solo cuando la
   /// factura vinculada ya está "Pagada".
-  recepcionConfirmadaPorId     String?           @db.UniqueIdentifier
-  recepcionConfirmadaPorNombre String?           @db.VarChar(255)
+  recepcionConfirmadaPorId     String?               @db.UniqueIdentifier
+  recepcionConfirmadaPorNombre String?               @db.VarChar(255)
   recepcionConfirmadaEn        DateTime?
-  recepcionComentario          String?           @db.Text
-  eliminado                 Boolean               @default(false)
-  tenant                    Tenant                @relation(fields: [tenantId], references: [id])
-  solicitanteUsuario        User?                 @relation("SolicitudSolicitante", fields: [solicitanteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resueltoPor               User?                 @relation("SolicitudResueltaPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  recepcionConfirmadaPor    User?                 @relation("SolicitudRecepcionConfirmadaPor", fields: [recepcionConfirmadaPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  proveedorRel              Proveedor?            @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  facturas                  Factura[]
-  cotizacionesProveedor     CotizacionProveedor[]
+  recepcionComentario          String?               @db.Text
+  eliminado                    Boolean               @default(false)
+  tenant                       Tenant                @relation(fields: [tenantId], references: [id])
+  solicitanteUsuario           User?                 @relation("SolicitudSolicitante", fields: [solicitanteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resueltoPor                  User?                 @relation("SolicitudResueltaPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recepcionConfirmadaPor       User?                 @relation("SolicitudRecepcionConfirmadaPor", fields: [recepcionConfirmadaPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proveedorRel                 Proveedor?            @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  facturas                     Factura[]
+  cotizacionesProveedor        CotizacionProveedor[]
 
   @@index([tenantId])
   @@index([tenantId, estado])
@@ -831,22 +834,22 @@ model TomaFisicaLinea {
 /// backend usa los valores por defecto documentados en
 /// lib/inventario-siesa.ts, lib/cobertura-siesa.ts, etc.
 model ConfiguracionInventario {
-  id                   String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId             String   @unique @db.UniqueIdentifier
+  id                    String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId              String   @unique @db.UniqueIdentifier
   /// Días sin venta o menos: "vendible".
-  diasVendible         Int      @default(60)
+  diasVendible          Int      @default(60)
   /// Días sin venta o menos (y > diasVendible): "exceso"; más: "obsolescencia".
-  diasExceso           Int      @default(180)
+  diasExceso            Int      @default(180)
   /// Días de cobertura o menos: riesgo de ruptura de stock.
-  diasRupturaCobertura Int      @default(15)
+  diasRupturaCobertura  Int      @default(15)
   /// Días de cobertura o más: sobre-cobertura (exceso de inventario frente a la venta).
-  diasSobreCobertura   Int      @default(180)
+  diasSobreCobertura    Int      @default(180)
   /// Inventario objetivo (Fase 6): días de cobertura que el negocio quiere mantener en stock — usado por domain/planeacion/inventario-objetivo.ts.
-  coberturaObjetivoDias Int     @default(45)
+  coberturaObjetivoDias Int      @default(45)
   /// Multiplicador de seguridad sobre el inventario objetivo (1.0 = sin margen extra; 1.2 = 20% adicional de colchón).
-  factorSeguridad      Float    @default(1.0)
-  updatedAt            DateTime @updatedAt
-  tenant               Tenant   @relation(fields: [tenantId], references: [id])
+  factorSeguridad       Float    @default(1.0)
+  updatedAt             DateTime @updatedAt
+  tenant                Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 /// Plan de producción con estados — Etapa J del módulo Producción &
@@ -857,22 +860,22 @@ model ConfiguracionInventario {
 /// lib/produccion-siesa.ts) — RicoSoft nunca escribe de vuelta a Siesa: este
 /// plan es solo seguimiento interno del avance, no crea una orden real allá.
 model PlanProduccion {
-  id                String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId          String   @db.UniqueIdentifier
-  itemRowId         Int
-  descripcion       String?  @db.VarChar(255)
-  referencia        String?  @db.VarChar(255)
-  unidadMedida      String?  @db.VarChar(50)
-  cantidadPlaneada  Decimal  @db.Decimal(18, 4)
+  id               String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId         String   @db.UniqueIdentifier
+  itemRowId        Int
+  descripcion      String?  @db.VarChar(255)
+  referencia       String?  @db.VarChar(255)
+  unidadMedida     String?  @db.VarChar(50)
+  cantidadPlaneada Decimal  @db.Decimal(18, 4)
   /// Planificada -> Aprobada -> En producción -> Parcial | Terminada; Cancelada desde cualquier estado no terminal.
-  estado            String   @default("Planificada") @db.VarChar(20)
-  fechaPlaneada     DateTime
-  responsableId     String   @db.UniqueIdentifier
-  responsable       String   @db.VarChar(255)
-  notas             String?  @db.VarChar(500)
-  createdAt         DateTime @default(now())
-  actualizadoEn     DateTime @updatedAt
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  estado           String   @default("Planificada") @db.VarChar(20)
+  fechaPlaneada    DateTime
+  responsableId    String   @db.UniqueIdentifier
+  responsable      String   @db.VarChar(255)
+  notas            String?  @db.VarChar(500)
+  createdAt        DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -889,24 +892,24 @@ model PlanProduccion {
 /// recalculado en el frontend) — si luego cambia en Siesa, esta gestión
 /// sigue reflejando el contexto real que motivó la decisión.
 model GestionLiquidacion {
-  id                 String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId           String   @db.UniqueIdentifier
-  itemRowId          Int
-  descripcion        String?  @db.VarChar(255)
-  referencia         String?  @db.VarChar(255)
-  cantidadExistente  Decimal  @db.Decimal(18, 4)
-  valorTotal         Decimal  @db.Decimal(18, 2)
-  score              Int
+  id                String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String   @db.UniqueIdentifier
+  itemRowId         Int
+  descripcion       String?  @db.VarChar(255)
+  referencia        String?  @db.VarChar(255)
+  cantidadExistente Decimal  @db.Decimal(18, 4)
+  valorTotal        Decimal  @db.Decimal(18, 2)
+  score             Int
   /// CRITICA | ALTA | MEDIA | BAJA
-  categoria          String   @db.VarChar(10)
-  motivo             String   @db.VarChar(500)
+  categoria         String   @db.VarChar(10)
+  motivo            String   @db.VarChar(500)
   /// PENDIENTE -> EN_REVISION -> APROBADA | RECHAZADA -> EJECUTADA
-  estado             String   @default("PENDIENTE") @db.VarChar(20)
-  responsableId      String   @db.UniqueIdentifier
-  responsable        String   @db.VarChar(255)
-  createdAt          DateTime @default(now())
-  actualizadoEn      DateTime @updatedAt
-  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  estado            String   @default("PENDIENTE") @db.VarChar(20)
+  responsableId     String   @db.UniqueIdentifier
+  responsable       String   @db.VarChar(255)
+  createdAt         DateTime @default(now())
+  actualizadoEn     DateTime @updatedAt
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -1034,6 +1037,33 @@ model ProyeccionMensual {
   @@index([tenantId])
 }
 
+/// Analítica > Constructor de análisis: una configuración de análisis
+/// guardada por un usuario (métrica + dimensión + período + filtros + orden
+/// + límite + visualización elegidos del catálogo cerrado de
+/// analitica-catalogo.ts — nunca SQL ni una métrica libre). Privado por
+/// usuario dentro del tenant: no existe hoy un concepto de "análisis
+/// compartido" en el negocio, así que un usuario nunca ve los análisis
+/// guardados de otro usuario del mismo tenant (ver aislamiento en
+/// analitica.controller.ts: toda operación filtra por tenantId Y usuarioId).
+model AnalisisGuardado {
+  id            String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String   @db.UniqueIdentifier
+  usuarioId     String   @db.UniqueIdentifier
+  nombre        String   @db.VarChar(150)
+  /// JSON con { metrica, dimensionPrincipal, dimensionSecundaria?,
+  /// fechaInicio, fechaFin, filtros, orden, limite, visualizacion } — la
+  /// misma forma que valida analitica-catalogo.ts al ejecutar. Se
+  /// revalida contra el catálogo cada vez que se ejecuta (nunca se
+  /// confía en una configuración guardada como si ya estuviera validada).
+  configuracion String   @db.NVarChar(4000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  usuario       User     @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId, usuarioId])
+}
+
 /// Meta comercial (Comercial → Objetivos). Fuente de la venta real SIEMPRE
 /// es Siesa (t461_cm_docto_factura_venta / v470_ventas) — este modelo solo
 /// guarda la META y su metadata, nunca cifras de venta calculadas (esas se
@@ -1087,14 +1117,14 @@ model Objetivo {
   /// "BORRADOR" | "ACTIVO" | "CANCELADO". "CERRADO" NO se persiste: se
   /// deriva en la capa de lectura cuando fechaFin < hoy, para no requerir
   /// un job/cron que transicione estados.
-  estado String @db.VarChar(20) @default("ACTIVO")
+  estado String @default("ACTIVO") @db.VarChar(20)
 
   /// Soft delete: el histórico de metas (incluidas las eliminadas) es
   /// insumo para analizar qué decidió Gerencia y qué resultado tuvo.
   eliminado Boolean @default(false)
 
-  creadoPorId     String  @db.UniqueIdentifier
-  creadoPorNombre String  @db.VarChar(255)
+  creadoPorId       String  @db.UniqueIdentifier
+  creadoPorNombre   String  @db.VarChar(255)
   /// Quién asignó la meta, si es distinto de quién la creó (p. ej.
   /// Gerencia General asigna una meta VENDEDOR preparada por un asistente).
   asignadoPorId     String? @db.UniqueIdentifier
@@ -1137,7 +1167,7 @@ model OportunidadSeguimiento {
   accion                  String    @db.VarChar(30)
   /// Contactado | SinRespuesta | Interesado | CotizacionSolicitada |
   /// CotizacionEnviada | EnNegociacion | NoInteresado | VentaRealizada
-  resultado                String    @db.VarChar(30)
+  resultado               String    @db.VarChar(30)
   comentario              String?   @db.Text
   /// Obligatorios cuando el resultado no es terminal (NoInteresado /
   /// VentaRealizada) — validado en el controller, no aquí: una oportunidad
@@ -1155,26 +1185,26 @@ model OportunidadSeguimiento {
 }
 
 model Empleado {
-  id                String             @id @default(uuid()) @db.UniqueIdentifier
-  tenantId          String             @db.UniqueIdentifier
-  empresaId         String             @db.VarChar(10)
-  documento         String             @db.VarChar(50)
-  nombres           String             @db.VarChar(255)
-  apellidos         String             @db.VarChar(255)
-  correo            String             @db.VarChar(255)
-  cargo             String             @db.VarChar(255)
-  area              String             @db.VarChar(100)
-  fechaContratacion DateTime
-  fechaLiquidacion  DateTime?
-  salarioActual     Decimal            @db.Decimal(18, 2)
-  estado            String             @default("Activo") @db.VarChar(20)
-  eliminado         Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-  tenant            Tenant             @relation(fields: [tenantId], references: [id])
-  faltas            FaltaStrike[]
-  historicoSalario  HistorialSalario[]
-  permisos          PermisoLaboral[]
-  vinculosBiometricos EmpleadoBiometrico[]
+  id                     String                @id @default(uuid()) @db.UniqueIdentifier
+  tenantId               String                @db.UniqueIdentifier
+  empresaId              String                @db.VarChar(10)
+  documento              String                @db.VarChar(50)
+  nombres                String                @db.VarChar(255)
+  apellidos              String                @db.VarChar(255)
+  correo                 String                @db.VarChar(255)
+  cargo                  String                @db.VarChar(255)
+  area                   String                @db.VarChar(100)
+  fechaContratacion      DateTime
+  fechaLiquidacion       DateTime?
+  salarioActual          Decimal               @db.Decimal(18, 2)
+  estado                 String                @default("Activo") @db.VarChar(20)
+  eliminado              Boolean               @default(false)
+  createdAt              DateTime              @default(now())
+  tenant                 Tenant                @relation(fields: [tenantId], references: [id])
+  faltas                 FaltaStrike[]
+  historicoSalario       HistorialSalario[]
+  permisos               PermisoLaboral[]
+  vinculosBiometricos    EmpleadoBiometrico[]
   marcacionesBiometricas MarcacionBiometrica[]
 
   @@index([tenantId])
@@ -1235,22 +1265,22 @@ model FaltaStrike {
 /// si mañana un tenant tiene dos sedes con dos CrossChex distintos, cada uno
 /// es una fila nueva de FuenteBiometrica, sin tocar el resto del modelo.
 model FuenteBiometrica {
-  id                 String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId           String    @db.UniqueIdentifier
+  id                 String                        @id @default(uuid()) @db.UniqueIdentifier
+  tenantId           String                        @db.UniqueIdentifier
   /// Identificador legible y único de la fuente (p. ej. "crosschex-flexipack"),
   /// usado para resolver configuración (ruta del .mdb) vía variables de
   /// entorno y para que MarcacionBiometrica.fuenteId sepa a qué instalación
   /// pertenece cada evento.
-  nombre             String    @unique @db.VarChar(50)
-  proveedor          String    @default("anviz") @db.VarChar(30)
+  nombre             String                        @unique @db.VarChar(50)
+  proveedor          String                        @default("anviz") @db.VarChar(30)
   /// Último Logid de Checkinout procesado con éxito. Solo avanza después de
   /// que el lote correspondiente ya quedó insertado en Postgres/SQLServer
   /// dentro de una transacción exitosa (ver crosschex.sync.service).
-  lastProcessedLogId Int       @default(0)
-  activa             Boolean   @default(true)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  tenant             Tenant    @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  lastProcessedLogId Int                           @default(0)
+  activa             Boolean                       @default(true)
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  tenant             Tenant                        @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
   marcaciones        MarcacionBiometrica[]
   sincronizaciones   SincronizacionBiometricoLog[]
   vinculosEmpleados  EmpleadoBiometrico[]
@@ -1306,25 +1336,25 @@ model EmpleadoBiometrico {
 /// noción de jornada, tardanza u horas trabajadas — eso es una capa
 /// posterior que lee estos registros, no que los reemplaza.
 model MarcacionBiometrica {
-  id             String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId       String    @db.UniqueIdentifier
-  fuenteId       String    @db.UniqueIdentifier
+  id             String           @id @default(uuid()) @db.UniqueIdentifier
+  tenantId       String           @db.UniqueIdentifier
+  fuenteId       String           @db.UniqueIdentifier
   /// Null hasta que un administrador asocie externalUserId a un Empleado
   /// (ver EmpleadoBiometrico). El evento nunca se descarta por no tener
   /// empleado — queda visible en "marcaciones sin asociar".
-  empleadoId     String?   @db.UniqueIdentifier
+  empleadoId     String?          @db.UniqueIdentifier
   /// Copiado de Empleado.empresaId en el momento en que se resuelve la
   /// asociación; null mientras la marcación esté sin asociar (ver nota en
   /// FuenteBiometrica: el mapeo dispositivo→empresa no es automático).
-  empresaId      String?   @db.VarChar(10)
+  empresaId      String?          @db.VarChar(10)
   /// Checkinout.Logid original. Es la clave real de idempotencia (junto con
   /// fuenteId), no (empleado + hora + tipo): dos marcaciones legítimas
   /// pueden compartir empleado/hora/tipo si el reloj biométrico las separa
   /// por segundos, y el Logid nunca se repite dentro de una misma fuente.
-  externalLogId  String    @db.VarChar(50)
+  externalLogId  String           @db.VarChar(50)
   /// Checkinout.userid tal como vino, conservado siempre aunque ya se haya
   /// resuelto empleadoId — permite reprocesar/auditar sin volver al MDB.
-  externalUserId String    @db.VarChar(50)
+  externalUserId String           @db.VarChar(50)
   /// Checkinout.CheckTime exacto, sin conversión de zona horaria de
   /// navegador. La normalización de zona horaria (America/Bogota u otra) la
   /// hace el adaptador CrossChex al mapear, de forma explícita y
@@ -1332,24 +1362,24 @@ model MarcacionBiometrica {
   horaMarcacion  DateTime
   /// Fecha (solo día) derivada de horaMarcacion en la zona horaria del
   /// tenant, para poder indexar/agrupar por día sin recalcular en cada query.
-  fecha          DateTime  @db.Date
+  fecha          DateTime         @db.Date
   /// Checkinout.CheckType original, sin alterar. 0=Entrada, 2=Break,
   /// 3=FueraTiempo según lo confirmado en CrossChex; otros valores se
   /// conservan tal cual aunque no se conozca su significado.
   checkType      Int
   /// Interpretación textual provisional de checkType (ENTRADA | BREAK |
   /// FUERATIEMPO | OTRO). Puede recalcularse a futuro sin tocar checkType.
-  tipoMarcacion  String    @db.VarChar(30)
-  dispositivoId  String?   @db.VarChar(50)
+  tipoMarcacion  String           @db.VarChar(30)
+  dispositivoId  String?          @db.VarChar(50)
   workType       Int?
   attFlag        Int?
   checked        Boolean?
   exported       Boolean?
   openDoorFlag   Boolean?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime         @default(now())
   fuente         FuenteBiometrica @relation(fields: [fuenteId], references: [id])
-  empleado       Empleado? @relation(fields: [empleadoId], references: [id])
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleado       Empleado?        @relation(fields: [empleadoId], references: [id])
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
 
   /// Garantiza idempotencia de la sincronización a nivel de base de datos,
   /// no solo en memoria: reinsertar el mismo lote no duplica filas.
@@ -1364,23 +1394,23 @@ model MarcacionBiometrica {
 /// registro "EN_CURSO" sirve como lock cooperativo (ver rule 25: no permitir
 /// dos sincronizaciones simultáneas de la misma fuente).
 model SincronizacionBiometricoLog {
-  id             String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId       String    @db.UniqueIdentifier
-  fuenteId       String    @db.UniqueIdentifier
+  id           String           @id @default(uuid()) @db.UniqueIdentifier
+  tenantId     String           @db.UniqueIdentifier
+  fuenteId     String           @db.UniqueIdentifier
   /// EN_CURSO | COMPLETADO | FALLIDO
-  estado         String    @default("EN_CURSO") @db.VarChar(20)
-  iniciadoEn     DateTime  @default(now())
-  finalizadoEn   DateTime?
-  logIdDesde     Int
-  logIdHasta     Int?
-  leidos         Int       @default(0)
-  insertados     Int       @default(0)
-  duplicados     Int       @default(0)
-  sinEmpleado    Int       @default(0)
-  erroresCount   Int       @default(0)
-  mensajeError   String?   @db.Text
-  fuente         FuenteBiometrica @relation(fields: [fuenteId], references: [id])
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  estado       String           @default("EN_CURSO") @db.VarChar(20)
+  iniciadoEn   DateTime         @default(now())
+  finalizadoEn DateTime?
+  logIdDesde   Int
+  logIdHasta   Int?
+  leidos       Int              @default(0)
+  insertados   Int              @default(0)
+  duplicados   Int              @default(0)
+  sinEmpleado  Int              @default(0)
+  erroresCount Int              @default(0)
+  mensajeError String?          @db.Text
+  fuente       FuenteBiometrica @relation(fields: [fuenteId], references: [id])
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
 
   /// El lock real (una sola sincronización EN_CURSO por fuenteId) NO puede
   /// expresarse aquí: Prisma no soporta índices únicos filtrados (WHERE) en
@@ -1418,17 +1448,29 @@ model ClasificacionArancelariaMatriz {
 /// separados), no aquí: esta entidad es el acuerdo comercial con el
 /// proveedor extranjero (Incoterm, moneda, TRM pactada).
 model OrdenCompraIntl {
-  id                  String                 @id @default(uuid()) @db.UniqueIdentifier
-  tenantId            String                 @db.UniqueIdentifier
-  numeroOrden         String                 @db.VarChar(50)
+  id                    String                     @id @default(uuid()) @db.UniqueIdentifier
+  tenantId              String                     @db.UniqueIdentifier
+  numeroOrden           String                     @db.VarChar(50)
+  /// Fecha explícita de la orden pactada con el proveedor — antes se
+  /// inferían del createdAt del registro, que puede diferir (ej. la orden
+  /// se registra en el sistema días después de haberse pactado). Default
+  /// "hoy" en el formulario, pero editable: es un dato del negocio, no de
+  /// auditoría (createdAt sigue intacto para eso).
+  fechaOrden            DateTime                   @default(now())
   /// Identificador legible del expediente (IMP-2026-041), generado al
   /// crear la orden — nunca se reutiliza aunque la orden se anule (mismo
   /// principio que numeroOrden: la unicidad real se valida en código, no a
   /// nivel de BD, para no bloquear reusar el consecutivo si algo falla a
   /// mitad de la creación). Nullable porque las órdenes creadas ANTES de
   /// esta migración no tienen uno — se muestra el id corto como fallback.
-  codigo              String?                @db.VarChar(30)
-  incoterm            String                 @db.VarChar(10)
+  codigo                String?                    @db.VarChar(30)
+  incoterm              String                     @db.VarChar(10)
+  /// Lugar pactado del Incoterm (ej. "Shanghai, China" para FOB, "Bogotá,
+  /// Colombia" para DAP) — NO se infiere del país de origen ni de ningún
+  /// otro campo: el lugar exacto de entrega/embarque es una decisión
+  /// comercial propia que puede no coincidir con ninguno de los dos países
+  /// involucrados (ej. FOB en un puerto distinto al de fabricación).
+  lugarPactado          String?                    @db.VarChar(255)
   /// FK real al catálogo de Proveedor (el mismo que usan Facturas/Servicios/
   /// Solicitudes, ya con trazabilidad a Siesa vía Proveedor.siesaTerceroRowId
   /// — no se duplica esa integración aquí). Nullable a propósito: un
@@ -1436,48 +1478,74 @@ model OrdenCompraIntl {
   /// todavía en el catálogo — en ese caso solo se llena proveedorExtranjero
   /// (texto libre) y luego se sincroniza/crea el Proveedor real. Cuando SÍ
   /// se selecciona uno, proveedorExtranjero se autocompleta con su nombre.
-  proveedorId         String?                @db.UniqueIdentifier
-  proveedorExtranjero String                 @db.VarChar(255)
+  proveedorId           String?                    @db.UniqueIdentifier
+  proveedorExtranjero   String                     @db.VarChar(255)
   /// Nombre de país validado en código contra PAISES_VALIDOS
   /// (importaciones.controller.ts) — mismo patrón que incoterm/moneda/
   /// formaPago: sin tabla propia porque es una lista de referencia estática
   /// (países no cambian), pero SÍ normalizada (nunca "china"/"CHINA"/
   /// "China" como valores distintos, a diferencia de antes).
-  paisOrigen          String                 @db.VarChar(100)
-  moneda              String                 @db.VarChar(3)
-  trmPactada          Decimal                @db.Decimal(18, 4)
-  valorEstimadoTotal  Decimal                @db.Decimal(18, 2)
+  paisOrigen            String                     @db.VarChar(100)
+  moneda                String                     @db.VarChar(3)
+  /// Tasa de cambio pactada con el proveedor (antes "TRM Pactada (COP)" en
+  /// UI — el nombre del campo en BD no cambia para no romper migraciones/
+  /// reportes ya existentes, solo cambia el label mostrado).
+  trmPactada            Decimal                    @db.Decimal(18, 4)
+  /// Fecha a la que corresponde `trmPactada` — puede ser hoy (si se tomó de
+  /// "TRM oficial del día") o una fecha pasada (si el proveedor pactó una
+  /// tasa fija días antes). Nullable: órdenes previas a este campo no la
+  /// tienen.
+  tasaCambioFecha       DateTime?
+  /// Oficial | Pactada | Manual — de dónde vino el valor de trmPactada.
+  /// "Oficial" solo se asigna cuando el usuario usa el botón "TRM oficial
+  /// del día"; nunca sobrescribe en silencio una tasa que el usuario ya
+  /// haya escrito a mano (ver crearOrdenCompraIntl / frontend).
+  tasaCambioFuente      String?                    @db.VarChar(20)
+  valorEstimadoTotal    Decimal                    @db.Decimal(18, 2)
   /// Borrador | Confirmada | Cerrada | Anulada — "Cerrada" ahora sí es
   /// alcanzable, vía cerrarOrdenCompraIntl + evaluarCondicionesCierre
   /// (domain/importaciones/condiciones-cierre.ts). Las condiciones son
   /// configurables por diseño (no hay una regla de negocio única todavía
   /// confirmada), no un candado fijo.
-  estado              String                 @default("Borrador") @db.VarChar(20)
+  estado                String                     @default("Borrador") @db.VarChar(20)
   /// Meta interna, nunca bloqueante: sirve para el indicador "¿cuándo
   /// debería terminar?" del expediente. Editable en cualquier momento.
-  fechaEstimadaCierre DateTime?
-  fechaCierre         DateTime?
-  responsableId       String?                @db.UniqueIdentifier
+  fechaEstimadaCierre   DateTime?
+  fechaCierre           DateTime?
+  responsableId         String?                    @db.UniqueIdentifier
   /// Término/forma de pago pactada con el proveedor extranjero (ej. "Carta
   /// de crédito", "Anticipado", "Crédito 30 días") — texto libre validado en
   /// código contra un catálogo cerrado (ver FORMAS_PAGO_VALIDAS en
   /// importaciones.controller.ts), mismo patrón que incoterm/moneda.
   /// Nullable: las órdenes creadas antes de este campo no tienen valor.
-  formaPago           String?                @db.VarChar(50)
-  observaciones       String?                @db.Text
-  eliminado           Boolean                @default(false)
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  tenant              Tenant                 @relation(fields: [tenantId], references: [id])
-  responsableUsuario  User?                  @relation("OrdenCompraIntlResponsable", fields: [responsableId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  proveedor           Proveedor?             @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  items               ItemOrdenCompraIntl[]
-  lotes               LoteImportacion[]
-  historial           ImportacionHistorial[]
-  actividades         ImportacionActividad[]
-  novedades           ImportacionNovedad[]
-  pagos               ImportacionPago[]
-  correosBandeja      ImportacionCorreo[]
+  formaPago             String?                    @db.VarChar(50)
+  /// Condición de pago dentro de la forma de pago elegida (ej. "50%
+  /// anticipo / 50% contra BL") — texto libre corto, complementa formaPago
+  /// sin necesitar un módulo de cuotas/contabilidad (eso queda fuera de
+  /// alcance a propósito).
+  condicionPago         String?                    @db.VarChar(255)
+  /// Detalle adicional de la condición de pago (texto largo libre).
+  detallePago           String?                    @db.Text
+  /// Fecha en la que el negocio necesita que la mercancía llegue —
+  /// persistida como dato estructurado (no texto libre en observaciones)
+  /// para que automatización futura (Bandeja Inteligente, Tracking) pueda
+  /// comparar contra fechaLlegadaEstimada/fechaLlegadaReal de cada lote.
+  fechaRequeridaLlegada DateTime?
+  observaciones         String?                    @db.Text
+  eliminado             Boolean                    @default(false)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  tenant                Tenant                     @relation(fields: [tenantId], references: [id])
+  responsableUsuario    User?                      @relation("OrdenCompraIntlResponsable", fields: [responsableId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proveedor             Proveedor?                 @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items                 ItemOrdenCompraIntl[]
+  lotes                 LoteImportacion[]
+  historial             ImportacionHistorial[]
+  actividades           ImportacionActividad[]
+  novedades             ImportacionNovedad[]
+  pagos                 ImportacionPago[]
+  correosBandeja        ImportacionCorreo[]
+  documentos            OrdenCompraIntlDocumento[]
 
   // Mismo motivo que en Factura: una restricción única a nivel de BD no
   // distingue órdenes anuladas/eliminadas, así que bloquearía reusar un
@@ -1506,6 +1574,12 @@ model ItemOrdenCompraIntl {
   /// (importaciones.controller.ts). Nullable porque los ítems creados antes
   /// de este campo no tienen valor; el formulario de creación SÍ la exige.
   unidadMedida            String?                         @db.VarChar(20)
+  /// Código/referencia con el que EL PROVEEDOR identifica este ítem en su
+  /// propia cotización/catálogo (puede diferir de `referencia`, que es la
+  /// referencia interna/Siesa) — texto libre, para que la Bandeja
+  /// Inteligente pueda cruzarlo contra la referencia que el proveedor use
+  /// en sus correos/facturas futuras.
+  referenciaProveedor     String?                         @db.VarChar(100)
   subpartidaArancelariaId String?                         @db.UniqueIdentifier
   cantidad                Decimal                         @db.Decimal(18, 4)
   pesoKg                  Decimal?                        @db.Decimal(18, 4)
@@ -1516,6 +1590,38 @@ model ItemOrdenCompraIntl {
   costeos                 CosteoImportacionDetalle[]
 
   @@index([ordenCompraId])
+}
+
+/// Documento inicial adjuntado directamente a la OrdenCompraIntl (Cotización,
+/// Proforma Invoice, Oferta comercial, Otros) — deliberadamente separado del
+/// patrón de "archivo único por campo fijo" de ExpedienteAduanero/
+/// VistoBuenoAduanero: aquí puede haber VARIOS documentos del mismo tipo (ej.
+/// dos cotizaciones de distintos ítems), así que es una tabla de filas, mismo
+/// espíritu que ImportacionCorreoAdjunto. El archivo físico se guarda con el
+/// MISMO patrón de middleware/upload.middleware.ts (carpeta propia bajo
+/// uploads/, nunca una URL pública — se sirve solo vía endpoint autenticado
+/// que valida tenant). tipo es texto validado en código contra
+/// TIPOS_DOCUMENTO_ORDEN_VALIDOS (importaciones.controller.ts), mismo patrón
+/// que incoterm/moneda/paisOrigen. Solo asociación de archivos: no dispara
+/// ninguna extracción/IA (eso es exclusivo de la Bandeja Inteligente sobre
+/// ImportacionCorreoAdjunto).
+model OrdenCompraIntlDocumento {
+  id              String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String          @db.UniqueIdentifier
+  ordenCompraId   String          @db.UniqueIdentifier
+  tipo            String          @db.VarChar(30)
+  nombreOriginal  String          @db.VarChar(255)
+  mime            String          @db.VarChar(100)
+  tamano          Int
+  /// Ruta relativa dentro de uploads/ordenes-compra-intl/<ordenCompraId>/,
+  /// nunca una URL absoluta ni pública.
+  ruta            String          @db.VarChar(500)
+  subidoPorNombre String?         @db.VarChar(255)
+  createdAt       DateTime        @default(now())
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ordenCompra     OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, ordenCompraId])
 }
 
 /// Requisito específico que un proveedor de importaciones exige para
@@ -1533,19 +1639,19 @@ model ItemOrdenCompraIntl {
 /// paisOrigen, sin tabla de catálogo propia porque es una lista corta y
 /// estable (DOCUMENTO/ACCION/CONDICION/INFORMACION/PAGO/ESPECIFICACION).
 model RequisitoProveedorImportacion {
-  id            String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId      String    @db.UniqueIdentifier
-  proveedorId   String    @db.UniqueIdentifier
-  tipo          String    @db.VarChar(30)
-  nombre        String    @db.VarChar(255)
-  descripcion   String?   @db.Text
-  obligatorio   Boolean   @default(true)
-  activo        Boolean   @default(true)
-  orden         Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  tenant        Tenant    @relation(fields: [tenantId], references: [id])
-  proveedor     Proveedor @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id          String    @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String    @db.UniqueIdentifier
+  proveedorId String    @db.UniqueIdentifier
+  tipo        String    @db.VarChar(30)
+  nombre      String    @db.VarChar(255)
+  descripcion String?   @db.Text
+  obligatorio Boolean   @default(true)
+  activo      Boolean   @default(true)
+  orden       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId, proveedorId])
   @@index([tenantId])
@@ -1577,35 +1683,35 @@ model RequisitoProveedorImportacion {
 /// mismo correo (reintento del job de ingesta, entrega duplicada) nunca crea
 /// una segunda fila.
 model ImportacionCorreo {
-  id                  String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId            String?   @db.UniqueIdentifier
+  id                  String                     @id @default(uuid()) @db.UniqueIdentifier
+  tenantId            String?                    @db.UniqueIdentifier
   /// Message-ID real del proveedor de correo (RFC 5322/Gmail id) — clave de
   /// idempotencia (única por sí sola, ver comentario del modelo).
-  messageId           String    @db.VarChar(255)
-  remitente           String    @db.VarChar(320)
-  destinatarios       String    @db.Text
-  asunto              String    @db.VarChar(500)
+  messageId           String                     @db.VarChar(255)
+  remitente           String                     @db.VarChar(320)
+  destinatarios       String                     @db.Text
+  asunto              String                     @db.VarChar(500)
   fechaRecibido       DateTime
-  cuerpoTexto         String?   @db.Text
+  cuerpoTexto         String?                    @db.Text
   /// PENDIENTE | CLASIFICADO | EXTRAIDO | MATCHEADO | REQUIERE_REVISION |
   /// RESUELTO | ERROR — validado en código (ver
   /// ESTADOS_CORREO_VALIDOS en importaciones-bandeja.controller.ts), mismo
   /// patrón que OrdenCompraIntl.estado.
-  estadoProcesamiento String    @default("PENDIENTE") @db.VarChar(30)
+  estadoProcesamiento String                     @default("PENDIENTE") @db.VarChar(30)
   /// Clasificación determinística/IA del correo — ver
   /// TIPOS_CLASIFICACION_VALIDOS. Null hasta que el job de procesamiento lo
   /// clasifique.
-  clasificacion       String?   @db.VarChar(30)
-  proveedorId         String?   @db.UniqueIdentifier
-  ordenCompraId       String?   @db.UniqueIdentifier
+  clasificacion       String?                    @db.VarChar(30)
+  proveedorId         String?                    @db.UniqueIdentifier
+  ordenCompraId       String?                    @db.UniqueIdentifier
   /// Errores de procesamiento (parseo, extracción, matching) — texto plano,
   /// nunca contenido comercial del correo (ver auditoría, privacidad de IA).
-  ultimoError         String?   @db.Text
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  proveedor           Proveedor?           @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ordenCompra         OrdenCompraIntl?     @relation(fields: [ordenCompraId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ultimoError         String?                    @db.Text
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  tenant              Tenant?                    @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proveedor           Proveedor?                 @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ordenCompra         OrdenCompraIntl?           @relation(fields: [ordenCompraId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   adjuntos            ImportacionCorreoAdjunto[]
   excepciones         ImportacionExcepcion[]
 
@@ -1622,20 +1728,20 @@ model ImportacionCorreo {
 /// que valida tenant). hashSha256 deduplica el mismo archivo si el correo se
 /// reingiere o si el proveedor reenvía el mismo adjunto en otro correo.
 model ImportacionCorreoAdjunto {
-  id               String    @id @default(uuid()) @db.UniqueIdentifier
-  correoId         String    @db.UniqueIdentifier
-  nombreOriginal   String    @db.VarChar(255)
-  mimeType         String    @db.VarChar(150)
+  id               String                  @id @default(uuid()) @db.UniqueIdentifier
+  correoId         String                  @db.UniqueIdentifier
+  nombreOriginal   String                  @db.VarChar(255)
+  mimeType         String                  @db.VarChar(150)
   tamano           Int
   /// Ruta relativa dentro de uploads/importaciones-correos/<correoId>/,
   /// nunca una URL absoluta ni pública.
-  ruta             String    @db.VarChar(500)
-  hashSha256       String    @db.Char(64)
-  textoExtraido    String?   @db.Text
+  ruta             String                  @db.VarChar(500)
+  hashSha256       String                  @db.Char(64)
+  textoExtraido    String?                 @db.Text
   /// PENDIENTE | EXTRAIDO | ERROR
-  estadoExtraccion String    @default("PENDIENTE") @db.VarChar(20)
-  createdAt        DateTime  @default(now())
-  correo           ImportacionCorreo          @relation(fields: [correoId], references: [id], onDelete: Cascade)
+  estadoExtraccion String                  @default("PENDIENTE") @db.VarChar(20)
+  createdAt        DateTime                @default(now())
+  correo           ImportacionCorreo       @relation(fields: [correoId], references: [id], onDelete: Cascade)
   extracciones     ImportacionExtraccion[]
 
   @@unique([correoId, hashSha256])
@@ -1648,22 +1754,22 @@ model ImportacionCorreoAdjunto {
 /// determinístico vs. IA, y cuál) — ver
 /// integrations/document-extraction/extraction-provider.ts.
 model ImportacionExtraccion {
-  id            String    @id @default(uuid()) @db.UniqueIdentifier
-  adjuntoId     String    @db.UniqueIdentifier
+  id            String                   @id @default(uuid()) @db.UniqueIdentifier
+  adjuntoId     String                   @db.UniqueIdentifier
   /// Nombre del campo extraído (ej. "eta", "incoterm", "numeroOrdenProveedor",
   /// "precioUnitarioFob") — catálogo abierto a propósito: los campos que se
   /// intentan extraer (ver §6 de la especificación) son muchos y crecerán.
-  campo         String    @db.VarChar(100)
-  valorExtraido String    @db.Text
+  campo         String                   @db.VarChar(100)
+  valorExtraido String                   @db.Text
   pagina        Int?
-  motorUsado    String    @db.VarChar(50)
-  confianza     Decimal?  @db.Decimal(5, 4)
+  motorUsado    String                   @db.VarChar(50)
+  confianza     Decimal?                 @db.Decimal(5, 4)
   /// Fragmento de texto de origen que sustenta el valor extraído (ej. la
   /// línea completa del PDF donde aparece la fecha) — para poder mostrarlo
   /// en el detalle sin reabrir el archivo. Nunca se le da a la IA como
   /// instrucción, siempre como dato ya extraído (ver §7/§14).
-  evidencia     String?   @db.Text
-  createdAt     DateTime  @default(now())
+  evidencia     String?                  @db.Text
+  createdAt     DateTime                 @default(now())
   adjunto       ImportacionCorreoAdjunto @relation(fields: [adjuntoId], references: [id], onDelete: Cascade)
 
   @@index([adjuntoId])
@@ -1683,26 +1789,26 @@ model ImportacionExtraccion {
 /// un tenant — el resto de tipos de excepción SIEMPRE tienen tenantId
 /// (el proveedor ya se identificó, solo falta la orden/producto/requisito).
 model ImportacionExcepcion {
-  id             String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId       String?   @db.UniqueIdentifier
-  correoId       String    @db.UniqueIdentifier
+  id            String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String?           @db.UniqueIdentifier
+  correoId      String            @db.UniqueIdentifier
   /// PROVEEDOR_NO_IDENTIFICADO | ORDEN_NO_IDENTIFICADA | REQUISITO_FALTANTE |
   /// INCONSISTENCIA_VALOR | PRODUCTO_NO_IDENTIFICADO |
   /// DOCUMENTO_NO_IDENTIFICADO | OTRO
-  tipo           String    @db.VarChar(40)
-  descripcion    String    @db.Text
+  tipo          String            @db.VarChar(40)
+  descripcion   String            @db.Text
   /// Candidatos cuando la excepción es de ambigüedad (ej. varios
   /// Proveedor/OrdenCompraIntl posibles) — JSON de ids+etiquetas, para que
   /// el frontend los muestre sin tener que volver a ejecutar el matching.
-  candidatos     String?   @db.Text
+  candidatos    String?           @db.Text
   /// ABIERTA | RESUELTA | DESCARTADA
-  estado         String    @default("ABIERTA") @db.VarChar(20)
-  resueltoPorId  String?   @db.UniqueIdentifier
-  resueltoEn     DateTime?
-  createdAt      DateTime  @default(now())
-  tenant         Tenant?            @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  correo         ImportacionCorreo  @relation(fields: [correoId], references: [id], onDelete: Cascade)
-  resueltoPor    User?              @relation("ImportacionExcepcionResueltoPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estado        String            @default("ABIERTA") @db.VarChar(20)
+  resueltoPorId String?           @db.UniqueIdentifier
+  resueltoEn    DateTime?
+  createdAt     DateTime          @default(now())
+  tenant        Tenant?           @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  correo        ImportacionCorreo @relation(fields: [correoId], references: [id], onDelete: Cascade)
+  resueltoPor   User?             @relation("ImportacionExcepcionResueltoPor", fields: [resueltoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId, estado])
   @@index([correoId])
@@ -1714,64 +1820,64 @@ model ImportacionExcepcion {
 /// el estado de la OrdenCompraIntl es independiente porque una sola orden
 /// puede tener varios lotes en estados distintos a la vez.
 model LoteImportacion {
-  id                   String                     @id @default(uuid()) @db.UniqueIdentifier
-  tenantId             String                     @db.UniqueIdentifier
-  ordenCompraId        String                     @db.UniqueIdentifier
-  blAwb                String                     @db.VarChar(100)
-  contenedor           String?                    @db.VarChar(50)
-  precinto             String?                    @db.VarChar(50)
-  puertoOrigen         String                     @db.VarChar(100)
-  puertoDestino        String                     @db.VarChar(100)
-  naviera              String?                    @db.VarChar(255)
-  fechaEmbarque        DateTime?
+  id                           String                     @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                     String                     @db.UniqueIdentifier
+  ordenCompraId                String                     @db.UniqueIdentifier
+  blAwb                        String                     @db.VarChar(100)
+  contenedor                   String?                    @db.VarChar(50)
+  precinto                     String?                    @db.VarChar(50)
+  puertoOrigen                 String                     @db.VarChar(100)
+  puertoDestino                String                     @db.VarChar(100)
+  naviera                      String?                    @db.VarChar(255)
+  fechaEmbarque                DateTime?
   /// ETA informada por el proveedor/naviera (dato comercial, viene del
   /// correo/documento) — se sigue llamando así por compatibilidad; en el
   /// tracking marítimo (§Tracking V1) es "ETA proveedor" frente a
   /// etaTrackingActual, que es la estimación en vivo del AIS.
-  fechaLlegadaEstimada DateTime?
-  fechaLlegadaReal     DateTime?
-  estado               String                     @default("En tránsito") @db.VarChar(30)
-  createdAt            DateTime                   @default(now())
+  fechaLlegadaEstimada         DateTime?
+  fechaLlegadaReal             DateTime?
+  estado                       String                     @default("En tránsito") @db.VarChar(30)
+  createdAt                    DateTime                   @default(now())
   /// Identificación del booking (distinto del BL/AWB, que ya existe) —
   /// llega típicamente antes que el BL en el ciclo de vida real del
   /// embarque, extraído por la Bandeja Inteligente de un correo de booking.
-  booking              String?                    @db.VarChar(100)
-  forwarder            String?                    @db.VarChar(255)
+  booking                      String?                    @db.VarChar(100)
+  forwarder                    String?                    @db.VarChar(255)
   /// Identificación del buque — IMO/MMSI son los identificadores estables
   /// que usa cualquier proveedor de tracking marítimo (AIS); el nombre solo
   /// es para mostrar en pantalla, nunca se usa para buscar (puede repetirse
   /// entre buques, IMO no).
-  buqueNombre          String?                    @db.VarChar(255)
-  buqueImo             String?                    @db.VarChar(20)
-  buqueMmsi            String?                    @db.VarChar(20)
+  buqueNombre                  String?                    @db.VarChar(255)
+  buqueImo                     String?                    @db.VarChar(20)
+  buqueMmsi                    String?                    @db.VarChar(20)
   /// ETA calculada en vivo por el proveedor de tracking marítimo (AIS),
   /// independiente de fechaLlegadaEstimada (la que informó el proveedor
   /// comercial) — la comparación entre ambas es lo que genera la alerta de
   /// variación de ETA. Nunca se escribe automáticamente sobre
   /// fechaLlegadaEstimada: son dos datos con dueños distintos (proveedor vs
   /// AIS) que deben poder divergir y compararse.
-  etaTrackingActual    DateTime?
-  ultimaPosicionLat    Float?
-  ultimaPosicionLon    Float?
-  ultimaPosicionFecha  DateTime?
-  velocidadNudos       Float?
-  rumboGrados          Float?
+  etaTrackingActual            DateTime?
+  ultimaPosicionLat            Float?
+  ultimaPosicionLon            Float?
+  ultimaPosicionFecha          DateTime?
+  velocidadNudos               Float?
+  rumboGrados                  Float?
   /// PENDIENTE (nunca sincronizado) | ACTIVO (última sincronización con
   /// datos) | SIN_DATOS (el proveedor de tracking no encontró el buque/IMO)
   /// | ERROR (la última consulta falló — ver ultimoErrorTracking).
-  estadoTracking       String                     @default("PENDIENTE") @db.VarChar(20)
+  estadoTracking               String                     @default("PENDIENTE") @db.VarChar(20)
   /// Nombre del adapter de MaritimeTrackingProvider que produjo el último
   /// dato (ej. "mock", "vesselfinder") — permite cambiar de proveedor sin
   /// perder trazabilidad de qué proveedor originó cada sincronización.
-  proveedorTracking    String?                    @db.VarChar(50)
-  ultimoErrorTracking  String?                    @db.Text
+  proveedorTracking            String?                    @db.VarChar(50)
+  ultimoErrorTracking          String?                    @db.Text
   ultimaSincronizacionTracking DateTime?
-  tenant               Tenant                     @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  ordenCompra          OrdenCompraIntl            @relation(fields: [ordenCompraId], references: [id])
-  expediente           ExpedienteAduanero?
-  costeos              CosteoImportacionDetalle[]
-  actividades          ImportacionActividad[]
-  contenedores         ContenedorLote[]
+  tenant                       Tenant                     @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  ordenCompra                  OrdenCompraIntl            @relation(fields: [ordenCompraId], references: [id])
+  expediente                   ExpedienteAduanero?
+  costeos                      CosteoImportacionDetalle[]
+  actividades                  ImportacionActividad[]
+  contenedores                 ContenedorLote[]
 
   @@index([tenantId, estado])
   @@index([ordenCompraId])
@@ -1785,21 +1891,21 @@ model LoteImportacion {
 /// saber en qué evento de la naviera está cada contenedor (booking, gate-in,
 /// cargado, zarpó, transbordo, arribo, descargado, entregado).
 model ContenedorLote {
-  id              String          @id @default(uuid()) @db.UniqueIdentifier
-  loteId          String          @db.UniqueIdentifier
-  numero          String          @db.VarChar(20)
+  id                String          @id @default(uuid()) @db.UniqueIdentifier
+  loteId            String          @db.UniqueIdentifier
+  numero            String          @db.VarChar(20)
   /// BOOKED | GATE_IN | LOADED | DEPARTED | TRANSSHIPMENT | ARRIVED_PORT |
   /// DISCHARGED | DELIVERED — catálogo cerrado validado en código.
-  ultimoEvento    String?         @db.VarChar(30)
+  ultimoEvento      String?         @db.VarChar(30)
   ultimoEventoFecha DateTime?
   /// Historial completo de eventos como JSON array de
   /// {tipo, fecha, ubicacion} — mismo patrón que
   /// ImportacionExcepcion.candidatos/Proveedor.materialesHabituales (JSON
   /// como texto, sin tabla propia: es de solo lectura para el usuario, no
   /// se consulta ni filtra por campo individual).
-  eventosJson     String?         @db.Text
-  createdAt       DateTime        @default(now())
-  lote            LoteImportacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  eventosJson       String?         @db.Text
+  createdAt         DateTime        @default(now())
+  lote              LoteImportacion @relation(fields: [loteId], references: [id], onDelete: Cascade)
 
   @@unique([loteId, numero])
   @@index([loteId])
@@ -1908,30 +2014,30 @@ model CosteoImportacionDetalle {
 /// una fila existente — cada evento nuevo se agrega, la línea de tiempo es
 /// append-only.
 model ImportacionHistorial {
-  id            String          @id @default(uuid()) @db.UniqueIdentifier
-  ordenCompraId String          @db.UniqueIdentifier
-  actor         String          @db.VarChar(255)
-  accion        String          @db.VarChar(255)
-  detalle       String?         @db.Text
+  id              String          @id @default(uuid()) @db.UniqueIdentifier
+  ordenCompraId   String          @db.UniqueIdentifier
+  actor           String          @db.VarChar(255)
+  accion          String          @db.VarChar(255)
+  detalle         String?         @db.Text
   /// Sistema (generado por una mutación del controller) | Manual (evento de
   /// negocio que un usuario registra explícitamente, ej. "Proveedor
   /// confirmó producción"). Default Sistema para no romper el historial
   /// existente antes de esta migración.
-  origen        String          @default("Sistema") @db.VarChar(10)
+  origen          String          @default("Sistema") @db.VarChar(10)
   /// Quién ejecutó/reportó el hecho en el mundo real (puede ser un tercero
   /// — "Naviera", "Proveedor" — no necesariamente el actor que hizo clic).
-  responsable   String?         @db.VarChar(255)
+  responsable     String?         @db.VarChar(255)
   /// Etapa de negocio a la que pertenece este evento (Orden, Documentación,
   /// Embarque, Tránsito, Aduana, Nacionalización, Pagos, Recepción, Cierre)
   /// — texto libre validado en controller, mismo patrón que el resto del
   /// módulo (sin enum de Prisma).
-  etapa         String?         @db.VarChar(30)
-  evidenciaNombre String?       @db.VarChar(255)
-  evidenciaRuta   String?       @db.VarChar(500)
-  evidenciaMime   String?       @db.VarChar(100)
+  etapa           String?         @db.VarChar(30)
+  evidenciaNombre String?         @db.VarChar(255)
+  evidenciaRuta   String?         @db.VarChar(500)
+  evidenciaMime   String?         @db.VarChar(100)
   evidenciaTamano Int?
-  createdAt     DateTime        @default(now())
-  ordenCompra   OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+  ordenCompra     OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
 
   @@index([ordenCompraId])
 }
@@ -1943,16 +2049,16 @@ model ImportacionHistorial {
 /// lo está) — un grafo plano de "depende de una", no un DAG general: la
 /// complejidad real del dominio de importaciones no lo necesita todavía.
 model ImportacionActividad {
-  id                String                @id @default(uuid()) @db.UniqueIdentifier
-  tenantId          String                @db.UniqueIdentifier
-  ordenCompraId     String                @db.UniqueIdentifier
-  loteId            String?               @db.UniqueIdentifier
-  nombre            String                @db.VarChar(255)
+  id                String                 @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String                 @db.UniqueIdentifier
+  ordenCompraId     String                 @db.UniqueIdentifier
+  loteId            String?                @db.UniqueIdentifier
+  nombre            String                 @db.VarChar(255)
   /// Orden | Documentación | Embarque | Tránsito | Aduana | Nacionalización | Pagos | Recepción | Cierre
-  etapa             String                @db.VarChar(30)
+  etapa             String                 @db.VarChar(30)
   /// Interno | Proveedor | AgenciaAduana | Transportador | Naviera | Otro
-  responsableTipo   String                @db.VarChar(20)
-  responsableNombre String?               @db.VarChar(255)
+  responsableTipo   String                 @db.VarChar(20)
+  responsableNombre String?                @db.VarChar(255)
   fechaPlanificada  DateTime?
   fechaLimite       DateTime?
   fechaReal         DateTime?
@@ -1960,15 +2066,15 @@ model ImportacionActividad {
   /// "Vencida" se DERIVA (fechaLimite < ahora y sigue Pendiente/EnCurso),
   /// nunca se persiste como transición manual — ver
   /// domain/importaciones/motor-seguimiento.ts.
-  estado            String                @default("Pendiente") @db.VarChar(20)
-  dependeDeId       String?               @db.UniqueIdentifier
-  observacion       String?               @db.Text
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  tenant            Tenant                @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  ordenCompra       OrdenCompraIntl       @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
-  lote              LoteImportacion?      @relation(fields: [loteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  dependeDe         ImportacionActividad? @relation("ActividadDependencia", fields: [dependeDeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estado            String                 @default("Pendiente") @db.VarChar(20)
+  dependeDeId       String?                @db.UniqueIdentifier
+  observacion       String?                @db.Text
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  ordenCompra       OrdenCompraIntl        @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  lote              LoteImportacion?       @relation(fields: [loteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  dependeDe         ImportacionActividad?  @relation("ActividadDependencia", fields: [dependeDeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   dependientes      ImportacionActividad[] @relation("ActividadDependencia")
 
   @@index([tenantId, ordenCompraId])
@@ -1981,47 +2087,47 @@ model ImportacionActividad {
 /// "actividad-vencida:<actividadId>") para poder sincronizar sin duplicar
 /// (upsert por reglaOrigen, ver sincronizarNovedadesAutomaticas).
 model ImportacionNovedad {
-  id                    String          @id @default(uuid()) @db.UniqueIdentifier
-  tenantId              String          @db.UniqueIdentifier
-  ordenCompraId         String          @db.UniqueIdentifier
+  id                          String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                    String          @db.UniqueIdentifier
+  ordenCompraId               String          @db.UniqueIdentifier
   /// Retraso | DocumentoFaltante | Inconsistencia | Dano | Faltante |
   /// ProblemaAduanero | ProblemaProveedor | ProblemaTransporte |
   /// ProblemaFinanciero | Bloqueo | Otro
-  tipo                  String          @db.VarChar(30)
-  descripcion           String          @db.Text
+  tipo                        String          @db.VarChar(30)
+  descripcion                 String          @db.Text
   /// Interno | Externo | PorDeterminar — nunca se asume "culpa del
   /// proveedor" solo porque algo está retrasado sin evidencia suficiente
   /// (ver domain/importaciones/motor-seguimiento.ts).
-  origen                String          @default("PorDeterminar") @db.VarChar(20)
-  responsable           String?         @db.VarChar(255)
+  origen                      String          @default("PorDeterminar") @db.VarChar(20)
+  responsable                 String?         @db.VarChar(255)
   /// Alta | Media | Baja
-  prioridad             String          @default("Media") @db.VarChar(10)
-  impacto               String?         @db.Text
-  fechaDeteccion        DateTime        @default(now())
-  fechaLimite           DateTime?
+  prioridad                   String          @default("Media") @db.VarChar(10)
+  impacto                     String?         @db.Text
+  fechaDeteccion              DateTime        @default(now())
+  fechaLimite                 DateTime?
   /// Abierta | EnGestion | Resuelta
-  estado                String          @default("Abierta") @db.VarChar(20)
-  accionRequerida       String?         @db.VarChar(500)
-  responsableResolucionId     String?   @db.UniqueIdentifier
-  responsableResolucionNombre String?   @db.VarChar(255)
-  fechaResolucion       DateTime?
-  evidenciaNombre       String?         @db.VarChar(255)
-  evidenciaRuta         String?         @db.VarChar(500)
-  evidenciaMime         String?         @db.VarChar(100)
-  evidenciaTamano       Int?
-  automatica            Boolean         @default(false)
-  reglaOrigen           String?         @db.VarChar(100)
-  creadoPorId           String?         @db.UniqueIdentifier
-  creadoPorNombre       String?         @db.VarChar(255)
-  createdAt             DateTime        @default(now())
-  tenant                Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  ordenCompra           OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  estado                      String          @default("Abierta") @db.VarChar(20)
+  accionRequerida             String?         @db.VarChar(500)
+  responsableResolucionId     String?         @db.UniqueIdentifier
+  responsableResolucionNombre String?         @db.VarChar(255)
+  fechaResolucion             DateTime?
+  evidenciaNombre             String?         @db.VarChar(255)
+  evidenciaRuta               String?         @db.VarChar(500)
+  evidenciaMime               String?         @db.VarChar(100)
+  evidenciaTamano             Int?
+  automatica                  Boolean         @default(false)
+  reglaOrigen                 String?         @db.VarChar(100)
+  creadoPorId                 String?         @db.UniqueIdentifier
+  creadoPorNombre             String?         @db.VarChar(255)
+  createdAt                   DateTime        @default(now())
+  tenant                      Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  ordenCompra                 OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, ordenCompraId])
-  @@index([tenantId, estado])
   // Idempotencia de la generación automática: nunca dos novedades abiertas
   // por la misma regla sobre la misma orden.
   @@unique([ordenCompraId, reglaOrigen])
+  @@index([tenantId, ordenCompraId])
+  @@index([tenantId, estado])
 }
 
 /// Obligación/pago asociado a una importación (anticipo o saldo a
@@ -2029,26 +2135,26 @@ model ImportacionNovedad {
 /// mismo patrón que Pago sobre Factura (nunca se borra, se anula) pero
 /// modelado aparte porque no existe hoy ningún pago sobre OrdenCompraIntl.
 model ImportacionPago {
-  id                  String          @id @default(uuid()) @db.UniqueIdentifier
-  tenantId            String          @db.UniqueIdentifier
-  ordenCompraId       String          @db.UniqueIdentifier
-  concepto            String          @db.VarChar(255)
-  valor               Decimal         @db.Decimal(18, 2)
-  moneda              String          @default("COP") @db.VarChar(3)
-  fechaVencimiento    DateTime?
+  id                String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String          @db.UniqueIdentifier
+  ordenCompraId     String          @db.UniqueIdentifier
+  concepto          String          @db.VarChar(255)
+  valor             Decimal         @db.Decimal(18, 2)
+  moneda            String          @default("COP") @db.VarChar(3)
+  fechaVencimiento  DateTime?
   /// Pendiente | Pagado | Anulado
-  estado              String          @default("Pendiente") @db.VarChar(20)
-  fechaPago           DateTime?
-  responsableId       String?         @db.UniqueIdentifier
-  responsableNombre   String?         @db.VarChar(255)
-  comprobanteNombre   String?         @db.VarChar(255)
-  comprobanteRuta     String?         @db.VarChar(500)
-  comprobanteMime     String?         @db.VarChar(100)
-  comprobanteTamano   Int?
-  observaciones       String?         @db.Text
-  createdAt           DateTime        @default(now())
-  tenant              Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  ordenCompra         OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  estado            String          @default("Pendiente") @db.VarChar(20)
+  fechaPago         DateTime?
+  responsableId     String?         @db.UniqueIdentifier
+  responsableNombre String?         @db.VarChar(255)
+  comprobanteNombre String?         @db.VarChar(255)
+  comprobanteRuta   String?         @db.VarChar(500)
+  comprobanteMime   String?         @db.VarChar(100)
+  comprobanteTamano Int?
+  observaciones     String?         @db.Text
+  createdAt         DateTime        @default(now())
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  ordenCompra       OrdenCompraIntl @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, ordenCompraId])
   @@index([tenantId, estado])
@@ -2152,16 +2258,16 @@ model InboxItem {
 
   enlace String? @db.VarChar(500)
 
-  createdAt DateTime @default(now())
+  createdAt           DateTime  @default(now())
   /// Solo se llena cuando la entidad origen tiene una fecha límite real —
   /// nunca se inventa una donde el negocio no la tiene.
-  dueAt     DateTime?
-  resolvedAt         DateTime?
+  dueAt               DateTime?
+  resolvedAt          DateTime?
   resolvedByUsuarioId String?   @db.UniqueIdentifier
 
-  tenant           Tenant @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  asignadoUsuario  User?  @relation("InboxItemAsignado", fields: [asignadoUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resolvedByUsuario User? @relation("InboxItemResueltoPor", fields: [resolvedByUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tenant            Tenant @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  asignadoUsuario   User?  @relation("InboxItemAsignado", fields: [asignadoUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resolvedByUsuario User?  @relation("InboxItemResueltoPor", fields: [resolvedByUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   // Idempotencia real a nivel de BD: el mismo evento (mismo origen+tipo)
   // nunca crea una segunda fila — lib/inbox.ts hace upsert contra esta clave.

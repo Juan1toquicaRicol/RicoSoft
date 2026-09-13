@@ -149,6 +149,9 @@ describe.skipIf(!RUN)(
       await prisma.expedienteAduanero.deleteMany({
         where: { tenantId: { in: [tenantAId, tenantBId] } },
       });
+      await prisma.ordenCompraIntlDocumento.deleteMany({
+        where: { tenantId: { in: [tenantAId, tenantBId] } },
+      });
       await prisma.costeoImportacionDetalle.deleteMany({
         where: { tenantId: { in: [tenantAId, tenantBId] } },
       });
@@ -355,6 +358,123 @@ describe.skipIf(!RUN)(
       expect(descarga.status).toBe(200);
     });
 
+    // ---------- Documentos iniciales de la orden ----------
+
+    let documentoInicialAId: string;
+
+    it("sube un documento inicial (Cotización) a la orden y lo lista en el detalle", async () => {
+      const subida = await request(app)
+        .post(`/api/importaciones/${ordenAId}/documentos/cotizacion`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .attach("archivo", Buffer.from("%PDF-1.4 cotizacion de prueba"), {
+          filename: "cotizacion.pdf",
+          contentType: "application/pdf",
+        });
+      expect(subida.status).toBe(201);
+      expect(subida.body.tipo).toBe("Cotización");
+      expect(subida.body.nombreOriginal).toBe("cotizacion.pdf");
+      documentoInicialAId = subida.body.id;
+
+      const detalle = await request(app)
+        .get(`/api/importaciones/${ordenAId}`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`);
+      expect(detalle.status).toBe(200);
+      expect(
+        detalle.body.documentos.some(
+          (d: { id: string; tipo: string }) =>
+            d.id === documentoInicialAId && d.tipo === "Cotización",
+        ),
+      ).toBe(true);
+    });
+
+    it("rechaza un tipo de documento inválido", async () => {
+      const res = await request(app)
+        .post(`/api/importaciones/${ordenAId}/documentos/tipo-inventado`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .attach("archivo", Buffer.from("%PDF-1.4 contenido"), {
+          filename: "x.pdf",
+          contentType: "application/pdf",
+        });
+      expect(res.status).toBe(400);
+    });
+
+    it("rechaza un archivo cuyo contenido real no corresponde al MIME declarado (magic bytes)", async () => {
+      const res = await request(app)
+        .post(`/api/importaciones/${ordenAId}/documentos/otros`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`)
+        .attach("archivo", Buffer.from("esto no es un PDF, es texto plano"), {
+          filename: "falso.pdf",
+          contentType: "application/pdf",
+        });
+      expect(res.status).toBe(400);
+
+      const documentos = await prisma.ordenCompraIntlDocumento.findMany({
+        where: { ordenCompraId: ordenAId, tipo: "Otros" },
+      });
+      expect(documentos.length).toBe(0);
+    });
+
+    it("usuario sin permiso IMPORTACIONES_CREAR recibe 403 al subir un documento inicial", async () => {
+      const res = await request(app)
+        .post(`/api/importaciones/${ordenAId}/documentos/otros`)
+        .set("Authorization", `Bearer ${tokenASinPermiso}`)
+        .attach("archivo", Buffer.from("%PDF-1.4 contenido"), {
+          filename: "otros.pdf",
+          contentType: "application/pdf",
+        });
+      expect(res.status).toBe(403);
+    });
+
+    it(
+      "CRÍTICO — Tenant B no puede subir, descargar ni eliminar un documento inicial de la orden de " +
+        "Tenant A (aislamiento por tenantId + ordenCompraId, sin fuga de datos)",
+      async () => {
+        const subidaCruzada = await request(app)
+          .post(`/api/importaciones/${ordenAId}/documentos/cotizacion`)
+          .set("Authorization", `Bearer ${tokenBAdmin}`)
+          .attach("archivo", Buffer.from("%PDF-1.4 intento hostil"), {
+            filename: "hackeo.pdf",
+            contentType: "application/pdf",
+          });
+        expect(subidaCruzada.status).toBe(404);
+
+        const descargaCruzada = await request(app)
+          .get(`/api/importaciones/${ordenAId}/documentos/${documentoInicialAId}`)
+          .set("Authorization", `Bearer ${tokenBAdmin}`);
+        expect(descargaCruzada.status).toBe(404);
+
+        const eliminacionCruzada = await request(app)
+          .delete(`/api/importaciones/${ordenAId}/documentos/${documentoInicialAId}`)
+          .set("Authorization", `Bearer ${tokenBAdmin}`);
+        expect(eliminacionCruzada.status).toBe(404);
+
+        // El documento real de A sigue intacto pese a los tres intentos cruzados.
+        const real = await prisma.ordenCompraIntlDocumento.findUnique({
+          where: { id: documentoInicialAId },
+        });
+        expect(real).not.toBeNull();
+        expect(real?.nombreOriginal).toBe("cotizacion.pdf");
+      },
+    );
+
+    it("descarga y luego elimina el documento inicial (el propio tenant sí puede)", async () => {
+      const descarga = await request(app)
+        .get(`/api/importaciones/${ordenAId}/documentos/${documentoInicialAId}`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`);
+      expect(descarga.status).toBe(200);
+      expect(descarga.headers["content-type"]).toContain("application/pdf");
+
+      const eliminacion = await request(app)
+        .delete(`/api/importaciones/${ordenAId}/documentos/${documentoInicialAId}`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`);
+      expect(eliminacion.status).toBe(200);
+
+      const trasEliminar = await prisma.ordenCompraIntlDocumento.findUnique({
+        where: { id: documentoInicialAId },
+      });
+      expect(trasEliminar).toBeNull();
+    });
+
     // ---------- Trazabilidad ----------
 
     it("cada mutación exitosa dejó una entrada real en ImportacionHistorial (historial atómico)", async () => {
@@ -374,6 +494,8 @@ describe.skipIf(!RUN)(
       expect(
         acciones.filter((a) => a === "Documento de visto bueno reemplazado").length,
       ).toBeGreaterThanOrEqual(1);
+      expect(acciones).toContain("Documento inicial adjuntado (Cotización)");
+      expect(acciones).toContain("Documento inicial eliminado (Cotización)");
     });
   },
 );

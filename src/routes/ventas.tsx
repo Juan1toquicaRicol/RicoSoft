@@ -1,13 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  ChevronDown,
-  Info,
-  Loader2,
-  Search,
-  TrendingDown,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, Info, Search, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -28,11 +20,9 @@ import {
   useDisponibilidadComercial,
   useBusquedaProductos,
   useContextoProducto,
-  useHistoricoComprasCliente,
   type DisponibilidadComercial,
   type ItemBusqueda,
   type ContextoProducto,
-  type ClienteEnRiesgo,
 } from "@/hooks/use-ventas";
 import { compact, formatCantidad, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -401,136 +391,6 @@ function PanelDisponibilidad() {
   );
 }
 
-/**
- * Fila expandible de "Clientes en riesgo": al desplegar, responde "¿qué
- * dejó de comprar este cliente?" y "¿cuánto compraba antes?" sin sacar al
- * vendedor de Ventas. Reutiliza GET /ventas/clientes/:id/historico (carga
- * perezosa, solo al abrir) — ningún cálculo nuevo en frontend.
- */
-function FilaClienteEnRiesgo({ cliente: c }: { cliente: ClienteEnRiesgo }) {
-  const [abierto, setAbierto] = useState(false);
-  const { consultar, loading } = useHistoricoComprasCliente();
-  const [historico, setHistorico] = useState<Awaited<ReturnType<typeof consultar>> | null>(null);
-
-  const handleToggle = async () => {
-    const next = !abierto;
-    setAbierto(next);
-    if (next && !historico) {
-      try {
-        setHistorico(await consultar(c.clienteRowId));
-      } catch {
-        // El hook ya expone `error`; el detalle simplemente no se llena.
-      }
-    }
-  };
-
-  return (
-    <>
-      <TableRow className="cursor-pointer hover:bg-slate-50/80" onClick={handleToggle}>
-        <TableCell className="w-8">
-          <ChevronDown
-            className={`h-3.5 w-3.5 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`}
-          />
-        </TableCell>
-        <TableCell className="text-xs font-semibold text-slate-800">
-          {c.clienteNombre ?? "Cliente sin nombre"}
-        </TableCell>
-        <TableCell className="text-right text-xs">
-          <span
-            className={cn(
-              "num font-semibold",
-              c.severidad === "alta" ? "text-red-600" : "text-amber-600",
-            )}
-          >
-            {c.diasInactivo} días
-          </span>
-        </TableCell>
-        <TableCell className="num text-right text-xs text-slate-600">
-          {money(c.promedioMensualNeto)}
-        </TableCell>
-        <TableCell className="num text-right text-xs font-bold text-slate-900">
-          {money(c.ventaEstimadaPerdida)}
-        </TableCell>
-        <TableCell className="num text-right text-xs text-slate-600">
-          {c.kilosEstimadosPerdidos > 0 ? formatCantidad(c.kilosEstimadosPerdidos, "KG") : "—"}
-        </TableCell>
-      </TableRow>
-      {abierto && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={6} className="bg-slate-50/60 px-6 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Qué le compraba este cliente (últimos 12 meses)
-            </p>
-            {loading && !historico && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando historial de compras...
-              </p>
-            )}
-            {historico && !historico.disponible && (
-              <p className="mt-2 text-xs text-slate-500">
-                {historico.motivo ?? "Sin datos disponibles."}
-              </p>
-            )}
-            {historico?.disponible &&
-              ((historico.productos ?? []).length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  Sin compras registradas en el período.
-                </p>
-              ) : (
-                <div className="mt-2 overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-100">
-                      <TableRow className="hover:bg-slate-100">
-                        <TableHead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          Producto
-                        </TableHead>
-                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          Cantidad
-                        </TableHead>
-                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          Valor histórico
-                        </TableHead>
-                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          Veces comprado
-                        </TableHead>
-                        <TableHead className="text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          Última compra
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(historico.productos ?? []).map((p) => (
-                        <TableRow key={p.itemRowId}>
-                          <TableCell className="text-xs text-slate-700">
-                            {p.descripcion ?? p.referencia ?? "Producto sin descripción"}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {formatCantidad(p.cantidadHistorica, p.unidadMedida)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {money(p.netoHistorico)}
-                          </TableCell>
-                          <TableCell className="num text-right text-xs text-slate-600">
-                            {p.numCompras}
-                          </TableCell>
-                          <TableCell className="text-right text-xs text-slate-500">
-                            {new Date(p.ultimaCompra).toLocaleDateString("es-CO", {
-                              timeZone: "UTC",
-                            })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ))}
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
-
 function Ventas() {
   const { centro, loading } = useCentroComercial();
 
@@ -587,110 +447,20 @@ function Ventas() {
             </PanelColapsable>
           )}
 
-          {((centro.clientesInactivos ?? []).length > 0 ||
-            (centro.caidasClientesTop ?? []).length > 0) && (
-            <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-red-600" />
-                <h2 className="text-sm font-bold text-slate-900">Clientes en riesgo</h2>
-              </div>
-              <p className="text-xs text-slate-500">
-                Clientes recurrentes que dejaron de comprar y caídas fuertes en clientes top —
-                estimado a partir del histórico de compras (Siesa)
-              </p>
-
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-red-700">
-                    Venta estimada en riesgo
-                  </p>
-                  <p className="num mt-1 text-xl font-bold text-red-700">
-                    {money(centro.totalVentaEnRiesgo ?? 0)}
-                  </p>
-                  <p className="mt-1 text-[11px] text-red-600">
-                    Estimado: promedio mensual histórico × días de inactividad
-                  </p>
-                </div>
-                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
-                    Material estimado en riesgo
-                  </p>
-                  <p className="num mt-1 text-xl font-bold text-amber-700">
-                    {formatCantidad(centro.totalKilosEnRiesgo ?? 0, "KG")}
-                  </p>
-                  <p className="mt-1 text-[11px] text-amber-600">
-                    Solo productos vendidos por kilo
-                  </p>
-                </div>
-              </div>
-
-              {(centro.clientesInactivos ?? []).length > 0 && (
-                <div className="mt-5 overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-100/80">
-                      <TableRow className="hover:bg-slate-100/80">
-                        <TableHead className="w-8" />
-                        <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Cliente
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Inactivo hace
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Promedio mensual
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Venta estimada perdida
-                        </TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                          Kilos estimados
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(centro.clientesInactivos ?? []).map((c) => (
-                        <FilaClienteEnRiesgo key={c.clienteRowId} cliente={c} />
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              {(centro.caidasClientesTop ?? []).length > 0 && (
-                <div className="mt-5 border-t border-slate-200 pt-4">
-                  <h3 className="text-xs font-bold text-slate-900">Caídas fuertes este mes</h3>
-                  <ul className="mt-2 space-y-1.5">
-                    {(centro.caidasClientesTop ?? []).map((c) => (
-                      <li
-                        key={c.clienteRowId ?? c.clienteNombre}
-                        className="flex items-center justify-between text-xs"
-                      >
-                        <span className="min-w-0 truncate text-slate-700">
-                          {c.clienteNombre ?? "Cliente sin nombre"}
-                        </span>
-                        <span className="num shrink-0 font-semibold text-red-600">
-                          -{c.caidaPct}% ({money(c.netoMesAnterior)} → {money(c.netoUltimoMes)})
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+          {(centro.productosEnRiesgoQuiebre ?? []).length === 0 && (
+            <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
+              Nada urgente que atender hoy — sin productos en riesgo de quiebre.
             </div>
           )}
-
-          {(centro.productosEnRiesgoQuiebre ?? []).length === 0 &&
-            (centro.clientesInactivos ?? []).length === 0 && (
-              <div className="mt-4 panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
-                Nada urgente que atender hoy — sin productos en riesgo de quiebre ni clientes
-                inactivos recientes.
-              </div>
-            )}
 
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              Ventas es el centro operativo comercial — para tendencias, márgenes, top clientes/
+              Clientes en riesgo (inactivos y con caídas fuertes) ahora vive en{" "}
+              <Link to="/oportunidades" className="font-semibold text-blue-700 hover:underline">
+                Oportunidades
+              </Link>
+              . Ventas es el centro operativo comercial — para tendencias, márgenes, top clientes/
               productos y evolución mensual, usa{" "}
               <Link to="/analitica" className="font-semibold text-blue-700 hover:underline">
                 Analítica

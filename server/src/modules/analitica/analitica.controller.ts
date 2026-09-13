@@ -22,6 +22,14 @@ import {
 } from "../../lib/ventas-siesa";
 import { calcularResumenFinancieroSiesa } from "../../lib/financiero-siesa";
 import { getOrSetCache } from "../../lib/memo-cache";
+import {
+  METRICAS,
+  DIMENSIONES,
+  visualizacionesPermitidas,
+  validarConfiguracionAnalisis,
+  type ConfiguracionAnalisis,
+} from "./analitica-catalogo";
+import { ejecutarAnalisis } from "./analitica-analisis.service";
 
 // Estados de Factura que representan una obligación todavía por pagar
 // (Rechazada no cuenta: nunca llega a deberse; Pagada tampoco: ya se saldó).
@@ -830,35 +838,38 @@ export const obtenerVentasPorVendedorGerencial = async (
 
   const claveCache = `ventas-vendedores:${tenant.siesaCiaId}:${inicioHoy.toISOString()}`;
   try {
-    const { filas, detalleHoy, topVendedoresPorMargen, resumenHoy } = await getOrSetCache(
-      claveCache,
-      CACHE_TTL_VENTAS_MS,
-      async () => {
-        const [filas, detalleHoy, topVendedoresPorMargen, resumenHoy] = await Promise.all([
-          leerVentasDiariasPorVendedorSiesa(tenant.siesaCiaId!, desde, hasta),
-          // Detalle de hoy con hora real (f461_ts) — ver leerVentasDeHoyConHoraSiesa.
-          leerVentasDeHoyConHoraSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
-          leerTopVendedoresPorMargenSiesa(
-            tenant.siesaCiaId!,
-            inicioMesActual,
-            inicioMesSiguiente,
-            10,
-          ),
-          // Total del día — $ y kg — para los indicadores superiores de
-          // Analítica ("Total ventas hoy"). Mismo rango [inicioHoy, hasta)
-          // ya usado para detalleHoy, un solo total en vez de sumar en
-          // frontend las filas de detalleHoy (que no traen kilos).
-          leerResumenVentaDiaSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
-        ]);
-        return { filas, detalleHoy, topVendedoresPorMargen, resumenHoy };
-      },
-    );
+    const { filas, detalleHoy, topVendedoresPorMargen, resumenHoy, resumenMes } =
+      await getOrSetCache(claveCache, CACHE_TTL_VENTAS_MS, async () => {
+        const [filas, detalleHoy, topVendedoresPorMargen, resumenHoy, resumenMes] =
+          await Promise.all([
+            leerVentasDiariasPorVendedorSiesa(tenant.siesaCiaId!, desde, hasta),
+            // Detalle de hoy con hora real (f461_ts) — ver leerVentasDeHoyConHoraSiesa.
+            leerVentasDeHoyConHoraSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
+            leerTopVendedoresPorMargenSiesa(
+              tenant.siesaCiaId!,
+              inicioMesActual,
+              inicioMesSiguiente,
+              10,
+            ),
+            // Total del día — $ y kg — para los indicadores superiores de
+            // Analítica ("Total ventas hoy"). Mismo rango [inicioHoy, hasta)
+            // ya usado para detalleHoy, un solo total en vez de sumar en
+            // frontend las filas de detalleHoy (que no traen kilos).
+            leerResumenVentaDiaSiesa(tenant.siesaCiaId!, inicioHoy, hasta),
+            // Mismo total, pero para el mes actual completo — usado para
+            // "kg/Toneladas del mes" en Analítica (mismo criterio de kilos
+            // que resumenHoy, solo cambia el rango).
+            leerResumenVentaDiaSiesa(tenant.siesaCiaId!, inicioMesActual, inicioMesSiguiente),
+          ]);
+        return { filas, detalleHoy, topVendedoresPorMargen, resumenHoy, resumenMes };
+      });
     return res.json({
       disponible: true,
       vendedores: calcularVentasPorVendedor(filas, ahora),
       detalleHoy,
       topVendedoresPorMargen,
       resumenHoy,
+      resumenMes,
     });
   } catch (error) {
     console.error("Error al leer ventas por vendedor desde Siesa:", error);
@@ -869,6 +880,7 @@ export const obtenerVentasPorVendedorGerencial = async (
       detalleHoy: [],
       topVendedoresPorMargen: [],
       resumenHoy: null,
+      resumenMes: null,
     });
   }
 };
@@ -1011,5 +1023,224 @@ export const obtenerHistoricoVentasGerencial = async (req: AuthenticatedRequest,
       total: 0,
       totalPages: 1,
     });
+  }
+};
+
+/**
+ * Catálogo cerrado de métricas/dimensiones/visualizaciones del constructor
+ * de análisis — el frontend lo consulta para armar los selects; el usuario
+ * nunca envía una métrica/dimensión que no venga de aquí, y el backend
+ * revalida cada configuración con validarConfiguracionAnalisis antes de
+ * ejecutar o guardar nada (defensa en profundidad, no solo UI).
+ */
+export const obtenerCatalogoAnalisis = async (_req: AuthenticatedRequest, res: Response) => {
+  return res.json({
+    metricas: METRICAS,
+    dimensiones: DIMENSIONES,
+    visualizacionesPorDimension: Object.fromEntries(
+      DIMENSIONES.map((d) => [d.key, visualizacionesPermitidas(d.key)]),
+    ),
+  });
+};
+
+function leerConfiguracionDelBody(body: unknown): ConfiguracionAnalisis | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.metrica !== "string" || typeof b.dimensionPrincipal !== "string") return null;
+  if (typeof b.fechaInicio !== "string" || typeof b.fechaFin !== "string") return null;
+  const filtrosRaw = (b.filtros as Record<string, unknown> | undefined) ?? undefined;
+  return {
+    metrica: b.metrica as ConfiguracionAnalisis["metrica"],
+    dimensionPrincipal: b.dimensionPrincipal as ConfiguracionAnalisis["dimensionPrincipal"],
+    dimensionSecundaria:
+      typeof b.dimensionSecundaria === "string"
+        ? (b.dimensionSecundaria as ConfiguracionAnalisis["dimensionSecundaria"])
+        : undefined,
+    fechaInicio: b.fechaInicio,
+    fechaFin: b.fechaFin,
+    filtros: filtrosRaw
+      ? {
+          vendedorId: typeof filtrosRaw.vendedorId === "number" ? filtrosRaw.vendedorId : undefined,
+          clienteId: typeof filtrosRaw.clienteId === "number" ? filtrosRaw.clienteId : undefined,
+        }
+      : undefined,
+    orden: b.orden === "asc" || b.orden === "desc" ? b.orden : undefined,
+    ordenarPor: typeof b.ordenarPor === "string" ? b.ordenarPor : undefined,
+    limite: typeof b.limite === "number" ? b.limite : undefined,
+    visualizacion:
+      typeof b.visualizacion === "string"
+        ? (b.visualizacion as ConfiguracionAnalisis["visualizacion"])
+        : undefined,
+  };
+}
+
+/**
+ * Ejecuta un análisis configurado por el usuario a partir del catálogo
+ * cerrado (ver analitica-catalogo.ts) reutilizando las mismas
+ * consultas/agregaciones de Siesa que ya usa el resto de Analítica (ver
+ * analitica-analisis.service.ts). Nunca acepta SQL ni una métrica/dimensión
+ * arbitraria: todo se valida contra el catálogo antes de tocar la base.
+ */
+export const ejecutarAnalisisConstructor = async (req: AuthenticatedRequest, res: Response) => {
+  const config = leerConfiguracionDelBody(req.body);
+  if (!config) {
+    return res.status(400).json({ message: "Configuración de análisis incompleta o inválida." });
+  }
+
+  const validacion = validarConfiguracionAnalisis(config);
+  if (!validacion.ok) {
+    return res.status(400).json({ message: validacion.error });
+  }
+
+  const tenantId = req.user!.tenantId;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
+  if (!tenant?.siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+      filas: [],
+      totales: {},
+    });
+  }
+
+  try {
+    const resultado = await ejecutarAnalisis(tenant.siesaCiaId, config);
+    return res.json(resultado);
+  } catch (error) {
+    console.error("Error al ejecutar análisis del constructor:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      filas: [],
+      totales: {},
+    });
+  }
+};
+
+function serializarAnalisisGuardado(a: {
+  id: string;
+  nombre: string;
+  configuracion: string;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  let configuracion: unknown = {};
+  try {
+    configuracion = JSON.parse(a.configuracion);
+  } catch {
+    configuracion = {};
+  }
+  return {
+    id: a.id,
+    nombre: a.nombre,
+    configuracion,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+  };
+}
+
+/**
+ * Análisis guardados: CRUD privado por usuario+tenant (P0 constructor de
+ * análisis). No existe hoy un concepto de "análisis compartido" en el
+ * negocio — cada operación filtra explícitamente por usuarioId ADEMÁS del
+ * tenantId que ya inyecta/valida tenantPrisma, así que un usuario nunca
+ * puede leer, listar ni eliminar el análisis de otro usuario del mismo
+ * tenant (protección IDOR).
+ */
+export const listarAnalisisGuardados = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const usuarioId = req.user!.id;
+    const analisis = await req.tenantPrisma!.analisisGuardado.findMany({
+      where: { usuarioId },
+      orderBy: { updatedAt: "desc" },
+    });
+    return res.json(analisis.map(serializarAnalisisGuardado));
+  } catch (error) {
+    console.error("Error al listar análisis guardados:", error);
+    return res.status(500).json({ message: "Error al listar los análisis guardados." });
+  }
+};
+
+export const obtenerAnalisisGuardado = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const usuarioId = req.user!.id;
+    const { id } = req.params;
+    const analisis = await req.tenantPrisma!.analisisGuardado.findFirst({
+      where: { id, usuarioId },
+    });
+    if (!analisis) {
+      return res.status(404).json({ message: "Análisis no encontrado." });
+    }
+    return res.json(serializarAnalisisGuardado(analisis));
+  } catch (error) {
+    console.error("Error al obtener el análisis guardado:", error);
+    return res.status(500).json({ message: "Error al obtener el análisis guardado." });
+  }
+};
+
+export const crearAnalisisGuardado = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { nombre, configuracion } = req.body ?? {};
+    if (typeof nombre !== "string" || !nombre.trim()) {
+      return res.status(400).json({ message: "El nombre del análisis es obligatorio." });
+    }
+    const config = leerConfiguracionDelBody(configuracion);
+    if (!config) {
+      return res.status(400).json({ message: "Configuración de análisis incompleta o inválida." });
+    }
+    const validacion = validarConfiguracionAnalisis(config);
+    if (!validacion.ok) {
+      return res.status(400).json({ message: validacion.error });
+    }
+
+    const tenantId = req.user!.tenantId;
+    const usuarioId = req.user!.id;
+    const creado = await req.tenantPrisma!.analisisGuardado.create({
+      data: {
+        tenantId,
+        usuarioId,
+        nombre: nombre.trim().slice(0, 150),
+        configuracion: JSON.stringify(configuracion),
+      },
+    });
+
+    await req.tenantPrisma!.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId,
+        accion: "ANALISIS_GUARDADO_CREADO",
+        detalle: `${req.user!.nombre} guardó el análisis "${creado.nombre}"`,
+      },
+    });
+
+    return res.status(201).json(serializarAnalisisGuardado(creado));
+  } catch (error) {
+    console.error("Error al crear el análisis guardado:", error);
+    return res.status(500).json({ message: "Error al crear el análisis guardado." });
+  }
+};
+
+export const eliminarAnalisisGuardado = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const usuarioId = req.user!.id;
+    const { id } = req.params;
+    // Prechequeo explícito de propiedad (usuarioId) además del tenantId que
+    // ya aplica tenantPrisma — mismo principio de "nunca confiar solo en el
+    // wrapper" que el resto de operaciones sensibles del sistema.
+    const existente = await req.tenantPrisma!.analisisGuardado.findFirst({
+      where: { id, usuarioId },
+      select: { id: true },
+    });
+    if (!existente) {
+      return res.status(404).json({ message: "Análisis no encontrado." });
+    }
+    await req.tenantPrisma!.analisisGuardado.delete({ where: { id } });
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Error al eliminar el análisis guardado:", error);
+    return res.status(500).json({ message: "Error al eliminar el análisis guardado." });
   }
 };
