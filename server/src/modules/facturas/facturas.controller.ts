@@ -6,7 +6,11 @@ import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { UPLOADS_DIR, moverArchivoDefinitivo } from "../../middleware/upload.middleware";
-import { notificarPorPermiso, crearNotificacion } from "../../lib/notificaciones";
+import {
+  notificarPorPermiso,
+  crearNotificacion,
+  resolverPlantillaNotificacion,
+} from "../../lib/notificaciones";
 
 const ESTADOS_VALIDOS = ["Pendiente", "Aprobada", "Pagada", "Rechazada"];
 const PRIORIDADES_VALIDAS = ["Baja", "Media", "Alta", "Crítica", "Urgente"];
@@ -501,23 +505,45 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
 
     if (solicitudDb) {
       if (solicitudDb.solicitanteId) {
+        const { titulo, mensaje } = await resolverPlantillaNotificacion(
+          tenantId,
+          "SOLICITUD_COMPRA_FACTURADA",
+          { item: solicitudDb.item, numeroFactura: factura.numero },
+          {
+            titulo: "Tu solicitud de compra fue facturada",
+            mensaje: `"${solicitudDb.item}" quedó facturada con la factura "${factura.numero}".`,
+          },
+        );
         await crearNotificacion({
           tenantId,
           usuarioId: solicitudDb.solicitanteId,
           tipo: "SOLICITUD_COMPRA_FACTURADA",
-          titulo: "Tu solicitud de compra fue facturada",
-          mensaje: `"${solicitudDb.item}" quedó facturada con la factura "${factura.numero}".`,
+          titulo,
+          mensaje,
           enlace: "/historia-compras",
         });
       }
     } else {
+      const { titulo, mensaje } = await resolverPlantillaNotificacion(
+        tenantId,
+        "FACTURA_PENDIENTE_APROBACION",
+        {
+          numeroFactura: factura.numero,
+          proveedor: factura.proveedor,
+          empresaId: factura.empresaId,
+        },
+        {
+          titulo: "Nueva factura pendiente de aprobación",
+          mensaje: `Factura "${factura.numero}" de ${factura.proveedor} (${factura.empresaId}).`,
+        },
+      );
       await notificarPorPermiso(
         tenantId,
         PERMISOS_SISTEMA.FACTURAS_APROBAR,
         {
           tipo: "FACTURA_PENDIENTE",
-          titulo: "Nueva factura pendiente de aprobación",
-          mensaje: `Factura "${factura.numero}" de ${factura.proveedor} (${factura.empresaId}).`,
+          titulo,
+          mensaje,
           enlace: "/facturas",
         },
         { excluirUsuarioId: req.user!.id },

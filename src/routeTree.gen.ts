@@ -32,10 +32,12 @@ import { Route as VentasRouteImport } from './routes/ventas'
 import { Route as ComercialClientesRouteImport } from './routes/comercial.clientes'
 import { Route as ComercialObjetivosRouteImport } from './routes/comercial.objetivos'
 import { Route as ConfiguracionIndexRouteImport } from './routes/configuracion.index'
+import { Route as ConfiguracionCatalogosRouteImport } from './routes/configuracion.catalogos'
 import { Route as ConfiguracionClasificacionItemsRouteImport } from './routes/configuracion.clasificacion-items'
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
 import { Route as ConfiguracionIntegracionesSiesaRouteImport } from './routes/configuracion.integraciones-siesa'
 import { Route as ConfiguracionModulosRouteImport } from './routes/configuracion.modulos'
+import { Route as ConfiguracionNegocioRouteImport } from './routes/configuracion.negocio'
 import { Route as ConfiguracionPerfilesFuncionalesRouteImport } from './routes/configuracion.perfiles-funcionales'
 import { Route as ConfiguracionPermisosRouteImport } from './routes/configuracion.permisos'
 import { Route as ConfiguracionProveedoresRouteImport } from './routes/configuracion.proveedores'
@@ -173,6 +175,11 @@ const ConfiguracionIndexRoute = ConfiguracionIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
+const ConfiguracionCatalogosRoute = ConfiguracionCatalogosRouteImport.update({
+  id: '/catalogos',
+  path: '/catalogos',
+  getParentRoute: () => ConfiguracionRoute,
+} as any)
 const ConfiguracionClasificacionItemsRoute =
   ConfiguracionClasificacionItemsRouteImport.update({
     id: '/clasificacion-items',
@@ -194,6 +201,11 @@ const ConfiguracionIntegracionesSiesaRoute =
 const ConfiguracionModulosRoute = ConfiguracionModulosRouteImport.update({
   id: '/modulos',
   path: '/modulos',
+  getParentRoute: () => ConfiguracionRoute,
+} as any)
+const ConfiguracionNegocioRoute = ConfiguracionNegocioRouteImport.update({
+  id: '/negocio',
+  path: '/negocio',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
 const ConfiguracionPerfilesFuncionalesRoute =
@@ -330,10 +342,12 @@ export interface FileRoutesByFullPath {
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
@@ -379,10 +393,12 @@ export interface FileRoutesByTo {
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
@@ -430,10 +446,12 @@ export interface FileRoutesById {
   '/ventas': typeof VentasRoute
   '/comercial/clientes': typeof ComercialClientesRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
@@ -482,10 +500,12 @@ export interface FileRouteTypes {
     | '/ventas'
     | '/comercial/clientes'
     | '/comercial/objetivos'
+    | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
@@ -531,10 +551,12 @@ export interface FileRouteTypes {
     | '/ventas'
     | '/comercial/clientes'
     | '/comercial/objetivos'
+    | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
@@ -581,10 +603,12 @@ export interface FileRouteTypes {
     | '/ventas'
     | '/comercial/clientes'
     | '/comercial/objetivos'
+    | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
@@ -810,6 +834,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionIndexRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
+    '/configuracion/catalogos': {
+      id: '/configuracion/catalogos'
+      path: '/catalogos'
+      fullPath: '/configuracion/catalogos'
+      preLoaderRoute: typeof ConfiguracionCatalogosRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
     '/configuracion/clasificacion-items': {
       id: '/configuracion/clasificacion-items'
       path: '/clasificacion-items'
@@ -836,6 +867,13 @@ declare module '@tanstack/react-router' {
       path: '/modulos'
       fullPath: '/configuracion/modulos'
       preLoaderRoute: typeof ConfiguracionModulosRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
+    '/configuracion/negocio': {
+      id: '/configuracion/negocio'
+      path: '/negocio'
+      fullPath: '/configuracion/negocio'
+      preLoaderRoute: typeof ConfiguracionNegocioRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
     '/configuracion/perfiles-funcionales': {
@@ -989,10 +1027,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface ConfiguracionRouteChildren {
+  ConfiguracionCatalogosRoute: typeof ConfiguracionCatalogosRoute
   ConfiguracionClasificacionItemsRoute: typeof ConfiguracionClasificacionItemsRoute
   ConfiguracionDepartamentosRoute: typeof ConfiguracionDepartamentosRoute
   ConfiguracionIntegracionesSiesaRoute: typeof ConfiguracionIntegracionesSiesaRoute
   ConfiguracionModulosRoute: typeof ConfiguracionModulosRoute
+  ConfiguracionNegocioRoute: typeof ConfiguracionNegocioRoute
   ConfiguracionPerfilesFuncionalesRoute: typeof ConfiguracionPerfilesFuncionalesRoute
   ConfiguracionPermisosRoute: typeof ConfiguracionPermisosRoute
   ConfiguracionProveedoresRoute: typeof ConfiguracionProveedoresRoute
@@ -1003,10 +1043,12 @@ interface ConfiguracionRouteChildren {
 }
 
 const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
+  ConfiguracionCatalogosRoute: ConfiguracionCatalogosRoute,
   ConfiguracionClasificacionItemsRoute: ConfiguracionClasificacionItemsRoute,
   ConfiguracionDepartamentosRoute: ConfiguracionDepartamentosRoute,
   ConfiguracionIntegracionesSiesaRoute: ConfiguracionIntegracionesSiesaRoute,
   ConfiguracionModulosRoute: ConfiguracionModulosRoute,
+  ConfiguracionNegocioRoute: ConfiguracionNegocioRoute,
   ConfiguracionPerfilesFuncionalesRoute: ConfiguracionPerfilesFuncionalesRoute,
   ConfiguracionPermisosRoute: ConfiguracionPermisosRoute,
   ConfiguracionProveedoresRoute: ConfiguracionProveedoresRoute,

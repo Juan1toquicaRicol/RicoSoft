@@ -10,6 +10,8 @@ import {
   LayoutGrid,
   Truck,
   Cloud,
+  ListChecks,
+  SlidersHorizontal,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
@@ -91,6 +93,20 @@ function Configuracion() {
       icon: LayoutGrid,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.MODULOS_VER),
+    },
+    {
+      to: "/configuracion/catalogos",
+      label: "Catálogos",
+      icon: ListChecks,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.CONFIGURACION_CATALOGOS),
+    },
+    {
+      to: "/configuracion/negocio",
+      label: "Config. de negocio",
+      icon: SlidersHorizontal,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR),
     },
     {
       to: "/configuracion/integraciones-siesa",

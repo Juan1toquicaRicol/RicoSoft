@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../config/prisma";
-import { crearNotificacion } from "./notificaciones";
+import { crearNotificacion, resolverPlantillaNotificacion } from "./notificaciones";
 
 /**
  * Fase 5.4.1 — hardening de idempotencia de crearNotificacion(). La
@@ -224,5 +224,135 @@ describe.skipIf(!RUN)("crearNotificacion — deduplicación por entidad/ciclo (D
     });
     const notifs = await prisma.notificacion.findMany({ where: { tenantId: tenantAId } });
     expect(notifs).toHaveLength(2);
+  });
+});
+
+describe.skipIf(!RUN)("resolverPlantillaNotificacion — BD real", () => {
+  const sufijo = randomUUID().slice(0, 8);
+  const tipoEventoConPlantilla = `TEST_TIPO_EVENTO_${sufijo}`;
+  const tipoEventoSinPlantilla = `TEST_SIN_PLANTILLA_${sufijo}`;
+  let tenantAId: string;
+  let tenantBId: string;
+  let plantillaGeneralId: string;
+  let plantillaTenantAId: string;
+
+  beforeAll(async () => {
+    const tenantA = await prisma.tenant.create({
+      data: { nombre: `Plantillas Notif A ${sufijo}`, subdomain: `test-plnotif-a-${sufijo}` },
+    });
+    tenantAId = tenantA.id;
+    const tenantB = await prisma.tenant.create({
+      data: { nombre: `Plantillas Notif B ${sufijo}`, subdomain: `test-plnotif-b-${sufijo}` },
+    });
+    tenantBId = tenantB.id;
+
+    plantillaGeneralId = (
+      await prisma.plantillaNotificacion.create({
+        data: {
+          tipoEvento: tipoEventoConPlantilla,
+          titulo: "General: {{nombre}}",
+          mensaje: "Mensaje general para {{nombre}} ({{codigo}}).",
+          tenantId: null,
+        },
+      })
+    ).id;
+  });
+
+  afterAll(async () => {
+    await prisma.plantillaNotificacion.deleteMany({
+      where: {
+        OR: [
+          { id: plantillaGeneralId },
+          { id: plantillaTenantAId },
+          { tipoEvento: tipoEventoConPlantilla },
+          { tipoEvento: tipoEventoSinPlantilla },
+        ],
+      },
+    });
+    await prisma.tenant.deleteMany({ where: { id: { in: [tenantAId, tenantBId] } } });
+    await prisma.$disconnect();
+  });
+
+  it("con plantilla GENERAL existente, interpola los placeholders", async () => {
+    const resultado = await resolverPlantillaNotificacion(
+      tenantBId,
+      tipoEventoConPlantilla,
+      { nombre: "Juan", codigo: "ABC-1" },
+      { titulo: "fallback titulo", mensaje: "fallback mensaje" },
+    );
+    expect(resultado.titulo).toBe("General: Juan");
+    expect(resultado.mensaje).toBe("Mensaje general para Juan (ABC-1).");
+  });
+
+  it("sin ninguna plantilla para el tipoEvento, usa el fallback exacto", async () => {
+    const resultado = await resolverPlantillaNotificacion(
+      tenantAId,
+      tipoEventoSinPlantilla,
+      { nombre: "Juan" },
+      { titulo: "Título de respaldo", mensaje: "Mensaje de respaldo para Juan." },
+    );
+    expect(resultado.titulo).toBe("Título de respaldo");
+    expect(resultado.mensaje).toBe("Mensaje de respaldo para Juan.");
+  });
+
+  it("prioriza la plantilla específica del tenant sobre la GENERAL cuando ambas existen", async () => {
+    plantillaTenantAId = (
+      await prisma.plantillaNotificacion.create({
+        data: {
+          tipoEvento: tipoEventoConPlantilla,
+          titulo: "Tenant A: {{nombre}}",
+          mensaje: "Mensaje específico de tenant A para {{nombre}}.",
+          tenantId: tenantAId,
+        },
+      })
+    ).id;
+
+    const resultadoTenantA = await resolverPlantillaNotificacion(
+      tenantAId,
+      tipoEventoConPlantilla,
+      { nombre: "Ana" },
+      { titulo: "fallback", mensaje: "fallback" },
+    );
+    expect(resultadoTenantA.titulo).toBe("Tenant A: Ana");
+
+    // Otro tenant sin plantilla propia sigue viendo la GENERAL.
+    const resultadoTenantB = await resolverPlantillaNotificacion(
+      tenantBId,
+      tipoEventoConPlantilla,
+      { nombre: "Ana", codigo: "X" },
+      { titulo: "fallback", mensaje: "fallback" },
+    );
+    expect(resultadoTenantB.titulo).toBe("General: Ana");
+  });
+
+  it("una plantilla inactiva no se usa — cae al fallback", async () => {
+    const tipoInactivo = `TEST_INACTIVO_${sufijo}`;
+    await prisma.plantillaNotificacion.create({
+      data: {
+        tipoEvento: tipoInactivo,
+        titulo: "No debería usarse",
+        mensaje: "No debería usarse",
+        tenantId: null,
+        activo: false,
+      },
+    });
+    const resultado = await resolverPlantillaNotificacion(
+      tenantAId,
+      tipoInactivo,
+      {},
+      { titulo: "Fallback activo", mensaje: "Fallback activo mensaje" },
+    );
+    expect(resultado.titulo).toBe("Fallback activo");
+    await prisma.plantillaNotificacion.deleteMany({ where: { tipoEvento: tipoInactivo } });
+  });
+
+  it("un placeholder sin valor provisto se deja intacto en el texto", async () => {
+    const resultado = await resolverPlantillaNotificacion(
+      tenantBId,
+      tipoEventoConPlantilla,
+      { nombre: "Solo Nombre" },
+      { titulo: "fallback", mensaje: "fallback" },
+    );
+    expect(resultado.mensaje).toBe("Mensaje general para Solo Nombre ({{codigo}}).");
   });
 });

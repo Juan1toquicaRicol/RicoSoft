@@ -39,6 +39,7 @@ export const PERMISOS_SISTEMA = {
   CONFIGURACION_VER: "configuracion.ver",
   CONFIGURACION_EDITAR: "configuracion.editar",
   CONFIGURACION_CATALOGOS: "configuracion.catalogos",
+  CONFIGURACION_PLANTILLAS_NOTIFICACION: "configuracion.plantillas_notificacion",
   MODULOS_VER: "modulos.ver",
   MODULOS_GESTIONAR: "modulos.gestionar",
   AUDITORIA_VER: "auditoria.ver",

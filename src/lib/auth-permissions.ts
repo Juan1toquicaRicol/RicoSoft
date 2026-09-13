@@ -57,6 +57,7 @@ export const PERMISOS_SISTEMA = {
   CONFIGURACION_VER: "configuracion.ver",
   CONFIGURACION_EDITAR: "configuracion.editar",
   CONFIGURACION_CATALOGOS: "configuracion.catalogos",
+  CONFIGURACION_PLANTILLAS_NOTIFICACION: "configuracion.plantillas_notificacion",
 
   // Módulo Gestión de Módulos (catálogo de módulos principales por departamento)
   MODULOS_VER: "modulos.ver",
@@ -418,6 +419,13 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     descripcion:
       "Permite crear, editar y eliminar valores de catálogos de referencia (incoterms, monedas, países, métodos de pago, motivos de novedad, etc.).",
   },
+  {
+    id: PERMISOS_SISTEMA.CONFIGURACION_PLANTILLAS_NOTIFICACION,
+    modulo: "Configuración",
+    nombre: "Gestionar plantillas de notificación",
+    descripcion:
+      "Permite crear, editar y eliminar plantillas de texto de notificaciones (título/mensaje con variables) usadas por facturas, solicitudes de compra y despachos.",
+  },
 
   // Módulos
   {
@@ -740,25 +748,29 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER,
     modulo: "Importaciones",
     nombre: "Ver Bandeja de Correos",
-    descripcion: "Permite consultar los correos ingeridos por la Bandeja Inteligente de Importaciones.",
+    descripcion:
+      "Permite consultar los correos ingeridos por la Bandeja Inteligente de Importaciones.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_PROCESAR,
     modulo: "Importaciones",
     nombre: "Reprocesar correos de la Bandeja",
-    descripcion: "Permite reencolar manualmente un correo para que la Bandeja lo vuelva a procesar.",
+    descripcion:
+      "Permite reencolar manualmente un correo para que la Bandeja lo vuelva a procesar.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER,
     modulo: "Importaciones",
     nombre: "Resolver excepciones de la Bandeja",
-    descripcion: "Permite resolver ambigüedades/inconsistencias detectadas por la Bandeja Inteligente.",
+    descripcion:
+      "Permite resolver ambigüedades/inconsistencias detectadas por la Bandeja Inteligente.",
   },
   {
     id: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR,
     modulo: "Importaciones",
     nombre: "Ver configuración de la Bandeja",
-    descripcion: "Permite consultar el estado de la sincronización de correo (sin exponer secretos).",
+    descripcion:
+      "Permite consultar el estado de la sincronización de correo (sin exponer secretos).",
   },
   {
     id: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,

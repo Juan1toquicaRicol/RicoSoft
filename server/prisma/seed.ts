@@ -762,6 +762,64 @@ async function main() {
     `✅ Valores de catálogo GENERAL creados: ${catalogosCreados} (de ${catalogosValor.length} definidos)`,
   );
 
+  // Plantillas de notificación GENERALES — texto EXACTO que estaba
+  // hardcodeado en facturas/solicitudes/despachos antes de introducir
+  // PlantillaNotificacion + resolverPlantillaNotificacion(); no debe cambiar
+  // ni un carácter del mensaje visible al usuario. Placeholders soportados
+  // documentados junto a cada llamada a resolverPlantillaNotificacion().
+  const plantillasNotificacion = [
+    {
+      tipoEvento: "SOLICITUD_COMPRA_FACTURADA",
+      titulo: "Tu solicitud de compra fue facturada",
+      mensaje: `"{{item}}" quedó facturada con la factura "{{numeroFactura}}".`,
+    },
+    {
+      tipoEvento: "FACTURA_PENDIENTE_APROBACION",
+      titulo: "Nueva factura pendiente de aprobación",
+      mensaje: `Factura "{{numeroFactura}}" de {{proveedor}} ({{empresaId}}).`,
+    },
+    {
+      tipoEvento: "SOLICITUD_COMPRA_PENDIENTE_APROBACION",
+      titulo: "Nueva solicitud de compra pendiente",
+      mensaje: `{{solicitante}} solicitó "{{item}}" ({{empresaId}}).`,
+    },
+    {
+      tipoEvento: "SOLICITUD_COMPRA_RESUELTA",
+      titulo: "Tu solicitud fue {{estado}}",
+      mensaje: `"{{item}}" fue {{estado}} por {{usuario}}.`,
+    },
+    {
+      tipoEvento: "DESPACHO_EN_CAMINO",
+      titulo: "Despacho en camino",
+      mensaje: `El despacho de "{{cliente}}" ({{referencia}}) pasó a {{estado}}.`,
+    },
+    {
+      tipoEvento: "DESPACHO_ENTREGADO",
+      titulo: "Despacho entregado",
+      mensaje: `El despacho de "{{cliente}}" ({{referencia}}) pasó a {{estado}}.`,
+    },
+    {
+      tipoEvento: "DESPACHO_NOVEDAD_REGISTRADA",
+      titulo: "Novedad en despacho",
+      mensaje: `{{cliente}}: {{tipoNovedad}} — {{descripcion}}`,
+    },
+  ];
+
+  let plantillasCreadas = 0;
+  for (const p of plantillasNotificacion) {
+    const existente = await prisma.plantillaNotificacion.findFirst({
+      where: { tipoEvento: p.tipoEvento, tenantId: null },
+    });
+    if (existente) continue;
+    await prisma.plantillaNotificacion.create({
+      data: { tipoEvento: p.tipoEvento, titulo: p.titulo, mensaje: p.mensaje, tenantId: null },
+    });
+    plantillasCreadas++;
+  }
+  console.log(
+    `✅ Plantillas de notificación GENERAL creadas: ${plantillasCreadas} (de ${plantillasNotificacion.length} definidas)`,
+  );
+
   console.log("\n🎉 Seed completado.");
 }
 

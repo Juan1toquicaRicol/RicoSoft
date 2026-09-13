@@ -12,7 +12,7 @@ import {
   camposRequeridosParaTransicion,
   type EstadoDespacho,
 } from "../../lib/despachos";
-import { notificarPorPermiso } from "../../lib/notificaciones";
+import { notificarPorPermiso, resolverPlantillaNotificacion } from "../../lib/notificaciones";
 import {
   crearDespachoSchema,
   actualizarEstadoDespachoSchema,
@@ -348,13 +348,24 @@ export const actualizarEstadoDespacho = async (req: AuthenticatedRequest, res: R
   ]);
 
   if (siguiente === "DESPACHADO" || siguiente === "ENTREGADO") {
+    const referencia = String(despacho.siesaDocReferencia ?? despacho.siesaDocRowId);
+    const tipoEvento = siguiente === "DESPACHADO" ? "DESPACHO_EN_CAMINO" : "DESPACHO_ENTREGADO";
+    const { titulo, mensaje } = await resolverPlantillaNotificacion(
+      req.user!.tenantId,
+      tipoEvento,
+      { cliente: despacho.clienteNombre, referencia, estado: siguiente },
+      {
+        titulo: siguiente === "DESPACHADO" ? "Despacho en camino" : "Despacho entregado",
+        mensaje: `El despacho de "${despacho.clienteNombre}" (${referencia}) pasó a ${siguiente}.`,
+      },
+    );
     await notificarPorPermiso(
       req.user!.tenantId,
       "despachos.ver",
       {
         tipo: "despacho",
-        titulo: siguiente === "DESPACHADO" ? "Despacho en camino" : "Despacho entregado",
-        mensaje: `El despacho de "${despacho.clienteNombre}" (${despacho.siesaDocReferencia ?? despacho.siesaDocRowId}) pasó a ${siguiente}.`,
+        titulo,
+        mensaje,
         enlace: `/despachos/${despacho.id}`,
       },
       { excluirUsuarioId: req.user!.id },
@@ -418,17 +429,32 @@ export const crearNovedad = async (req: AuthenticatedRequest, res: Response) => 
     },
   });
 
-  await notificarPorPermiso(
-    req.user!.tenantId,
-    "despachos.gestionar",
-    {
-      tipo: "despacho_novedad",
-      titulo: "Novedad en despacho",
-      mensaje: `${despacho.clienteNombre}: ${parseo.data.tipo} — ${parseo.data.descripcion}`,
-      enlace: `/despachos/${despacho.id}`,
-    },
-    { excluirUsuarioId: req.user!.id },
-  );
+  {
+    const { titulo, mensaje } = await resolverPlantillaNotificacion(
+      req.user!.tenantId,
+      "DESPACHO_NOVEDAD_REGISTRADA",
+      {
+        cliente: despacho.clienteNombre,
+        tipoNovedad: parseo.data.tipo,
+        descripcion: parseo.data.descripcion,
+      },
+      {
+        titulo: "Novedad en despacho",
+        mensaje: `${despacho.clienteNombre}: ${parseo.data.tipo} — ${parseo.data.descripcion}`,
+      },
+    );
+    await notificarPorPermiso(
+      req.user!.tenantId,
+      "despachos.gestionar",
+      {
+        tipo: "despacho_novedad",
+        titulo,
+        mensaje,
+        enlace: `/despachos/${despacho.id}`,
+      },
+      { excluirUsuarioId: req.user!.id },
+    );
+  }
 
   return res.status(201).json(novedad);
 };

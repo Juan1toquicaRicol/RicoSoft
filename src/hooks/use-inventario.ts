@@ -255,6 +255,14 @@ export interface ConfiguracionInventario {
   coberturaObjetivoDias: number;
   /** Fase 6 — multiplicador de seguridad sobre el inventario objetivo (1 = sin colchón extra). */
   factorSeguridad: number;
+  /** Umbrales adicionales (auditoría de datos hardcodeados) — opcionales: si
+   * se omiten al guardar, el backend conserva el valor por defecto de la columna. */
+  umbralVariabilidadAltaDemanda?: number;
+  umbralPerdidaRotacionDemanda?: number;
+  umbralTendenciaFuertePctDemanda?: number;
+  umbralAlertaTrmPct?: number;
+  plazoCreditoDiasDefecto?: number;
+  minimoCotizacionesSolicitud?: number;
 }
 
 /** Umbrales configurables del módulo (Parte 16) — días de vendible/exceso/ruptura/sobre-cobertura. */

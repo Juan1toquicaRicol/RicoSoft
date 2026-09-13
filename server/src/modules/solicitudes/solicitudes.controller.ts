@@ -9,7 +9,11 @@ import {
   UPLOADS_DIR_COTIZACIONES,
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
-import { crearNotificacion, notificarPorPermiso } from "../../lib/notificaciones";
+import {
+  crearNotificacion,
+  notificarPorPermiso,
+  resolverPlantillaNotificacion,
+} from "../../lib/notificaciones";
 import { crearItemDeTrabajo, resolverItemDeTrabajo } from "../../lib/inbox";
 import { ESTADOS_SC_VINCULABLES_A_FACTURA } from "../facturas/facturas.controller";
 
@@ -475,17 +479,28 @@ export const crearSolicitud = async (req: AuthenticatedRequest, res: Response) =
       },
     });
 
-    await notificarPorPermiso(
-      tenantId,
-      PERMISOS_SISTEMA.SOLICITUDES_APROBAR,
-      {
-        tipo: "SOLICITUD_COMPRA_PENDIENTE",
-        titulo: "Nueva solicitud de compra pendiente",
-        mensaje: `${solicitanteUsuario.nombre} solicitó "${item}" (${solicitud.empresaId}).`,
-        enlace: "/solicitudes-compra",
-      },
-      { excluirUsuarioId: req.user!.id },
-    );
+    {
+      const { titulo, mensaje } = await resolverPlantillaNotificacion(
+        tenantId,
+        "SOLICITUD_COMPRA_PENDIENTE_APROBACION",
+        { solicitante: solicitanteUsuario.nombre, item, empresaId: solicitud.empresaId },
+        {
+          titulo: "Nueva solicitud de compra pendiente",
+          mensaje: `${solicitanteUsuario.nombre} solicitó "${item}" (${solicitud.empresaId}).`,
+        },
+      );
+      await notificarPorPermiso(
+        tenantId,
+        PERMISOS_SISTEMA.SOLICITUDES_APROBAR,
+        {
+          tipo: "SOLICITUD_COMPRA_PENDIENTE",
+          titulo,
+          mensaje,
+          enlace: "/solicitudes-compra",
+        },
+        { excluirUsuarioId: req.user!.id },
+      );
+    }
 
     await crearItemDeTrabajo(req.tenantPrisma!, {
       tenantId,
@@ -639,12 +654,21 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
     // Comprado; "En Cotización" sigue siendo un estado activo, no una
     // resolución final, así que no genera notificación).
     if (solicitud.solicitanteId && ESTADOS_HISTORICOS.includes(nuevoEstado)) {
+      const { titulo, mensaje } = await resolverPlantillaNotificacion(
+        tenantId,
+        "SOLICITUD_COMPRA_RESUELTA",
+        { estado: nuevoEstado.toLowerCase(), item: solicitud.item, usuario: req.user!.nombre },
+        {
+          titulo: `Tu solicitud fue ${nuevoEstado.toLowerCase()}`,
+          mensaje: `"${solicitud.item}" fue ${nuevoEstado.toLowerCase()} por ${req.user!.nombre}.`,
+        },
+      );
       await crearNotificacion({
         tenantId,
         usuarioId: solicitud.solicitanteId,
         tipo: "SOLICITUD_COMPRA_RESUELTA",
-        titulo: `Tu solicitud fue ${nuevoEstado.toLowerCase()}`,
-        mensaje: `"${solicitud.item}" fue ${nuevoEstado.toLowerCase()} por ${req.user!.nombre}.`,
+        titulo,
+        mensaje,
         enlace: "/historia-compras",
       });
     }
