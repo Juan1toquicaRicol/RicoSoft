@@ -186,9 +186,11 @@ describe.skipIf(!RUN)(
         ids.push(res.body.id);
       }
 
+      // Igual que la aprobación, seleccionar la ganadora la debe hacer
+      // alguien distinto de quien creó la solicitud (A-03).
       const seleccion = await request(app)
         .post(`/api/solicitudes-compra/${id}/cotizaciones/${ids[0]}/seleccionar`)
-        .set("Authorization", `Bearer ${tokenAAdmin}`);
+        .set("Authorization", `Bearer ${tokenAAprobador}`);
       expect(seleccion.status).toBe(200);
 
       const aprobar = await request(app)
@@ -261,7 +263,7 @@ describe.skipIf(!RUN)(
 
       const seleccion = await request(app)
         .post(`/api/solicitudes-compra/${id}/cotizaciones/${ids[1]}/seleccionar`)
-        .set("Authorization", `Bearer ${tokenAAdmin}`);
+        .set("Authorization", `Bearer ${tokenAAprobador}`);
       expect(seleccion.status).toBe(200);
       expect(
         seleccion.body.find((c: { id: string; esGanadora: boolean }) => c.id === ids[1]).esGanadora,

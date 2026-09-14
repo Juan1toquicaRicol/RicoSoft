@@ -9,6 +9,7 @@ import {
 } from "../../lib/permissions";
 import { esDominioCorporativoValido, obtenerTenantPorCorreo } from "../../lib/dominios";
 import { validarPasswordSegura } from "../../lib/password";
+import { whereAlcance } from "../../lib/alcance";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -81,14 +82,15 @@ export const registerUserService = async (data: {
     );
   }
 
-  // El departamento debe existir, pertenecer al mismo tenant y estar activo.
-  // esSistemas=true se excluye explícitamente: calcularPermisosEfectivos
-  // (lib/permissions.ts) le da a cualquier usuario de un departamento así
-  // TODOS los permisos del sistema, igual que un superadmin — un autoregistro
-  // público jamás puede aterrizar ahí, sin importar qué tan "correcto" luzca
-  // el dominio de correo.
+  // El departamento debe existir, ser accesible para ese tenant (propio o
+  // GENERAL — mismo criterio que GET /departamentos/publico, que es lo que
+  // llena el select del formulario) y estar activo. esSistemas=true se
+  // excluye explícitamente: calcularPermisosEfectivos (lib/permissions.ts)
+  // le da a cualquier usuario de un departamento así TODOS los permisos del
+  // sistema, igual que un superadmin — un autoregistro público jamás puede
+  // aterrizar ahí, sin importar qué tan "correcto" luzca el dominio de correo.
   const departamento = await prisma.departamento.findFirst({
-    where: { id: departamentoId, tenantId: tenant.id, activo: true, esSistemas: false },
+    where: { id: departamentoId, ...whereAlcance(tenant.id), activo: true, esSistemas: false },
   });
   if (!departamento) {
     throw new Error("El departamento seleccionado no es válido.");
@@ -97,11 +99,7 @@ export const registerUserService = async (data: {
   // Crear el usuario en SQL Server. rol/isSuperadmin/rolId NUNCA se toman del
   // body de la petición (ni siquiera están en la firma de esta función): un
   // autoregistro siempre entra como colaborador sin rol asignado, con cero
-  // permisos. activo:false a propósito: el dominio de correo solo prueba que
-  // el formato es corporativo, no que quien se registró controla esa bandeja
-  // (no hay verificación de correo) — la cuenta queda pendiente de que un
-  // administrador la active explícitamente (mismo endpoint que ya existe
-  // para activar/desactivar usuarios).
+  // permisos.
   const nuevoUsuario = await prisma.user.create({
     data: {
       nombre,
@@ -110,7 +108,7 @@ export const registerUserService = async (data: {
       tenantId: tenant.id,
       departamentoId: departamento.id,
       rol: "USER",
-      activo: false,
+      activo: true,
     },
     select: {
       id: true,

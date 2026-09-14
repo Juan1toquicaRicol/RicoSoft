@@ -11,6 +11,8 @@ import {
   obtenerConfiguracionInventario,
   actualizarConfiguracionInventario,
   obtenerDecisionesPlaneacion,
+  obtenerPedidosComprometidosItem,
+  obtenerPedidosComprometidosTodos,
 } from "./inventario.controller";
 
 const router = Router();
@@ -23,6 +25,15 @@ router.use(attachTenantPrisma);
 // permisos propios de CRUD. Un permiso dedicado (inventario.ver) tiene
 // sentido cuando el módulo crezca (toma física, ajustes, etc.).
 router.get("/resumen", requirePermission("analitica.ver"), obtenerInventarioGerencial);
+router.get(
+  "/productos/:itemRowId/comprometidos",
+  requirePermission("analitica.ver"),
+  obtenerPedidosComprometidosItem,
+);
+// Sin filtro de ítem — alimenta la pantalla de detalle completo a la que
+// navega el clic en la tarjeta "Comprometido (estimado)" (agregado de todo
+// el inventario, no de un producto puntual).
+router.get("/comprometidos", requirePermission("analitica.ver"), obtenerPedidosComprometidosTodos);
 router.get("/demanda", requirePermission("analitica.ver"), obtenerPronosticoDemandaGerencial);
 router.get(
   "/produccion-recomendada",

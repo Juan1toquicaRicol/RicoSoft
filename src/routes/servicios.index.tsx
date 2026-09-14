@@ -67,10 +67,12 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { money, PeriodicidadServicio, type ServicioSuscripcion } from "@/lib/data";
 import { PLAZO_CREDITO_DIAS_DEFECTO } from "@/lib/constantes-negocio";
 
 export const Route = createFileRoute("/servicios/")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.SERVICIOS_VER),
   head: () => ({
     meta: [
       { title: "Servicios y Suscripciones | RicoSoft" },
@@ -120,6 +122,8 @@ function ServiciosPage() {
     null,
   );
   const [eliminando, setEliminando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [alternandoEstadoId, setAlternandoEstadoId] = useState<string | null>(null);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
   const handleEliminarServicio = async () => {
@@ -271,11 +275,19 @@ function ServiciosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombreServicio || !form.proveedorId) return;
+    if (!form.nombreServicio) {
+      toast.error("Ingresa el nombre del servicio.");
+      return;
+    }
+    if (!form.proveedorId) {
+      toast.error("Selecciona el proveedor del servicio.");
+      return;
+    }
     if (!form.responsableId) {
       toast.error("Selecciona el responsable del departamento.");
       return;
     }
+    setGuardando(true);
     try {
       if (editando) {
         await actualizarSuscripcion(editando.id, {
@@ -315,6 +327,8 @@ function ServiciosPage() {
           : `Error al ${editando ? "editar" : "registrar"} el servicio.`,
       );
       return;
+    } finally {
+      setGuardando(false);
     }
     setModalOpen(false);
     resetForm();
@@ -381,187 +395,201 @@ function ServiciosPage() {
             ]}
           />
         </div>
-        <Table>
-          <TableHeader className="bg-slate-100/80">
-            <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                <EncabezadoOrdenable campo="servicio" orden={orden} onClick={cambiarOrden}>
-                  Servicio / Licencia
-                </EncabezadoOrdenable>
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Empresa
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                <EncabezadoOrdenable campo="area" orden={orden} onClick={cambiarOrden}>
-                  Departamento Categorizado
-                </EncabezadoOrdenable>
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Proveedor
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                <EncabezadoOrdenable campo="periodicidad" orden={orden} onClick={cambiarOrden}>
-                  Periodicidad
-                </EncabezadoOrdenable>
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                <EncabezadoOrdenable
-                  campo="costo"
-                  orden={orden}
-                  onClick={cambiarOrden}
-                  alinearDerecha
-                >
-                  Costo
-                </EncabezadoOrdenable>
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                <EncabezadoOrdenable campo="fechaRenovacion" orden={orden} onClick={cambiarOrden}>
-                  Próxima Renovación
-                </EncabezadoOrdenable>
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Estado
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Acción
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="text-slate-800 font-medium">
-            {gruposSuscripciones.map((grupo) => (
-              <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && (
-                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
-                )}
-                {grupo.filas.map((sub) => (
-                  <TableRow key={sub.id}>
-                    <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
-                      <Link
-                        to="/servicios/$id"
-                        params={{ id: sub.id }}
-                        className="hover:underline hover:text-blue-800"
-                      >
-                        {sub.nombreServicio}
-                      </Link>
-                      <p className="text-[10px] text-slate-400 font-normal">
-                        Resp: {sub.responsableArea}
-                      </p>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
-                      >
-                        {siglaEmpresa(sub.empresaId)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="border-slate-200 bg-slate-100 text-slate-700"
-                      >
-                        {sub.area}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">
-                      {sub.proveedor}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-500 font-medium">
-                      {sub.periodicidad}
-                    </TableCell>
-                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                      {money(sub.costo, sub.moneda)}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <p className="font-mono text-xs text-slate-500">
-                        {new Date(sub.fechaRenovacion).toLocaleDateString("es-CO", {
-                          timeZone: "UTC",
-                        })}
-                      </p>
-                      {sub.estado === "Activo" && (
-                        <BarraVencimiento
-                          fecha={sub.fechaRenovacion}
-                          etiquetaVencido="Venció"
-                          className="mt-1"
-                          semaforo
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <EstadoBadge estado={sub.estado} />
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {puedeEditar && (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-100/80">
+              <TableRow className="hover:bg-slate-100/80">
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  <EncabezadoOrdenable campo="servicio" orden={orden} onClick={cambiarOrden}>
+                    Servicio / Licencia
+                  </EncabezadoOrdenable>
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Empresa
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  <EncabezadoOrdenable campo="area" orden={orden} onClick={cambiarOrden}>
+                    Departamento Categorizado
+                  </EncabezadoOrdenable>
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Proveedor
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  <EncabezadoOrdenable campo="periodicidad" orden={orden} onClick={cambiarOrden}>
+                    Periodicidad
+                  </EncabezadoOrdenable>
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  <EncabezadoOrdenable
+                    campo="costo"
+                    orden={orden}
+                    onClick={cambiarOrden}
+                    alinearDerecha
+                  >
+                    Costo
+                  </EncabezadoOrdenable>
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  <EncabezadoOrdenable campo="fechaRenovacion" orden={orden} onClick={cambiarOrden}>
+                    Próxima Renovación
+                  </EncabezadoOrdenable>
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Estado
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Acción
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="text-slate-800 font-medium">
+              {gruposSuscripciones.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                  )}
+                  {grupo.filas.map((sub) => (
+                    <TableRow key={sub.id}>
+                      <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
+                        <Link
+                          to="/servicios/$id"
+                          params={{ id: sub.id }}
+                          className="hover:underline hover:text-blue-800"
+                        >
+                          {sub.nombreServicio}
+                        </Link>
+                        <p className="text-[10px] text-slate-400 font-normal">
+                          Resp: {sub.responsableArea}
+                        </p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                        >
+                          {siglaEmpresa(sub.empresaId)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-slate-100 text-slate-700"
+                        >
+                          {sub.area}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-800">
+                        {sub.proveedor}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500 font-medium">
+                        {sub.periodicidad}
+                      </TableCell>
+                      <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                        {money(sub.costo, sub.moneda)}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <p className="font-mono text-xs text-slate-500">
+                          {new Date(sub.fechaRenovacion).toLocaleDateString("es-CO", {
+                            timeZone: "UTC",
+                          })}
+                        </p>
+                        {sub.estado === "Activo" && (
+                          <BarraVencimiento
+                            fecha={sub.fechaRenovacion}
+                            etiquetaVencido="Venció"
+                            className="mt-1"
+                            semaforo
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <EstadoBadge estado={sub.estado} />
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          {puedeEditar && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => abrirEdicion(sub)}
+                              className="h-7 text-[11px] gap-1"
+                            >
+                              <Pencil className="h-3 w-3" /> Editar
+                            </Button>
+                          )}
                           <Button
                             size="xs"
                             variant="outline"
-                            onClick={() => abrirEdicion(sub)}
+                            disabled={alternandoEstadoId === sub.id}
+                            onClick={async () => {
+                              setAlternandoEstadoId(sub.id);
+                              try {
+                                await toggleEstadoSuscripcion(sub.id);
+                              } catch (err: unknown) {
+                                toast.error(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Error al cambiar el estado.",
+                                );
+                              } finally {
+                                setAlternandoEstadoId(null);
+                              }
+                            }}
                             className="h-7 text-[11px] gap-1"
                           >
-                            <Pencil className="h-3 w-3" /> Editar
+                            <Power className="h-3 w-3" />{" "}
+                            {alternandoEstadoId === sub.id
+                              ? "..."
+                              : sub.estado === "Activo"
+                                ? "Desactivar"
+                                : "Activar"}
                           </Button>
-                        )}
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() =>
-                            toggleEstadoSuscripcion(sub.id).catch((err: unknown) =>
-                              toast.error(
-                                err instanceof Error ? err.message : "Error al cambiar el estado.",
-                              ),
-                            )
-                          }
-                          className="h-7 text-[11px] gap-1"
-                        >
-                          <Power className="h-3 w-3" />{" "}
-                          {sub.estado === "Activo" ? "Desactivar" : "Activar"}
-                        </Button>
-                        {puedeEliminar && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() =>
-                              setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })
-                            }
-                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
+                          {puedeEliminar && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() =>
+                                setServicioAEliminar({ id: sub.id, nombre: sub.nombreServicio })
+                              }
+                              className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+              {filteredSuscripciones.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9} className="p-0">
+                    {loading ? (
+                      <div className="py-12 text-center text-xs text-slate-500">
+                        Cargando servicios...
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </Fragment>
-            ))}
-            {filteredSuscripciones.length === 0 && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={9} className="p-0">
-                  {loading ? (
-                    <div className="py-12 text-center text-xs text-slate-500">
-                      Cargando servicios...
-                    </div>
-                  ) : error ? (
-                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
-                  ) : (
-                    <EmptyState
-                      icon={CreditCard}
-                      title="No hay servicios o suscripciones registradas en esta empresa"
-                      description='Haz clic en "Registrar Servicio / Suscripción" para agregar el primero.'
-                      action={
-                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
-                          <Plus className="h-4 w-4" /> Registrar Servicio / Suscripción
-                        </Button>
-                      }
-                    />
-                  )}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    ) : error ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : (
+                      <EmptyState
+                        icon={CreditCard}
+                        title="No hay servicios o suscripciones registradas en esta empresa"
+                        description='Haz clic en "Registrar Servicio / Suscripción" para agregar el primero.'
+                        action={
+                          <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                            <Plus className="h-4 w-4" /> Registrar Servicio / Suscripción
+                          </Button>
+                        }
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* MODAL REGISTRAR/EDITAR SUSCRIPCION */}
@@ -785,15 +813,22 @@ function ServiciosPage() {
             )}
 
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={guardando}
+                onClick={() => setModalOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 size="sm"
+                disabled={guardando}
                 className="bg-blue-800 text-white hover:bg-blue-900 font-bold"
               >
-                {editando ? "Guardar Cambios" : "Guardar Servicio"}
+                {guardando ? "Guardando..." : editando ? "Guardar Cambios" : "Guardar Servicio"}
               </Button>
             </DialogFooter>
           </form>

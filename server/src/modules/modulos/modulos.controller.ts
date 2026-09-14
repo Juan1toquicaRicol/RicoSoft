@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { whereAlcance } from "../../lib/alcance";
@@ -162,34 +163,61 @@ const CATALOGO_DEFECTO: Array<{
   },
 ];
 
-/**
- * Crea los módulos por defecto que aún no existan para el tenant. Se ejecuta
- * en cada consulta y es idempotente: si el tenant ya tiene todos los módulos
- * del catálogo no hace nada; si se agrega uno nuevo al catálogo (p. ej.
- * "Historia de Compras"), lo crea sin tocar ni reordenar los módulos ya
- * existentes ni la configuración que un admin ya haya hecho sobre ellos.
- */
-async function asegurarCatalogoDefecto(tenantId: string) {
-  const existentes = await prisma.modulo.findMany({
-    where: { tenantId },
-    select: { clave: true, orden: true },
-  });
-  const clavesExistentes = new Set(existentes.map((m) => m.clave));
-  const faltantes = CATALOGO_DEFECTO.filter((m) => !clavesExistentes.has(m.clave));
-  if (faltantes.length === 0) return;
+type ModuloConDepartamento = Prisma.ModuloGetPayload<{
+  include: { departamento: { select: { id: true; nombre: true } } };
+}>;
 
-  const ordenBase = existentes.reduce((max, m) => Math.max(max, m.orden), -1) + 1;
-  await prisma.modulo.createMany({
-    data: faltantes.map((modulo, index) => ({
-      tenantId,
-      clave: modulo.clave,
-      nombre: modulo.nombre,
-      ruta: modulo.ruta,
-      icono: modulo.icono,
-      permisoClave: modulo.permisoClave,
-      orden: ordenBase + index,
-    })),
+const INCLUDE_DEPARTAMENTO = {
+  departamento: { select: { id: true as const, nombre: true as const } },
+} satisfies Prisma.ModuloInclude;
+
+/**
+ * Trae TODOS los módulos accesibles al tenant (propios + GENERAL) y de paso
+ * siembra los módulos por defecto que le falten — antes eran dos `findMany`
+ * separados en cada request (uno solo para chequear qué falta sembrar, otro
+ * para el listado real); ahora es uno solo en el camino común (nada por
+ * sembrar), y solo se paga una segunda consulta en el camino raro donde sí
+ * hubo que crear algo (primera vez del tenant, o el catálogo por defecto
+ * creció). Idempotente: si el tenant ya tiene todos los módulos del catálogo
+ * no crea nada.
+ *
+ * El chequeo de "qué falta" siempre se hace contra TODOS los módulos propios
+ * del tenant, activos o no — nunca filtrado por `activo`, o un módulo
+ * desactivado se leería como "no sembrado todavía" y el `createMany`
+ * fallaría contra el índice único [tenantId, clave].
+ */
+async function listarModulosDelTenant(tenantId: string): Promise<ModuloConDepartamento[]> {
+  let modulos = await prisma.modulo.findMany({
+    where: whereAlcance(tenantId),
+    include: INCLUDE_DEPARTAMENTO,
+    orderBy: { orden: "asc" },
   });
+
+  const propios = modulos.filter((m) => m.tenantId === tenantId);
+  const clavesExistentes = new Set(propios.map((m) => m.clave));
+  const faltantes = CATALOGO_DEFECTO.filter((m) => !clavesExistentes.has(m.clave));
+
+  if (faltantes.length > 0) {
+    const ordenBase = propios.reduce((max, m) => Math.max(max, m.orden), -1) + 1;
+    await prisma.modulo.createMany({
+      data: faltantes.map((modulo, index) => ({
+        tenantId,
+        clave: modulo.clave,
+        nombre: modulo.nombre,
+        ruta: modulo.ruta,
+        icono: modulo.icono,
+        permisoClave: modulo.permisoClave,
+        orden: ordenBase + index,
+      })),
+    });
+    modulos = await prisma.modulo.findMany({
+      where: whereAlcance(tenantId),
+      include: INCLUDE_DEPARTAMENTO,
+      orderBy: { orden: "asc" },
+    });
+  }
+
+  return modulos;
 }
 
 const serializar = (modulo: {
@@ -236,13 +264,7 @@ function tieneAcceso(req: AuthenticatedRequest, permisoClave: string | null): bo
 export const listarModulos = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    await asegurarCatalogoDefecto(tenantId);
-
-    const modulos = await prisma.modulo.findMany({
-      where: whereAlcance(tenantId),
-      include: { departamento: { select: { id: true, nombre: true } } },
-      orderBy: { orden: "asc" },
-    });
+    const modulos = await listarModulosDelTenant(tenantId);
 
     return res.json(modulos.map(serializar));
   } catch (error) {
@@ -262,15 +284,12 @@ export const listarModulos = async (req: AuthenticatedRequest, res: Response) =>
 export const listarModulosMenu = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    await asegurarCatalogoDefecto(tenantId);
+    const modulos = await listarModulosDelTenant(tenantId);
 
-    const modulos = await prisma.modulo.findMany({
-      where: { ...whereAlcance(tenantId), activo: true },
-      include: { departamento: { select: { id: true, nombre: true } } },
-      orderBy: { orden: "asc" },
-    });
-
-    const visibles = modulos.filter((m) => tieneAcceso(req, m.permisoClave));
+    // El filtro de `activo` se aplica en memoria (no en SQL): ya se trajeron
+    // todos los módulos accesibles para el chequeo de siembra de arriba, así
+    // que reutilizamos ese mismo resultado en vez de una segunda consulta.
+    const visibles = modulos.filter((m) => m.activo && tieneAcceso(req, m.permisoClave));
 
     return res.json(visibles.map(serializar));
   } catch (error) {

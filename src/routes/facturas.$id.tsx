@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,8 +63,10 @@ import { useCatalogo } from "@/hooks/use-catalogos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/facturas/$id")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.FACTURAS_VER),
   head: () => ({
     meta: [
       { title: "Detalle de Factura | RicoSoft" },
@@ -532,10 +535,16 @@ function RegistrarPagoModal({
     }
   }, [open, saldoPendiente]);
 
+  const excedeSaldo = form.valor > saldoPendiente;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.valor || form.valor <= 0) {
       toast.error("El valor del pago debe ser mayor a cero.");
+      return;
+    }
+    if (excedeSaldo) {
+      toast.error("El valor del pago no puede superar el saldo pendiente.");
       return;
     }
     setGuardando(true);
@@ -593,10 +602,19 @@ function RegistrarPagoModal({
                 id="pago-valor"
                 required
                 min={1}
+                max={saldoPendiente}
                 value={form.valor}
                 onChange={(e) => setForm({ ...form, valor: Number(e.target.value) })}
-                className="h-9 text-xs"
+                className={cn(
+                  "h-9 text-xs",
+                  excedeSaldo && "border-red-400 focus-visible:ring-red-400",
+                )}
               />
+              {excedeSaldo && (
+                <p className="text-[11px] font-semibold text-red-600">
+                  No puede superar el saldo pendiente ({money(saldoPendiente, moneda)}).
+                </p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -666,7 +684,7 @@ function RegistrarPagoModal({
             <Button
               type="submit"
               size="sm"
-              disabled={guardando}
+              disabled={guardando || excedeSaldo}
               className="bg-blue-800 hover:bg-blue-900 text-white font-bold"
             >
               {guardando ? "Registrando..." : "Registrar pago"}

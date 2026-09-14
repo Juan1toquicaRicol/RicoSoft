@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 
@@ -64,6 +65,11 @@ export function useModulos() {
   return { modulos, loading, error, refresh, actualizarModulo };
 }
 
+// Módulos rara vez cambian minuto a minuto (un admin los reordena/asigna
+// ocasionalmente desde Configuración > Módulos) — no hace falta pedirlos de
+// nuevo en cada navegación del sidebar.
+const STALE_TIME_MENU_MS = 2 * 60_000;
+
 /**
  * Catálogo reducido a módulos activos, usado para construir el sidebar.
  * Accesible para cualquier usuario autenticado.
@@ -72,35 +78,26 @@ export function useModulos() {
  * listarModulosMenu en modulos.controller.ts) — este hook nunca decide
  * visibilidad en el cliente, solo refleja lo que llega.
  *
- * Depende de `user?.tenantId` y de `user?.permisos`: AppShell (donde vive el
- * sidebar) nunca se desmonta al cambiar de empresa en caliente ni cuando
- * SessionContext refresca la sesión tras un cambio de rol/permisos — sin
- * estas dependencias el menú seguiría mostrando los módulos de antes hasta
- * un refresh manual de la página.
+ * La query key incluye `tenantId` y los permisos del usuario: AppShell (donde
+ * vive el sidebar) nunca se desmonta al cambiar de empresa en caliente ni
+ * cuando SessionContext refresca la sesión tras un cambio de rol/permisos —
+ * sin esto en la key, el menú seguiría mostrando los módulos de antes hasta
+ * un refresh manual. Cacheado con React Query: antes se repetía la misma
+ * petición en cada remount de AppShell (cada clic del sidebar); ahora se
+ * reutiliza mientras la key no cambie y no haya pasado STALE_TIME_MENU_MS.
  */
 export function useModulosMenu() {
   const { user } = useSession();
-  const [modulos, setModulos] = useState<ModuloApi[]>([]);
-  const [loading, setLoading] = useState(true);
   const permisosKey = user?.permisos.join(",") ?? "";
 
-  useEffect(() => {
-    let cancelado = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const data = await fetchAuth("/modulos/menu");
-        if (!cancelado) setModulos(data);
-      } catch {
-        if (!cancelado) setModulos([]);
-      } finally {
-        if (!cancelado) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelado = true;
-    };
-  }, [user?.tenantId, permisosKey]);
+  const query = useQuery({
+    queryKey: ["modulos-menu", user?.tenantId, permisosKey],
+    queryFn: () => fetchAuth("/modulos/menu") as Promise<ModuloApi[]>,
+    enabled: Boolean(user?.tenantId),
+    staleTime: STALE_TIME_MENU_MS,
+    // El hook original no reintentaba ante un fallo.
+    retry: false,
+  });
 
-  return { modulos, loading };
+  return { modulos: query.data ?? [], loading: query.isLoading };
 }

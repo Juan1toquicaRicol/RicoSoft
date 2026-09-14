@@ -151,6 +151,7 @@ function UsuariosConfigPage() {
   const [guardandoNuevoUsuario, setGuardandoNuevoUsuario] = useState(false);
   const [errorNuevoUsuario, setErrorNuevoUsuario] = useState("");
   const [eliminando, setEliminando] = useState(false);
+  const [cambiandoSuperadmin, setCambiandoSuperadmin] = useState(false);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
 
   // Gestión de acceso a otras empresas (solo visible/usable para superadmin)
@@ -337,6 +338,27 @@ function UsuariosConfigPage() {
       setErrorModal(err instanceof Error ? err.message : "Error al restablecer la contraseña.");
     } finally {
       setGuardandoPassword(false);
+    }
+  };
+
+  const handleCambiarSuperadmin = async (nuevoValor: boolean) => {
+    if (!usuarioEditando) return;
+    setCambiandoSuperadmin(true);
+    setErrorModal("");
+    try {
+      await fetchAuth(`/usuarios/${usuarioEditando.id}/superadmin`, {
+        method: "PATCH",
+        body: JSON.stringify({ isSuperadmin: nuevoValor }),
+      });
+      setUsuarioEditando({ ...usuarioEditando, isSuperadmin: nuevoValor });
+      fetchUsuarios();
+      toast.success(nuevoValor ? "Ahora es superadministrador." : "Ya no es superadministrador.");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al cambiar el estado de superadministrador.",
+      );
+    } finally {
+      setCambiandoSuperadmin(false);
     }
   };
 
@@ -693,7 +715,7 @@ function UsuariosConfigPage() {
       </div>
 
       <Dialog open={!!usuarioEditando} onOpenChange={(open) => !open && setUsuarioEditando(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Editar usuario</DialogTitle>
             <DialogDescription>
@@ -878,7 +900,21 @@ function UsuariosConfigPage() {
               </div>
             )}
 
-            {puedeEliminar && !usuarioEditando?.isSuperadmin && (
+            {sesion?.isSuperadmin && usuarioEditando && usuarioEditando.id !== sesion.id && (
+              <div className="border-t border-slate-200 pt-4">
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={usuarioEditando.isSuperadmin}
+                    disabled={cambiandoSuperadmin}
+                    onChange={(e) => handleCambiarSuperadmin(e.target.checked)}
+                  />
+                  Superadministrador (acceso total a esta empresa)
+                </label>
+              </div>
+            )}
+
+            {puedeEliminar && (
               <div className="border-t border-slate-200 pt-4">
                 <Button
                   variant="destructive"
@@ -908,7 +944,8 @@ function UsuariosConfigPage() {
             <AlertDialogTitle>¿Eliminar a {usuarioAEliminar?.nombre}?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción es permanente. Si el usuario tiene historial asociado (auditoría,
-              solicitudes u otros registros), no podrá eliminarse: desactívalo en su lugar.
+              facturas, solicitudes u otros registros), esos registros se conservan pero quedan
+              desvinculados de su cuenta — no se pueden recuperar la cuenta ni el vínculo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -928,7 +965,7 @@ function UsuariosConfigPage() {
         open={creandoUsuario}
         onOpenChange={(open) => !guardandoNuevoUsuario && setCreandoUsuario(open)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Nuevo usuario</DialogTitle>
             <DialogDescription>

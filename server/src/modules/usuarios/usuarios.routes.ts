@@ -1,6 +1,10 @@
 // server/src/modules/usuarios/usuarios.routes.ts
 import { Router } from "express";
-import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware"; // <-- Verificar que esta ruta exista
+import {
+  authenticateJWT,
+  requirePermission,
+  requireSuperadmin,
+} from "../../middleware/auth.middleware"; // <-- Verificar que esta ruta exista
 import { validarBody } from "../../middleware/validate.middleware";
 import {
   crearUsuarioSchema,
@@ -11,6 +15,7 @@ import {
   asignarDepartamentoSchema,
   cambiarEmailSchema,
   resetPasswordSchema,
+  cambiarSuperadminSchema,
 } from "./usuarios.schemas";
 import {
   listarUsuarios,
@@ -23,6 +28,7 @@ import {
   cambiarPasswordPropio,
   cambiarEmailUsuario,
   resetPasswordUsuario,
+  cambiarSuperadminUsuario,
   eliminarUsuario,
 } from "./usuarios.controller"; // <-- Mismo directorio
 
@@ -77,6 +83,12 @@ router.patch(
   requirePermission("usuarios.reset_password"),
   validarBody(resetPasswordSchema),
   resetPasswordUsuario,
+);
+router.patch(
+  "/:id/superadmin",
+  requireSuperadmin,
+  validarBody(cambiarSuperadminSchema),
+  cambiarSuperadminUsuario,
 );
 router.delete("/:id", requirePermission("usuarios.eliminar"), eliminarUsuario);
 

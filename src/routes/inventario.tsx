@@ -516,13 +516,18 @@ function Inventario() {
                 {money(inventario.totalValorVendible ?? 0)} es mercancía vendible
               </p>
             </div>
-            <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+            <Link
+              to="/inventario/comprometidos"
+              className="panel p-5 bg-white border-slate-200 shadow-2xs text-left cursor-pointer transition hover:border-slate-300 hover:shadow-md"
+            >
               <p className="text-xs font-semibold text-slate-500">Comprometido (estimado)</p>
               <p className="num mt-2 text-xl font-bold text-slate-900">
                 {money(inventario.totalComprometidoValor ?? 0)}
               </p>
-              <p className="mt-1 text-[11px] text-slate-500">Ya destinado a pedidos</p>
-            </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Ya destinado a pedidos — clic para ver todos los pedidos que lo generan
+              </p>
+            </Link>
             <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
               <p className="text-xs font-semibold text-slate-500">Vendible</p>
               <p className="num mt-2 text-xl font-bold text-emerald-600">

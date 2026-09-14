@@ -616,9 +616,24 @@ export const cambiarEstadoSolicitud = async (req: AuthenticatedRequest, res: Res
         typeof comentario === "string" && comentario.trim() ? comentario.trim() : null;
     }
 
-    const actualizada = await req.tenantPrisma!.solicitudCompra.update({
-      where: { id },
+    // `updateMany` con el estado actual esperado en el `where` (en vez de
+    // `update` por id) cierra la ventana de carrera entre el `findFirst` de
+    // arriba y esta escritura: si dos peticiones concurrentes pasan ambas la
+    // validación de transición, solo la primera en llegar aquí realmente
+    // escribe (count=1) — la segunda encuentra que el estado ya cambió
+    // (count=0) y recibe el mismo 409 de "transición no permitida" en vez de
+    // aplicar una segunda resolución sobre una solicitud ya resuelta.
+    const resultadoUpdate = await req.tenantPrisma!.solicitudCompra.updateMany({
+      where: { id, tenantId, estado: { in: transicion.desde } },
       data,
+    });
+    if (resultadoUpdate.count === 0) {
+      return res
+        .status(409)
+        .json({ message: `No se puede pasar de "${solicitud.estado}" a "${nuevoEstado}".` });
+    }
+    const actualizada = await req.tenantPrisma!.solicitudCompra.findFirstOrThrow({
+      where: { id, tenantId },
     });
 
     // La solicitud dejó de necesitar aprobación (fue aprobada o rechazada) —
@@ -727,8 +742,11 @@ export const confirmarRecepcionSolicitud = async (req: AuthenticatedRequest, res
       });
     }
 
-    const actualizada = await req.tenantPrisma!.solicitudCompra.update({
-      where: { id },
+    // Mismo cierre de ventana de carrera que en cambiarEstadoSolicitud: el
+    // `where.estado` guarda que la transición siga siendo válida al momento
+    // de escribir, no solo al momento de leer.
+    const resultadoUpdate = await req.tenantPrisma!.solicitudCompra.updateMany({
+      where: { id, tenantId, estado: "Facturada" },
       data: {
         estado: "Recibida",
         recepcionConfirmadaPorId: req.user!.id,
@@ -737,6 +755,14 @@ export const confirmarRecepcionSolicitud = async (req: AuthenticatedRequest, res
         recepcionComentario:
           typeof comentario === "string" && comentario.trim() ? comentario.trim() : null,
       },
+    });
+    if (resultadoUpdate.count === 0) {
+      return res.status(409).json({
+        message: `No se puede confirmar la recepción desde el estado "${solicitud.estado}".`,
+      });
+    }
+    const actualizada = await req.tenantPrisma!.solicitudCompra.findFirstOrThrow({
+      where: { id, tenantId },
     });
 
     await req.tenantPrisma!.auditoria.create({

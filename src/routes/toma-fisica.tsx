@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, ClipboardList, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -66,7 +66,10 @@ function DialogoNuevaToma({
   const [creando, setCreando] = useState(false);
 
   const handleCrear = async () => {
-    if (!bodegaRowId) return;
+    if (!bodegaRowId) {
+      toast.error("Selecciona una bodega para crear la toma física.");
+      return;
+    }
     setCreando(true);
     try {
       const toma = await crear(Number(bodegaRowId));
@@ -126,6 +129,7 @@ function TomaFisicaPage() {
   const { tomas, loading, refresh } = useTomasFisicas();
   const { patrones, loading: cargandoPatrones } = usePatronesTomaFisica();
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <AppShell
@@ -143,7 +147,10 @@ function TomaFisicaPage() {
       <DialogoNuevaToma
         abierto={dialogoAbierto}
         onOpenChange={setDialogoAbierto}
-        onCreada={() => refresh()}
+        onCreada={(id) => {
+          refresh();
+          navigate({ to: "/toma-fisica/$id", params: { id } });
+        }}
       />
 
       {patrones.length > 0 && (

@@ -67,6 +67,23 @@ const CATEGORIA_POR_ESTADO: Record<string, EstadoCategoria> = {
   Nacionalizado: "positivo",
   Cerrada: "positivo",
   Anulada: "negativo",
+
+  // Estados crudos del enum EstadoDespacho (Despachos pasa el valor del
+  // enum tal cual, no una etiqueta traducida) y estado de novedad.
+  RECIBIDO: "neutro",
+  PREPARANDO: "neutro",
+  PREPARADO: "neutro",
+  PENDIENTE_CARGUE: "neutro",
+  CARGANDO: "pendiente",
+  CARGADO: "pendiente",
+  DESPACHADO: "pendiente",
+  EN_TRANSITO: "pendiente",
+  ENTREGADO: "positivo",
+  ENTREGA_PARCIAL: "pendiente",
+  DEVUELTO: "negativo",
+  CANCELADO: "negativo",
+  ABIERTA: "pendiente",
+  RESUELTA: "positivo",
 };
 
 const ESTILOS_POR_CATEGORIA: Record<EstadoCategoria, string> = {

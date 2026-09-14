@@ -52,10 +52,12 @@ import { siglaEmpresa } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 
 const PROVEEDOR_MANUAL = "__manual__";
 
 export const Route = createFileRoute("/solicitudes-compra/$id")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.SOLICITUDES_VER),
   head: () => ({
     meta: [
       { title: "Detalle de Solicitud de Compra | RicoSoft" },
@@ -195,41 +197,52 @@ function DetalleSolicitud() {
               <ArrowLeft className="h-4 w-4" /> Volver
             </Button>
           </Link>
-          {puedeEstadoActivo && (
-            <>
-              {puedeRechazar && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setConfirmAccion({
-                      estado: "Rechazada",
-                      titulo: "¿Rechazar esta solicitud?",
-                      verbo: "rechazar",
-                    })
-                  }
-                  className="gap-2 text-slate-900 border-slate-400 hover:bg-slate-100"
-                >
-                  <XCircle className="h-4 w-4" /> Rechazar
-                </Button>
-              )}
-              {puedeAprobar && (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    setConfirmAccion({
-                      estado: "Aprobada",
-                      titulo: "¿Aprobar esta solicitud?",
-                      verbo: "aprobar",
-                    })
-                  }
-                  className="gap-2 bg-blue-800 hover:bg-blue-900 text-white"
-                >
-                  <Check className="h-4 w-4" /> Aprobar Solicitud
-                </Button>
-              )}
-            </>
-          )}
+          {puedeEstadoActivo &&
+            (() => {
+              const esPropia = !!user?.id && solicitud.solicitanteId === user.id;
+              const tituloPropia = esPropia
+                ? "No puedes aprobar/rechazar una solicitud que tú mismo creaste."
+                : undefined;
+              return (
+                <>
+                  {puedeRechazar && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={esPropia}
+                      title={tituloPropia}
+                      onClick={() =>
+                        setConfirmAccion({
+                          estado: "Rechazada",
+                          titulo: "¿Rechazar esta solicitud?",
+                          verbo: "rechazar",
+                        })
+                      }
+                      className="gap-2 text-slate-900 border-slate-400 hover:bg-slate-100"
+                    >
+                      <XCircle className="h-4 w-4" /> Rechazar
+                    </Button>
+                  )}
+                  {puedeAprobar && (
+                    <Button
+                      size="sm"
+                      disabled={esPropia}
+                      title={tituloPropia}
+                      onClick={() =>
+                        setConfirmAccion({
+                          estado: "Aprobada",
+                          titulo: "¿Aprobar esta solicitud?",
+                          verbo: "aprobar",
+                        })
+                      }
+                      className="gap-2 bg-blue-800 hover:bg-blue-900 text-white"
+                    >
+                      <Check className="h-4 w-4" /> Aprobar Solicitud
+                    </Button>
+                  )}
+                </>
+              );
+            })()}
           {solicitud.estado === "Aprobada" && puedeComprar && (
             <Button
               size="sm"
@@ -333,6 +346,9 @@ function DetalleSolicitud() {
             area={solicitud.area}
             puedeCrear={puedeCrear}
             puedeAprobar={puedeAprobar}
+            esPropia={!!user?.id && solicitud.solicitanteId === user.id}
+            minimo={solicitud.cotizacionesResumen.minimo}
+            maximo={solicitud.cotizacionesResumen.maximo}
             // Una vez la solicitud sale de Pendiente/En Cotización (Historia
             // de Compras) la decisión ya quedó tomada — el cuadro
             // comparativo pasa a ser registro histórico, nunca editable.
@@ -483,13 +499,25 @@ function PanelCotizaciones({
   area,
   puedeCrear: puedeCrearProp,
   puedeAprobar: puedeAprobarProp,
+  esPropia = false,
   soloLectura = false,
+  minimo = 1,
+  maximo = 3,
   onChange,
 }: {
   solicitudId: string;
   area: string;
   puedeCrear: boolean;
   puedeAprobar: boolean;
+  /** La solicitud fue creada por el usuario actual — no puede elegir su
+   * propia cotización ganadora (misma separación de funciones que
+   * aprobar/rechazar). */
+  esPropia?: boolean;
+  /** Mínimo/máximo real de la regla de cotizaciones, leídos de
+   * `solicitud.cotizacionesResumen` (nunca hardcodeados aquí, para no
+   * desactualizarse si la regla de negocio cambia). */
+  minimo?: number;
+  maximo?: number;
   /** Solicitud ya resuelta (Historia de Compras): el cuadro comparativo es
    * registro histórico, no se puede agregar, eliminar ni elegir ganadora —
    * solo se muestra. */
@@ -610,94 +638,101 @@ function PanelCotizaciones({
         <p className="mt-1 text-[11px] text-slate-500">
           {soloLectura
             ? "Registro histórico: el cuadro comparativo ya no se puede modificar."
-            : "Se requiere al menos 1 cotización completa y una elegida como ganadora para poder aprobar la solicitud (hasta un máximo de 3)."}
+            : `Se requiere al menos ${minimo} cotización completa y una elegida como ganadora para poder aprobar la solicitud (hasta un máximo de ${maximo}).`}
         </p>
       </div>
 
-      <Table>
-        <TableHeader className="bg-slate-100/80">
-          <TableRow className="hover:bg-slate-100/80">
-            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
-              Proveedor
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
-              Valor COP
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
-              Entrega
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
-              Doc.
-            </TableHead>
-            <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
-              Acciones
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody className="text-slate-800 font-medium">
-          {cotizaciones.map((c) => (
-            <TableRow key={c.id} className={c.esGanadora ? "bg-blue-50/60" : undefined}>
-              <TableCell className="px-3 py-2 text-xs font-semibold">
-                <span className="inline-flex items-center gap-1.5">
-                  {c.esGanadora && <Trophy className="h-3.5 w-3.5 text-blue-700" />}
-                  {c.proveedorNombre}
-                </span>
-              </TableCell>
-              <TableCell className="num px-3 py-2 text-right text-xs font-bold">
-                {money(c.valorTotalCOP)}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-center text-xs">
-                {c.tiempoEntregaDias} d.
-              </TableCell>
-              <TableCell className="px-3 py-2 text-center">
-                <button
-                  type="button"
-                  title={`Ver documento: ${c.archivo.nombre}`}
-                  onClick={() => handleVerCotizacion(c.id)}
-                  className="text-slate-400 hover:text-blue-700"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                </button>
-              </TableCell>
-              <TableCell className="px-3 py-2 text-right">
-                <div className="flex justify-end gap-1">
-                  {puedeAprobar && !c.esGanadora && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      disabled={accionId === c.id}
-                      onClick={() => handleSeleccionar(c.id)}
-                      className="h-6 text-[10px]"
-                    >
-                      Elegir ganadora
-                    </Button>
-                  )}
-                  {puedeCrear && (
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      disabled={accionId === c.id}
-                      onClick={() => handleEliminar(c.id)}
-                      className="h-6 text-[10px] text-slate-500 hover:text-slate-900"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              </TableCell>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader className="bg-slate-100/80">
+            <TableRow className="hover:bg-slate-100/80">
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
+                Proveedor
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                Valor COP
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                Entrega
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                Doc.
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                Acciones
+              </TableHead>
             </TableRow>
-          ))}
-          {cotizaciones.length === 0 && (
-            <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={5} className="px-3 py-6 text-center text-xs text-slate-500">
-                {cargandoCotizaciones
-                  ? "Cargando cotizaciones..."
-                  : errorCotizaciones || "Todavía no hay cotizaciones registradas."}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody className="text-slate-800 font-medium">
+            {cotizaciones.map((c) => (
+              <TableRow key={c.id} className={c.esGanadora ? "bg-blue-50/60" : undefined}>
+                <TableCell className="px-3 py-2 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1.5">
+                    {c.esGanadora && <Trophy className="h-3.5 w-3.5 text-blue-700" />}
+                    {c.proveedorNombre}
+                  </span>
+                </TableCell>
+                <TableCell className="num px-3 py-2 text-right text-xs font-bold">
+                  {money(c.valorTotalCOP)}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center text-xs">
+                  {c.tiempoEntregaDias} d.
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center">
+                  <button
+                    type="button"
+                    title={`Ver documento: ${c.archivo.nombre}`}
+                    onClick={() => handleVerCotizacion(c.id)}
+                    className="text-slate-400 hover:text-blue-700"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                  </button>
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right">
+                  <div className="flex justify-end gap-1">
+                    {puedeAprobar && !c.esGanadora && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={esPropia || accionId === c.id}
+                        title={
+                          esPropia
+                            ? "No puedes elegir la cotización ganadora de una solicitud que tú mismo creaste."
+                            : undefined
+                        }
+                        onClick={() => handleSeleccionar(c.id)}
+                        className="h-6 text-[10px]"
+                      >
+                        Elegir ganadora
+                      </Button>
+                    )}
+                    {puedeCrear && (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={accionId === c.id}
+                        onClick={() => handleEliminar(c.id)}
+                        className="h-6 text-[10px] text-slate-500 hover:text-slate-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {cotizaciones.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="px-3 py-6 text-center text-xs text-slate-500">
+                  {cargandoCotizaciones
+                    ? "Cargando cotizaciones..."
+                    : errorCotizaciones || "Todavía no hay cotizaciones registradas."}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
       {puedeCrear && cotizaciones.length < 3 && !cotizaciones.some((c) => c.esGanadora) && (
         <form

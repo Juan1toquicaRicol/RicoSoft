@@ -72,11 +72,13 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { money, EstadoFactura, PrioridadOptions } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { PLAZO_CREDITO_DIAS_DEFECTO } from "@/lib/constantes-negocio";
 
 export const Route = createFileRoute("/facturas/")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.FACTURAS_VER),
   head: () => ({
     meta: [
       { title: "Recepción de Facturas | RicoSoft" },

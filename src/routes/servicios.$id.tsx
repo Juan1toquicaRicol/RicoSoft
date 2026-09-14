@@ -46,8 +46,10 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/servicios/$id")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.SERVICIOS_VER),
   head: () => ({
     meta: [
       { title: "Detalle de Servicio | RicoSoft" },
@@ -93,14 +95,19 @@ function DetalleServicio() {
       }));
   }, [facturas]);
 
+  const [alternandoEstado, setAlternandoEstado] = useState(false);
+
   const handleToggleEstado = async () => {
     if (!servicio) return;
+    setAlternandoEstado(true);
     try {
       await toggleEstadoSuscripcion(servicio.id);
       await refresh();
       toast.success(`Servicio ${servicio.estado === "Activo" ? "desactivado" : "activado"}.`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar el servicio.");
+    } finally {
+      setAlternandoEstado(false);
     }
   };
 
@@ -140,9 +147,15 @@ function DetalleServicio() {
             </Button>
           </Link>
           {puedeEditar && (
-            <Button size="sm" variant="outline" onClick={handleToggleEstado} className="gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleToggleEstado}
+              disabled={alternandoEstado}
+              className="gap-2"
+            >
               <Power className="h-4 w-4" />{" "}
-              {servicio.estado === "Activo" ? "Desactivar" : "Activar"}
+              {alternandoEstado ? "..." : servicio.estado === "Activo" ? "Desactivar" : "Activar"}
             </Button>
           )}
         </>
@@ -164,54 +177,56 @@ function DetalleServicio() {
                 Este servicio todavía no tiene facturas asociadas.
               </div>
             ) : (
-              <Table>
-                <TableHeader className="bg-slate-100/80">
-                  <TableRow className="hover:bg-slate-100/80">
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
-                      Factura
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
-                      Emisión
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
-                      Vencimiento
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3 text-right">
-                      Valor
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
-                      Estado
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="text-slate-800 font-medium">
-                  {facturas.map((f) => (
-                    <TableRow key={f.id}>
-                      <TableCell className="py-2.5 pr-3">
-                        <Link
-                          to="/facturas/$id"
-                          params={{ id: f.id }}
-                          className="font-bold text-blue-800 hover:underline"
-                        >
-                          {f.numero}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
-                        {new Date(f.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })}
-                      </TableCell>
-                      <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
-                        {new Date(f.vence).toLocaleDateString("es-CO", { timeZone: "UTC" })}
-                      </TableCell>
-                      <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">
-                        {money(f.total, f.moneda)}
-                      </TableCell>
-                      <TableCell className="py-2.5 pr-3">
-                        <EstadoBadge estado={f.estado} />
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-slate-100/80">
+                    <TableRow className="hover:bg-slate-100/80">
+                      <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                        Factura
+                      </TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                        Emisión
+                      </TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                        Vencimiento
+                      </TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3 text-right">
+                        Valor
+                      </TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold py-2.5 pr-3">
+                        Estado
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody className="text-slate-800 font-medium">
+                    {facturas.map((f) => (
+                      <TableRow key={f.id}>
+                        <TableCell className="py-2.5 pr-3">
+                          <Link
+                            to="/facturas/$id"
+                            params={{ id: f.id }}
+                            className="font-bold text-blue-800 hover:underline"
+                          >
+                            {f.numero}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
+                          {new Date(f.fecha).toLocaleDateString("es-CO", { timeZone: "UTC" })}
+                        </TableCell>
+                        <TableCell className="py-2.5 pr-3 font-mono text-slate-500">
+                          {new Date(f.vence).toLocaleDateString("es-CO", { timeZone: "UTC" })}
+                        </TableCell>
+                        <TableCell className="num py-2.5 pr-3 text-right font-bold text-slate-900">
+                          {money(f.total, f.moneda)}
+                        </TableCell>
+                        <TableCell className="py-2.5 pr-3">
+                          <EstadoBadge estado={f.estado} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </div>

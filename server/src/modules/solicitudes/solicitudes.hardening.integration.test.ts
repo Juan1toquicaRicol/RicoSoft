@@ -122,6 +122,53 @@ describe.skipIf(!RUN)("Solicitudes — autoaprobación, rol inactivo y auditorí
     expect(enDb?.estado).toBe("Pendiente");
   });
 
+  it("1b. A-03: el solicitante NO puede elegir la cotización ganadora de su propia solicitud (403)", async () => {
+    const id = await crearSolicitudComoA();
+    const cot = await request(app)
+      .post(`/api/solicitudes-compra/${id}/cotizaciones`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .field("proveedorNombre", "Proveedor Autoaprobación")
+      .field("proveedorNit", "9001234567")
+      .field("valorTotalCOP", "500000")
+      .field("tiempoEntregaDias", "5")
+      .attach("archivo", Buffer.from("%PDF-1.4 contenido de prueba"), {
+        filename: "cotizacion.pdf",
+        contentType: "application/pdf",
+      });
+    expect(cot.status).toBe(201);
+    const cotizacionId = cot.body.id as string;
+
+    const res = await request(app)
+      .post(`/api/solicitudes-compra/${id}/cotizaciones/${cotizacionId}/seleccionar`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(403);
+
+    const cotEnDb = await prisma.cotizacionProveedor.findUnique({ where: { id: cotizacionId } });
+    expect(cotEnDb?.esGanadora).toBe(false);
+  });
+
+  it("1c. A-03: otro usuario SÍ puede elegir la cotización ganadora de una solicitud que no creó él mismo", async () => {
+    const id = await crearSolicitudComoA();
+    const cot = await request(app)
+      .post(`/api/solicitudes-compra/${id}/cotizaciones`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .field("proveedorNombre", "Proveedor Legítimo")
+      .field("proveedorNit", "9007654321")
+      .field("valorTotalCOP", "500000")
+      .field("tiempoEntregaDias", "5")
+      .attach("archivo", Buffer.from("%PDF-1.4 contenido de prueba"), {
+        filename: "cotizacion.pdf",
+        contentType: "application/pdf",
+      });
+    expect(cot.status).toBe(201);
+    const cotizacionId = cot.body.id as string;
+
+    const res = await request(app)
+      .post(`/api/solicitudes-compra/${id}/cotizaciones/${cotizacionId}/seleccionar`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(200);
+  });
+
   it("2. A-03: otro usuario con permiso SÍ puede rechazar una solicitud que no creó él mismo", async () => {
     const id = await crearSolicitudComoA();
     const res = await request(app)

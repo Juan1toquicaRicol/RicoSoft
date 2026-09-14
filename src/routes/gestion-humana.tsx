@@ -61,6 +61,7 @@ import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { DOMINIOS_PERMITIDOS, esDominioCorporativoValido } from "@/lib/dominios";
 import { money, Empleado, GravedadStrike } from "@/lib/data";
 import {
@@ -71,6 +72,7 @@ import {
 import { agruparFilas } from "@/lib/agrupar";
 
 export const Route = createFileRoute("/gestion-humana")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.EMPLEADOS_VER),
   head: () => ({
     meta: [
       { title: "Gestión Humana | RicoSoft" },
@@ -116,6 +118,9 @@ function GestionHumana() {
   const [selectedEmpleado, setSelectedEmpleado] = useState<Empleado | null>(null);
   const [empleadoAEliminar, setEmpleadoAEliminar] = useState<Empleado | null>(null);
   const [eliminandoEmpleado, setEliminandoEmpleado] = useState(false);
+  const [empleadoALiquidar, setEmpleadoALiquidar] = useState<Empleado | null>(null);
+  const [liquidandoEmpleado, setLiquidandoEmpleado] = useState(false);
+  const [accionPermisoId, setAccionPermisoId] = useState<string | null>(null);
   const [agrupacionEmpleados, setAgrupacionEmpleados] = useState(OPCION_SIN_AGRUPAR.value);
   const [agrupacionPermisos, setAgrupacionPermisos] = useState(OPCION_SIN_AGRUPAR.value);
   const [agrupacionFaltas, setAgrupacionFaltas] = useState(OPCION_SIN_AGRUPAR.value);
@@ -131,6 +136,20 @@ function GestionHumana() {
       toast.error(err instanceof Error ? err.message : "No fue posible eliminar el expediente.");
     } finally {
       setEliminandoEmpleado(false);
+    }
+  };
+
+  const handleLiquidarEmpleado = async () => {
+    if (!empleadoALiquidar) return;
+    setLiquidandoEmpleado(true);
+    try {
+      await liquidarEmpleado(empleadoALiquidar.id, new Date().toISOString().split("T")[0]);
+      toast.success(`Colaborador ${empleadoALiquidar.nombres} liquidado.`);
+      setEmpleadoALiquidar(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al liquidar el colaborador.");
+    } finally {
+      setLiquidandoEmpleado(false);
     }
   };
 
@@ -528,20 +547,7 @@ function GestionHumana() {
                             <Button
                               size="xs"
                               variant="ghost"
-                              onClick={() => {
-                                if (confirm(`¿Liquidar al colaborador ${emp.nombres}?`)) {
-                                  liquidarEmpleado(
-                                    emp.id,
-                                    new Date().toISOString().split("T")[0],
-                                  ).catch((err: unknown) =>
-                                    toast.error(
-                                      err instanceof Error
-                                        ? err.message
-                                        : "Error al liquidar el colaborador.",
-                                    ),
-                                  );
-                                }
-                              }}
+                              onClick={() => setEmpleadoALiquidar(emp)}
                               className="h-7 text-[11px] text-slate-900 hover:bg-slate-100"
                             >
                               Liquidar
@@ -677,30 +683,44 @@ function GestionHumana() {
                             <Button
                               size="xs"
                               variant="success"
-                              onClick={() =>
-                                updateEstadoPermiso(p.id, "Aprobado").catch((err: unknown) =>
+                              disabled={accionPermisoId === p.id}
+                              onClick={async () => {
+                                setAccionPermisoId(p.id);
+                                try {
+                                  await updateEstadoPermiso(p.id, "Aprobado");
+                                } catch (err: unknown) {
                                   toast.error(
                                     err instanceof Error ? err.message : "Error al aprobar.",
-                                  ),
-                                )
-                              }
+                                  );
+                                } finally {
+                                  setAccionPermisoId(null);
+                                }
+                              }}
                               className="h-7 text-[11px]"
                             >
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
+                              <CheckCircle2 className="h-3 w-3 mr-1" />{" "}
+                              {accionPermisoId === p.id ? "..." : "Aprobar"}
                             </Button>
                             <Button
                               size="xs"
                               variant="destructive"
-                              onClick={() =>
-                                updateEstadoPermiso(p.id, "Rechazado").catch((err: unknown) =>
+                              disabled={accionPermisoId === p.id}
+                              onClick={async () => {
+                                setAccionPermisoId(p.id);
+                                try {
+                                  await updateEstadoPermiso(p.id, "Rechazado");
+                                } catch (err: unknown) {
                                   toast.error(
                                     err instanceof Error ? err.message : "Error al rechazar.",
-                                  ),
-                                )
-                              }
+                                  );
+                                } finally {
+                                  setAccionPermisoId(null);
+                                }
+                              }}
                               className="h-7 text-[11px]"
                             >
-                              <XCircle className="h-3 w-3 mr-1" /> Rechazar
+                              <XCircle className="h-3 w-3 mr-1" />{" "}
+                              {accionPermisoId === p.id ? "..." : "Rechazar"}
                             </Button>
                           </div>
                         )}
@@ -1350,6 +1370,29 @@ function GestionHumana() {
               disabled={eliminandoEmpleado}
             >
               {eliminandoEmpleado ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!empleadoALiquidar}
+        onOpenChange={(open) => !open && setEmpleadoALiquidar(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Liquidar al colaborador {empleadoALiquidar?.nombres}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              El colaborador quedará marcado como "Liquidado" con fecha de hoy. Esta acción queda
+              registrada en la auditoría.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={liquidandoEmpleado}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLiquidarEmpleado} disabled={liquidandoEmpleado}>
+              {liquidandoEmpleado ? "Liquidando..." : "Liquidar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

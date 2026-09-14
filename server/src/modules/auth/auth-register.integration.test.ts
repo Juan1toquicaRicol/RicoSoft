@@ -81,7 +81,7 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
     expect(noCreado).toBeNull();
   });
 
-  it("2. permite el registro con un departamento normal, pero la cuenta queda INACTIVA", async () => {
+  it("2. permite el registro con un departamento normal, y la cuenta queda ACTIVA de una", async () => {
     const email = `registro-normal+${sufijo}@${DOMINIO}`;
     const res = await request(app).post("/api/auth/register").send({
       nombre: "Registro Normal",
@@ -93,36 +93,19 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
 
     const creado = await prisma.user.findUnique({ where: { email } });
     expect(creado).not.toBeNull();
-    expect(creado?.activo).toBe(false);
+    expect(creado?.activo).toBe(true);
     expect(creado?.isSuperadmin).toBe(false);
     expect(creado?.rolId).toBeNull();
   });
 
-  it("3. una cuenta autoregistrada (inactiva) no puede iniciar sesión hasta ser activada", async () => {
+  it("3. una cuenta recién autoregistrada puede iniciar sesión de inmediato", async () => {
     const email = `registro-login+${sufijo}@${DOMINIO}`;
     await request(app).post("/api/auth/register").send({
-      nombre: "Pendiente Aprobación",
+      nombre: "Registro Inmediato",
       email,
       password: "ClaveSegura123",
       departamentoId: departamentoNormalId,
     });
-
-    const login = await request(app)
-      .post("/api/auth/login")
-      .send({ email, password: "ClaveSegura123" });
-    expect(login.status).toBe(401);
-    expect(login.body.message).toMatch(/inactiva/i);
-  });
-
-  it("4. tras activar la cuenta (flujo administrativo existente), el login funciona", async () => {
-    const email = `registro-activado+${sufijo}@${DOMINIO}`;
-    await request(app).post("/api/auth/register").send({
-      nombre: "Ya Aprobado",
-      email,
-      password: "ClaveSegura123",
-      departamentoId: departamentoNormalId,
-    });
-    await prisma.user.update({ where: { email }, data: { activo: true } });
 
     const login = await request(app)
       .post("/api/auth/login")

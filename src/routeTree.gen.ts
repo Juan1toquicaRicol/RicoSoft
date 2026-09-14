@@ -41,6 +41,7 @@ import { Route as ConfiguracionNegocioRouteImport } from './routes/configuracion
 import { Route as ConfiguracionPerfilesFuncionalesRouteImport } from './routes/configuracion.perfiles-funcionales'
 import { Route as ConfiguracionPermisosRouteImport } from './routes/configuracion.permisos'
 import { Route as ConfiguracionProveedoresRouteImport } from './routes/configuracion.proveedores'
+import { Route as ConfiguracionPublicacionesRouteImport } from './routes/configuracion.publicaciones'
 import { Route as ConfiguracionReglasDestinatariosRouteImport } from './routes/configuracion.reglas-destinatarios'
 import { Route as ConfiguracionRolesRouteImport } from './routes/configuracion.roles'
 import { Route as ConfiguracionUsuariosRouteImport } from './routes/configuracion.usuarios'
@@ -49,7 +50,9 @@ import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
 import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 import { Route as ImportacionesIndexRouteImport } from './routes/importaciones.index'
 import { Route as ImportacionesIdRouteImport } from './routes/importaciones.$id'
+import { Route as ImportacionesAnaliticaRouteImport } from './routes/importaciones.analitica'
 import { Route as ImportacionesNuevaRouteImport } from './routes/importaciones.nueva'
+import { Route as InventarioComprometidosRouteImport } from './routes/inventario_.comprometidos'
 import { Route as LogisticaCumplimientoRouteImport } from './routes/logistica.cumplimiento'
 import { Route as LogisticaNovedadesAbiertasRouteImport } from './routes/logistica.novedades-abiertas'
 import { Route as ServiciosIndexRouteImport } from './routes/servicios.index'
@@ -225,6 +228,12 @@ const ConfiguracionProveedoresRoute =
     path: '/proveedores',
     getParentRoute: () => ConfiguracionRoute,
   } as any)
+const ConfiguracionPublicacionesRoute =
+  ConfiguracionPublicacionesRouteImport.update({
+    id: '/publicaciones',
+    path: '/publicaciones',
+    getParentRoute: () => ConfiguracionRoute,
+  } as any)
 const ConfiguracionReglasDestinatariosRoute =
   ConfiguracionReglasDestinatariosRouteImport.update({
     id: '/reglas-destinatarios',
@@ -266,9 +275,19 @@ const ImportacionesIdRoute = ImportacionesIdRouteImport.update({
   path: '/importaciones/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportacionesAnaliticaRoute = ImportacionesAnaliticaRouteImport.update({
+  id: '/importaciones/analitica',
+  path: '/importaciones/analitica',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImportacionesNuevaRoute = ImportacionesNuevaRouteImport.update({
   id: '/importaciones/nueva',
   path: '/importaciones/nueva',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventarioComprometidosRoute = InventarioComprometidosRouteImport.update({
+  id: '/inventario_/comprometidos',
+  path: '/inventario/comprometidos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogisticaCumplimientoRoute = LogisticaCumplimientoRouteImport.update({
@@ -351,13 +370,16 @@ export interface FileRoutesByFullPath {
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
+  '/configuracion/publicaciones': typeof ConfiguracionPublicacionesRoute
   '/configuracion/reglas-destinatarios': typeof ConfiguracionReglasDestinatariosRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
+  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
+  '/inventario/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -402,13 +424,16 @@ export interface FileRoutesByTo {
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
+  '/configuracion/publicaciones': typeof ConfiguracionPublicacionesRoute
   '/configuracion/reglas-destinatarios': typeof ConfiguracionReglasDestinatariosRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
+  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
+  '/inventario/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -455,13 +480,16 @@ export interface FileRoutesById {
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
   '/configuracion/proveedores': typeof ConfiguracionProveedoresRoute
+  '/configuracion/publicaciones': typeof ConfiguracionPublicacionesRoute
   '/configuracion/reglas-destinatarios': typeof ConfiguracionReglasDestinatariosRoute
   '/configuracion/roles': typeof ConfiguracionRolesRoute
   '/configuracion/usuarios': typeof ConfiguracionUsuariosRoute
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
+  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
+  '/inventario_/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
   '/logistica/novedades-abiertas': typeof LogisticaNovedadesAbiertasRoute
   '/servicios/$id': typeof ServiciosIdRoute
@@ -509,13 +537,16 @@ export interface FileRouteTypes {
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
+    | '/configuracion/publicaciones'
     | '/configuracion/reglas-destinatarios'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
+    | '/importaciones/analitica'
     | '/importaciones/nueva'
+    | '/inventario/comprometidos'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -560,13 +591,16 @@ export interface FileRouteTypes {
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
+    | '/configuracion/publicaciones'
     | '/configuracion/reglas-destinatarios'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
+    | '/importaciones/analitica'
     | '/importaciones/nueva'
+    | '/inventario/comprometidos'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -612,13 +646,16 @@ export interface FileRouteTypes {
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
     | '/configuracion/proveedores'
+    | '/configuracion/publicaciones'
     | '/configuracion/reglas-destinatarios'
     | '/configuracion/roles'
     | '/configuracion/usuarios'
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
+    | '/importaciones/analitica'
     | '/importaciones/nueva'
+    | '/inventario_/comprometidos'
     | '/logistica/cumplimiento'
     | '/logistica/novedades-abiertas'
     | '/servicios/$id'
@@ -658,7 +695,9 @@ export interface RootRouteChildren {
   ComercialObjetivosRoute: typeof ComercialObjetivosRoute
   FacturasIdRoute: typeof FacturasIdRoute
   ImportacionesIdRoute: typeof ImportacionesIdRoute
+  ImportacionesAnaliticaRoute: typeof ImportacionesAnaliticaRoute
   ImportacionesNuevaRoute: typeof ImportacionesNuevaRoute
+  InventarioComprometidosRoute: typeof InventarioComprometidosRoute
   LogisticaCumplimientoRoute: typeof LogisticaCumplimientoRoute
   LogisticaNovedadesAbiertasRoute: typeof LogisticaNovedadesAbiertasRoute
   ServiciosIdRoute: typeof ServiciosIdRoute
@@ -897,6 +936,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionProveedoresRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
+    '/configuracion/publicaciones': {
+      id: '/configuracion/publicaciones'
+      path: '/publicaciones'
+      fullPath: '/configuracion/publicaciones'
+      preLoaderRoute: typeof ConfiguracionPublicacionesRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
     '/configuracion/reglas-destinatarios': {
       id: '/configuracion/reglas-destinatarios'
       path: '/reglas-destinatarios'
@@ -953,11 +999,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacionesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/importaciones/analitica': {
+      id: '/importaciones/analitica'
+      path: '/importaciones/analitica'
+      fullPath: '/importaciones/analitica'
+      preLoaderRoute: typeof ImportacionesAnaliticaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/importaciones/nueva': {
       id: '/importaciones/nueva'
       path: '/importaciones/nueva'
       fullPath: '/importaciones/nueva'
       preLoaderRoute: typeof ImportacionesNuevaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventario_/comprometidos': {
+      id: '/inventario_/comprometidos'
+      path: '/inventario/comprometidos'
+      fullPath: '/inventario/comprometidos'
+      preLoaderRoute: typeof InventarioComprometidosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logistica/cumplimiento': {
@@ -1036,6 +1096,7 @@ interface ConfiguracionRouteChildren {
   ConfiguracionPerfilesFuncionalesRoute: typeof ConfiguracionPerfilesFuncionalesRoute
   ConfiguracionPermisosRoute: typeof ConfiguracionPermisosRoute
   ConfiguracionProveedoresRoute: typeof ConfiguracionProveedoresRoute
+  ConfiguracionPublicacionesRoute: typeof ConfiguracionPublicacionesRoute
   ConfiguracionReglasDestinatariosRoute: typeof ConfiguracionReglasDestinatariosRoute
   ConfiguracionRolesRoute: typeof ConfiguracionRolesRoute
   ConfiguracionUsuariosRoute: typeof ConfiguracionUsuariosRoute
@@ -1052,6 +1113,7 @@ const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
   ConfiguracionPerfilesFuncionalesRoute: ConfiguracionPerfilesFuncionalesRoute,
   ConfiguracionPermisosRoute: ConfiguracionPermisosRoute,
   ConfiguracionProveedoresRoute: ConfiguracionProveedoresRoute,
+  ConfiguracionPublicacionesRoute: ConfiguracionPublicacionesRoute,
   ConfiguracionReglasDestinatariosRoute: ConfiguracionReglasDestinatariosRoute,
   ConfiguracionRolesRoute: ConfiguracionRolesRoute,
   ConfiguracionUsuariosRoute: ConfiguracionUsuariosRoute,
@@ -1111,7 +1173,9 @@ const rootRouteChildren: RootRouteChildren = {
   ComercialObjetivosRoute: ComercialObjetivosRoute,
   FacturasIdRoute: FacturasIdRoute,
   ImportacionesIdRoute: ImportacionesIdRoute,
+  ImportacionesAnaliticaRoute: ImportacionesAnaliticaRoute,
   ImportacionesNuevaRoute: ImportacionesNuevaRoute,
+  InventarioComprometidosRoute: InventarioComprometidosRoute,
   LogisticaCumplimientoRoute: LogisticaCumplimientoRoute,
   LogisticaNovedadesAbiertasRoute: LogisticaNovedadesAbiertasRoute,
   ServiciosIdRoute: ServiciosIdRoute,

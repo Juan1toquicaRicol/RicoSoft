@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDespacho, type EstadoDespacho } from "@/hooks/use-despachos";
+import { useDespacho, type EstadoDespacho, type DespachoLinea } from "@/hooks/use-despachos";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
@@ -89,12 +89,14 @@ const TIPOS_NOVEDAD = [
 function DialogoCambiarEstado({
   estadoActual,
   siguiente,
+  lineas,
   abierto,
   onOpenChange,
   onConfirmar,
 }: {
   estadoActual: EstadoDespacho;
   siguiente: EstadoDespacho;
+  lineas: DespachoLinea[];
   abierto: boolean;
   onOpenChange: (v: boolean) => void;
   onConfirmar: (datos: Record<string, string>) => Promise<void>;
@@ -107,6 +109,10 @@ function DialogoCambiarEstado({
 
   const requiereVehiculo = siguiente === "CARGANDO";
   const requiereRecibidoPor = siguiente === "ENTREGADO" || siguiente === "ENTREGA_PARCIAL";
+  const requiereCantidadesConfirmadas =
+    siguiente === "ENTREGADO" || siguiente === "ENTREGA_PARCIAL";
+  const faltanCantidades =
+    requiereCantidadesConfirmadas && lineas.some((l) => l.cantidadEntregada == null);
 
   const handleConfirmar = async () => {
     setEnviando(true);
@@ -174,12 +180,18 @@ function DialogoCambiarEstado({
               className="h-9 text-xs"
             />
           </div>
+          {faltanCantidades && (
+            <p className="text-xs font-semibold text-red-600">
+              Registra la cantidad entregada de todas las líneas de "Productos" antes de continuar.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
             onClick={handleConfirmar}
             disabled={
               enviando ||
+              faltanCantidades ||
               (requiereVehiculo && (!vehiculoPlaca || !conductorNombre)) ||
               (requiereRecibidoPor && !recibidoPor)
             }
@@ -261,13 +273,72 @@ function DialogoNovedad({
   );
 }
 
+function DialogoResolverNovedad({
+  abierto,
+  onOpenChange,
+  onResolver,
+}: {
+  abierto: boolean;
+  onOpenChange: (v: boolean) => void;
+  onResolver: (observacion: string) => Promise<void>;
+}) {
+  const [observacion, setObservacion] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const handleResolver = async () => {
+    setEnviando(true);
+    try {
+      await onResolver(observacion.trim());
+      onOpenChange(false);
+      setObservacion("");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Resolver novedad</DialogTitle>
+          <DialogDescription>
+            Deja una nota de qué se hizo para resolverla — queda en el historial del despacho.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1">
+          <Label className="text-[11px] font-semibold text-slate-500 uppercase">
+            Nota de resolución
+          </Label>
+          <Input
+            value={observacion}
+            onChange={(e) => setObservacion(e.target.value)}
+            placeholder="Ej. Se reenvió el producto faltante al cliente."
+            className="h-9 text-xs"
+          />
+        </div>
+        <DialogFooter>
+          <Button onClick={handleResolver} disabled={enviando || !observacion.trim()}>
+            {enviando ? "Resolviendo..." : "Marcar como resuelta"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DetalleDespacho() {
   const { id } = Route.useParams();
   const { user: sesion } = useSession();
   const puedeGestionar = hasPermission(sesion, PERMISOS_SISTEMA.DESPACHOS_GESTIONAR);
-  const { detalle, loading, actualizarEstado, crearNovedad, resolverNovedad } = useDespacho(id);
+  const { detalle, loading, actualizarEstado, actualizarLinea, crearNovedad, resolverNovedad } =
+    useDespacho(id);
   const [siguienteElegido, setSiguienteElegido] = useState<EstadoDespacho | null>(null);
   const [novedadAbierta, setNovedadAbierta] = useState(false);
+  const [novedadAResolver, setNovedadAResolver] = useState<string | null>(null);
+  const [guardandoLineaId, setGuardandoLineaId] = useState<string | null>(null);
+  const [cantidadEntregadaBorrador, setCantidadEntregadaBorrador] = useState<
+    Record<string, string>
+  >({});
 
   if (loading)
     return (
@@ -298,6 +369,34 @@ function DetalleDespacho() {
       toast.success(`Estado actualizado a "${siguienteElegido}".`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "No se pudo actualizar el estado.");
+    }
+  };
+
+  const handleGuardarCantidadEntregada = async (lineaId: string) => {
+    const valor = cantidadEntregadaBorrador[lineaId];
+    const n = Number(valor);
+    if (!valor || !Number.isFinite(n) || n < 0) {
+      toast.error("Ingresa una cantidad entregada válida (número mayor o igual a 0).");
+      return;
+    }
+    setGuardandoLineaId(lineaId);
+    try {
+      await actualizarLinea(lineaId, { cantidadEntregada: n });
+      toast.success("Cantidad entregada registrada.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo registrar la cantidad.");
+    } finally {
+      setGuardandoLineaId(null);
+    }
+  };
+
+  const handleResolverNovedad = async (observacion: string) => {
+    if (!novedadAResolver) return;
+    try {
+      await resolverNovedad(novedadAResolver, observacion);
+      toast.success("Novedad resuelta.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No se pudo resolver la novedad.");
     }
   };
 
@@ -356,6 +455,7 @@ function DetalleDespacho() {
         <DialogoCambiarEstado
           estadoActual={despacho.estado}
           siguiente={siguienteElegido}
+          lineas={lineas}
           abierto={!!siguienteElegido}
           onOpenChange={(v) => !v && setSiguienteElegido(null)}
           onConfirmar={handleConfirmarEstado}
@@ -372,6 +472,11 @@ function DetalleDespacho() {
             toast.error(err instanceof Error ? err.message : "No se pudo registrar la novedad.");
           }
         }}
+      />
+      <DialogoResolverNovedad
+        abierto={!!novedadAResolver}
+        onOpenChange={(v) => !v && setNovedadAResolver(null)}
+        onResolver={handleResolverNovedad}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -460,8 +565,40 @@ function DetalleDespacho() {
                       <TableCell className="num text-right text-xs text-slate-600">
                         {l.cantidadPreparada !== null ? compact(l.cantidadPreparada) : "—"}
                       </TableCell>
-                      <TableCell className="num text-right text-xs text-slate-600">
-                        {l.cantidadEntregada !== null ? compact(l.cantidadEntregada) : "—"}
+                      <TableCell className="text-right">
+                        {puedeGestionar ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={
+                                cantidadEntregadaBorrador[l.id] ??
+                                (l.cantidadEntregada !== null ? String(l.cantidadEntregada) : "")
+                              }
+                              onChange={(e) =>
+                                setCantidadEntregadaBorrador((prev) => ({
+                                  ...prev,
+                                  [l.id]: e.target.value,
+                                }))
+                              }
+                              className="h-7 w-24 text-right text-xs"
+                              disabled={guardandoLineaId === l.id}
+                            />
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              className="h-7 text-[10px]"
+                              disabled={guardandoLineaId === l.id}
+                              onClick={() => handleGuardarCantidadEntregada(l.id)}
+                            >
+                              {guardandoLineaId === l.id ? "..." : "Guardar"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="num text-xs text-slate-600">
+                            {l.cantidadEntregada !== null ? compact(l.cantidadEntregada) : "—"}
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -499,7 +636,7 @@ function DetalleDespacho() {
                         size="sm"
                         variant="outline"
                         className="mt-2"
-                        onClick={() => resolverNovedad(n.id)}
+                        onClick={() => setNovedadAResolver(n.id)}
                       >
                         Marcar como resuelta
                       </Button>

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 
@@ -12,73 +13,121 @@ export interface NotificacionApi {
   createdAt: string;
 }
 
+interface ListaNotificaciones {
+  notificaciones: NotificacionApi[];
+  noLeidas: number;
+}
+
+const STALE_TIME_MS = 15_000;
+const POLL_INTERVAL_MS = 30_000;
+
 /**
  * Centro de notificaciones del usuario en sesión. Refresca el contador de no
  * leídas cada 30s (más liviano que el polling de Facturas: esto no necesita
- * la misma frecuencia) y trae la lista completa solo cuando se abre la
- * campana, para no pedir 20 notificaciones en cada refresco de fondo.
+ * la misma frecuencia) y trae la lista completa solo cuando se pide
+ * explícitamente (al abrir la campana, o desde "Mi actividad" en el Home),
+ * para no pedir 20 notificaciones en cada refresco de fondo.
+ *
+ * Cacheado con React Query, keyeado por tenantId: `NotificationBell` y
+ * `PanelMiActividad` (Home) instancian este hook por separado, pero al usar
+ * la MISMA query key, React Query deduplica — antes eran dos peticiones
+ * independientes a /notificaciones/no-leidas/contador en cada carga de Home.
  */
 export function useNotificaciones() {
   const { user } = useSession();
-  const [notificaciones, setNotificaciones] = useState<NotificacionApi[]>([]);
-  const [noLeidas, setNoLeidas] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const tenantId = user?.tenantId;
+  const qkContador = ["notificaciones", "contador", tenantId] as const;
+  const qkLista = ["notificaciones", "lista", tenantId] as const;
 
-  const refrescarContador = useCallback(async () => {
-    try {
+  const contadorQuery = useQuery({
+    queryKey: qkContador,
+    queryFn: async () => {
       const data = await fetchAuth("/notificaciones/no-leidas/contador");
-      setNoLeidas(data.noLeidas ?? 0);
-    } catch {
-      // Silencioso: un fallo puntual del contador de fondo no debe interrumpir al usuario.
-    }
-  }, []);
+      return (data.noLeidas ?? 0) as number;
+    },
+    enabled: Boolean(tenantId),
+    staleTime: STALE_TIME_MS,
+    refetchInterval: POLL_INTERVAL_MS,
+    retry: false,
+  });
 
-  const refrescarLista = useCallback(async () => {
-    setLoading(true);
-    try {
+  const listaQuery = useQuery({
+    queryKey: qkLista,
+    queryFn: async () => {
       const data = await fetchAuth("/notificaciones?limite=20");
-      setNotificaciones(data.data ?? []);
-      setNoLeidas(data.noLeidas ?? 0);
-    } catch {
-      // Silencioso: se deja la última lista conocida en pantalla.
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return {
+        notificaciones: (data.data ?? []) as NotificacionApi[],
+        noLeidas: (data.noLeidas ?? 0) as number,
+      };
+    },
+    // Solo se popula bajo demanda (refrescarLista), no al montar — mismo
+    // comportamiento que antes: no pedir 20 notificaciones en cada carga.
+    enabled: false,
+    staleTime: STALE_TIME_MS,
+    retry: false,
+  });
 
-  // La lista solo se popula al abrir la campana (ver NotificationBell), pero
-  // puede quedar en memoria de la empresa anterior si el usuario cambia de
-  // tenant sin volver a abrirla — se limpia explícitamente en cada cambio,
-  // junto con el contador, que sí se refresca de inmediato (no espera los 30s
-  // del polling de fondo).
+  // El contador es la fuente única para el badge (bell + Home); cuando la
+  // lista completa trae un noLeidas más reciente, se sincroniza ahí también.
   useEffect(() => {
-    setNotificaciones([]);
-    refrescarContador();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") refrescarContador();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [refrescarContador, user?.tenantId]);
-
-  const marcarLeida = useCallback(async (id: string) => {
-    setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
-    setNoLeidas((prev) => Math.max(0, prev - 1));
-    try {
-      await fetchAuth(`/notificaciones/${id}/leida`, { method: "PATCH" });
-    } catch {
-      // No revertimos el optimismo por un fallo puntual; el próximo refresco corrige el estado real.
+    if (listaQuery.data) {
+      queryClient.setQueryData(qkContador, listaQuery.data.noLeidas);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listaQuery.data]);
+
+  const refrescarLista = useCallback(() => {
+    return queryClient.refetchQueries({ queryKey: qkLista });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient, tenantId]);
+
+  const marcarLeida = useCallback(
+    async (id: string) => {
+      queryClient.setQueryData(qkLista, (old: ListaNotificaciones | undefined) =>
+        old
+          ? {
+              notificaciones: old.notificaciones.map((n) =>
+                n.id === id ? { ...n, leida: true } : n,
+              ),
+              noLeidas: Math.max(0, old.noLeidas - 1),
+            }
+          : old,
+      );
+      queryClient.setQueryData(qkContador, (old: number | undefined) =>
+        Math.max(0, (old ?? 1) - 1),
+      );
+      try {
+        await fetchAuth(`/notificaciones/${id}/leida`, { method: "PATCH" });
+      } catch {
+        // No revertimos el optimismo por un fallo puntual; el próximo refresco corrige el estado real.
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryClient, tenantId],
+  );
 
   const marcarTodasLeidas = useCallback(async () => {
-    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
-    setNoLeidas(0);
+    queryClient.setQueryData(qkLista, (old: ListaNotificaciones | undefined) =>
+      old
+        ? { notificaciones: old.notificaciones.map((n) => ({ ...n, leida: true })), noLeidas: 0 }
+        : old,
+    );
+    queryClient.setQueryData(qkContador, 0);
     try {
       await fetchAuth("/notificaciones/leer-todas", { method: "PATCH" });
     } catch {
       // Idem: el próximo refresco corrige el estado real si esto falló.
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient, tenantId]);
 
-  return { notificaciones, noLeidas, loading, refrescarLista, marcarLeida, marcarTodasLeidas };
+  return {
+    notificaciones: listaQuery.data?.notificaciones ?? [],
+    noLeidas: contadorQuery.data ?? 0,
+    loading: listaQuery.isFetching,
+    refrescarLista,
+    marcarLeida,
+    marcarTodasLeidas,
+  };
 }

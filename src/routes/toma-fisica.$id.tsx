@@ -8,6 +8,16 @@ import { EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -57,7 +67,10 @@ function FilaConteo({
 
   const handleGuardar = async () => {
     const n = Number(valor);
-    if (!Number.isFinite(n) || n < 0) return;
+    if (!Number.isFinite(n) || n < 0) {
+      toast.error("Ingresa un conteo válido (número entero mayor o igual a 0).");
+      return;
+    }
     setGuardando(true);
     try {
       await onRegistrar(linea.id, n);
@@ -126,14 +139,14 @@ function DetalleTomaFisica() {
   const puedeGestionar = hasPermission(sesion, PERMISOS_SISTEMA.TOMA_FISICA_GESTIONAR);
   const { detalle, loading, registrarConteo, cerrar } = useTomaFisica(id);
   const [cerrando, setCerrando] = useState(false);
+  const [confirmCerrar, setConfirmCerrar] = useState(false);
 
   const handleCerrar = async () => {
-    if (!confirm("¿Cerrar esta toma física? Después de cerrarla no se podrá modificar el conteo."))
-      return;
     setCerrando(true);
     try {
       await cerrar();
       toast.success("Toma física cerrada.");
+      setConfirmCerrar(false);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "No se pudo cerrar la toma física.");
     } finally {
@@ -175,7 +188,12 @@ function DetalleTomaFisica() {
               <div className="flex items-center gap-3">
                 <EstadoBadge estado={detalle.toma.estado} />
                 {puedeGestionar && detalle.toma.estado === "Abierta" && (
-                  <Button size="sm" variant="outline" onClick={handleCerrar} disabled={cerrando}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setConfirmCerrar(true)}
+                    disabled={cerrando}
+                  >
                     <Lock className="mr-1 h-3.5 w-3.5" /> {cerrando ? "Cerrando..." : "Cerrar toma"}
                   </Button>
                 )}
@@ -250,6 +268,23 @@ function DetalleTomaFisica() {
           </div>
         </>
       )}
+
+      <AlertDialog open={confirmCerrar} onOpenChange={(open) => !open && setConfirmCerrar(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cerrar esta toma física?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Después de cerrarla no se podrá modificar el conteo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cerrando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCerrar} disabled={cerrando}>
+              {cerrando ? "Cerrando..." : "Cerrar toma"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

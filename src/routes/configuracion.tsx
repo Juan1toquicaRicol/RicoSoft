@@ -12,6 +12,8 @@ import {
   Cloud,
   ListChecks,
   SlidersHorizontal,
+  Tags,
+  Megaphone,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
@@ -81,6 +83,13 @@ function Configuracion() {
       show: hasPermission(user, PERMISOS_SISTEMA.REGLAS_DESTINATARIOS_VER),
     },
     {
+      to: "/configuracion/publicaciones",
+      label: "Publicaciones",
+      icon: Megaphone,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.PUBLICACIONES_GESTIONAR),
+    },
+    {
       to: "/configuracion/proveedores",
       label: "Proveedores",
       icon: Truck,
@@ -100,6 +109,13 @@ function Configuracion() {
       icon: ListChecks,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.CONFIGURACION_CATALOGOS),
+    },
+    {
+      to: "/configuracion/clasificacion-items",
+      label: "Clasificación de Items",
+      icon: Tags,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.CONFIGURACION_VER),
     },
     {
       to: "/configuracion/negocio",

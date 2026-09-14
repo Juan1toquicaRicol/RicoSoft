@@ -67,6 +67,7 @@ import { useCreditos, useResumenCreditos, useCarteraSiesa } from "@/hooks/use-cr
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { money } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import type { CreditoCliente } from "@/lib/data";
@@ -76,6 +77,7 @@ const OPCIONES_ESTADO_CREDITO = ["Todos", "Al día", "Por vencer", "Vencido", "P
 const OPCIONES_ESTADO_SIESA = ["Todos", "Al día", "Por vencer", "Vencido"];
 
 export const Route = createFileRoute("/creditos")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.CREDITOS_VER),
   head: () => ({
     meta: [
       { title: "Créditos de clientes | RicoSoft" },
@@ -332,7 +334,10 @@ function Creditos() {
                   return (
                     <Fragment key={c.id}>
                       <TableRow
-                        className="cursor-pointer"
+                        className={cn(
+                          "cursor-pointer",
+                          c.diasMora > 0 && "border-l-2 border-l-red-500 bg-red-50/40",
+                        )}
                         onClick={() => setClienteExpandido(expandido ? null : c.id)}
                       >
                         <TableCell className="px-2 py-3 text-slate-400">
@@ -343,7 +348,12 @@ function Creditos() {
                           )}
                         </TableCell>
                         <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
-                          {c.cliente}
+                          <span className="inline-flex items-center gap-1.5">
+                            {c.diasMora > 0 && (
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                            )}
+                            {c.cliente}
+                          </span>
                         </TableCell>
                         <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
                           {money(c.saldo)}
@@ -351,7 +361,7 @@ function Creditos() {
                         <TableCell
                           className={cn(
                             "num px-4 py-3 text-right text-xs",
-                            c.vencido > 0 ? "font-bold text-slate-900" : "text-slate-400",
+                            c.vencido > 0 ? "font-bold text-red-600" : "text-slate-400",
                           )}
                         >
                           {c.vencido > 0 ? money(c.vencido) : "—"}
@@ -364,7 +374,12 @@ function Creditos() {
                             <p className="text-[10px] text-slate-400">{c.estado}</p>
                           )}
                         </TableCell>
-                        <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">
+                        <TableCell
+                          className={cn(
+                            "num px-4 py-3 text-right text-xs",
+                            c.diasMora > 0 ? "font-bold text-red-600" : "text-slate-600",
+                          )}
+                        >
                           {c.diasMora > 0 ? `${c.diasMora} días` : "—"}
                         </TableCell>
                         <TableCell className="px-4 py-3">
@@ -810,7 +825,10 @@ function PanelCarteraSiesa() {
               return (
                 <Fragment key={clave}>
                   <TableRow
-                    className="cursor-pointer"
+                    className={cn(
+                      "cursor-pointer",
+                      c.diasMora > 0 && "border-l-2 border-l-red-500 bg-red-50/40",
+                    )}
                     onClick={() => setClienteExpandido(expandido ? null : clave)}
                   >
                     <TableCell className="px-2 py-3 text-slate-400">
@@ -821,7 +839,12 @@ function PanelCarteraSiesa() {
                       )}
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <p className="font-bold text-xs text-slate-900">{c.cliente}</p>
+                      <p className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                        {c.diasMora > 0 && (
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        )}
+                        {c.cliente}
+                      </p>
                       {c.nit && <p className="text-[11px] font-mono text-slate-500">NIT {c.nit}</p>}
                     </TableCell>
                     <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
@@ -830,7 +853,7 @@ function PanelCarteraSiesa() {
                     <TableCell
                       className={cn(
                         "num px-4 py-3 text-right text-xs",
-                        c.vencido > 0 ? "font-bold text-slate-900" : "text-slate-400",
+                        c.vencido > 0 ? "font-bold text-red-600" : "text-slate-400",
                       )}
                     >
                       {c.vencido > 0 ? money(c.vencido) : "—"}
@@ -841,7 +864,12 @@ function PanelCarteraSiesa() {
                       </p>
                       <p className="text-[10px] text-slate-400">{c.estado}</p>
                     </TableCell>
-                    <TableCell className="num px-4 py-3 text-right text-xs text-slate-600">
+                    <TableCell
+                      className={cn(
+                        "num px-4 py-3 text-right text-xs",
+                        c.diasMora > 0 ? "font-bold text-red-600" : "text-slate-600",
+                      )}
+                    >
                       {c.diasMora > 0 ? `${c.diasMora} días` : "—"}
                     </TableCell>
                     <TableCell className="px-4 py-3">

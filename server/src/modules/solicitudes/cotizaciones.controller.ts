@@ -250,6 +250,16 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
       });
     }
 
+    // Mismo control de separación de funciones que cambiarEstadoSolicitud:
+    // el precio final que se aprueba depende de cuál cotización gana, así
+    // que el propio solicitante no puede decidir eso — igual que no puede
+    // aprobar/rechazar su propia solicitud.
+    if (solicitud.solicitanteId && solicitud.solicitanteId === req.user!.id) {
+      return res.status(403).json({
+        message: "No puedes seleccionar la cotización ganadora de una solicitud que tú mismo creaste.",
+      });
+    }
+
     const cotizaciones = await req.tenantPrisma!.cotizacionProveedor.findMany({
       where: { solicitudCompraId: id, tenantId },
     });

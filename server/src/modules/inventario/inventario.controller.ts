@@ -1,7 +1,10 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
-import { leerExistenciasSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import {
+  leerExistenciasSiesa,
+  leerPedidosComprometidosSiesa,
+} from "../integraciones-siesa/siesa-inventario.service";
 import {
   leerVentasMensualesPorProductoSiesa,
   leerComprasPorClienteProductoSiesa,
@@ -524,4 +527,98 @@ export const actualizarConfiguracionInventario = async (
   });
 
   return res.json(config);
+};
+
+/**
+ * Detalle de pedidos de venta que originan el "Comprometido (estimado)" de
+ * un ítem (tarjeta del KPI en /inventario/resumen) — NO recalcula ni
+ * reemplaza ese KPI, que sigue viniendo exclusivamente de
+ * f400_cant_comprometida_1 (leerExistenciasSiesa/calcularResumenInventarioSiesa,
+ * sin tocar). Este endpoint solo explica de dónde sale ese número, leyendo
+ * en vivo t431_cm_pv_movto/t430_cm_pv_docto (ver
+ * leerPedidosComprometidosSiesa). `itemRowId` viene del path, `ciaId`
+ * SIEMPRE del tenant autenticado — nunca de query/body/path, mismo
+ * principio de autoridad que el resto de este controller.
+ */
+export const obtenerPedidosComprometidosItem = async (req: AuthenticatedRequest, res: Response) => {
+  const itemRowId = Number(req.params.itemRowId);
+  if (!Number.isInteger(itemRowId) || itemRowId <= 0) {
+    return res.status(400).json({ message: "itemRowId inválido." });
+  }
+
+  const tenantId = req.user!.tenantId;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
+
+  if (!tenant?.siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
+  }
+
+  try {
+    const pedidos = await leerPedidosComprometidosSiesa(tenant.siesaCiaId, itemRowId);
+    const totalCantidadComprometida = pedidos.reduce((acc, p) => acc + p.cantidadComprometida, 0);
+    return res.json({
+      disponible: true,
+      pedidos,
+      totalCantidadComprometida,
+      // El detalle puede venir vacío aunque el KPI principal (t400) tenga
+      // comprometido>0 para este ítem — discrepancia real conocida (0,5%
+      // de las unidades en la verificación en vivo), no un error. El
+      // frontend usa este flag para distinguir "no hay compromiso" de "hay
+      // compromiso pero no se identificó el documento de origen".
+      sinDocumentoIdentificable: pedidos.length === 0,
+    });
+  } catch (error) {
+    console.error("Error al leer pedidos comprometidos desde Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
+  }
+};
+
+/**
+ * Mismo origen que `obtenerPedidosComprometidosItem`, sin filtrar por
+ * ítem — la tarjeta "Comprometido (estimado)" es un agregado de TODO el
+ * inventario, así que su detalle completo tampoco debe obligar a buscar un
+ * producto primero. Sigue siendo una sola consulta a Siesa (sin loop);
+ * `ciaId` sigue viniendo exclusivamente del tenant autenticado.
+ */
+export const obtenerPedidosComprometidosTodos = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  const tenantId = req.user!.tenantId;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { siesaCiaId: true },
+  });
+
+  if (!tenant?.siesaCiaId) {
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+    });
+  }
+
+  try {
+    const pedidos = await leerPedidosComprometidosSiesa(tenant.siesaCiaId);
+    const totalCantidadComprometida = pedidos.reduce((acc, p) => acc + p.cantidadComprometida, 0);
+    return res.json({
+      disponible: true,
+      pedidos,
+      totalCantidadComprometida,
+    });
+  } catch (error) {
+    console.error("Error al leer pedidos comprometidos desde Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+    });
+  }
 };

@@ -74,6 +74,7 @@ model Tenant {
   excepcionesImportacion         ImportacionExcepcion[]
   catalogosValor                 CatalogoValor[]
   plantillasNotificacion         PlantillaNotificacion[]
+  publicaciones                  Publicacion[]
 }
 
 model User {
@@ -114,6 +115,7 @@ model User {
   excepcionesImportacionResueltas  ImportacionExcepcion[]     @relation("ImportacionExcepcionResueltoPor")
   perfilesFuncionales              UsuarioPerfilFuncional[]
   analisisGuardados                AnalisisGuardado[]
+  publicacionesCreadas             Publicacion[]              @relation("PublicacionAutor")
   colaborador                      Colaborador?               @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   departamento                     Departamento?              @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rolRel                           Rol?                       @relation(fields: [rolId], references: [id])
@@ -205,7 +207,11 @@ model Membresia {
 model Auditoria {
   id              String   @id @default(uuid()) @db.UniqueIdentifier
   tenantId        String   @db.UniqueIdentifier
-  usuarioId       String   @db.UniqueIdentifier
+  /// Nullable a propósito: si el usuario actor se borra (ver eliminarUsuario
+  /// con forzado), el registro de auditoría se conserva — solo se
+  /// desvincula la FK — porque `detalle` ya incluye el nombre en texto libre
+  /// y la trazabilidad del EVENTO importa más que mantener viva la FK.
+  usuarioId       String?  @db.UniqueIdentifier
   usuarioAfectado String?  @db.VarChar(255)
   accion          String   @db.VarChar(100)
   detalle         String   @db.Text
@@ -220,7 +226,7 @@ model Auditoria {
   datosNuevos     String?  @db.Text
   createdAt       DateTime @default(now())
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  usuario         User     @relation("UsuarioOrigen", fields: [usuarioId], references: [id])
+  usuario         User?    @relation("UsuarioOrigen", fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId])
 }
@@ -451,7 +457,10 @@ model SincronizacionSiesaLog {
   ciaId                 Int
   /// EN_COLA | EN_CURSO | COMPLETADO | FALLIDO | CANCELADO
   estado                String    @default("EN_COLA") @db.VarChar(20)
-  iniciadoPorId         String    @db.UniqueIdentifier
+  /// Nullable a propósito: si el usuario que inició la sincronización se
+  /// borra (ver eliminarUsuario con forzado), el historial de la corrida se
+  /// conserva y solo se desvincula la FK.
+  iniciadoPorId         String?   @db.UniqueIdentifier
   iniciadoEn            DateTime  @default(now())
   finalizadoEn          DateTime?
   leidos                Int       @default(0)
@@ -468,7 +477,7 @@ model SincronizacionSiesaLog {
   /// periódicamente y se detiene si está en true, en vez de matar el proceso.
   cancelacionSolicitada Boolean   @default(false)
   tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  iniciadoPor           User      @relation(fields: [iniciadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  iniciadoPor           User?     @relation(fields: [iniciadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId, estado])
   @@index([tenantId, iniciadoEn])
@@ -581,14 +590,17 @@ model Pago {
   comprobanteRuta     String?  @db.VarChar(500)
   comprobanteMime     String?  @db.VarChar(100)
   comprobanteTamano   Int?
-  registradoPorId     String   @db.UniqueIdentifier
+  /// Nullable a propósito: si el usuario que registró el pago se borra (ver
+  /// eliminarUsuario con forzado), el pago se conserva íntegro — el nombre ya
+  /// queda guardado en registradoPorNombre, solo se desvincula la FK.
+  registradoPorId     String?  @db.UniqueIdentifier
   registradoPorNombre String   @db.VarChar(255)
   observaciones       String?  @db.Text
   estado              String   @default("Confirmado") @db.VarChar(20)
   createdAt           DateTime @default(now())
   tenant              Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
   factura             Factura  @relation(fields: [facturaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  registradoPor       User     @relation("PagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  registradoPor       User?    @relation("PagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId])
   @@index([facturaId])
@@ -665,13 +677,16 @@ model CotizacionProveedor {
   archivoRuta       String          @db.VarChar(500)
   archivoMime       String          @db.VarChar(100)
   archivoTamano     Int
-  subidoPorId       String          @db.UniqueIdentifier
+  /// Nullable a propósito: si el usuario que subió la cotización se borra
+  /// (ver eliminarUsuario con forzado), la cotización se conserva íntegra —
+  /// el nombre ya queda guardado en subidoPorNombre, solo se desvincula la FK.
+  subidoPorId       String?         @db.UniqueIdentifier
   subidoPorNombre   String          @db.VarChar(255)
   createdAt         DateTime        @default(now())
   tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   solicitudCompra   SolicitudCompra @relation(fields: [solicitudCompraId], references: [id], onDelete: Cascade)
   proveedorRel      Proveedor?      @relation(fields: [proveedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subidoPor         User            @relation("CotizacionProveedorSubidaPor", fields: [subidoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subidoPor         User?           @relation("CotizacionProveedorSubidaPor", fields: [subidoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId])
   @@index([solicitudCompraId])
@@ -836,34 +851,34 @@ model TomaFisicaLinea {
 /// backend usa los valores por defecto documentados en
 /// lib/inventario-siesa.ts, lib/cobertura-siesa.ts, etc.
 model ConfiguracionInventario {
-  id                    String   @id @default(uuid()) @db.UniqueIdentifier
-  tenantId              String   @unique @db.UniqueIdentifier
+  id                              String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                        String   @unique @db.UniqueIdentifier
   /// Días sin venta o menos: "vendible".
-  diasVendible          Int      @default(60)
+  diasVendible                    Int      @default(60)
   /// Días sin venta o menos (y > diasVendible): "exceso"; más: "obsolescencia".
-  diasExceso            Int      @default(180)
+  diasExceso                      Int      @default(180)
   /// Días de cobertura o menos: riesgo de ruptura de stock.
-  diasRupturaCobertura  Int      @default(15)
+  diasRupturaCobertura            Int      @default(15)
   /// Días de cobertura o más: sobre-cobertura (exceso de inventario frente a la venta).
-  diasSobreCobertura    Int      @default(180)
+  diasSobreCobertura              Int      @default(180)
   /// Inventario objetivo (Fase 6): días de cobertura que el negocio quiere mantener en stock — usado por domain/planeacion/inventario-objetivo.ts.
-  coberturaObjetivoDias Int      @default(45)
+  coberturaObjetivoDias           Int      @default(45)
   /// Multiplicador de seguridad sobre el inventario objetivo (1.0 = sin margen extra; 1.2 = 20% adicional de colchón).
-  factorSeguridad       Float    @default(1.0)
+  factorSeguridad                 Float    @default(1.0)
   /// Variabilidad de demanda (coeficiente de variación) a partir de la cual se considera "alta" — lib/demanda-siesa.ts.
-  umbralVariabilidadAltaDemanda    Float @default(0.75)
+  umbralVariabilidadAltaDemanda   Float    @default(0.75)
   /// Fracción de pérdida de rotación a partir de la cual se marca como relevante — lib/demanda-siesa.ts.
-  umbralPerdidaRotacionDemanda     Float @default(0.5)
+  umbralPerdidaRotacionDemanda    Float    @default(0.5)
   /// Porcentaje de tendencia (creciente/decreciente) a partir del cual se considera "fuerte" — lib/demanda-siesa.ts.
-  umbralTendenciaFuertePctDemanda  Float @default(20)
+  umbralTendenciaFuertePctDemanda Float    @default(20)
   /// Porcentaje de diferencia entre TRM oficial y TRM de la orden a partir del cual se alerta al usuario.
-  umbralAlertaTrmPct              Float @default(2)
+  umbralAlertaTrmPct              Float    @default(2)
   /// Plazo de crédito/renovación por defecto (días) cuando no se especifica uno propio.
-  plazoCreditoDiasDefecto         Int   @default(30)
+  plazoCreditoDiasDefecto         Int      @default(30)
   /// Mínimo de cotizaciones de proveedor requeridas para poder aprobar una SolicitudCompra.
-  minimoCotizacionesSolicitud     Int   @default(3)
-  updatedAt             DateTime @updatedAt
-  tenant                Tenant   @relation(fields: [tenantId], references: [id])
+  minimoCotizacionesSolicitud     Int      @default(3)
+  updatedAt                       DateTime @updatedAt
+  tenant                          Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 /// Catálogo genérico de valores de referencia (comercio internacional, CRM,
@@ -911,6 +926,44 @@ model PlantillaNotificacion {
   tenant     Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@unique([tipoEvento, tenantId])
+}
+
+/// Contenido corporativo mostrado en el Home ("Inicio"): novedades, avisos y
+/// próximos eventos. Mismo patrón de alcance GENERAL/TENANT que
+/// PlantillaNotificacion/Departamento/Rol — nunca se filtra en el frontend,
+/// el backend solo devuelve lo que corresponde al tenant de la sesión (más lo
+/// GENERAL, visible en todas las empresas del grupo).
+model Publicacion {
+  id       String  @id @default(uuid()) @db.UniqueIdentifier
+  tenantId String? @db.UniqueIdentifier
+
+  /// NOVEDAD (sección "Novedades de la organización") | AVISO (sección
+  /// "Información importante") | EVENTO (sección "Próximos eventos").
+  categoria String @db.VarChar(20)
+  /// Etiqueta libre dentro de la categoría para diferenciar visualmente sin
+  /// necesitar un enum cerrado (ej. "Comunicado", "Seguridad", "Gestión
+  /// Humana", "Sistemas").
+  tipo      String @db.VarChar(50)
+  titulo    String @db.VarChar(255)
+  contenido String @db.NVarChar(Max)
+
+  fechaPublicacion DateTime  @default(now())
+  /// Si se cumple, la publicación deja de listarse aunque siga activa=true
+  /// (evita tener que recordar desactivarla a mano).
+  fechaVencimiento DateTime?
+  /// Solo aplica a categoria=EVENTO: cuándo ocurre el evento (distinto de
+  /// fechaPublicacion, que es cuándo se publicó el aviso del evento).
+  fechaEvento      DateTime?
+
+  activo    Boolean  @default(true)
+  autorId   String   @db.UniqueIdentifier
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  autor  User    @relation("PublicacionAutor", fields: [autorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId, categoria, activo])
 }
 
 /// Plan de producción con estados — Etapa J del módulo Producción &

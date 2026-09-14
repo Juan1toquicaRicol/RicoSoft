@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { LayoutGrid, ArrowUp, ArrowDown, Building2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { fetchAuth } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
@@ -10,6 +11,7 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { useModulos } from "@/hooks/use-modulos";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -52,17 +54,29 @@ function ModulosConfigPage() {
   }, []);
 
   const handleCambiarDepartamento = async (id: string, departamentoId: string) => {
-    await actualizarModulo(id, {
-      departamentoId: departamentoId === SIN_DEPARTAMENTO ? null : departamentoId,
-    });
+    try {
+      await actualizarModulo(id, {
+        departamentoId: departamentoId === SIN_DEPARTAMENTO ? null : departamentoId,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el departamento.");
+    }
   };
 
   const handleToggleActivo = async (id: string, activo: boolean) => {
-    await actualizarModulo(id, { activo });
+    try {
+      await actualizarModulo(id, { activo });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el estado del módulo.");
+    }
   };
 
   const handleCambiarPermiso = async (id: string, permisoClave: string) => {
-    await actualizarModulo(id, { permisoClave: permisoClave.trim() || null });
+    try {
+      await actualizarModulo(id, { permisoClave: permisoClave.trim() || null });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el permiso requerido.");
+    }
   };
 
   const handleMover = async (index: number, direccion: -1 | 1) => {
@@ -153,11 +167,11 @@ function ModulosConfigPage() {
                   </TableCell>
                   <TableCell>
                     {puedeGestionar ? (
-                      <input
+                      <Input
                         defaultValue={m.permisoClave ?? ""}
                         placeholder="Sin restricción"
                         onBlur={(e) => handleCambiarPermiso(m.id, e.target.value)}
-                        className="h-8 w-40 rounded-md border border-slate-300 bg-white px-2 text-xs font-mono"
+                        className="h-8 w-40 text-xs font-mono"
                         title="Código de permiso (p. ej. facturas.ver). Vacío = visible para cualquier usuario autenticado."
                       />
                     ) : m.permisoClave ? (

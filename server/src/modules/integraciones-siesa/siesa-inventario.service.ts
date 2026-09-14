@@ -1,4 +1,8 @@
 import { getSiesaPool } from "../../config/siesa";
+import {
+  determinarEstadoPedidoVentaSiesa,
+  type EstadoPedidoVentaSiesa,
+} from "../../lib/pedidos-venta-siesa";
 
 /**
  * Lectura de inventario real desde Siesa/UnoEE (t400_cm_existencia —
@@ -359,5 +363,182 @@ export async function buscarItemsSiesa(
     descripcion: r.descripcion?.trim() || null,
     referencia: r.referencia?.trim() || null,
     unidadMedida: r.unidadMedida?.trim() || null,
+  }));
+}
+
+/**
+ * Detalle de pedidos de venta que generan el "Comprometido (estimado)" de
+ * un ítem — origen real verificado en vivo de f400_cant_comprometida_1
+ * (ver auditoría cerrada: t431_cm_pv_movto.f431_cant1_comprometida
+ * coincide en 99,5% de las unidades comprometidas de t400 para cia 1,
+ * agrupando por ítem+bodega; el 0,5% restante es una discrepancia real sin
+ * explicación identificada, no se fuerza a cuadrar). Un solo SELECT
+ * parametrizado, sin N+1. Cliente resuelto vía t200_mm_terceros (misma
+ * tabla y patrón de join que siesa-ventas.service.ts) priorizando
+ * f430_rowid_tercero_fact sobre f430_rowid_tercero_rem cuando ambos
+ * existen.
+ */
+export interface PedidoComprometidoSiesa {
+  pvDoctoRowId: number;
+  numeroDocumento: number;
+  tipoDocto: number | null;
+  clienteRowId: number | null;
+  clienteNombre: string | null;
+  itemRowId: number;
+  referencia: string | null;
+  descripcion: string | null;
+  cantidadPedida: number;
+  cantidadComprometida: number;
+  cantidadRemisionada: number;
+  cantidadFacturada: number;
+  fechaPedido: Date | null;
+  fechaEntrega: Date | null;
+  vendedorRowId: number | null;
+  vendedorNombre: string | null;
+  estado: EstadoPedidoVentaSiesa;
+  /** Estado crudo de la línea (t431.f431_ind_estado) — dato técnico, se
+   * expone junto al `estado` interpretado para la vista de "todos los
+   * detalles" que no quiere ocultar nada. */
+  indEstadoLinea: number | null;
+  /** Estado crudo del documento (t430.f430_ind_estado). */
+  indEstadoDocto: number | null;
+  /** Flags individuales — mismos que ya alimentan `determinarEstadoPedidoVentaSiesa`,
+   * expuestos aparte porque la vista de detalle completo debe poder mostrar
+   * cada uno por separado, no solo la etiqueta ya interpretada. */
+  indUltEstadoAprobado: boolean | null;
+  indBackorderDocto: boolean | null;
+  indBackorderLinea: boolean | null;
+  indRetenidoMargen: boolean | null;
+  indRetenidoCupo: boolean | null;
+  indRetenidoMora: boolean | null;
+  indRetenidoBloqueo: boolean | null;
+  indRetenidoAnticipo: boolean | null;
+  indRemisionado: boolean | null;
+  indFacturado: boolean | null;
+}
+
+export async function leerPedidosComprometidosSiesa(
+  ciaId: number,
+  itemRowId?: number,
+): Promise<PedidoComprometidoSiesa[]> {
+  const pool = await getSiesaPool();
+  const request = pool.request().input("ciaId", ciaId);
+  if (itemRowId !== undefined) request.input("itemRowId", itemRowId);
+  const { recordset } = await request.query<{
+    pvDoctoRowId: number;
+    numeroDocumento: number;
+    tipoDocto: number | null;
+    clienteRowId: number | null;
+    clienteNombre: string | null;
+    itemRowId: number;
+    referencia: string | null;
+    descripcion: string | null;
+    cantidadPedida: number;
+    cantidadComprometida: number;
+    cantidadRemisionada: number;
+    cantidadFacturada: number;
+    fechaPedido: Date | null;
+    fechaEntrega: Date | null;
+    vendedorRowId: number | null;
+    vendedorNombre: string | null;
+    indEstadoLinea: number | null;
+    indEstadoDocto: number | null;
+    indUltEstadoAprobado: boolean | null;
+    indBackorderDocto: boolean | null;
+    indBackorderLinea: boolean | null;
+    indRetenidoMargen: boolean | null;
+    indRetenidoCupo: boolean | null;
+    indRetenidoMora: boolean | null;
+    indRetenidoBloqueo: boolean | null;
+    indRetenidoAnticipo: boolean | null;
+    indRemisionado: boolean | null;
+    indFacturado: boolean | null;
+  }>(`
+    SELECT
+      t430.f430_rowid AS pvDoctoRowId,
+      t430.f430_consec_docto AS numeroDocumento,
+      t430.f430_id_tipo_docto AS tipoDocto,
+      COALESCE(t430.f430_rowid_tercero_fact, t430.f430_rowid_tercero_rem) AS clienteRowId,
+      COALESCE(tcf.f200_razon_social, tcr.f200_razon_social) AS clienteNombre,
+      t431.f431_rowid_item_ext AS itemRowId,
+      it.f120_referencia AS referencia,
+      it.f120_descripcion AS descripcion,
+      t431.f431_cant1_pedida AS cantidadPedida,
+      t431.f431_cant1_comprometida AS cantidadComprometida,
+      t431.f431_cant1_remisionada AS cantidadRemisionada,
+      t431.f431_cant1_facturada AS cantidadFacturada,
+      t430.f430_id_fecha AS fechaPedido,
+      t431.f431_fecha_entrega AS fechaEntrega,
+      COALESCE(t431.f431_rowid_tercero_vendedor, t430.f430_rowid_tercero_vendedor) AS vendedorRowId,
+      COALESCE(tvl.f200_razon_social, tvd.f200_razon_social) AS vendedorNombre,
+      t431.f431_ind_estado AS indEstadoLinea,
+      t430.f430_ind_estado AS indEstadoDocto,
+      t430.f430_ind_ult_estado_aprobado AS indUltEstadoAprobado,
+      t430.f430_ind_backorder AS indBackorderDocto,
+      t431.f431_ind_backorder AS indBackorderLinea,
+      t430.f430_ind_retenido_margen AS indRetenidoMargen,
+      t430.f430_ind_retenido_cupo AS indRetenidoCupo,
+      t430.f430_ind_retenido_mora AS indRetenidoMora,
+      t430.f430_ind_retenido_bloqueo AS indRetenidoBloqueo,
+      t430.f430_ind_retenido_anticipo AS indRetenidoAnticipo,
+      t430.f430_ind_remisionado AS indRemisionado,
+      t430.f430_ind_facturado AS indFacturado
+    FROM t431_cm_pv_movto t431
+    INNER JOIN t430_cm_pv_docto t430 ON t430.f430_rowid = t431.f431_rowid_pv_docto
+    LEFT JOIN t120_mc_items it ON it.f120_rowid = t431.f431_rowid_item_ext
+    LEFT JOIN t200_mm_terceros tcf ON tcf.f200_rowid = t430.f430_rowid_tercero_fact
+    LEFT JOIN t200_mm_terceros tcr ON tcr.f200_rowid = t430.f430_rowid_tercero_rem
+    LEFT JOIN t200_mm_terceros tvl ON tvl.f200_rowid = t431.f431_rowid_tercero_vendedor
+    LEFT JOIN t200_mm_terceros tvd ON tvd.f200_rowid = t430.f430_rowid_tercero_vendedor
+    WHERE t431.f431_id_cia = @ciaId
+      ${itemRowId !== undefined ? "AND t431.f431_rowid_item_ext = @itemRowId" : ""}
+      AND t431.f431_cant1_comprometida > 0
+    ORDER BY t430.f430_id_fecha DESC
+  `);
+
+  return recordset.map((r) => ({
+    pvDoctoRowId: r.pvDoctoRowId,
+    numeroDocumento: r.numeroDocumento,
+    tipoDocto: r.tipoDocto,
+    clienteRowId: r.clienteRowId,
+    clienteNombre: r.clienteNombre?.trim() || null,
+    itemRowId: r.itemRowId,
+    referencia: r.referencia?.trim() || null,
+    descripcion: r.descripcion?.trim() || null,
+    cantidadPedida: Number(r.cantidadPedida ?? 0),
+    cantidadComprometida: Number(r.cantidadComprometida ?? 0),
+    cantidadRemisionada: Number(r.cantidadRemisionada ?? 0),
+    cantidadFacturada: Number(r.cantidadFacturada ?? 0),
+    fechaPedido: r.fechaPedido,
+    fechaEntrega: r.fechaEntrega,
+    vendedorRowId: r.vendedorRowId,
+    vendedorNombre: r.vendedorNombre?.trim() || null,
+    indEstadoLinea: r.indEstadoLinea,
+    indEstadoDocto: r.indEstadoDocto,
+    indUltEstadoAprobado: r.indUltEstadoAprobado,
+    indBackorderDocto: r.indBackorderDocto,
+    indBackorderLinea: r.indBackorderLinea,
+    indRetenidoMargen: r.indRetenidoMargen,
+    indRetenidoCupo: r.indRetenidoCupo,
+    indRetenidoMora: r.indRetenidoMora,
+    indRetenidoBloqueo: r.indRetenidoBloqueo,
+    indRetenidoAnticipo: r.indRetenidoAnticipo,
+    indRemisionado: r.indRemisionado,
+    indFacturado: r.indFacturado,
+    estado: determinarEstadoPedidoVentaSiesa({
+      indUltEstadoAprobado: r.indUltEstadoAprobado,
+      indBackorderDocto: r.indBackorderDocto,
+      indBackorderLinea: r.indBackorderLinea,
+      indRetenidoMargen: r.indRetenidoMargen,
+      indRetenidoCupo: r.indRetenidoCupo,
+      indRetenidoMora: r.indRetenidoMora,
+      indRetenidoBloqueo: r.indRetenidoBloqueo,
+      indRetenidoAnticipo: r.indRetenidoAnticipo,
+      indRemisionado: r.indRemisionado,
+      indFacturado: r.indFacturado,
+      cantPedida: Number(r.cantidadPedida ?? 0),
+      cantRemisionada: Number(r.cantidadRemisionada ?? 0),
+      cantFacturada: Number(r.cantidadFacturada ?? 0),
+    }),
   }));
 }

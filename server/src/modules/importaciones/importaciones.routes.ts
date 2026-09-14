@@ -72,6 +72,10 @@ import {
   eliminarRequisitoProveedor,
 } from "./importaciones-requisitos-proveedor.controller";
 import {
+  obtenerResumenAnaliticaImportaciones,
+  listarOperacionesAnaliticaImportaciones,
+} from "./importaciones-analitica.controller";
+import {
   crearRequisitoProveedorSchema,
   actualizarRequisitoProveedorSchema,
 } from "./importaciones-requisitos-proveedor.schemas";
@@ -110,6 +114,21 @@ router.delete(
   "/proveedores/requisitos/:requisitoId",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_REQUISITOS_ELIMINAR),
   eliminarRequisitoProveedor,
+);
+
+// Analítica de Importaciones V1 — antes de "/:id" a propósito, mismo motivo
+// que /trm-oficial: si quedara después, Express interpretaría "analitica"
+// como un :id. Reutiliza IMPORTACIONES_VER (misma responsabilidad de
+// consulta que el resto del módulo), sin crear un permiso nuevo.
+router.get(
+  "/analitica/resumen",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
+  obtenerResumenAnaliticaImportaciones,
+);
+router.get(
+  "/analitica/operaciones",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
+  listarOperacionesAnaliticaImportaciones,
 );
 
 router.get("/", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), listarOrdenesCompraIntl);

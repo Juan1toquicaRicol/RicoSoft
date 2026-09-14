@@ -59,6 +59,9 @@ export const PERMISOS_SISTEMA = {
   CONFIGURACION_CATALOGOS: "configuracion.catalogos",
   CONFIGURACION_PLANTILLAS_NOTIFICACION: "configuracion.plantillas_notificacion",
 
+  // Módulo Publicaciones (novedades/avisos/eventos del Home)
+  PUBLICACIONES_GESTIONAR: "publicaciones.gestionar",
+
   // Módulo Gestión de Módulos (catálogo de módulos principales por departamento)
   MODULOS_VER: "modulos.ver",
   MODULOS_GESTIONAR: "modulos.gestionar",
@@ -167,6 +170,7 @@ export interface PermisoDefinicion {
     | "Reglas de Destinatarios"
     | "Proveedores"
     | "Configuración"
+    | "Publicaciones"
     | "Módulos"
     | "Auditoría"
     | "Facturas"
@@ -425,6 +429,15 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Gestionar plantillas de notificación",
     descripcion:
       "Permite crear, editar y eliminar plantillas de texto de notificaciones (título/mensaje con variables) usadas por facturas, solicitudes de compra y despachos.",
+  },
+
+  // Publicaciones
+  {
+    id: PERMISOS_SISTEMA.PUBLICACIONES_GESTIONAR,
+    modulo: "Publicaciones",
+    nombre: "Gestionar publicaciones del Home",
+    descripcion:
+      "Permite crear, editar y eliminar novedades, avisos y eventos mostrados en el Inicio.",
   },
 
   // Módulos

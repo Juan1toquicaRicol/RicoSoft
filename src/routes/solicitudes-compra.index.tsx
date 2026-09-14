@@ -76,6 +76,7 @@ import { useUsuariosPorDepartamento } from "@/hooks/use-usuarios-por-departament
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { requirePermisoGuard } from "@/lib/route-guards";
 import { money, Prioridad } from "@/lib/data";
 
 const PRIORIDADES_SOLICITUD: Prioridad[] = ["Baja", "Media", "Alta", "Urgente"];
@@ -102,6 +103,7 @@ const busquedaSolicitudSchema = z.object({
 });
 
 export const Route = createFileRoute("/solicitudes-compra/")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.SOLICITUDES_VER),
   head: () => ({
     meta: [
       { title: "Solicitudes de Compra | RicoSoft" },
@@ -160,6 +162,9 @@ function SolicitudesCompraPage() {
     id: string;
     item: string;
     area: string;
+    solicitanteId: string | null | undefined;
+    minimo: number;
+    maximo: number;
   } | null>(null);
   const {
     cotizaciones,
@@ -215,11 +220,18 @@ function SolicitudesCompraPage() {
     tiempoEntregaDias: 0,
   };
 
-  const abrirCotizaciones = (id: string, item: string, area: string) => {
+  const abrirCotizaciones = (
+    id: string,
+    item: string,
+    area: string,
+    solicitanteId: string | null | undefined,
+    minimo: number,
+    maximo: number,
+  ) => {
     setFormCotizacion(cotizacionFormInicial);
     setProveedorCotizacionSeleccionado(null);
     setArchivoCotizacion(null);
-    setCotizacionesModal({ id, item, area });
+    setCotizacionesModal({ id, item, area, solicitanteId, minimo, maximo });
   };
 
   const handleAgregarCotizacion = async (e: React.FormEvent) => {
@@ -543,209 +555,240 @@ function SolicitudesCompraPage() {
             ]}
           />
         </div>
-        <Table>
-          <TableHeader className="bg-slate-100/80">
-            <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Fecha
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Empresa
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Ítem Solicitado
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Departamento / Solicitante
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
-                Cant.
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Menor valor
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Prioridad
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Estado
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Acciones
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="text-slate-800 font-medium">
-            {gruposSolicitudes.map((grupo) => (
-              <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && (
-                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
-                )}
-                {grupo.filas.map((sol) => (
-                  <TableRow key={sol.id}>
-                    <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {new Date(sol.fechaSolicitud).toLocaleDateString("es-CO", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
-                      >
-                        {siglaEmpresa(sol.empresaId)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <Link
-                          to="/solicitudes-compra/$id"
-                          params={{ id: sol.id }}
-                          className="font-bold text-slate-900 text-xs hover:text-blue-800 hover:underline"
-                        >
-                          {sol.item}
-                        </Link>
-                        {sol.cotizacion && (
-                          <button
-                            type="button"
-                            title={`Ver cotización: ${sol.cotizacion.nombre}`}
-                            disabled={descargandoCotizacion}
-                            onClick={() => handleVerCotizacion(sol.id)}
-                            className="shrink-0 text-slate-400 hover:text-blue-700"
-                          >
-                            <Paperclip className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500 truncate max-w-[200px]">
-                        {sol.descripcion || "-"}
-                      </p>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <p className="font-semibold text-slate-900">{sol.solicitante}</p>
-                      <p className="text-[11px] text-slate-500">{sol.area}</p>
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-center font-bold text-xs text-slate-900">
-                      {sol.cantidad}
-                    </TableCell>
-                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                      {sol.cotizacionesResumen.menorValor != null
-                        ? money(sol.cotizacionesResumen.menorValor)
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-500">
-                      {sol.prioridad}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <EstadoBadge estado={sol.estado} />
-                      {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
-                        <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                          {sol.cotizacionesResumen.total}/{sol.cotizacionesResumen.maximo}{" "}
-                          cotizaciones
-                          {sol.cotizacionesResumen.tieneGanadora ? " · ganadora elegida" : ""}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
-                          <>
-                            {(puedeCrear || puedeAprobar) && (
-                              <Button
-                                size="xs"
-                                variant="outline"
-                                onClick={() => abrirCotizaciones(sol.id, sol.item, sol.area)}
-                                className="h-7 text-[11px]"
-                              >
-                                <FileSpreadsheet className="h-3 w-3 mr-1" /> Cotizaciones
-                              </Button>
-                            )}
-                            {puedeAprobar && (
-                              <Button
-                                size="xs"
-                                variant="success"
-                                disabled={
-                                  sol.cotizacionesResumen.total < sol.cotizacionesResumen.minimo ||
-                                  !sol.cotizacionesResumen.tieneGanadora
-                                }
-                                title={
-                                  sol.cotizacionesResumen.total < sol.cotizacionesResumen.minimo ||
-                                  !sol.cotizacionesResumen.tieneGanadora
-                                    ? `Se requiere al menos ${sol.cotizacionesResumen.minimo} cotización y una ganadora elegida.`
-                                    : undefined
-                                }
-                                onClick={() => abrirConfirmacion(sol.id, sol.item, "Aprobada")}
-                                className="h-7 text-[11px]"
-                              >
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
-                              </Button>
-                            )}
-                            {puedeRechazar && (
-                              <Button
-                                size="xs"
-                                variant="destructive"
-                                onClick={() => abrirConfirmacion(sol.id, sol.item, "Rechazada")}
-                                className="h-7 text-[11px]"
-                              >
-                                <XCircle className="h-3 w-3 mr-1" /> Rechazar
-                              </Button>
-                            )}
-                          </>
-                        )}
-                        {sol.estado === "Aprobada" && puedeComprar && (
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => abrirConfirmacion(sol.id, sol.item, "Comprado")}
-                            className="h-7 text-[11px]"
-                          >
-                            <Package className="h-3 w-3 mr-1" /> Marcar Comprado
-                          </Button>
-                        )}
-                        {puedeEliminar && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => setSolicitudAEliminar({ id: sol.id, item: sol.item })}
-                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </Fragment>
-            ))}
-            {filteredSolicitudes.length === 0 && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={9} className="p-0">
-                  {loading ? (
-                    <div className="py-12 text-center text-xs text-slate-500">
-                      Cargando solicitudes...
-                    </div>
-                  ) : error ? (
-                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
-                  ) : (
-                    <EmptyState
-                      icon={ShoppingBag}
-                      title="No hay solicitudes de compra en esta empresa"
-                      description='Haz clic en "Crear Solicitud de Compra" para registrar la primera.'
-                      action={
-                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
-                          <Plus className="h-4 w-4" /> Crear Solicitud de Compra
-                        </Button>
-                      }
-                    />
-                  )}
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-100/80">
+              <TableRow className="hover:bg-slate-100/80">
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Fecha
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Empresa
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Ítem Solicitado
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Departamento / Solicitante
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-center">
+                  Cant.
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Menor valor
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Prioridad
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                  Estado
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                  Acciones
+                </TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody className="text-slate-800 font-medium">
+              {gruposSolicitudes.map((grupo) => (
+                <Fragment key={grupo.clave || "sin-grupo"}>
+                  {grupo.clave && (
+                    <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={9} />
+                  )}
+                  {grupo.filas.map((sol) => (
+                    <TableRow key={sol.id}>
+                      <TableCell className="px-4 py-3 font-mono text-xs text-slate-500">
+                        {new Date(sol.fechaSolicitud).toLocaleDateString("es-CO", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                        >
+                          {siglaEmpresa(sol.empresaId)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Link
+                            to="/solicitudes-compra/$id"
+                            params={{ id: sol.id }}
+                            className="font-bold text-slate-900 text-xs hover:text-blue-800 hover:underline"
+                          >
+                            {sol.item}
+                          </Link>
+                          {sol.cotizacion && (
+                            <button
+                              type="button"
+                              title={`Ver cotización: ${sol.cotizacion.nombre}`}
+                              disabled={descargandoCotizacion}
+                              onClick={() => handleVerCotizacion(sol.id)}
+                              className="shrink-0 text-slate-400 hover:text-blue-700"
+                            >
+                              <Paperclip className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate max-w-[200px]">
+                          {sol.descripcion || "-"}
+                        </p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">{sol.solicitante}</p>
+                        <p className="text-[11px] text-slate-500">{sol.area}</p>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-center font-bold text-xs text-slate-900">
+                        {sol.cantidad}
+                      </TableCell>
+                      <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                        {sol.cotizacionesResumen.menorValor != null
+                          ? money(sol.cotizacionesResumen.menorValor)
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs text-slate-500">
+                        {sol.prioridad}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <EstadoBadge estado={sol.estado} />
+                        {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
+                          <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                            {sol.cotizacionesResumen.total}/{sol.cotizacionesResumen.maximo}{" "}
+                            cotizaciones
+                            {sol.cotizacionesResumen.tieneGanadora ? " · ganadora elegida" : ""}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          {(sol.estado === "Pendiente" || sol.estado === "En Cotización") && (
+                            <>
+                              {(puedeCrear || puedeAprobar) && (
+                                <Button
+                                  size="xs"
+                                  variant="outline"
+                                  onClick={() =>
+                                    abrirCotizaciones(
+                                      sol.id,
+                                      sol.item,
+                                      sol.area,
+                                      sol.solicitanteId,
+                                      sol.cotizacionesResumen.minimo,
+                                      sol.cotizacionesResumen.maximo,
+                                    )
+                                  }
+                                  className="h-7 text-[11px]"
+                                >
+                                  <FileSpreadsheet className="h-3 w-3 mr-1" /> Cotizaciones
+                                </Button>
+                              )}
+                              {puedeAprobar &&
+                                (() => {
+                                  const esPropia = sol.solicitanteId === user?.id;
+                                  const faltaCotizacion =
+                                    sol.cotizacionesResumen.total <
+                                      sol.cotizacionesResumen.minimo ||
+                                    !sol.cotizacionesResumen.tieneGanadora;
+                                  return (
+                                    <Button
+                                      size="xs"
+                                      variant="success"
+                                      disabled={esPropia || faltaCotizacion}
+                                      title={
+                                        esPropia
+                                          ? "No puedes aprobar una solicitud que tú mismo creaste."
+                                          : faltaCotizacion
+                                            ? `Se requiere al menos ${sol.cotizacionesResumen.minimo} cotización y una ganadora elegida.`
+                                            : undefined
+                                      }
+                                      onClick={() =>
+                                        abrirConfirmacion(sol.id, sol.item, "Aprobada")
+                                      }
+                                      className="h-7 text-[11px]"
+                                    >
+                                      <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
+                                    </Button>
+                                  );
+                                })()}
+                              {puedeRechazar &&
+                                (() => {
+                                  const esPropia = sol.solicitanteId === user?.id;
+                                  return (
+                                    <Button
+                                      size="xs"
+                                      variant="destructive"
+                                      disabled={esPropia}
+                                      title={
+                                        esPropia
+                                          ? "No puedes rechazar una solicitud que tú mismo creaste."
+                                          : undefined
+                                      }
+                                      onClick={() =>
+                                        abrirConfirmacion(sol.id, sol.item, "Rechazada")
+                                      }
+                                      className="h-7 text-[11px]"
+                                    >
+                                      <XCircle className="h-3 w-3 mr-1" /> Rechazar
+                                    </Button>
+                                  );
+                                })()}
+                            </>
+                          )}
+                          {sol.estado === "Aprobada" && puedeComprar && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => abrirConfirmacion(sol.id, sol.item, "Comprado")}
+                              className="h-7 text-[11px]"
+                            >
+                              <Package className="h-3 w-3 mr-1" /> Marcar Comprado
+                            </Button>
+                          )}
+                          {puedeEliminar && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => setSolicitudAEliminar({ id: sol.id, item: sol.item })}
+                              className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+              {filteredSolicitudes.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9} className="p-0">
+                    {loading ? (
+                      <div className="py-12 text-center text-xs text-slate-500">
+                        Cargando solicitudes...
+                      </div>
+                    ) : error ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : (
+                      <EmptyState
+                        icon={ShoppingBag}
+                        title="No hay solicitudes de compra en esta empresa"
+                        description='Haz clic en "Crear Solicitud de Compra" para registrar la primera.'
+                        action={
+                          <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                            <Plus className="h-4 w-4" /> Crear Solicitud de Compra
+                          </Button>
+                        }
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* MODAL CREAR SOLICITUD DE COMPRA */}
@@ -1077,100 +1120,120 @@ function SolicitudesCompraPage() {
               Cotizaciones de proveedor — {cotizacionesModal?.item}
             </DialogTitle>
             <DialogDescription className="text-slate-500">
-              Se requiere al menos 1 cotización completa y una elegida como ganadora para poder
-              aprobar la solicitud (hasta un máximo de 3).
+              Se requiere al menos {cotizacionesModal?.minimo ?? 1} cotización completa y una
+              elegida como ganadora para poder aprobar la solicitud (hasta un máximo de{" "}
+              {cotizacionesModal?.maximo ?? 3}).
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <Table>
-              <TableHeader className="bg-slate-100/80">
-                <TableRow className="hover:bg-slate-100/80">
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
-                    Proveedor
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
-                    NIT
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
-                    Valor COP
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
-                    Entrega (días)
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
-                    Documento
-                  </TableHead>
-                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
-                    Acciones
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="text-slate-800 font-medium">
-                {cotizaciones.map((c) => (
-                  <TableRow key={c.id} className={c.esGanadora ? "bg-blue-50/60" : undefined}>
-                    <TableCell className="px-3 py-2 text-xs font-semibold">
-                      <span className="inline-flex items-center gap-1.5">
-                        {c.esGanadora && <Trophy className="h-3.5 w-3.5 text-blue-700" />}
-                        {c.proveedorNombre}
-                      </span>
-                    </TableCell>
-                    <TableCell className="px-3 py-2 text-xs">{c.proveedorNit}</TableCell>
-                    <TableCell className="num px-3 py-2 text-right text-xs font-bold">
-                      {money(c.valorTotalCOP)}
-                    </TableCell>
-                    <TableCell className="px-3 py-2 text-center text-xs">
-                      {c.tiempoEntregaDias}
-                    </TableCell>
-                    <TableCell className="px-3 py-2 text-center">
-                      <button
-                        type="button"
-                        title={`Ver documento: ${c.archivo.nombre}`}
-                        onClick={() => handleVerCotizacionProveedor(c.id)}
-                        className="text-slate-400 hover:text-blue-700"
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-100/80">
+                  <TableRow className="hover:bg-slate-100/80">
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
+                      Proveedor
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2">
+                      NIT
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                      Valor COP
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                      Entrega (días)
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-center">
+                      Documento
+                    </TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-3 py-2 text-right">
+                      Acciones
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="text-slate-800 font-medium">
+                  {cotizaciones.map((c) => (
+                    <TableRow key={c.id} className={c.esGanadora ? "bg-blue-50/60" : undefined}>
+                      <TableCell className="px-3 py-2 text-xs font-semibold">
+                        <span className="inline-flex items-center gap-1.5">
+                          {c.esGanadora && <Trophy className="h-3.5 w-3.5 text-blue-700" />}
+                          {c.proveedorNombre}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-xs">{c.proveedorNit}</TableCell>
+                      <TableCell className="num px-3 py-2 text-right text-xs font-bold">
+                        {money(c.valorTotalCOP)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center text-xs">
+                        {c.tiempoEntregaDias}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          title={`Ver documento: ${c.archivo.nombre}`}
+                          onClick={() => handleVerCotizacionProveedor(c.id)}
+                          className="text-slate-400 hover:text-blue-700"
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          {puedeAprobar &&
+                            !c.esGanadora &&
+                            (() => {
+                              const esPropia = cotizacionesModal?.solicitanteId === user?.id;
+                              return (
+                                <Button
+                                  size="xs"
+                                  variant="outline"
+                                  disabled={
+                                    esPropia ||
+                                    cotizaciones.length < 1 ||
+                                    accionCotizacionId === c.id
+                                  }
+                                  title={
+                                    esPropia
+                                      ? "No puedes elegir la cotización ganadora de una solicitud que tú mismo creaste."
+                                      : undefined
+                                  }
+                                  onClick={() => handleSeleccionarGanadora(c.id)}
+                                  className="h-6 text-[10px]"
+                                >
+                                  Elegir ganadora
+                                </Button>
+                              );
+                            })()}
+                          {puedeCrear && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              disabled={accionCotizacionId === c.id}
+                              onClick={() => handleEliminarCotizacion(c.id)}
+                              className="h-6 text-[10px] text-slate-500 hover:text-slate-900"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {cotizaciones.length === 0 && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={6}
+                        className="px-3 py-6 text-center text-xs text-slate-500"
                       >
-                        <Paperclip className="h-3.5 w-3.5" />
-                      </button>
-                    </TableCell>
-                    <TableCell className="px-3 py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        {puedeAprobar && !c.esGanadora && (
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            disabled={cotizaciones.length < 1 || accionCotizacionId === c.id}
-                            onClick={() => handleSeleccionarGanadora(c.id)}
-                            className="h-6 text-[10px]"
-                          >
-                            Elegir ganadora
-                          </Button>
-                        )}
-                        {puedeCrear && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            disabled={accionCotizacionId === c.id}
-                            onClick={() => handleEliminarCotizacion(c.id)}
-                            className="h-6 text-[10px] text-slate-500 hover:text-slate-900"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {cotizaciones.length === 0 && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={6} className="px-3 py-6 text-center text-xs text-slate-500">
-                      {cargandoCotizaciones
-                        ? "Cargando cotizaciones..."
-                        : errorCotizaciones || "Todavía no hay cotizaciones registradas."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                        {cargandoCotizaciones
+                          ? "Cargando cotizaciones..."
+                          : errorCotizaciones || "Todavía no hay cotizaciones registradas."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             {puedeCrear && cotizaciones.length < 3 && !cotizaciones.some((c) => c.esGanadora) && (
               <form

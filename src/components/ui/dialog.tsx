@@ -38,7 +38,15 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+        // max-h-[90vh] + overflow-y-auto por defecto: sin esto, un diálogo
+        // con más contenido del que cabe en la ventana (ej. una lista que
+        // crece con datos, como membresías de un usuario) se desborda del
+        // viewport — está en position:fixed sin scroll propio, así que el
+        // contenido de más simplemente queda fuera de la pantalla (el botón
+        // de cerrar del footer incluido). Cualquier diálogo puntual puede
+        // seguir pisando esto con su propio max-h-* si de verdad lo necesita
+        // más chico (cn() usa tailwind-merge, la clase más específica gana).
+        "fixed left-[50%] top-[50%] z-50 grid max-h-[90vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
         className,
       )}
       {...props}

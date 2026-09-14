@@ -2,11 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
-  ChevronRight,
   ShieldAlert,
-  Users,
-  ShieldCheck,
-  Key,
   Building2,
   History,
   Settings,
@@ -36,7 +32,6 @@ import {
   Target,
   Gauge,
   ShoppingBag,
-  Tags,
   ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -47,7 +42,7 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission, canAccessAdmin } from "@/lib/session";
 import { useModulosMenu } from "@/hooks/use-modulos";
 import { useTenantsAccesibles } from "@/hooks/use-tenants-accesibles";
-import { abreviarNombreTenant } from "@/lib/tenant-context";
+import { abreviarNombreTenant, empresaIdDeTenant, siglaEmpresa } from "@/lib/tenant-context";
 import { NotificationBell } from "@/components/notification-bell";
 import {
   DropdownMenu,
@@ -90,11 +85,57 @@ interface AppShellProps {
   actions?: React.ReactNode;
 }
 
+// No existe un archivo de logo individual por empresa — solo el logo del
+// grupo y `3logos.jpg` (FlexiPack, Ricol y Green Solutions apilados
+// verticalmente en ese orden, cada uno en su propio tercio). En vez de pedir
+// 3 archivos nuevos, se recorta ese mismo sprite con background-position
+// para mostrar solo el tercio que corresponde a la empresa activa.
+const ALTO_LOGO_EMPRESA = 28; // px, equivalente a h-7
+// 3logos.jpg mide 1545x2000px con los 3 logos apilados en tercios iguales
+// (667px de alto cada uno) — el ancho de recorte se calcula contra el alto
+// total escalado (ALTO_LOGO_EMPRESA * 3), no contra un solo tercio, para no
+// distorsionar el sprite.
+const ANCHO_LOGO_EMPRESA = Math.round((1545 / 2000) * (ALTO_LOGO_EMPRESA * 3));
+const POSICION_Y_LOGO: Record<string, "top" | "center" | "bottom"> = {
+  FL: "top",
+  RC: "center",
+  GR: "bottom",
+};
+
+/** Logo de la empresa (tenant) activa junto al título de cada pantalla. Si
+ * el tenant no mapea a ninguna de las 3 empresas conocidas (dato aún no
+ * migrado, entorno de pruebas, etc.) cae al logo del grupo como antes. */
+function LogoEmpresaActiva({ empresaId }: { empresaId: string | null }) {
+  if (!empresaId || !POSICION_Y_LOGO[empresaId]) {
+    return (
+      <img
+        src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
+        alt="Grupo Ricol"
+        className="h-7 w-auto shrink-0 hidden lg:block"
+      />
+    );
+  }
+  return (
+    <div
+      role="img"
+      aria-label={`Logo de ${siglaEmpresa(empresaId)}`}
+      className="hidden lg:block shrink-0 overflow-hidden"
+      style={{
+        width: ANCHO_LOGO_EMPRESA,
+        height: ALTO_LOGO_EMPRESA,
+        backgroundImage: "url(/3logos.jpg)",
+        backgroundSize: `${ANCHO_LOGO_EMPRESA}px ${ALTO_LOGO_EMPRESA * 3}px`,
+        backgroundPosition: `left ${POSICION_Y_LOGO[empresaId]}`,
+        backgroundRepeat: "no-repeat",
+      }}
+    />
+  );
+}
+
 export function AppShell({ children, title, description, actions }: AppShellProps) {
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
   const { user, loading, logout, switchTenant } = useSession();
-  const [adminMenuAbierto, setAdminMenuAbierto] = useState(pathname.startsWith("/configuracion"));
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const { modulos: modulosMenu } = useModulosMenu();
   // El id/nombre de la empresa ACTIVA siempre se lee de `user` (SessionContext,
@@ -153,14 +194,9 @@ export function AppShell({ children, title, description, actions }: AppShellProp
   const tieneAccesoAdmin = canAccessAdmin(user);
 
   // Permisos específicos para subopciones
-  const canVerUsuarios = hasPermission(user, PERMISOS_SISTEMA.USUARIOS_VER);
-  const canVerRoles = hasPermission(user, PERMISOS_SISTEMA.ROLES_VER);
-  const canVerPermisos = hasPermission(user, PERMISOS_SISTEMA.PERMISOS_VER);
-  const canVerDepartamentos = hasPermission(user, PERMISOS_SISTEMA.DEPARTAMENTOS_VER);
-  const canVerProveedores = hasPermission(user, PERMISOS_SISTEMA.PROVEEDORES_VER);
-  const canVerModulos = hasPermission(user, PERMISOS_SISTEMA.MODULOS_VER);
-  const canVerClasificacionItems = hasPermission(user, PERMISOS_SISTEMA.CONFIGURACION_VER);
   const canVerAuditoria = hasPermission(user, PERMISOS_SISTEMA.AUDITORIA_VER);
+
+  const empresaActivaId = empresaIdDeTenant(user.tenantNombre);
 
   const handleLogout = () => {
     logout();
@@ -266,141 +302,35 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                   Administración Global
                 </div>
 
-                {/* Botón desplegable del Módulo de Configuración */}
-                <button
-                  onClick={() => setAdminMenuAbierto(!adminMenuAbierto)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
+                {/* Va directo a /configuracion (que ya tiene su propia barra
+                    de pestañas con las subrutas autorizadas) — sin desplegar
+                    un submenú aparte en el sidebar. */}
+                <Link
+                  to="/configuracion"
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                     pathname.startsWith("/configuracion")
                       ? "bg-slate-100 text-black font-semibold"
                       : "hover:bg-slate-100 text-black"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Settings className="h-4 w-4 text-black" />
-                    <span>Configuración</span>
-                  </div>
-                  {adminMenuAbierto ? (
-                    <ChevronDown className="h-4 w-4 text-black" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-black" />
-                  )}
-                </button>
+                  <Settings className="h-4 w-4 text-black" />
+                  <span>Configuración</span>
+                </Link>
 
-                {/* Submenú con subrutas autorizadas */}
-                {adminMenuAbierto && (
-                  <div className="mt-1 ml-4 pl-3 border-l border-slate-200 space-y-1 text-xs">
-                    {canVerUsuarios && (
-                      <Link
-                        to="/configuracion/usuarios"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/usuarios")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        <span>Usuarios</span>
-                      </Link>
-                    )}
-
-                    {canVerRoles && (
-                      <Link
-                        to="/configuracion/roles"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/roles")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>Roles</span>
-                      </Link>
-                    )}
-
-                    {canVerPermisos && (
-                      <Link
-                        to="/configuracion/permisos"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/permisos")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <Key className="h-3.5 w-3.5" />
-                        <span>Permisos</span>
-                      </Link>
-                    )}
-
-                    {canVerDepartamentos && (
-                      <Link
-                        to="/configuracion/departamentos"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/departamentos")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <Building2 className="h-3.5 w-3.5" />
-                        <span>Departamentos</span>
-                      </Link>
-                    )}
-
-                    {canVerProveedores && (
-                      <Link
-                        to="/configuracion/proveedores"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/proveedores")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <Truck className="h-3.5 w-3.5" />
-                        <span>Proveedores</span>
-                      </Link>
-                    )}
-
-                    {canVerClasificacionItems && (
-                      <Link
-                        to="/configuracion/clasificacion-items"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/clasificacion-items")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <Tags className="h-3.5 w-3.5" />
-                        <span>Clasificación de ítems</span>
-                      </Link>
-                    )}
-
-                    {canVerModulos && (
-                      <Link
-                        to="/configuracion/modulos"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/configuracion/modulos")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <LayoutGrid className="h-3.5 w-3.5" />
-                        <span>Módulos</span>
-                      </Link>
-                    )}
-
-                    {canVerAuditoria && (
-                      <Link
-                        to="/auditoria"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                          pathname.startsWith("/auditoria")
-                            ? "bg-blue-50 text-blue-800 font-semibold"
-                            : "hover:bg-slate-100 text-black"
-                        }`}
-                      >
-                        <History className="h-3.5 w-3.5" />
-                        <span>Auditoría</span>
-                      </Link>
-                    )}
-                  </div>
+                {/* Auditoría no vive bajo /configuracion, así que queda como
+                    su propio ítem (antes era parte del submenú desplegable). */}
+                {canVerAuditoria && (
+                  <Link
+                    to="/auditoria"
+                    className={`mt-1 flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                      pathname.startsWith("/auditoria")
+                        ? "bg-slate-100 text-black font-semibold"
+                        : "hover:bg-slate-100 text-black"
+                    }`}
+                  >
+                    <History className="h-4 w-4 text-black" />
+                    <span>Auditoría</span>
+                  </Link>
                 )}
               </div>
             </>
@@ -440,11 +370,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
             >
               <Menu className="h-5 w-5" />
             </button>
-            <img
-              src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
-              alt="Grupo Ricol"
-              className="h-7 w-auto shrink-0 hidden lg:block"
-            />
+            <LogoEmpresaActiva empresaId={empresaActivaId} />
             <div className="hidden lg:block h-6 w-px bg-slate-200 shrink-0" />
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-slate-800 truncate">{title}</h1>

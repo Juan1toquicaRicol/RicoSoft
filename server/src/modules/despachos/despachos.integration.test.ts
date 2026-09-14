@@ -283,4 +283,47 @@ describe.skipIf(!RUN)("Despachos — multi-tenant real", () => {
     expect(res.status).toBe(200);
     expect(res.body.estado).toBe("PREPARANDO");
   });
+
+  it("no permite marcar ENTREGADO sin confirmar la cantidad entregada de todas las líneas (hallazgo QA)", async () => {
+    const avanzar = async (estado: string, extra: Record<string, string> = {}) => {
+      const res = await request(app)
+        .patch(`/api/despachos/${despachoBId}/estado`)
+        .set("Authorization", `Bearer ${tokenAdminB}`)
+        .send({ estado, ...extra });
+      expect(res.status).toBe(200);
+      return res;
+    };
+
+    await avanzar("PREPARADO");
+    await avanzar("PENDIENTE_CARGUE");
+    await avanzar("CARGANDO", { vehiculoPlaca: "XYZ789", conductorNombre: "María Gómez" });
+    await avanzar("CARGADO");
+    await avanzar("DESPACHADO");
+    await avanzar("EN_TRANSITO");
+
+    const sinCantidad = await request(app)
+      .patch(`/api/despachos/${despachoBId}/estado`)
+      .set("Authorization", `Bearer ${tokenAdminB}`)
+      .send({ estado: "ENTREGADO", recibidoPor: "Recepcionista" });
+    expect(sinCantidad.status).toBe(409);
+    expect(sinCantidad.body.message).toMatch(/cantidad entregada/i);
+
+    const detalle = await request(app)
+      .get(`/api/despachos/${despachoBId}`)
+      .set("Authorization", `Bearer ${tokenAdminB}`);
+    const lineaId = detalle.body.lineas[0].id as string;
+
+    const confirmarCantidad = await request(app)
+      .patch(`/api/despachos/${despachoBId}/lineas/${lineaId}`)
+      .set("Authorization", `Bearer ${tokenAdminB}`)
+      .send({ cantidadEntregada: 50 });
+    expect(confirmarCantidad.status).toBe(200);
+
+    const conCantidad = await request(app)
+      .patch(`/api/despachos/${despachoBId}/estado`)
+      .set("Authorization", `Bearer ${tokenAdminB}`)
+      .send({ estado: "ENTREGADO", recibidoPor: "Recepcionista" });
+    expect(conCantidad.status).toBe(200);
+    expect(conCantidad.body.estado).toBe("ENTREGADO");
+  });
 });

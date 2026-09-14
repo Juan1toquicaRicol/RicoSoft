@@ -197,8 +197,9 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
  * (POST /auth/register), aquí el administrador puede fijar rol y
  * departamento desde el inicio. El tenant nunca sale del body: siempre es el
  * del administrador que ejecuta la acción, para no poder crear un usuario en
- * otra empresa. No acepta `isSuperadmin`: esa bandera no es asignable por
- * API en ningún endpoint del sistema.
+ * otra empresa. No acepta `isSuperadmin` en el alta: esa bandera solo se
+ * puede otorgar después, vía PATCH /usuarios/:id/superadmin, reservado a
+ * superadmins (ver cambiarSuperadminUsuario).
  */
 export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -535,10 +536,76 @@ export const resetPasswordUsuario = async (req: AuthenticatedRequest, res: Respo
 };
 
 /**
- * Elimina permanentemente a un usuario. Un usuario con historial (facturas,
- * solicitudes resueltas, auditoría) no se puede borrar por integridad
- * referencial: se le pide al administrador desactivarlo en su lugar para no
- * perder la trazabilidad de sus acciones pasadas.
+ * Otorga o revoca isSuperadmin a un usuario nativo del tenant. Reservado a
+ * superadmins (ver requireSuperadmin en la ruta): con isSuperadmin se salta
+ * cualquier chequeo de permiso normal (ver hasPermission/parseRolPermisos),
+ * así que solo quien ya tiene esa autoridad puede repartirla — de lo
+ * contrario, alguien con un permiso puntual como "usuarios.editar" podría
+ * autoconcederse (a través de un tercero) control total del tenant.
+ */
+export const cambiarSuperadminUsuario = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isSuperadmin } = req.body;
+    const tenantId = req.user!.tenantId;
+
+    if (id === req.user!.id) {
+      return res
+        .status(409)
+        .json({ message: "No puedes cambiar tu propio estado de superadministrador." });
+    }
+
+    // Aislamiento multi-tenant: no permitir operar sobre usuarios de otra empresa (IDOR)
+    const usuario = await prisma.user.findFirst({ where: { id, tenantId } });
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario no encontrado." });
+    }
+
+    if (usuario.isSuperadmin === isSuperadmin) {
+      return res.json({ message: "Sin cambios.", isSuperadmin });
+    }
+
+    if (!isSuperadmin) {
+      const superadminsActivos = await prisma.user.count({
+        where: { tenantId, isSuperadmin: true },
+      });
+      if (superadminsActivos <= 1) {
+        return res.status(409).json({
+          message: "No se puede quitar el estado de superadministrador al último del sistema.",
+        });
+      }
+    }
+
+    await prisma.user.update({ where: { id }, data: { isSuperadmin } });
+
+    await prisma.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        usuarioAfectado: usuario.email,
+        accion: isSuperadmin ? "USUARIO_SUPERADMIN_OTORGADO" : "USUARIO_SUPERADMIN_REVOCADO",
+        detalle: isSuperadmin
+          ? `${req.user!.nombre} le otorgó superadministrador a ${usuario.email}`
+          : `${req.user!.nombre} le quitó superadministrador a ${usuario.email}`,
+        entidadTipo: "User",
+        entidadId: id,
+      },
+    });
+
+    return res.json({ message: "Estado de superadministrador actualizado.", isSuperadmin });
+  } catch (error) {
+    console.error("Error al cambiar el estado de superadministrador:", error);
+    return res.status(500).json({ message: "Error al cambiar el estado de superadministrador." });
+  }
+};
+
+/**
+ * Elimina permanentemente a un usuario, incluso si tiene historial de
+ * negocio asociado (facturas, solicitudes, auditoría, etc.): desvincula la FK
+ * de esos registros (quedan intactos, con el nombre ya guardado en texto) y
+ * solo borra las filas puramente personales del usuario (notificaciones,
+ * análisis guardados, perfiles funcionales). Sigue sin poder borrar su propia
+ * cuenta ni al último superadministrador del tenant.
  */
 export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -566,15 +633,71 @@ export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) 
       }
     }
 
+    // Borrado forzado: en vez de bloquear el borrado cuando el usuario tiene
+    // historial asociado, se desvincula (FK -> null) de los registros de
+    // negocio que ya guardan un snapshot en texto de su nombre (o, en el caso
+    // de Auditoria, el propio `detalle`), y se eliminan solo las filas que son
+    // puramente personales/sin valor de trazabilidad para nadie más
+    // (notificaciones in-app, análisis guardados, perfiles funcionales
+    // asignados). PermisoUsuario y Membresia ya tienen ON DELETE CASCADE en
+    // el schema.
     try {
-      await prisma.user.delete({ where: { id } });
-    } catch {
-      // Violación de FK: el usuario tiene historial asociado (auditoría,
-      // solicitudes resueltas, etc.) y no puede borrarse sin perder trazabilidad.
-      return res.status(409).json({
-        message:
-          "Este usuario tiene historial asociado (auditoría, solicitudes u otros registros) y no se puede eliminar. Desactívalo en su lugar.",
-      });
+      await prisma.$transaction([
+        prisma.auditoria.updateMany({ where: { usuarioId: id }, data: { usuarioId: null } }),
+        prisma.sincronizacionSiesaLog.updateMany({
+          where: { iniciadoPorId: id },
+          data: { iniciadoPorId: null },
+        }),
+        prisma.pago.updateMany({ where: { registradoPorId: id }, data: { registradoPorId: null } }),
+        prisma.cotizacionProveedor.updateMany({
+          where: { subidoPorId: id },
+          data: { subidoPorId: null },
+        }),
+        prisma.factura.updateMany({ where: { responsableId: id }, data: { responsableId: null } }),
+        prisma.solicitudCompra.updateMany({
+          where: { solicitanteId: id },
+          data: { solicitanteId: null },
+        }),
+        prisma.solicitudCompra.updateMany({
+          where: { resueltoPorId: id },
+          data: { resueltoPorId: null },
+        }),
+        prisma.solicitudCompra.updateMany({
+          where: { recepcionConfirmadaPorId: id },
+          data: { recepcionConfirmadaPorId: null },
+        }),
+        prisma.servicioSuscripcion.updateMany({
+          where: { responsableId: id },
+          data: { responsableId: null },
+        }),
+        prisma.ordenCompraIntl.updateMany({
+          where: { responsableId: id },
+          data: { responsableId: null },
+        }),
+        prisma.importacionExcepcion.updateMany({
+          where: { resueltoPorId: id },
+          data: { resueltoPorId: null },
+        }),
+        prisma.costeoImportacionDetalle.updateMany({
+          where: { liquidadoPorId: id },
+          data: { liquidadoPorId: null },
+        }),
+        prisma.inboxItem.updateMany({
+          where: { asignadoUsuarioId: id },
+          data: { asignadoUsuarioId: null },
+        }),
+        prisma.inboxItem.updateMany({
+          where: { resolvedByUsuarioId: id },
+          data: { resolvedByUsuarioId: null },
+        }),
+        prisma.notificacion.deleteMany({ where: { usuarioId: id } }),
+        prisma.analisisGuardado.deleteMany({ where: { usuarioId: id } }),
+        prisma.usuarioPerfilFuncional.deleteMany({ where: { userId: id } }),
+        prisma.user.delete({ where: { id } }),
+      ]);
+    } catch (errorBorrado) {
+      console.error("Error al eliminar el usuario (borrado forzado):", errorBorrado);
+      return res.status(500).json({ message: "Error al eliminar el usuario." });
     }
 
     await prisma.auditoria.create({

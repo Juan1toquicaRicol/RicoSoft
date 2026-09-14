@@ -302,6 +302,118 @@ export function useConfiguracionInventario() {
   return { configuracion, loading, error, refresh, guardar };
 }
 
+export interface PedidoComprometido {
+  pvDoctoRowId: number;
+  numeroDocumento: number;
+  tipoDocto: number | null;
+  clienteRowId: number | null;
+  clienteNombre: string | null;
+  itemRowId: number;
+  referencia: string | null;
+  descripcion: string | null;
+  cantidadPedida: number;
+  cantidadComprometida: number;
+  cantidadRemisionada: number;
+  cantidadFacturada: number;
+  fechaPedido: string | null;
+  fechaEntrega: string | null;
+  vendedorRowId: number | null;
+  vendedorNombre: string | null;
+  estado: string;
+  indEstadoLinea: number | null;
+  indEstadoDocto: number | null;
+  indUltEstadoAprobado: boolean | null;
+  indBackorderDocto: boolean | null;
+  indBackorderLinea: boolean | null;
+  indRetenidoMargen: boolean | null;
+  indRetenidoCupo: boolean | null;
+  indRetenidoMora: boolean | null;
+  indRetenidoBloqueo: boolean | null;
+  indRetenidoAnticipo: boolean | null;
+  indRemisionado: boolean | null;
+  indFacturado: boolean | null;
+}
+
+export interface PedidosComprometidosItem {
+  disponible: boolean;
+  motivo?: string;
+  pedidos?: PedidoComprometido[];
+  totalCantidadComprometida?: number;
+  sinDocumentoIdentificable?: boolean;
+}
+
+/**
+ * Detalle de pedidos de venta que originan el "Comprometido (estimado)" de
+ * un ítem — bajo demanda (nunca se llama en la carga inicial de la
+ * pantalla de Inventario, solo cuando el usuario pide el detalle de un
+ * ítem puntual).
+ */
+export function usePedidosComprometidos() {
+  const [datos, setDatos] = useState<PedidosComprometidosItem | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const consultar = useCallback(async (itemRowId: number) => {
+    setLoading(true);
+    setError("");
+    setDatos(null);
+    try {
+      const data = await fetchAuth(`/inventario/productos/${itemRowId}/comprometidos`);
+      setDatos(data as PedidosComprometidosItem);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los pedidos comprometidos.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const limpiar = useCallback(() => {
+    setDatos(null);
+    setError("");
+  }, []);
+
+  return { datos, loading, error, consultar, limpiar };
+}
+
+export interface PedidosComprometidosTodos {
+  disponible: boolean;
+  motivo?: string;
+  pedidos?: PedidoComprometido[];
+  totalCantidadComprometida?: number;
+}
+
+/**
+ * Detalle COMPLETO de "Comprometido (estimado)" — todos los pedidos de
+ * venta que comprometen inventario en toda la compañía, sin filtrar por
+ * producto. La tarjeta de Inventario es un agregado de todo el portafolio,
+ * así que su detalle tampoco debe obligar a buscar un producto primero
+ * (una sola consulta a Siesa, se carga al entrar a la pantalla de detalle).
+ */
+export function usePedidosComprometidosTodos() {
+  const [datos, setDatos] = useState<PedidosComprometidosTodos | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth("/inventario/comprometidos");
+      setDatos(data as PedidosComprometidosTodos);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error cargando los pedidos comprometidos.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { datos, loading, error, refresh };
+}
+
 export type TipoDecision = "producir" | "comprar" | "liquidar" | "no_producir" | "riesgo_quiebre";
 export type PrioridadDecision = "alta" | "media" | "baja";
 export type ConfianzaDecision = "alta" | "media" | "baja";

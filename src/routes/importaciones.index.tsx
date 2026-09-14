@@ -178,6 +178,12 @@ function ImportacionesPage() {
       description="Órdenes de compra internacional, trazabilidad de lotes por BL/AWB y costeo landed bajo NIC 2/21."
       actions={
         <div className="flex items-center gap-2">
+          <Link
+            to="/importaciones/analitica"
+            className={buttonVariants({ variant: "outline", size: "sm", className: "gap-2" })}
+          >
+            Analítica
+          </Link>
           {hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER) && (
             <Link
               to="/importaciones/bandeja"

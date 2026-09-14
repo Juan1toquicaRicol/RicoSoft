@@ -97,7 +97,18 @@ function DialogoNuevoPlan({
   };
 
   const handleCrear = async () => {
-    if (!form.itemRowId || !form.cantidadPlaneada || !form.fechaPlaneada) return;
+    if (!form.itemRowId) {
+      toast.error("Ingresa el itemRowId del producto (referencia Siesa).");
+      return;
+    }
+    if (!form.cantidadPlaneada) {
+      toast.error("Ingresa la cantidad planeada.");
+      return;
+    }
+    if (!form.fechaPlaneada) {
+      toast.error("Selecciona la fecha planeada.");
+      return;
+    }
     setCreando(true);
     try {
       await crear(form);

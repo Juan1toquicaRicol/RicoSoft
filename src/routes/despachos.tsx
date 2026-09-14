@@ -83,12 +83,17 @@ function DialogoNuevoDespacho({
 
   const handleBuscar = async () => {
     setMotivo(null);
-    const res = await buscar(search);
-    if (!res.disponible) {
-      setMotivo(res.motivo ?? "No disponible.");
+    try {
+      const res = await buscar(search);
+      if (!res.disponible) {
+        setMotivo(res.motivo ?? "No disponible.");
+        setDocumentos([]);
+      } else {
+        setDocumentos(res.items ?? []);
+      }
+    } catch (err: unknown) {
       setDocumentos([]);
-    } else {
-      setDocumentos(res.items ?? []);
+      toast.error(err instanceof Error ? err.message : "No se pudo buscar el documento.");
     }
   };
 

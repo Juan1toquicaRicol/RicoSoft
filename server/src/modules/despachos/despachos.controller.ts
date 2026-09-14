@@ -314,6 +314,19 @@ export const actualizarEstadoDespacho = async (req: AuthenticatedRequest, res: R
     });
   }
 
+  // No se puede marcar un despacho como entregado (total o parcial) sin
+  // haber confirmado antes cuánto se entregó realmente por línea — evita
+  // cerrar el despacho "a ciegas" sin dejar registro de cantidades reales.
+  if (siguiente === "ENTREGADO" || siguiente === "ENTREGA_PARCIAL") {
+    const lineas = await prisma.despachoLinea.findMany({ where: { despachoId: despacho.id } });
+    const sinConfirmar = lineas.some((l) => l.cantidadEntregada == null);
+    if (sinConfirmar) {
+      return res.status(409).json({
+        message: `Registra la cantidad entregada de todas las líneas antes de pasar a "${siguiente}".`,
+      });
+    }
+  }
+
   const ahora = new Date();
   const dataActualizacion: Record<string, unknown> = { estado: siguiente };
   if (parseo.data.vehiculoPlaca !== undefined)

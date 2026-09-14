@@ -81,3 +81,9 @@ export const resetPasswordSchema = z.object({
     .string(textoObligatorio("La nueva contraseña es obligatoria."))
     .min(1, "La nueva contraseña es obligatoria."),
 });
+
+export const cambiarSuperadminSchema = z.object({
+  isSuperadmin: z.boolean(
+    booleanoObligatorio("El campo 'isSuperadmin' es requerido y debe ser booleano."),
+  ),
+});

@@ -36,6 +36,7 @@ import oportunidadesRoutes from "./modules/oportunidades/oportunidades.routes";
 import objetivosRoutes from "./modules/objetivos/objetivos.routes";
 import catalogosRoutes from "./modules/catalogos/catalogos.routes";
 import plantillasNotificacionRoutes from "./modules/plantillas-notificacion/plantillas-notificacion.routes";
+import publicacionesRoutes from "./modules/publicaciones/publicaciones.routes";
 
 export const isProduction = process.env.NODE_ENV === "production";
 
@@ -128,6 +129,7 @@ export function createApp() {
   app.use("/api/objetivos", objetivosRoutes);
   app.use("/api/catalogos", catalogosRoutes);
   app.use("/api/plantillas-notificacion", plantillasNotificacionRoutes);
+  app.use("/api/publicaciones", publicacionesRoutes);
 
   // 404 para cualquier ruta no reconocida bajo /api
   app.use("/api", (_req, res) => {

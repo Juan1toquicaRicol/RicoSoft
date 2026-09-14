@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   FilaGrupo,
   OPCION_SIN_AGRUPAR,
@@ -80,6 +82,11 @@ function Auditoria() {
   const [error, setError] = useState("");
   const [expandido, setExpandido] = useState<string | null>(null);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 50;
 
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
@@ -98,17 +105,22 @@ function Auditoria() {
   );
 
   useEffect(() => {
+    setLoading(true);
     (async () => {
       try {
-        const data = await fetchAuth("/auditoria?pageSize=50");
+        const params = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page) });
+        if (desde) params.set("desde", desde);
+        if (hasta) params.set("hasta", hasta);
+        const data = await fetchAuth(`/auditoria?${params.toString()}`);
         setEventos(data.data ?? []);
+        setTotalPages(Math.max(1, Math.ceil((data.total ?? 0) / PAGE_SIZE)));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Error cargando el registro de auditoría.");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [desde, hasta, page]);
 
   return (
     <AppShell
@@ -121,7 +133,47 @@ function Auditoria() {
       }
     >
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-        <div className="flex justify-end border-b border-slate-200 bg-slate-50/80 p-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Desde</Label>
+              <Input
+                type="date"
+                value={desde}
+                onChange={(e) => {
+                  setDesde(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 w-40 text-xs border-slate-300 bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Hasta</Label>
+              <Input
+                type="date"
+                value={hasta}
+                onChange={(e) => {
+                  setHasta(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 w-40 text-xs border-slate-300 bg-white"
+              />
+            </div>
+            {(desde || hasta) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDesde("");
+                  setHasta("");
+                  setPage(1);
+                }}
+                className="text-xs text-slate-500"
+              >
+                Limpiar filtro
+              </Button>
+            )}
+          </div>
           <SelectorAgrupacion
             value={agrupacion}
             onChange={setAgrupacion}
@@ -267,6 +319,33 @@ function Auditoria() {
             ))}
           </TableBody>
         </Table>
+        {!loading && eventos.length > 0 && (
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+            <p className="text-[11px] text-slate-500">
+              Página {page} de {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="gap-1"
+              >
+                Siguiente <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
