@@ -81,6 +81,8 @@ interface UsuarioApi {
   rolRel: { id: string; nombre: string } | null;
   departamentoId: string | null;
   departamento: { id: string; nombre: string } | null;
+  origen: "NATIVO" | "MEMBRESIA";
+  empresaOrigen: string | null;
 }
 
 interface RolOpcion {
@@ -616,7 +618,9 @@ function UsuariosConfigPage() {
                         <div className="text-xs text-slate-500">{u.email}</div>
                       </TableCell>
                       <TableCell className="text-slate-600">
-                        {puedeCambiarDepartamento ? (
+                        {u.origen === "MEMBRESIA" ? (
+                          u.departamento?.nombre || "Sin departamento"
+                        ) : puedeCambiarDepartamento ? (
                           <Select
                             value={u.departamentoId ?? "__sin_departamento__"}
                             onValueChange={(value) => handleCambiarDepartamento(u.id, value)}
@@ -641,6 +645,8 @@ function UsuariosConfigPage() {
                       <TableCell>
                         {u.isSuperadmin ? (
                           <span className="text-xs text-slate-500">Todos los permisos</span>
+                        ) : u.origen === "MEMBRESIA" ? (
+                          <Badge variant="secondary">{u.rolRel?.nombre || "Sin rol"}</Badge>
                         ) : puedeCambiarRol ? (
                           <Select
                             value={u.rolId ?? "__sin_rol__"}
@@ -682,26 +688,37 @@ function UsuariosConfigPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {puedeGestionar && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Ver / editar usuario"
-                              onClick={() => abrirEdicion(u)}
+                          {u.origen === "MEMBRESIA" ? (
+                            <span
+                              className="text-xs text-slate-400"
+                              title={`Esta cuenta se gestiona desde ${u.empresaOrigen}, su empresa hogar.`}
                             >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {puedeDesactivar && !u.isSuperadmin ? (
-                            <Button
-                              size="sm"
-                              variant={u.activo ? "destructive" : "success"}
-                              onClick={() => handleToggleEstado(u.id, !u.activo)}
-                            >
-                              {u.activo ? "Desactivar" : "Activar"}
-                            </Button>
+                              Gestionar desde {u.empresaOrigen}
+                            </span>
                           ) : (
-                            !puedeGestionar && <span className="text-xs text-slate-400">—</span>
+                            <>
+                              {puedeGestionar && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Ver / editar usuario"
+                                  onClick={() => abrirEdicion(u)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {puedeDesactivar && !u.isSuperadmin ? (
+                                <Button
+                                  size="sm"
+                                  variant={u.activo ? "destructive" : "success"}
+                                  onClick={() => handleToggleEstado(u.id, !u.activo)}
+                                >
+                                  {u.activo ? "Desactivar" : "Activar"}
+                                </Button>
+                              ) : (
+                                !puedeGestionar && <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>

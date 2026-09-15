@@ -152,18 +152,21 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
       Math.max(1, Number.parseInt(String(req.query.pageSize ?? "20"), 10) || 20),
     );
 
-    const where = {
-      tenantId,
-      ...(search
-        ? {
-            OR: [{ nombre: { contains: search } }, { email: { contains: search } }],
-          }
-        : {}),
-    };
+    const filtroBusqueda = search
+      ? { OR: [{ nombre: { contains: search } }, { email: { contains: search } }] }
+      : {};
 
-    const [data, total] = await Promise.all([
+    // La lista de "Usuarios" de una empresa debe incluir no solo su gente
+    // nativa (User.tenantId), sino también a quienes acceden a ella por
+    // Membresia (acceso a otra empresa del grupo, incluido isSuperadmin ahí)
+    // — de lo contrario un admin de esta empresa no puede ver quién más
+    // puede entrar a sus datos. Como son dos tablas distintas, se traen
+    // ambas y se combinan/paginan en memoria: el volumen por tenant en este
+    // ERP es lo bastante chico para que valga la pena mantenerlo simple en
+    // vez de forzar una unión a nivel SQL.
+    const [nativos, membresias] = await Promise.all([
       prisma.user.findMany({
-        where,
+        where: { tenantId, ...filtroBusqueda },
         select: {
           id: true,
           nombre: true,
@@ -178,12 +181,82 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
           departamentoId: true,
           departamento: { select: { id: true, nombre: true } },
         },
-        orderBy: { nombre: "asc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
       }),
-      prisma.user.count({ where }),
+      prisma.membresia.findMany({
+        // user.tenantId != tenantId: una membresía nunca debería apuntar al
+        // mismo tenant "hogar" del usuario (crearMembresia lo bloquea al
+        // crearla), pero se filtra igual por si queda algún registro
+        // residual de antes de esa validación — si no, el usuario aparece
+        // duplicado (una vez como nativo, otra vez como "membresía").
+        where: { tenantId, activo: true, user: { ...filtroBusqueda, tenantId: { not: tenantId } } },
+        select: {
+          id: true,
+          isSuperadmin: true,
+          rolRel: { select: { id: true, nombre: true } },
+          // La membresía casi nunca tiene su propio departamento asignado (el
+          // formulario de "dar acceso a otra empresa" no lo pide todavía) —
+          // se usa el departamento de la empresa HOGAR del usuario como mejor
+          // aproximación, en vez de mostrar "Sin departamento" siempre.
+          departamentoId: true,
+          departamento: { select: { id: true, nombre: true } },
+          user: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true,
+              activo: true,
+              createdAt: true,
+              lastLoginAt: true,
+              departamentoId: true,
+              departamento: { select: { id: true, nombre: true } },
+              tenant: { select: { nombre: true } },
+            },
+          },
+        },
+      }),
     ]);
+
+    const filasNativas = nativos.map((u) => ({
+      id: u.id,
+      nombre: u.nombre,
+      email: u.email,
+      rol: u.rol,
+      rolId: u.rolId,
+      activo: u.activo,
+      isSuperadmin: u.isSuperadmin,
+      createdAt: u.createdAt,
+      lastLoginAt: u.lastLoginAt,
+      rolRel: u.rolRel,
+      departamentoId: u.departamentoId,
+      departamento: u.departamento,
+      origen: "NATIVO" as const,
+      empresaOrigen: null as string | null,
+    }));
+
+    const filasMembresia = membresias.map((m) => ({
+      id: m.user.id,
+      nombre: m.user.nombre,
+      email: m.user.email,
+      rol: m.rolRel?.nombre ?? null,
+      rolId: m.rolRel?.id ?? null,
+      // Un usuario inactivo en su empresa hogar no debe figurar como activo
+      // aquí solo porque la membresía sí lo esté.
+      activo: m.user.activo,
+      isSuperadmin: m.isSuperadmin,
+      createdAt: m.user.createdAt,
+      lastLoginAt: m.user.lastLoginAt,
+      rolRel: m.rolRel,
+      departamentoId: m.departamentoId ?? m.user.departamentoId,
+      departamento: m.departamento ?? m.user.departamento,
+      origen: "MEMBRESIA" as const,
+      empresaOrigen: m.user.tenant.nombre,
+    }));
+
+    const combinadas = [...filasNativas, ...filasMembresia].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es"),
+    );
+    const total = combinadas.length;
+    const data = combinadas.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
     return res.json({ data, total, page, pageSize });
   } catch (error) {

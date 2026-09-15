@@ -33,6 +33,7 @@ import {
   Gauge,
   ShoppingBag,
   ClipboardCheck,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -418,6 +419,15 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                 </span>
               )
             )}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              title="Refrescar página"
+              aria-label="Refrescar página"
+              className="shrink-0 p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            >
+              <RefreshCw className="h-4.5 w-4.5" />
+            </button>
             <NotificationBell />
             {user.isSuperadmin && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 text-white border border-slate-900">

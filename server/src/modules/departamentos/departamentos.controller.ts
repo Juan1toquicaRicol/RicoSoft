@@ -4,21 +4,50 @@ import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { obtenerTenantPorDominio } from "../../lib/dominios";
 import { whereAlcance } from "../../lib/alcance";
 
+const CONTEOS_BLOQUEO = {
+  usuarios: true,
+  membresias: true,
+  colaboradores: true,
+  modulos: true,
+  proveedores: true,
+  perfilesFuncionales: true,
+} as const;
+
 function serializar(d: {
   id: string;
   tenantId: string | null;
   nombre: string;
   esSistemas: boolean;
   activo: boolean;
-  _count?: { usuarios: number };
+  _count?: {
+    usuarios: number;
+    membresias?: number;
+    colaboradores?: number;
+    modulos?: number;
+    proveedores?: number;
+    perfilesFuncionales?: number;
+  };
 }) {
+  const c = d._count;
+  // Todo lo que apunta a este departamento vía FK (ver eliminarDepartamento)
+  // se suma aquí para poder deshabilitar el botón de eliminar en la UI antes
+  // de que el usuario intente y reciba un 409 sorpresa.
+  const totalAsignaciones =
+    (c?.usuarios ?? 0) +
+    (c?.membresias ?? 0) +
+    (c?.colaboradores ?? 0) +
+    (c?.modulos ?? 0) +
+    (c?.proveedores ?? 0) +
+    (c?.perfilesFuncionales ?? 0);
   return {
     id: d.id,
     nombre: d.nombre,
     esSistemas: d.esSistemas,
     activo: d.activo,
     alcance: d.tenantId === null ? "GENERAL" : "TENANT",
-    usuariosAsignados: d._count?.usuarios ?? 0,
+    usuariosAsignados: c?.usuarios ?? 0,
+    membresiasAsignadas: c?.membresias ?? 0,
+    enUso: totalAsignaciones > 0,
   };
 }
 
@@ -28,7 +57,7 @@ export const listarDepartamentos = async (req: AuthenticatedRequest, res: Respon
     const tenantId = req.user!.tenantId;
     const departamentos = await prisma.departamento.findMany({
       where: whereAlcance(tenantId),
-      include: { _count: { select: { usuarios: true } } },
+      include: { _count: { select: CONTEOS_BLOQUEO } },
       orderBy: { nombre: "asc" },
     });
 
@@ -252,7 +281,18 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
 
     const departamento = await prisma.departamento.findFirst({
       where: { id, ...whereAlcance(tenantId) },
-      include: { _count: { select: { usuarios: true, membresias: true } } },
+      include: {
+        _count: {
+          select: {
+            usuarios: true,
+            membresias: true,
+            colaboradores: true,
+            modulos: true,
+            proveedores: true,
+            perfilesFuncionales: true,
+          },
+        },
+      },
     });
     if (!departamento) {
       return res.status(404).json({ message: "Departamento no encontrado." });
@@ -263,16 +303,61 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
           "Solo un superadministrador puede eliminar un departamento de alcance general o marcado como Sistemas.",
       });
     }
-    if (departamento._count.usuarios > 0 || departamento._count.membresias > 0) {
+
+    // Toda tabla con FK (onDelete: NoAction) hacia Departamento debe
+    // revisarse aquí antes del delete: si no, Prisma lanza una violación de
+    // clave foránea (P2003) que el catch de abajo solo puede reportar como
+    // un 500 genérico, sin decirle al usuario qué es lo que realmente lo
+    // está bloqueando.
+    const bloqueos: string[] = [];
+    if (departamento._count.usuarios > 0) {
+      bloqueos.push(`${departamento._count.usuarios} usuario(s)`);
+    }
+    if (departamento._count.membresias > 0) {
+      bloqueos.push(`${departamento._count.membresias} membresía(s)`);
+    }
+    if (departamento._count.colaboradores > 0) {
+      bloqueos.push(`${departamento._count.colaboradores} colaborador(es)`);
+    }
+    if (departamento._count.modulos > 0) {
+      bloqueos.push(`${departamento._count.modulos} módulo(s) asignado(s)`);
+    }
+    if (departamento._count.proveedores > 0) {
+      bloqueos.push(`${departamento._count.proveedores} proveedor(es)`);
+    }
+    if (departamento._count.perfilesFuncionales > 0) {
+      bloqueos.push(`${departamento._count.perfilesFuncionales} perfil(es) funcional(es)`);
+    }
+    if (bloqueos.length > 0) {
       return res.status(409).json({
-        message: `No se puede eliminar: hay ${departamento._count.usuarios} usuario(s)/${departamento._count.membresias} membresía(s) asignados a este departamento.`,
+        message: `No se puede eliminar: tiene ${bloqueos.join(", ")} asignados a este departamento.`,
       });
     }
     if (departamento.tenantId === null) {
-      // Es GENERAL: aunque este tenant no tenga usuarios ahí, otro sí podría.
-      const usadoEnOtroLado = await prisma.user.count({ where: { departamentoId: id } });
-      const usadoEnMembresias = await prisma.membresia.count({ where: { departamentoId: id } });
-      if (usadoEnOtroLado > 0 || usadoEnMembresias > 0) {
+      // Es GENERAL: aunque este tenant no tenga nada ahí, otro sí podría.
+      const [
+        usadoUsuarios,
+        usadoMembresias,
+        usadoColaboradores,
+        usadoModulos,
+        usadoProveedores,
+        usadoPerfiles,
+      ] = await Promise.all([
+        prisma.user.count({ where: { departamentoId: id } }),
+        prisma.membresia.count({ where: { departamentoId: id } }),
+        prisma.colaborador.count({ where: { departamentoId: id } }),
+        prisma.modulo.count({ where: { departamentoId: id } }),
+        prisma.proveedor.count({ where: { departamentoId: id } }),
+        prisma.perfilFuncional.count({ where: { departamentoId: id } }),
+      ]);
+      if (
+        usadoUsuarios > 0 ||
+        usadoMembresias > 0 ||
+        usadoColaboradores > 0 ||
+        usadoModulos > 0 ||
+        usadoProveedores > 0 ||
+        usadoPerfiles > 0
+      ) {
         return res.status(409).json({
           message:
             "No se puede eliminar: es un departamento general y está en uso en otra empresa.",

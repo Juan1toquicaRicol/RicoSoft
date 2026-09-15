@@ -32,6 +32,8 @@ interface DepartamentoApi {
   activo: boolean;
   alcance: "GENERAL" | "TENANT";
   usuariosAsignados: number;
+  membresiasAsignadas: number;
+  enUso: boolean;
 }
 
 function DepartamentosConfigPage() {
@@ -255,6 +257,15 @@ function DepartamentosConfigPage() {
                   <TableCell className="text-slate-600">
                     <span className="flex items-center gap-1">
                       <Users className="h-3.5 w-3.5 text-slate-400" /> {d.usuariosAsignados}
+                      {d.membresiasAsignadas > 0 && (
+                        <span
+                          className="text-xs text-slate-400"
+                          title="Accesos de membresía (incluye acceso a otra empresa) que usan este departamento"
+                        >
+                          (+{d.membresiasAsignadas} membresía
+                          {d.membresiasAsignadas === 1 ? "" : "s"})
+                        </span>
+                      )}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -282,15 +293,23 @@ function DepartamentosConfigPage() {
                         {d.alcance === "GENERAL" ? "Hacer exclusivo" : "Hacer general"}
                       </Button>
                     )}
-                    {puedeEliminar && d.usuariosAsignados === 0 && (
-                      <button
-                        onClick={() => handleEliminar(d)}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors align-middle cursor-pointer"
-                        title="Eliminar departamento"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 inline" />
-                      </button>
-                    )}
+                    {puedeEliminar &&
+                      (d.enUso ? (
+                        <span
+                          className="p-1.5 inline-block text-slate-300 cursor-not-allowed align-middle"
+                          title="No se puede eliminar: tiene usuarios, membresías, módulos, colaboradores, proveedores o perfiles funcionales asignados"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 inline" />
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleEliminar(d)}
+                          className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-900 transition-colors align-middle cursor-pointer"
+                          title="Eliminar departamento"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 inline" />
+                        </button>
+                      ))}
                   </TableCell>
                 </TableRow>
               ))
