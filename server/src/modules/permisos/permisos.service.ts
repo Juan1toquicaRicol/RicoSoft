@@ -1,46 +1,48 @@
 import { prisma } from "../../config/prisma";
-import { PERMISOS_SISTEMA } from "../../lib/permissions";
+import { PERMISOS_SISTEMA, PERMISOS_LEGACY } from "../../lib/permissions";
+import { moduloPermiso, nombrePermiso } from "../../lib/catalogo-permisos";
 
-function moduloDesdeCodigo(codigo: string): string {
-  const [prefijo] = codigo.split(".");
-  return prefijo ? prefijo.charAt(0).toUpperCase() + prefijo.slice(1) : "General";
-}
-
-function nombreDesdeCodigo(codigo: string): string {
-  return codigo
-    .split(/[._]/)
-    .filter(Boolean)
-    .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1))
-    .join(" ");
-}
+// Nombre y módulo salen de la jerarquía Módulo → Sección (lib/catalogo-permisos.ts),
+// no del prefijo del código: así "pedidos_comerciales.ver" se siembra como
+// módulo "Comercial" y nombre "Pedidos comerciales · Ver", en vez del
+// "Pedidos_comerciales" con guion bajo que producía derivarlo del código.
 
 /**
- * Siembra el catálogo de permisos de un tenant a partir de PERMISOS_SISTEMA
- * la primera vez que se consulta — no hay migración de datos: cada tenant se
- * siembra perezosamente al primer acceso a Administración Global > Permisos,
- * sin tocar tenants que nunca la abran. Nombre/módulo iniciales se derivan
- * del código (p. ej. "solicitudes.aprobar" -> módulo "Solicitudes", nombre
- * "Solicitudes Aprobar"); un administrador puede renombrarlos después.
+ * Reconcilia el catálogo de permisos de un tenant contra PERMISOS_SISTEMA en
+ * cada consulta — antes solo sembraba una vez ("si ya existe algún permiso
+ * de sistema, no hacer nada"), así que un código agregado a PERMISOS_SISTEMA
+ * después del primer seed de un tenant quedaba invisible para siempre en su
+ * catálogo (ver auditoría: los 4 permisos de biométrico no aparecían en
+ * Roles/Permisos aunque el backend ya los exigía). Ahora solo inserta los
+ * códigos de sistema que falten; los que ya existen —de sistema o
+ * personalizados— nunca se tocan, y si no falta ninguno no se crea nada.
+ * Nombre/módulo iniciales se derivan del código (p. ej. "solicitudes.aprobar"
+ * -> módulo "Solicitudes", nombre "Solicitudes Aprobar"); un administrador
+ * puede renombrarlos después.
  */
 async function asegurarCatalogoSembrado(tenantId: string): Promise<void> {
-  const existe = await prisma.permiso.findFirst({
+  const existentes = await prisma.permiso.findMany({
     where: { tenantId, esSistema: true },
-    select: { id: true },
+    select: { codigo: true },
   });
-  if (existe) return;
+  const codigosExistentes = new Set(existentes.map((p) => p.codigo));
+  const faltantes = Object.values(PERMISOS_SISTEMA).filter(
+    (codigo) => !codigosExistentes.has(codigo),
+  );
+  if (faltantes.length === 0) return;
 
   try {
     // SQL Server no soporta `skipDuplicates` en createMany (a diferencia de
-    // Postgres/SQLite); si dos requests concurrentes ven `existe === null` a
-    // la vez, la segunda inserción choca contra el índice único
-    // [tenantId, codigo] y falla — se ignora ese error puntual: la primera
-    // ya sembró el catálogo, que es lo único que importaba.
+    // Postgres/SQLite); si dos requests concurrentes calculan el mismo
+    // conjunto de faltantes a la vez, la segunda inserción choca contra el
+    // índice único [tenantId, codigo] y falla — se ignora ese error puntual:
+    // la primera ya insertó lo que hacía falta, que es lo único que importaba.
     await prisma.permiso.createMany({
-      data: Object.values(PERMISOS_SISTEMA).map((codigo) => ({
+      data: faltantes.map((codigo) => ({
         tenantId,
         codigo,
-        nombre: nombreDesdeCodigo(codigo),
-        modulo: moduloDesdeCodigo(codigo),
+        nombre: nombrePermiso(codigo),
+        modulo: moduloPermiso(codigo),
         esSistema: true,
         activo: true,
       })),
@@ -50,12 +52,21 @@ async function asegurarCatalogoSembrado(tenantId: string): Promise<void> {
   }
 }
 
+/**
+ * Catálogo visible/asignable del tenant. Las filas de códigos LEGACY se
+ * conservan en base (nunca se borran: un rol guardado puede seguir
+ * teniéndolas y se siguen honrando vía expandirLegacy) pero se ocultan aquí,
+ * para que un administrador no pueda seguir asignando códigos muertos ni vea
+ * duplicados del tipo "Cotizaciones Manipular" junto a "Cotizaciones
+ * Gestionar".
+ */
 export async function listarCatalogoPermisos(tenantId: string) {
   await asegurarCatalogoSembrado(tenantId);
-  return prisma.permiso.findMany({
+  const permisos = await prisma.permiso.findMany({
     where: { tenantId },
     orderBy: [{ modulo: "asc" }, { nombre: "asc" }],
   });
+  return permisos.filter((p) => !(p.codigo in PERMISOS_LEGACY));
 }
 
 /**

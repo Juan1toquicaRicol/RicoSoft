@@ -37,6 +37,24 @@ export const listarRolesDeTenant = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
+/** Departamentos activos de UNA empresa específica (no la del que llama), para
+ * elegir el departamento propio de una membresía (H1: antes solo se podía
+ * elegir rol, y el departamento quedaba fijo al de la empresa hogar). */
+export const listarDepartamentosDeTenant = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+    const departamentos = await prisma.departamento.findMany({
+      where: { ...whereAlcance(tenantId), activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+    return res.json(departamentos);
+  } catch (error) {
+    console.error("Error al listar departamentos del tenant:", error);
+    return res.status(500).json({ message: "Error al obtener los departamentos de esa empresa." });
+  }
+};
+
 /** Membresías (acceso a empresas adicionales) de un usuario, más su tenant "hogar". */
 export const listarMembresiasUsuario = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -74,6 +92,8 @@ export const listarMembresiasUsuario = async (req: AuthenticatedRequest, res: Re
         isSuperadmin: true,
         tenant: { select: { id: true, nombre: true } },
         rolRel: { select: { id: true, nombre: true } },
+        departamentoId: true,
+        departamento: { select: { id: true, nombre: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -90,7 +110,7 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
   try {
     const { userId } = req.params;
     // Forma del body ya validada por validarBody(crearMembresiaSchema).
-    const { tenantId, rolId, isSuperadmin } = req.body;
+    const { tenantId, rolId, departamentoId, isSuperadmin } = req.body;
 
     // Nadie puede otorgarse una membresía a sí mismo, ni siquiera un
     // superadmin: el chequeo de abajo ("el objetivo debe ser nativo de tu
@@ -145,16 +165,47 @@ export const crearMembresia = async (req: AuthenticatedRequest, res: Response) =
       rolIdFinal = rol.id;
     }
 
+    // H1: el departamento de la membresía es el de la persona EN ESA
+    // empresa miembro, independiente de su departamento en la empresa hogar
+    // — por eso se valida contra whereAlcance(tenantId) (la empresa a la que
+    // se está dando acceso), no contra el tenant del que llama.
+    let departamentoIdFinal: string | null = null;
+    if (departamentoId) {
+      const departamento = await prisma.departamento.findFirst({
+        where: { id: departamentoId, ...whereAlcance(tenantId), activo: true },
+      });
+      if (!departamento) {
+        return res.status(404).json({
+          message: "El departamento seleccionado no existe o no pertenece a esa empresa.",
+        });
+      }
+      departamentoIdFinal = departamento.id;
+    }
+
     const membresia = await prisma.membresia.upsert({
       where: { userId_tenantId: { userId, tenantId } },
-      create: { userId, tenantId, rolId: rolIdFinal, isSuperadmin: !!isSuperadmin, activo: true },
-      update: { rolId: rolIdFinal, isSuperadmin: !!isSuperadmin, activo: true },
+      create: {
+        userId,
+        tenantId,
+        rolId: rolIdFinal,
+        departamentoId: departamentoIdFinal,
+        isSuperadmin: !!isSuperadmin,
+        activo: true,
+      },
+      update: {
+        rolId: rolIdFinal,
+        departamentoId: departamentoIdFinal,
+        isSuperadmin: !!isSuperadmin,
+        activo: true,
+      },
       select: {
         id: true,
         activo: true,
         isSuperadmin: true,
         tenant: { select: { id: true, nombre: true } },
         rolRel: { select: { id: true, nombre: true } },
+        departamentoId: true,
+        departamento: { select: { id: true, nombre: true } },
       },
     });
 
@@ -188,7 +239,7 @@ export const actualizarMembresia = async (req: AuthenticatedRequest, res: Respon
   try {
     const { id } = req.params;
     // Forma del body ya validada por validarBody(actualizarMembresiaSchema).
-    const { rolId, isSuperadmin, activo } = req.body;
+    const { rolId, departamentoId, isSuperadmin, activo } = req.body;
 
     const membresia = await prisma.membresia.findUnique({
       where: { id },
@@ -223,10 +274,22 @@ export const actualizarMembresia = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
+    if (departamentoId !== undefined && departamentoId !== null) {
+      const departamento = await prisma.departamento.findFirst({
+        where: { id: departamentoId, ...whereAlcance(membresia.tenantId), activo: true },
+      });
+      if (!departamento) {
+        return res.status(404).json({
+          message: "El departamento seleccionado no existe o no pertenece a esa empresa.",
+        });
+      }
+    }
+
     const actualizada = await prisma.membresia.update({
       where: { id },
       data: {
         ...(rolId !== undefined ? { rolId } : {}),
+        ...(departamentoId !== undefined ? { departamentoId } : {}),
         ...(isSuperadmin !== undefined ? { isSuperadmin } : {}),
         ...(activo !== undefined ? { activo } : {}),
       },
@@ -236,6 +299,8 @@ export const actualizarMembresia = async (req: AuthenticatedRequest, res: Respon
         isSuperadmin: true,
         tenant: { select: { id: true, nombre: true } },
         rolRel: { select: { id: true, nombre: true } },
+        departamentoId: true,
+        departamento: { select: { id: true, nombre: true } },
       },
     });
 

@@ -30,6 +30,8 @@ import planProduccionRoutes from "./modules/plan-produccion/plan-produccion.rout
 import gestionLiquidacionRoutes from "./modules/gestion-liquidacion/gestion-liquidacion.routes";
 import gerencialRoutes from "./modules/gerencial/gerencial.routes";
 import ventasRoutes from "./modules/ventas/ventas.routes";
+import proformasRoutes from "./modules/proformas/proformas.routes";
+import comercialRoutes from "./modules/comercial/comercial.routes";
 import despachosRoutes from "./modules/despachos/despachos.routes";
 import logisticaRoutes from "./modules/logistica/logistica.routes";
 import oportunidadesRoutes from "./modules/oportunidades/oportunidades.routes";
@@ -123,6 +125,8 @@ export function createApp() {
   app.use("/api/gestion-liquidacion", gestionLiquidacionRoutes);
   app.use("/api/gerencial", gerencialRoutes);
   app.use("/api/ventas", ventasRoutes);
+  app.use("/api/proformas", proformasRoutes);
+  app.use("/api/comercial", comercialRoutes);
   app.use("/api/despachos", despachosRoutes);
   app.use("/api/logistica", logisticaRoutes);
   app.use("/api/oportunidades", oportunidadesRoutes);

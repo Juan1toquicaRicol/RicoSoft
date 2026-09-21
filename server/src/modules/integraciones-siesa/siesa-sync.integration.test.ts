@@ -328,13 +328,28 @@ describe.skipIf(!RUN)(
           },
         });
 
+        // H-02: NO depende de que el túnel VPN hacia Siesa esté caído. Este
+        // entorno puede tener o no conectividad real hacia Siesa según el
+        // día/red (confirmado con una prueba TCP directa: en este entorno SÍ
+        // hay ruta a db06.siesacloud.local:1433), y con CIA_A=9001 (una
+        // compañía que no existe de verdad en Siesa) la conexión simplemente
+        // se completa y la consulta devuelve 0 filas — no lanza, así que el
+        // log terminaba en COMPLETADO en vez de FALLIDO, sin ejercitar el
+        // catch que este test dice probar.
+        //
+        // ciaId inválido (no numérico, forzado con `as unknown as number`
+        // solo para esta prueba) para que el binding del parámetro en
+        // leerProveedoresDesdeSiesa() falle con un error real de conversión
+        // de tipo en SQL Server ("Conversion failed... to data type int") —
+        // mismo catch de ejecutarSincronizacion, determinista sin importar
+        // si el túnel VPN está arriba o no. El log en sí se crea con un
+        // ciaId válido (columna Int en Prisma) porque esa parte no es lo que
+        // se está probando.
+        const CIA_INVALIDA = "NO-ES-UN-NUMERO" as unknown as number;
         const log = await crearLog(tenantAId, CIA_A, userAdminId);
-        // Este entorno de pruebas no tiene el túnel VPN hacia Siesa activo, así
-        // que ejecutarSincronizacion() falla al conectar de verdad — es
-        // exactamente el escenario real que motivó el fix: sin el try/catch
-        // alrededor de la lectura a Siesa, el log se quedaba atascado en
-        // EN_COLA para siempre.
-        await expect(ejecutarSincronizacion(log.id, tenantAId, CIA_A)).resolves.not.toThrow();
+        await expect(
+          ejecutarSincronizacion(log.id, tenantAId, CIA_INVALIDA),
+        ).resolves.not.toThrow();
 
         const logFinal = await prisma.sincronizacionSiesaLog.findUnique({ where: { id: log.id } });
         expect(logFinal?.estado).toBe("FALLIDO");

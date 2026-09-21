@@ -144,6 +144,57 @@ describe.skipIf(!RUN)("Permisos — catálogo dinámico (multi-tenant real)", ()
     expect(eliminar.status).toBe(204);
   });
 
+  it("reconcilia un código de sistema que falte (agregado después del primer seed) sin duplicar ni tocar los demás", async () => {
+    const antes = await request(app).get("/api/permisos").set("Authorization", `Bearer ${token}`);
+    expect(antes.status).toBe(200);
+    const totalAntes = antes.body.length;
+    const objetivo = antes.body.find(
+      (p: { esSistema: boolean; codigo: string }) => p.esSistema && p.codigo === "biometrico.ver",
+    );
+    expect(objetivo).toBeTruthy();
+
+    // Simula un tenant cuyo catálogo se sembró antes de que "biometrico.ver"
+    // existiera en PERMISOS_SISTEMA: borra esa fila directamente, sin pasar
+    // por el endpoint (los permisos de sistema no se pueden borrar por API).
+    await prisma.permiso.delete({ where: { id: objetivo.id } });
+
+    // listarCatalogoPermisos reconcilia en la MISMA llamada que detecta el
+    // faltante (asegurarCatalogoSembrado corre antes del findMany) — no hace
+    // falta una segunda consulta para que reaparezca.
+    const reconciliada = await request(app)
+      .get("/api/permisos")
+      .set("Authorization", `Bearer ${token}`);
+    expect(reconciliada.status).toBe(200);
+    expect(reconciliada.body.length).toBe(totalAntes);
+    const recreado = reconciliada.body.find(
+      (p: { codigo: string; esSistema: boolean }) => p.codigo === "biometrico.ver",
+    );
+    expect(recreado).toBeTruthy();
+    expect(recreado.esSistema).toBe(true);
+    expect(recreado.id).not.toBe(objetivo.id); // fila nueva, no la misma que se borró
+
+    // Una consulta más no debe duplicar nada ni volver a insertar.
+    const otraVezMas = await request(app)
+      .get("/api/permisos")
+      .set("Authorization", `Bearer ${token}`);
+    expect(otraVezMas.status).toBe(200);
+    expect(otraVezMas.body.length).toBe(totalAntes);
+    const sinDuplicar = otraVezMas.body.filter(
+      (p: { codigo: string }) => p.codigo === "biometrico.ver",
+    );
+    expect(sinDuplicar.length).toBe(1);
+    expect(sinDuplicar[0].id).toBe(recreado.id);
+
+    // El otro tenant, que nunca perdió esa fila, no se ve afectado.
+    const otroTenantLista = await request(app)
+      .get("/api/permisos")
+      .set("Authorization", `Bearer ${otroToken}`);
+    expect(otroTenantLista.status).toBe(200);
+    expect(
+      otroTenantLista.body.filter((p: { codigo: string }) => p.codigo === "biometrico.ver").length,
+    ).toBe(1);
+  });
+
   it("no permite eliminar ni editar el código de un permiso del sistema, y aísla el catálogo por tenant", async () => {
     const lista = await request(app).get("/api/permisos").set("Authorization", `Bearer ${token}`);
     const permisoSistema = lista.body.find(

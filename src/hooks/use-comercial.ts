@@ -1,0 +1,265 @@
+import { useCallback, useEffect, useState } from "react";
+import { fetchAuth } from "@/lib/session";
+
+export interface ItemComercial {
+  id?: string;
+  itemRowId: number | null;
+  referencia: string | null;
+  descripcion: string;
+  bodegaRowId: number | null;
+  bodega: string | null;
+  unidadMedida: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  descuentoPct: number;
+  ivaPct: number;
+}
+
+export interface TotalesComercial {
+  subtotal: number;
+  descuentos: number;
+  impuestos: number;
+  total: number;
+}
+
+export interface DocumentoRelacionadoResumen {
+  id: string;
+  numero: number;
+  estado: string;
+  createdAt?: string;
+}
+
+export interface Cotizacion extends TotalesComercial {
+  id: string;
+  numero: number;
+  numeroFormateado: string;
+  tenantId: string;
+  clienteRowId: number;
+  clienteNombre: string;
+  clienteNit: string | null;
+  contacto: string | null;
+  direccion: string | null;
+  ciudad: string | null;
+  telefono: string | null;
+  vendedorNombre: string | null;
+  fecha: string;
+  fechaVencimiento: string | null;
+  estado: string;
+  moneda: string;
+  observaciones: string | null;
+  erpNumero: string | null;
+  creadoPorNombre: string;
+  createdAt: string;
+  items: ItemComercial[];
+  proformas?: DocumentoRelacionadoResumen[];
+  pedidos?: DocumentoRelacionadoResumen[];
+}
+
+export interface PedidoComercial extends TotalesComercial {
+  id: string;
+  numero: number;
+  numeroFormateado: string;
+  cotizacionId: string | null;
+  proformaId: string | null;
+  clienteRowId: number;
+  clienteNombre: string;
+  clienteNit: string | null;
+  vendedorNombre: string | null;
+  fecha: string;
+  estado: string;
+  moneda: string;
+  observaciones: string | null;
+  erpNumero: string | null;
+  creadoPorNombre: string;
+  createdAt: string;
+  items: ItemComercial[];
+  cotizacion?: { id: string; numero: number; estado: string } | null;
+  proforma?: { id: string; numero: number; estado: string } | null;
+}
+
+export interface DocumentoBandeja {
+  tipo: "cotizacion" | "proforma" | "pedido";
+  id: string;
+  numero: string;
+  cliente: string;
+  fecha: string;
+  estado: string;
+  valor: number;
+  documentoRelacionado: string | null;
+  erp: string | null;
+}
+
+export interface CotizacionPayload {
+  numero?: number;
+  clienteRowId: number;
+  clienteNombre: string;
+  clienteNit?: string | null;
+  contacto?: string | null;
+  direccion?: string | null;
+  ciudad?: string | null;
+  telefono?: string | null;
+  vendedorNombre?: string | null;
+  fechaVencimiento?: string | null;
+  moneda?: string;
+  observaciones?: string | null;
+  items: ItemComercial[];
+}
+
+/** Bandeja agregada — Comercial → Gestión Comercial. */
+export function useDocumentosComerciales(params: {
+  tipo?: "todos" | "cotizacion" | "proforma" | "pedido";
+  search?: string;
+  estado?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const [items, setItems] = useState<DocumentoBandeja[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const { tipo, search, estado, page = 1, pageSize = 25 } = params;
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const qs = new URLSearchParams();
+      qs.set("tipo", tipo ?? "todos");
+      qs.set("page", String(page));
+      qs.set("pageSize", String(pageSize));
+      if (search) qs.set("search", search);
+      if (estado) qs.set("estado", estado);
+      const data = await fetchAuth(`/comercial/documentos?${qs.toString()}`);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No fue posible cargar la bandeja comercial.");
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, search, estado, page, pageSize]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { items, total, loading, error, refresh };
+}
+
+export function useCotizacion(id: string | null) {
+  const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/comercial/cotizaciones/${id}`);
+      setCotizacion(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No fue posible cargar la cotización.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { cotizacion, loading, error, refresh };
+}
+
+export function usePedidoComercial(id: string | null) {
+  const [pedido, setPedido] = useState<PedidoComercial | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAuth(`/comercial/pedidos/${id}`);
+      setPedido(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No fue posible cargar el pedido.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { pedido, loading, error, refresh };
+}
+
+export function useCrearCotizacion() {
+  const [loading, setLoading] = useState(false);
+  const crear = useCallback(async (payload: CotizacionPayload): Promise<Cotizacion> => {
+    setLoading(true);
+    try {
+      return await fetchAuth("/comercial/cotizaciones", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  return { crear, loading };
+}
+
+export function useAccionesCotizacion() {
+  const accion = useCallback(async (id: string, path: string, observacion?: string) => {
+    return fetchAuth(`/comercial/cotizaciones/${id}/${path}`, {
+      method: "POST",
+      body: JSON.stringify({ observacion: observacion ?? null }),
+    });
+  }, []);
+
+  return {
+    enviar: (id: string) => accion(id, "enviar"),
+    aprobar: (id: string) => accion(id, "aprobar"),
+    rechazar: (id: string, observacion?: string) => accion(id, "rechazar", observacion),
+    anular: (id: string, observacion?: string) => accion(id, "anular", observacion),
+    crearProforma: (id: string) =>
+      fetchAuth(`/comercial/cotizaciones/${id}/proforma`, { method: "POST", body: JSON.stringify({}) }),
+    /** Vincula/corrige a mano el documento Siesa (CDV rowid) de esta cotización. */
+    asignarErp: (id: string, erpRowId: number) =>
+      fetchAuth(`/comercial/cotizaciones/${id}/asignar-erp`, {
+        method: "POST",
+        body: JSON.stringify({ erpRowId }),
+      }),
+    /** Borrado PERMANENTE — solo superadmin, distinto de anular. */
+    eliminar: (id: string) => fetchAuth(`/comercial/cotizaciones/${id}`, { method: "DELETE" }),
+  };
+}
+
+export function useAccionesPedido() {
+  const accion = useCallback(async (id: string, path: string, observacion?: string) => {
+    return fetchAuth(`/comercial/pedidos/${id}/${path}`, {
+      method: "POST",
+      body: JSON.stringify({ observacion: observacion ?? null }),
+    });
+  }, []);
+
+  return {
+    confirmar: (id: string) => accion(id, "confirmar"),
+    marcarListoParaErp: (id: string) => accion(id, "listo-erp"),
+    anular: (id: string, observacion?: string) => accion(id, "anular", observacion),
+    crearDesdeProforma: (proformaId: string) =>
+      fetchAuth(`/comercial/proformas/${proformaId}/pedido`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    /** Borrado PERMANENTE — solo superadmin. */
+    eliminar: (id: string) => fetchAuth(`/comercial/pedidos/${id}`, { method: "DELETE" }),
+  };
+}

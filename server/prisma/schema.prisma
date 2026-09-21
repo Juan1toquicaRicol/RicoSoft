@@ -24,6 +24,7 @@ model Tenant {
   auditorias                     Auditoria[]
   colaboradores                  Colaborador[]
   configuracionInventario        ConfiguracionInventario?
+  configuracionComercial         ConfiguracionComercial?
   creditos                       CreditoCliente[]
   departamentos                  Departamento[]
   tomasFisicas                   TomaFisica[]
@@ -68,6 +69,7 @@ model Tenant {
   sincronizacionesBiometrico     SincronizacionBiometricoLog[]
   perfilesFuncionales            PerfilFuncional[]
   usuarioPerfilesFuncionales     UsuarioPerfilFuncional[]
+  indicadoresCreditoCliente      IndicadorCreditoCliente[]
   reglasDestinatarios            ReglaDestinatarios[]
   requisitosProveedorImportacion RequisitoProveedorImportacion[]
   correosImportacion             ImportacionCorreo[]
@@ -75,6 +77,9 @@ model Tenant {
   catalogosValor                 CatalogoValor[]
   plantillasNotificacion         PlantillaNotificacion[]
   publicaciones                  Publicacion[]
+  proformas                      Proforma[]
+  cotizacionesComerciales        Cotizacion[]
+  pedidosComerciales             PedidoComercial[]
 }
 
 model User {
@@ -116,6 +121,9 @@ model User {
   perfilesFuncionales              UsuarioPerfilFuncional[]
   analisisGuardados                AnalisisGuardado[]
   publicacionesCreadas             Publicacion[]              @relation("PublicacionAutor")
+  proformasCreadas                 Proforma[]
+  cotizacionesComercialesCreadas   Cotizacion[]
+  pedidosComercialesCreados        PedidoComercial[]
   colaborador                      Colaborador?               @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   departamento                     Departamento?              @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rolRel                           Rol?                       @relation(fields: [rolId], references: [id])
@@ -801,6 +809,36 @@ model CreditoCliente {
   @@index([tenantId])
 }
 
+/// Snapshot cacheado de t9896_pdv_clientes_analisis (Siesa) para UN cliente
+/// (tenantId + clienteRowId, mismo patrón que OportunidadSeguimiento — Siesa
+/// puro, sin FK). NO reemplaza la cartera real (t353_co_saldo_abierto, ver
+/// GET /creditos/cartera-siesa, que sigue siendo la fuente viva): t9896 es un
+/// snapshot de análisis crediticio cuya frecuencia real de refresco en Siesa
+/// no está confirmada, así que `actualizadoEn` (cuándo RicoSoft lo leyó por
+/// última vez) debe mostrarse siempre junto al dato en la UI.
+model IndicadorCreditoCliente {
+  id                  String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId            String   @db.UniqueIdentifier
+  clienteRowId        Int
+  cupoCredito         Decimal  @db.Decimal(18, 2)
+  disponible          Decimal  @db.Decimal(18, 2)
+  carteraCorriente    Decimal  @db.Decimal(18, 2)
+  carteraVencida      Decimal  @db.Decimal(18, 2)
+  diasPromedioVencido Int?
+  diasPromedioPago    Int?
+  bloquearCupo        Boolean  @default(false)
+  bloquearMora        Boolean  @default(false)
+  bloquear            Boolean  @default(false)
+  /// Siempre "T9896_SNAPSHOT" hoy — campo previsto para si en el futuro se
+  /// agrega otro origen (p. ej. un cálculo propio de RicoSoft).
+  origenDato          String   @default("T9896_SNAPSHOT") @db.VarChar(30)
+  actualizadoEn       DateTime @default(now())
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, clienteRowId])
+  @@index([tenantId])
+}
+
 /// Toma física mensual — Etapa I del módulo Producción & Planeación.
 /// Modelo NATIVO de RicoSoft (no existe en Siesa: se buscaron tablas de
 /// conteo físico/ajuste de inventario y no se encontró ninguna). La bodega
@@ -879,6 +917,26 @@ model ConfiguracionInventario {
   minimoCotizacionesSolicitud     Int      @default(3)
   updatedAt                       DateTime @updatedAt
   tenant                          Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+/// Tasas de retención comercial por tenant (módulo Ventas/Proformas) — a
+/// propósito NO se mezcla con ConfiguracionInventario (dominio distinto,
+/// misma forma: una fila por tenant, campos tipados con default). Una
+/// Proforma copia estos porcentajes al crearse (snapshot en
+/// Proforma.retencionPct/retencionIvaPct/icaPct) y nunca vuelve a leerlos —
+/// cambiar esta configuración solo afecta proformas nuevas.
+model ConfiguracionComercial {
+  id                 String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId           String   @unique @db.UniqueIdentifier
+  /// Retención en la fuente = Total bruto × este %.
+  retencionFuentePct Decimal  @default(2.5) @db.Decimal(5, 2)
+  /// Retención de IVA = Valor IVA × este % (sobre el impuesto, no sobre el bruto).
+  retencionIvaPct    Decimal  @default(15) @db.Decimal(5, 2)
+  /// Retención ICA = Total bruto × este %.
+  retencionIcaPct    Decimal  @default(0.7) @db.Decimal(5, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 /// Catálogo genérico de valores de referencia (comercio internacional, CRM,
@@ -1265,34 +1323,44 @@ model Objetivo {
 /// que CotizacionProveedor.proveedorId — referencia externa, no FK), nunca
 /// se crea un catálogo propio de clientes/productos.
 model OportunidadSeguimiento {
-  id                      String    @id @default(uuid()) @db.UniqueIdentifier
-  tenantId                String    @db.UniqueIdentifier
+  id                        String    @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                  String    @db.UniqueIdentifier
   /// t200_mm_terceros.f200_rowid del cliente — igual que en el resto del
   /// sistema (SolicitudCompra.proveedorId, CotizacionProveedor, etc. son
   /// FK propias; esto es Siesa puro, como itemRowId en otros módulos).
-  clienteRowId            Int
-  clienteNombre           String    @db.VarChar(255)
+  clienteRowId              Int
+  clienteNombre             String    @db.VarChar(255)
   /// Producto de la oportunidad concreta, si aplica (una oportunidad puede
   /// ser general del cliente o sobre un producto puntual del cruce de
   /// oportunidad-comercial-siesa.ts).
-  itemRowId               Int?
-  itemDescripcion         String?   @db.VarChar(255)
+  itemRowId                 Int?
+  itemDescripcion           String?   @db.VarChar(255)
   /// Llamada | WhatsApp | Correo | Reunion | Visita | Cotizacion | Seguimiento | Otro
-  accion                  String    @db.VarChar(30)
+  accion                    String    @db.VarChar(30)
   /// Contactado | SinRespuesta | Interesado | CotizacionSolicitada |
   /// CotizacionEnviada | EnNegociacion | NoInteresado | VentaRealizada
-  resultado               String    @db.VarChar(30)
-  comentario              String?   @db.Text
+  resultado                 String    @db.VarChar(30)
+  comentario                String?   @db.Text
   /// Obligatorios cuando el resultado no es terminal (NoInteresado /
   /// VentaRealizada) — validado en el controller, no aquí: una oportunidad
   /// activa sin próxima acción es solo un dato analítico, no algo
   /// accionable (ver Motor de Decisiones).
-  proximaAccion           String?   @db.VarChar(255)
-  proximoSeguimientoFecha DateTime?
-  usuarioId               String    @db.UniqueIdentifier
-  usuario                 String    @db.VarChar(255)
-  createdAt               DateTime  @default(now())
-  tenant                  Tenant    @relation(fields: [tenantId], references: [id])
+  proximaAccion             String?   @db.VarChar(255)
+  proximoSeguimientoFecha   DateTime?
+  /// Compromiso = proximaAccion + proximoSeguimientoFecha de ESTE evento.
+  /// createdAt es cuándo se REGISTRÓ el evento, nunca cuándo se ejecutó el
+  /// compromiso — por eso el cierre necesita su propia fecha (compromisoCompletadoEn),
+  /// distinta de createdAt y distinta de proximoSeguimientoFecha (la programada).
+  compromisoCompletado      Boolean   @default(false)
+  compromisoCompletadoEn    DateTime?
+  /// Plano (id + nombre en texto), igual que usuarioId/usuario arriba — sin
+  /// FK a User, mismo criterio ya usado en todo este modelo.
+  compromisoCompletadoPorId String?   @db.UniqueIdentifier
+  compromisoCompletadoPor   String?   @db.VarChar(255)
+  usuarioId                 String    @db.UniqueIdentifier
+  usuario                   String    @db.VarChar(255)
+  createdAt                 DateTime  @default(now())
+  tenant                    Tenant    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, clienteRowId])
@@ -2389,4 +2457,255 @@ model InboxItem {
   @@index([tenantId, asignadoUsuarioId, status])
   @@index([tenantId, asignadoPermiso, status])
   @@index([tenantId, status, prioridad])
+}
+
+/// Proforma comercial (módulo Ventas) — reemplaza el llenado manual del
+/// Excel "Factura Proforma", trayendo los datos del cliente desde Siesa
+/// (ver leerDatosFacturacionCliente en siesa-clientes.service.ts) y
+/// dejándolos editables para retenciones/novedades. Numeración propia por
+/// tenant, continuando la secuencia manual anterior desde 3890. Los totales
+/// (subtotal/IVA/retención/ICA/total) NUNCA se guardan — se recalculan
+/// siempre desde items + los porcentajes de este encabezado, igual que las
+/// fórmulas del Excel original, para que nunca queden desactualizados.
+model Proforma {
+  id                  String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId            String            @db.UniqueIdentifier
+  numero              Int
+  clienteRowId        Int
+  clienteNombre       String            @db.VarChar(255)
+  clienteNit          String?           @db.VarChar(50)
+  contacto            String?           @db.VarChar(255)
+  direccion           String?           @db.VarChar(500)
+  ciudad              String?           @db.VarChar(255)
+  telefono            String?           @db.VarChar(50)
+  formaPago           String?           @db.VarChar(100)
+  fechaVencimiento    DateTime?
+  vendedorNombre      String?           @db.VarChar(255)
+  ocNumero            String?           @db.VarChar(100)
+  documentoAlterno    String?           @db.VarChar(100)
+  remisiones          String?           @db.VarChar(100)
+  moneda              String            @default("PESOS") @db.VarChar(20)
+  observaciones       String?           @db.Text
+  aplicaRetencion     Boolean           @default(false)
+  retencionPct        Decimal           @default(2.5) @db.Decimal(5, 2)
+  /// Retención de IVA (Fase 2): aplica sobre el IVA de la proforma, no sobre
+  /// el total bruto — ver domain/ventas/proforma-calculo.ts. Default 15,
+  /// desactivada por defecto igual que las otras dos, para que las
+  /// proformas ya creadas antes de este campo conserven su comportamiento.
+  aplicaRetencionIva  Boolean           @default(false)
+  retencionIvaPct     Decimal           @default(15) @db.Decimal(5, 2)
+  aplicaIca           Boolean           @default(false)
+  icaPct              Decimal           @default(0.7) @db.Decimal(5, 2)
+  /// Estado de la proforma. "activa" (default) o "anulada". Solo se usa hoy
+  /// para la regla anti-duplicados de cotización (ver crearProforma):
+  /// una proforma anulada nunca bloquea una nueva proforma sobre la misma
+  /// cotización de origen. No existían más estados antes de este campo.
+  estado              String            @default("activa") @db.VarChar(20)
+  /// Vinculación con la cotización de origen (CRM/Siesa) que dio pie a esta
+  /// proforma — opcional: una proforma puede seguir creándose manualmente,
+  /// sin cotización. Es solo una REFERENCIA + snapshot: los datos propios de
+  /// la proforma (cliente, items, precios, etc.) ya quedaron copiados en las
+  /// columnas de arriba al momento de crearla y NO cambian si la cotización
+  /// cambia después en la fuente.
+  cotizacionOrigen    String?           @db.VarChar(30)
+  /// Identificador técnico real de la cotización en la fuente (hoy:
+  /// t430_cm_pv_docto.f430_rowid en Siesa) — se revalida contra Siesa en
+  /// cada creación, nunca se confía en lo que mande el frontend.
+  cotizacionIdExterno String?           @db.VarChar(50)
+  /// Número visible de la cotización (ej. "COT-34147"), solo para mostrar.
+  cotizacionNumero    String?           @db.VarChar(50)
+  /// Documento ERP asociado si existe (ej. "PDV-55365"), solo para mostrar.
+  erpDocumentoNumero  String?           @db.VarChar(50)
+  /// Relación interna 1→N con la Cotización propia de RicoSoft (módulo
+  /// Comercial — Fase "Gestión Comercial"), independiente de las columnas
+  /// cotizacionOrigen/cotizacionIdExterno/cotizacionNumero de arriba, que
+  /// siguen intactas para la referencia externa (Siesa) ya validada. Nullable
+  /// a propósito: una proforma sigue pudiendo crearse manualmente, sin
+  /// cotización interna, exactamente igual que hoy.
+  cotizacionId        String?           @db.UniqueIdentifier
+  creadoPorId         String?           @db.UniqueIdentifier
+  creadoPorNombre     String            @db.VarChar(255)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creadoPor           User?             @relation(fields: [creadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cotizacion          Cotizacion?       @relation(fields: [cotizacionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items               ProformaItem[]
+  pedidosComerciales  PedidoComercial[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, clienteRowId])
+  @@index([tenantId, cotizacionIdExterno])
+  @@index([tenantId, cotizacionId])
+}
+
+/// Línea de producto de una Proforma. itemRowId referencia el maestro de
+/// ítems de Siesa cuando la línea vino del autocompletado; queda null si se
+/// escribió manualmente (mismo criterio opcional que ProformaItem.referencia).
+model ProformaItem {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  proformaId     String   @db.UniqueIdentifier
+  orden          Int
+  itemRowId      Int?
+  referencia     String?  @db.VarChar(100)
+  descripcion    String   @db.VarChar(500)
+  /// Bodega real de Siesa (t150_mc_bodegas) elegida para esta línea —
+  /// bodegaRowId es la identidad estable (leerBodegasSiesa), bodega es el
+  /// nombre ya resuelto en el momento de guardar, para mostrarlo en
+  /// pantalla/histórico/PDF sin depender de una segunda consulta a Siesa.
+  bodegaRowId    Int?
+  bodega         String?  @db.VarChar(20)
+  unidadMedida   String?  @db.VarChar(20)
+  cantidad       Decimal  @db.Decimal(18, 4)
+  precioUnitario Decimal  @db.Decimal(18, 2)
+  descuentoPct   Decimal  @default(0) @db.Decimal(5, 2)
+  ivaPct         Decimal  @default(19) @db.Decimal(5, 2)
+  proforma       Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+
+  @@index([proformaId])
+}
+
+/// Cotización propia de RicoSoft (módulo Comercial → Gestión Comercial, fase
+/// local). Independiente de la disponibilidad de Siesa: a diferencia de la
+/// cotización que hoy se busca en vivo en t430_cm_pv_docto
+/// (proformas.controller.ts / siesa-pedidos.service.ts), esta es una entidad
+/// propia con su propio consecutivo — nunca usa el consecutivo/rowid de
+/// Siesa como PK. Los campos erp* quedan preparados para la integración de
+/// escritura futura (fase posterior) pero NO se usan todavía en esta fase.
+/// estado: BORRADOR | ENVIADA | APROBADA | RECHAZADA | CONVERTIDA | ANULADA.
+model Cotizacion {
+  id                      String            @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                String            @db.UniqueIdentifier
+  numero                  Int
+  clienteRowId            Int
+  clienteNombre           String            @db.VarChar(255)
+  clienteNit              String?           @db.VarChar(50)
+  contacto                String?           @db.VarChar(255)
+  direccion               String?           @db.VarChar(500)
+  ciudad                  String?           @db.VarChar(255)
+  telefono                String?           @db.VarChar(50)
+  vendedorNombre          String?           @db.VarChar(255)
+  fecha                   DateTime          @default(now())
+  fechaVencimiento        DateTime?
+  estado                  String            @default("BORRADOR") @db.VarChar(20)
+  moneda                  String            @default("PESOS") @db.VarChar(20)
+  observaciones           String?           @db.Text
+  /// Preparado para la integración Siesa de escritura (fase futura): tipo de
+  /// documento ERP (ej. "CDV"), identidad técnica (rowid), número visible,
+  /// y estado/última fecha de sincronización. Sin adaptador todavía: estas
+  /// columnas quedan siempre null en esta fase.
+  erpTipoDocumento        String?           @db.VarChar(10)
+  erpRowId                Int?
+  erpNumero               String?           @db.VarChar(50)
+  erpFechaSincronizacion  DateTime?
+  erpEstadoSincronizacion String?           @db.VarChar(20)
+  creadoPorId             String?           @db.UniqueIdentifier
+  creadoPorNombre         String            @db.VarChar(255)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creadoPor               User?             @relation(fields: [creadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items                   CotizacionItem[]
+  proformas               Proforma[]
+  pedidos                 PedidoComercial[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, clienteRowId])
+  @@index([tenantId, estado])
+  @@index([tenantId, fecha])
+}
+
+/// Línea de una Cotizacion — mismo shape que ProformaItem (referencia,
+/// cantidad, precio, descuento, IVA, bodega opcional), para que
+/// crear-Proforma-desde-Cotización pueda copiar 1:1 sin transformar campos.
+model CotizacionItem {
+  id             String     @id @default(uuid()) @db.UniqueIdentifier
+  cotizacionId   String     @db.UniqueIdentifier
+  orden          Int
+  itemRowId      Int?
+  referencia     String?    @db.VarChar(100)
+  descripcion    String     @db.VarChar(500)
+  bodegaRowId    Int?
+  bodega         String?    @db.VarChar(20)
+  unidadMedida   String?    @db.VarChar(20)
+  cantidad       Decimal    @db.Decimal(18, 4)
+  precioUnitario Decimal    @db.Decimal(18, 2)
+  descuentoPct   Decimal    @default(0) @db.Decimal(5, 2)
+  ivaPct         Decimal    @default(19) @db.Decimal(5, 2)
+  cotizacion     Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@index([cotizacionId])
+}
+
+/// Pedido comercial propio de RicoSoft (módulo Comercial → Gestión
+/// Comercial). Deliberadamente NO se llama "PDV": PDV es el documento de
+/// pedido de venta en Siesa (t430_cm_pv_docto tipo PDV) — este es un
+/// documento interno de RicoSoft con su propio consecutivo (PC-XXXXX),
+/// preparado para relacionarse a futuro con un PDV real vía los campos erp*
+/// (sin adaptador todavía, fase posterior).
+/// estado: BORRADOR | CONFIRMADO | LISTO_PARA_ERP | SINCRONIZADO |
+/// ERROR_SINCRONIZACION | ANULADO.
+model PedidoComercial {
+  id                      String                @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                String                @db.UniqueIdentifier
+  numero                  Int
+  /// Cotización interna de origen, si el pedido viene de la cadena
+  /// Cotización→Proforma→Pedido. Nullable: también puede crearse
+  /// directamente desde una Proforma sin cotización interna.
+  cotizacionId            String?               @db.UniqueIdentifier
+  /// Proforma activa de origen (ver "Crear Pedido" en el detalle de
+  /// Proforma) — snapshot independiente, nunca se recalcula si la proforma
+  /// cambia después.
+  proformaId              String?               @db.UniqueIdentifier
+  clienteRowId            Int
+  clienteNombre           String                @db.VarChar(255)
+  clienteNit              String?               @db.VarChar(50)
+  vendedorNombre          String?               @db.VarChar(255)
+  fecha                   DateTime              @default(now())
+  estado                  String                @default("BORRADOR") @db.VarChar(20)
+  moneda                  String                @default("PESOS") @db.VarChar(20)
+  observaciones           String?               @db.Text
+  /// Preparado para la integración Siesa de escritura (fase futura) — ver
+  /// mismo comentario en Cotizacion. Sin usar todavía.
+  erpTipoDocumento        String?               @db.VarChar(10)
+  erpRowId                Int?
+  erpNumero               String?               @db.VarChar(50)
+  erpFechaSincronizacion  DateTime?
+  erpEstadoSincronizacion String?               @db.VarChar(20)
+  creadoPorId             String?               @db.UniqueIdentifier
+  creadoPorNombre         String                @db.VarChar(255)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  tenant                  Tenant                @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cotizacion              Cotizacion?           @relation(fields: [cotizacionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proforma                Proforma?             @relation(fields: [proformaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creadoPor               User?                 @relation(fields: [creadoPorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items                   PedidoComercialItem[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, clienteRowId])
+  @@index([tenantId, estado])
+  @@index([tenantId, fecha])
+  @@index([cotizacionId])
+  @@index([proformaId])
+}
+
+/// Línea de un PedidoComercial — mismo shape que ProformaItem/CotizacionItem.
+model PedidoComercialItem {
+  id             String          @id @default(uuid()) @db.UniqueIdentifier
+  pedidoId       String          @db.UniqueIdentifier
+  orden          Int
+  itemRowId      Int?
+  referencia     String?         @db.VarChar(100)
+  descripcion    String          @db.VarChar(500)
+  bodegaRowId    Int?
+  bodega         String?         @db.VarChar(20)
+  unidadMedida   String?         @db.VarChar(20)
+  cantidad       Decimal         @db.Decimal(18, 4)
+  precioUnitario Decimal         @db.Decimal(18, 2)
+  descuentoPct   Decimal         @default(0) @db.Decimal(5, 2)
+  ivaPct         Decimal         @default(19) @db.Decimal(5, 2)
+  pedido         PedidoComercial @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([pedidoId])
 }

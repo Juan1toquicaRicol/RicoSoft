@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma";
 import { CreditoCliente } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { leerSaldosAbiertosSiesa } from "../integraciones-siesa/siesa-financiero.service";
+import { leerIndicadorCreditoSiesa } from "../integraciones-siesa/siesa-credito.service";
 import { clasificarMonto, calcularResumenCartera } from "../../domain/creditos/clasificacion";
 
 const ESTADOS_VALIDOS = ["Al día", "Por vencer", "Vencido", "Paz y Salvo"];
@@ -486,5 +487,147 @@ export const eliminarCredito = async (req: AuthenticatedRequest, res: Response) 
   } catch (error) {
     console.error("Error al eliminar crédito:", error);
     return res.status(500).json({ message: "Error al eliminar el crédito." });
+  }
+};
+
+/**
+ * Cartera real de UN cliente (ficha 360, pestaña Cartera) — mismo servicio
+ * que ya usa listarCarteraSiesa (leerSaldosAbiertosSiesa), solo que acotado
+ * a un tercero puntual vía el filtro opcional agregado ahí. No es un
+ * endpoint paralelo: es la misma fuente, con un WHERE adicional.
+ */
+export const obtenerCarteraCliente = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const clienteRowId = Number.parseInt(String(req.params.clienteRowId), 10);
+    if (!Number.isInteger(clienteRowId)) {
+      return res.status(400).json({ message: "clienteRowId inválido." });
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { siesaCiaId: true },
+    });
+    if (!tenant?.siesaCiaId) {
+      return res.json({
+        disponible: false,
+        motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+        items: [],
+        resumen: RESUMEN_VACIO,
+      });
+    }
+
+    const saldos = (await leerSaldosAbiertosSiesa(tenant.siesaCiaId, clienteRowId)).filter(
+      (s) => s.saldo > 0,
+    );
+    const resumen = calcularResumenCartera(
+      saldos.map((s) => ({
+        clave: String(s.terceroRowId ?? clienteRowId),
+        saldo: s.saldo,
+        vence: s.vence,
+      })),
+    );
+
+    const items = saldos.map((s) => {
+      const c = clasificarMonto(s.saldo, s.vence, null);
+      return { saldo: s.saldo, vence: s.vence, diasMora: c.diasMora, estado: c.estado };
+    });
+
+    return res.json({ disponible: true, items, resumen });
+  } catch (error) {
+    console.error("Error al leer la cartera del cliente desde Siesa:", error);
+    return res.json({
+      disponible: false,
+      motivo: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      items: [],
+      resumen: RESUMEN_VACIO,
+    });
+  }
+};
+
+/**
+ * Indicador de crédito de UN cliente (ficha 360, pestaña Crédito) —
+ * t9896_pdv_clientes_analisis, un SNAPSHOT (no la cartera viva, esa es
+ * t353/obtenerCarteraCliente). Se lee de Siesa y se persiste como cache en
+ * IndicadorCreditoCliente con `actualizadoEn`, que la UI debe mostrar
+ * siempre junto al dato — nunca se presenta como si fuera tiempo real.
+ * Confirmado contra la instancia real: t9896 puede estar completamente vacía
+ * (sin filas) si Siesa/PDV nunca la pobló — en ese caso se devuelve
+ * `disponible: false` explícito, nunca se inventa un indicador en ceros.
+ */
+export const obtenerIndicadorCreditoCliente = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const clienteRowId = Number.parseInt(String(req.params.clienteRowId), 10);
+    if (!Number.isInteger(clienteRowId)) {
+      return res.status(400).json({ message: "clienteRowId inválido." });
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { siesaCiaId: true },
+    });
+    if (!tenant?.siesaCiaId) {
+      return res.json({
+        disponible: false,
+        motivo: "Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.",
+      });
+    }
+
+    const indicador = await leerIndicadorCreditoSiesa(tenant.siesaCiaId, clienteRowId);
+    if (!indicador) {
+      return res.json({
+        disponible: false,
+        motivo:
+          "Siesa no tiene análisis crediticio (t9896) registrado para este cliente todavía.",
+      });
+    }
+
+    const guardado = await req.tenantPrisma!.indicadorCreditoCliente.upsert({
+      where: { tenantId_clienteRowId: { tenantId, clienteRowId } },
+      create: {
+        tenantId,
+        clienteRowId,
+        cupoCredito: indicador.cupoCredito,
+        disponible: indicador.disponible,
+        carteraCorriente: indicador.carteraCorriente,
+        carteraVencida: indicador.carteraVencida,
+        diasPromedioVencido: indicador.diasPromedioVencido,
+        diasPromedioPago: indicador.diasPromedioPago,
+        bloquearCupo: indicador.bloquearCupo,
+        bloquearMora: indicador.bloquearMora,
+        bloquear: indicador.bloquear,
+      },
+      update: {
+        cupoCredito: indicador.cupoCredito,
+        disponible: indicador.disponible,
+        carteraCorriente: indicador.carteraCorriente,
+        carteraVencida: indicador.carteraVencida,
+        diasPromedioVencido: indicador.diasPromedioVencido,
+        diasPromedioPago: indicador.diasPromedioPago,
+        bloquearCupo: indicador.bloquearCupo,
+        bloquearMora: indicador.bloquearMora,
+        bloquear: indicador.bloquear,
+        actualizadoEn: new Date(),
+      },
+    });
+
+    return res.json({
+      disponible: true,
+      cupoCredito: Number(guardado.cupoCredito),
+      disponibleCredito: Number(guardado.disponible),
+      carteraCorriente: Number(guardado.carteraCorriente),
+      carteraVencida: Number(guardado.carteraVencida),
+      diasPromedioVencido: guardado.diasPromedioVencido,
+      diasPromedioPago: guardado.diasPromedioPago,
+      bloquearCupo: guardado.bloquearCupo,
+      bloquearMora: guardado.bloquearMora,
+      bloquear: guardado.bloquear,
+      origenDato: guardado.origenDato,
+      actualizadoEn: guardado.actualizadoEn,
+    });
+  } catch (error) {
+    console.error("Error al obtener el indicador de crédito del cliente:", error);
+    return res.status(500).json({ message: "Error al obtener el indicador de crédito." });
   }
 };

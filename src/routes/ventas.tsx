@@ -3,6 +3,7 @@ import { AlertTriangle, Info, Search, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { ProformaDialog } from "@/components/proforma-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,9 @@ import {
 } from "@/hooks/use-ventas";
 import { compact, formatCantidad, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/session-context";
+import { hasPermission } from "@/lib/session";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 
 export const Route = createFileRoute("/ventas")({
   head: () => ({
@@ -393,11 +397,17 @@ function PanelDisponibilidad() {
 
 function Ventas() {
   const { centro, loading } = useCentroComercial();
+  const { user } = useSession();
+  // Crear una proforma es ahora "proformas.manipular" (sección propia de
+  // Comercial), ya no "ventas.ver" — un usuario que solo puede VER el Centro
+  // Comercial pero no manipular Proformas no debe ver este atajo.
+  const puedeCrearProforma = hasPermission(user, PERMISOS_SISTEMA.PROFORMAS_GESTIONAR);
 
   return (
     <AppShell
       title="Ventas"
       description="Centro Operativo Comercial — qué puedo vender, qué no puedo comprometer y qué cliente requiere atención hoy"
+      actions={puedeCrearProforma ? <ProformaDialog /> : undefined}
     >
       <PanelDisponibilidad />
 

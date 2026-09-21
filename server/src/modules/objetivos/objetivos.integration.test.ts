@@ -37,10 +37,27 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
     return res.body.token as string;
   };
 
-  const rangoFuturo = () => ({
-    fechaInicio: new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    fechaFin: new Date(Date.now() + 430 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-  });
+  // H-02: cada llamada debe devolver una ventana de fechas propia y NO
+  // solapada con las demás — el objetivo creado en un `it()` normalmente no
+  // se borra (no hay cleanup entre tests, cada uno crea uno nuevo), así que
+  // dos llamadas con la MISMA fechaInicio/fechaFin chocan con la regla de
+  // negocio "no dos objetivos EMPRESA activos con rango solapado" (409) en
+  // vez de con el resultado 201 que el test espera. Antes, todas las
+  // llamadas devolvían exactamente [400,430] días desde hoy, y varios tests
+  // ("Editar…", "Eliminar…", "Sin siesaCiaId…") reusaban esa MISMA
+  // fechaInicio con un fechaFin distinto — cada uno de esos rangos seguía
+  // solapando el objetivo de la primera prueba (nunca eliminado) y entre sí.
+  // `baseDias` deja a cada llamador reservar su propio bloque de 30 días,
+  // separado por al menos 40 días de los demás usados en este archivo.
+  let rangoFuturoLlamadas = 0;
+  const rangoFuturo = (baseDias?: number) => {
+    const base = baseDias ?? 400 + rangoFuturoLlamadas * 40;
+    rangoFuturoLlamadas += 1;
+    return {
+      fechaInicio: new Date(Date.now() + base * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      fechaFin: new Date(Date.now() + (base + 30) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    };
+  };
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
@@ -253,7 +270,7 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
         nivel: "EMPRESA",
         tipoPeriodo: "MENSUAL",
         fechaInicio,
-        fechaFin: new Date(Date.now() + 600 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        fechaFin,
         metaValor: 300,
       });
     expect(creado.status).toBe(201);
@@ -281,7 +298,7 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
         nivel: "EMPRESA",
         tipoPeriodo: "MENSUAL",
         fechaInicio,
-        fechaFin: new Date(Date.now() + 700 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        fechaFin,
         metaValor: 400,
       });
     expect(creado.status).toBe(201);
@@ -311,7 +328,7 @@ describe.skipIf(!RUN)("Objetivos — multi-tenant real", () => {
         nivel: "EMPRESA",
         tipoPeriodo: "MENSUAL",
         fechaInicio,
-        fechaFin: new Date(Date.now() + 800 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        fechaFin,
         metaValor: 500,
       });
     expect(creado.status).toBe(201);

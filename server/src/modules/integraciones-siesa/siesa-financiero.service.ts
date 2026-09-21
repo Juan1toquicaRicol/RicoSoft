@@ -33,9 +33,19 @@ export interface SaldoAbiertoSiesa {
   saldo: number;
 }
 
-export async function leerSaldosAbiertosSiesa(ciaId: number): Promise<SaldoAbiertoSiesa[]> {
+/**
+ * `terceroRowId` opcional: acota el saldo abierto a UN tercero (usado por la
+ * ficha 360 del cliente, CRM) — omitido, se comporta exactamente igual que
+ * antes (cartera completa del tenant, usada por GET /creditos/cartera-siesa).
+ */
+export async function leerSaldosAbiertosSiesa(
+  ciaId: number,
+  terceroRowId?: number,
+): Promise<SaldoAbiertoSiesa[]> {
   const pool = await getSiesaPool();
-  const { recordset } = await pool.request().input("ciaId", ciaId).query<{
+  const request = pool.request().input("ciaId", ciaId);
+  if (terceroRowId !== undefined) request.input("terceroRowId", terceroRowId);
+  const { recordset } = await request.query<{
     terceroRowId: number | null;
     terceroNombre: string | null;
     terceroNit: string | null;
@@ -53,6 +63,7 @@ export async function leerSaldosAbiertosSiesa(ciaId: number): Promise<SaldoAbier
     WHERE s.f353_id_cia = @ciaId
       AND s.f353_fecha_cancelacion IS NULL
       AND (s.f353_total_db - s.f353_total_cr) <> 0
+      ${terceroRowId !== undefined ? "AND s.f353_rowid_tercero = @terceroRowId" : ""}
   `);
   return recordset.map((r) => ({
     terceroRowId: r.terceroRowId,

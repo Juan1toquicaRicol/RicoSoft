@@ -170,6 +170,52 @@ describe.skipIf(!RUN)("Reglas de Destinatarios — API, multi-tenant real", () =
     expect(listado.body.some((r: { id: string }) => r.id === creada.body.id)).toBe(true);
   });
 
+  it("H-03: el listado resuelve correctamente los nombres de USUARIO/PERFIL/AREA de VARIAS reglas con VARIOS destinatarios cada una (batching, no N+1)", async () => {
+    const reglaUno = await request(app)
+      .post("/api/reglas-destinatarios")
+      .set("Authorization", `Bearer ${tokenAdminA}`)
+      .send({
+        evento: `TEST_BATCH_UNO_${sufijo}`,
+        destinatarios: [
+          { tipo: "USUARIO", usuarioId: usuarioAId },
+          { tipo: "PERFIL", perfilId: perfilAId },
+        ],
+      });
+    expect(reglaUno.status).toBe(201);
+
+    const reglaDos = await request(app)
+      .post("/api/reglas-destinatarios")
+      .set("Authorization", `Bearer ${tokenAdminA}`)
+      .send({
+        evento: `TEST_BATCH_DOS_${sufijo}`,
+        destinatarios: [
+          { tipo: "AREA", departamentoId: departamentoAId },
+          { tipo: "USUARIO", usuarioId: usuarioAId },
+        ],
+      });
+    expect(reglaDos.status).toBe(201);
+
+    const listado = await request(app)
+      .get("/api/reglas-destinatarios")
+      .set("Authorization", `Bearer ${tokenAdminA}`);
+    expect(listado.status).toBe(200);
+
+    const uno = listado.body.find((r: { id: string }) => r.id === reglaUno.body.id);
+    const dos = listado.body.find((r: { id: string }) => r.id === reglaDos.body.id);
+    expect(uno).toBeDefined();
+    expect(dos).toBeDefined();
+
+    const usuarioEnUno = uno.destinatarios.find((d: { tipo: string }) => d.tipo === "USUARIO");
+    const perfilEnUno = uno.destinatarios.find((d: { tipo: string }) => d.tipo === "PERFIL");
+    expect(usuarioEnUno.usuarioNombre).toBe("Usuario A");
+    expect(perfilEnUno.perfilNombre).toBe("Tesorería");
+
+    const areaEnDos = dos.destinatarios.find((d: { tipo: string }) => d.tipo === "AREA");
+    const usuarioEnDos = dos.destinatarios.find((d: { tipo: string }) => d.tipo === "USUARIO");
+    expect(areaEnDos.departamentoNombre).toBe(`Contabilidad ${sufijo}`);
+    expect(usuarioEnDos.usuarioNombre).toBe("Usuario A");
+  });
+
   it("Un usuario sin permiso reglas_destinatarios.crear recibe 403", async () => {
     const res = await request(app)
       .post("/api/reglas-destinatarios")

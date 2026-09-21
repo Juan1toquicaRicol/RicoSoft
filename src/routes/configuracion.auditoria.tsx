@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -22,25 +22,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { agruparFilas } from "@/lib/agrupar";
-import { fetchAuth } from "@/lib/session";
+import { fetchAuth, fetchAuthBlob, hasPermission } from "@/lib/session";
+import { useSession } from "@/lib/session-context";
+import { requirePermisoGuard } from "@/lib/route-guards";
+import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 
-export const Route = createFileRoute("/auditoria")({
-  head: () => ({
-    meta: [
-      { title: "Auditoría | RicoSoft" },
-      {
-        name: "description",
-        content: "Traza completa de accesos, cambios, aprobaciones y descargas del sistema.",
-      },
-      { property: "og:title", content: "Auditoría | RicoSoft" },
-      {
-        property: "og:description",
-        content: "Registro de todas las acciones realizadas en la plataforma.",
-      },
-    ],
-  }),
-  component: Auditoria,
+export const Route = createFileRoute("/configuracion/auditoria")({
+  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.AUDITORIA_VER),
+  component: AuditoriaConfigPage,
 });
 
 interface EventoAuditoria {
@@ -76,16 +67,16 @@ function formatearValor(valor: unknown): string {
   return String(valor);
 }
 
-function Auditoria() {
-  const [eventos, setEventos] = useState<EventoAuditoria[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function AuditoriaConfigPage() {
+  const { user: sesion } = useSession();
+  const puedeExportar = hasPermission(sesion, PERMISOS_SISTEMA.AUDITORIA_EXPORTAR);
+
   const [expandido, setExpandido] = useState<string | null>(null);
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [exportando, setExportando] = useState(false);
   const PAGE_SIZE = 50;
 
   const claveDeAgrupacion = useMemo(() => {
@@ -99,39 +90,79 @@ function Auditoria() {
     }
   }, [agrupacion]);
 
+  const paramsFiltro = useMemo(() => {
+    const params = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page) });
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
+    return params;
+  }, [desde, hasta, page]);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["auditoria", paramsFiltro.toString()],
+    queryFn: () => fetchAuth(`/auditoria?${paramsFiltro.toString()}`),
+  });
+
+  const eventos: EventoAuditoria[] = data?.data ?? [];
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+
   const gruposEventos = useMemo(
     () => agruparFilas(eventos, claveDeAgrupacion),
     [eventos, claveDeAgrupacion],
   );
 
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      try {
-        const params = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page) });
-        if (desde) params.set("desde", desde);
-        if (hasta) params.set("hasta", hasta);
-        const data = await fetchAuth(`/auditoria?${params.toString()}`);
-        setEventos(data.data ?? []);
-        setTotalPages(Math.max(1, Math.ceil((data.total ?? 0) / PAGE_SIZE)));
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Error cargando el registro de auditoría.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [desde, hasta, page]);
+  const handleExportar = async () => {
+    setExportando(true);
+    try {
+      const filtroExport = new URLSearchParams();
+      if (desde) filtroExport.set("desde", desde);
+      if (hasta) filtroExport.set("hasta", hasta);
+      const blob = await fetchAuthBlob(`/auditoria/exportar?${filtroExport.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Registro de auditoría exportado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible exportar el registro.");
+    } finally {
+      setExportando(false);
+    }
+  };
 
   return (
-    <AppShell
-      title="Auditoría"
-      description="Registro de eventos de seguridad y administración"
-      actions={
-        <Button variant="outline" size="sm" className="gap-2" disabled>
-          <Download className="h-4 w-4" /> Exportar log
-        </Button>
-      }
-    >
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+            <History className="h-6 w-6 text-blue-600" />
+            Auditoría
+          </h1>
+          <p className="text-sm text-slate-500">
+            Registro de eventos de seguridad y administración, con antes/después de cada cambio.
+          </p>
+        </div>
+        {puedeExportar && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={exportando}
+            onClick={handleExportar}
+          >
+            {exportando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Exportar log
+          </Button>
+        )}
+      </div>
+
       <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-3">
           <div className="flex flex-wrap items-end gap-3">
@@ -203,18 +234,22 @@ function Auditoria() {
             </TableRow>
           </TableHeader>
           <TableBody className="text-slate-800 font-medium">
-            {loading && (
+            {isLoading && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={5} className="px-4 py-6 text-center text-xs text-slate-500">
                   Cargando...
                 </TableCell>
               </TableRow>
             )}
-            {!loading && eventos.length === 0 && (
+            {!isLoading && eventos.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={5} className="p-0">
                   {error ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-500">{error}</div>
+                    <div className="px-4 py-6 text-center text-xs text-slate-500">
+                      {error instanceof Error
+                        ? error.message
+                        : "Error cargando el registro de auditoría."}
+                    </div>
                   ) : (
                     <EmptyState icon={History} title="No hay eventos registrados todavía" />
                   )}
@@ -319,7 +354,7 @@ function Auditoria() {
             ))}
           </TableBody>
         </Table>
-        {!loading && eventos.length > 0 && (
+        {!isLoading && eventos.length > 0 && (
           <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3">
             <p className="text-[11px] text-slate-500">
               Página {page} de {totalPages}
@@ -347,6 +382,6 @@ function Auditoria() {
           </div>
         )}
       </div>
-    </AppShell>
+    </div>
   );
 }

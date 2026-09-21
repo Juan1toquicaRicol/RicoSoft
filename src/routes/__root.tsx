@@ -11,27 +11,13 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { ErrorPage, pickErrorVariant } from "@/components/system/error-page";
+import { ErrorBoundary } from "@/components/system/error-boundary";
+import { OfflinePage } from "@/components/system/offline-page";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 
 function NotFoundComponent() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">No encontramos la pagina</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No logramos encontrar la pagina que estas buscando, puedes intentar volver al inicio.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Ir al inicio
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  return <ErrorPage variant="404" />;
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
@@ -42,33 +28,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          La pagina no se pudo cargar correctamente
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Algo paso con la carga de este sitio, reintenta nuevamente o vuelve al inicio.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Intentar de nuevo
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Ir al inicio
-          </a>
-        </div>
-      </div>
-    </div>
+    <ErrorPage
+      variant={pickErrorVariant(error)}
+      onRetry={() => {
+        router.invalidate();
+        reset();
+      }}
+      detalleTecnico={import.meta.env.DEV ? (error.stack ?? error.message) : undefined}
+    />
   );
 }
 
@@ -133,14 +100,22 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const online = useOnlineStatus();
 
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
         <TenantProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
+          <ErrorBoundary>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+          </ErrorBoundary>
           <Toaster position="top-right" richColors closeButton />
+          {/* Aviso NO bloqueante de sin-conexión: navigator.onLine puede dar
+              falso positivo en red local (ver use-online-status.ts), así que
+              esto nunca debe tapar la pantalla ni impedir usar RicoSoft —
+              solo informa en una esquina. No cierra sesión, no borra estado. */}
+          {!online && <OfflinePage onRetry={() => window.location.reload()} />}
         </TenantProvider>
       </SessionProvider>
     </QueryClientProvider>

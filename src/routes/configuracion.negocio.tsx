@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Percent } from "lucide-react";
 import { toast } from "sonner";
 
 import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { useConfiguracionInventario, type ConfiguracionInventario } from "@/hooks/use-inventario";
+import { useConfiguracionComercial, type ConfiguracionComercial } from "@/hooks/use-proformas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -220,6 +221,117 @@ function ConfiguracionNegocioPage() {
           </Button>
         </div>
       </form>
+
+      <ConfiguracionComercialSection />
+    </div>
+  );
+}
+
+/** Tasas de retención de Ventas/Proformas — modelo y endpoint propios
+ * (ConfiguracionComercial), a propósito separados de ConfiguracionInventario
+ * de arriba (dominio distinto). Cambiar esto solo afecta proformas NUEVAS:
+ * cada proforma ya creada conserva el snapshot de porcentajes con el que se
+ * generó (ver Proforma.retencionPct/retencionIvaPct/icaPct en el backend). */
+function ConfiguracionComercialSection() {
+  const { configuracion, loading, guardar } = useConfiguracionComercial();
+  const [valores, setValores] = useState<ConfiguracionComercial>({
+    retencionFuentePct: 2.5,
+    retencionIvaPct: 15,
+    retencionIcaPct: 0.7,
+  });
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (configuracion) setValores(configuracion);
+  }, [configuracion]);
+
+  const handleGuardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGuardando(true);
+    try {
+      await guardar(valores);
+      toast.success("Retenciones de Ventas actualizadas.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar las retenciones.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleGuardar}
+      className="space-y-4 bg-white p-6 rounded-lg border border-slate-200 shadow-2xs"
+    >
+      <div>
+        <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <Percent className="h-4 w-4 text-blue-600" />
+          Retenciones de Ventas (Proformas)
+        </h2>
+        <p className="text-xs text-slate-500 max-w-2xl mt-1">
+          Porcentajes iniciales con los que se crea cada proforma nueva. Cambiarlos no afecta las
+          proformas ya creadas: cada una conserva las tasas con las que se generó.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <CampoPorcentaje
+          etiqueta="Retención en la fuente"
+          ayuda="ReteFuente = Total bruto × este %."
+          valor={valores.retencionFuentePct}
+          disabled={loading}
+          onChange={(v) => setValores((prev) => ({ ...prev, retencionFuentePct: v }))}
+        />
+        <CampoPorcentaje
+          etiqueta="Retención de IVA"
+          ayuda="ReteIVA = Valor IVA × este % (sobre el impuesto, no sobre el bruto)."
+          valor={valores.retencionIvaPct}
+          disabled={loading}
+          onChange={(v) => setValores((prev) => ({ ...prev, retencionIvaPct: v }))}
+        />
+        <CampoPorcentaje
+          etiqueta="Retención ICA"
+          ayuda="ReteICA = Total bruto × este %."
+          valor={valores.retencionIcaPct}
+          disabled={loading}
+          onChange={(v) => setValores((prev) => ({ ...prev, retencionIcaPct: v }))}
+        />
+      </div>
+      <div className="flex justify-end pt-2">
+        <Button type="submit" variant="success" disabled={guardando || loading}>
+          {guardando ? "Guardando..." : "Guardar retenciones"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function CampoPorcentaje({
+  etiqueta,
+  ayuda,
+  valor,
+  disabled,
+  onChange,
+}: {
+  etiqueta: string;
+  ayuda: string;
+  valor: number;
+  disabled: boolean;
+  onChange: (valor: number) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm font-medium text-slate-700">{etiqueta}</label>
+      <Input
+        type="number"
+        required
+        min={0}
+        max={100}
+        step={0.1}
+        value={valor}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <p className="text-xs text-slate-500">{ayuda}</p>
     </div>
   );
 }

@@ -3,6 +3,21 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { whereAlcance } from "../../lib/alcance";
+import { permisoClaveDeSecciones } from "../../lib/catalogo-permisos";
+
+/**
+ * Valores que `permisoClave` tuvo por defecto en versiones anteriores, por
+ * módulo. Si la fila del tenant todavía tiene uno de estos (o el valor
+ * vigente), nadie la personalizó y se puede actualizar al valor actual; si
+ * tiene cualquier otra cosa, es una decisión del administrador y NO se toca.
+ *
+ * Esto sustituye a las migraciones SQL manuales: antes, cambiar el permiso
+ * de un módulo en el código no llegaba a los tenants ya sembrados (la fila
+ * solo se crea una vez), y hacía falta un UPDATE a mano por cada cambio.
+ */
+const PERMISO_CLAVE_HISTORICO: Record<string, string[]> = {
+  "gestion-comercial": ["cotizaciones.ver", "cotizaciones.ver,proformas.ver,pedidos_comerciales.ver"],
+};
 
 /**
  * Catálogo por defecto de módulos principales de la aplicación. Se usa para
@@ -83,6 +98,22 @@ const CATALOGO_DEFECTO: Array<{
     ruta: "/ventas",
     icono: "ShoppingBag",
     permisoClave: "ventas.ver",
+  },
+  {
+    clave: "gestion-comercial",
+    nombre: "Gestión Comercial",
+    ruta: "/comercial/gestion",
+    icono: "FileText",
+    // Agrega 3 secciones del módulo Comercial — Centro Comercial y Objetivos
+    // tienen su propia entrada de menú. Basta con tener el VER de una para
+    // que el módulo aparezca (ver tieneAcceso(), que interpreta la lista
+    // separada por comas como "cualquiera de estos"). Los códigos se derivan
+    // de la jerarquía, no se escriben a mano.
+    permisoClave: permisoClaveDeSecciones([
+      "cotizaciones",
+      "proformas",
+      "pedidos_comerciales",
+    ]),
   },
   {
     clave: "despachos",
@@ -217,6 +248,37 @@ async function listarModulosDelTenant(tenantId: string): Promise<ModuloConDepart
     });
   }
 
+  // Reconciliación de `permisoClave` para módulos ya sembrados: si la fila
+  // del tenant sigue en un valor histórico conocido (ver
+  // PERMISO_CLAVE_HISTORICO) — es decir, nadie la personalizó — se
+  // actualiza al valor vigente del catálogo. Si tiene cualquier otro valor,
+  // es una decisión del administrador y se respeta. Esto reemplaza la
+  // migración SQL manual que hacía falta cada vez que el permiso de un
+  // módulo cambiaba en el código.
+  const porActualizar = propios.filter((m) => {
+    const defecto = CATALOGO_DEFECTO.find((d) => d.clave === m.clave);
+    if (!defecto || defecto.permisoClave === m.permisoClave) return false;
+    const historicos = PERMISO_CLAVE_HISTORICO[m.clave] ?? [];
+    return m.permisoClave === null || historicos.includes(m.permisoClave);
+  });
+
+  if (porActualizar.length > 0) {
+    await Promise.all(
+      porActualizar.map((m) => {
+        const defecto = CATALOGO_DEFECTO.find((d) => d.clave === m.clave)!;
+        return prisma.modulo.update({
+          where: { id: m.id },
+          data: { permisoClave: defecto.permisoClave },
+        });
+      }),
+    );
+    modulos = await prisma.modulo.findMany({
+      where: whereAlcance(tenantId),
+      include: INCLUDE_DEPARTAMENTO,
+      orderBy: { orden: "asc" },
+    });
+  }
+
   return modulos;
 }
 
@@ -252,10 +314,26 @@ const serializar = (modulo: {
  * el módulo no exige ningún permiso (dashboard/bandeja), o tiene ese permiso
  * concreto en su sesión activa — el mismo `req.user.permisos` que ya usa
  * `requirePermission()` en cada endpoint, ninguna fuente nueva de verdad. */
+/**
+ * `permisoClave` admite una lista separada por comas ("a.ver,b.ver") para
+ * módulos que agregan varias secciones independientes (p. ej. Gestión
+ * Comercial = Cotizaciones + Proformas + Pedidos comerciales): basta con
+ * tener AL MENOS UNO de esos permisos para que el módulo aparezca en el
+ * menú — cada sección adentro sigue filtrando su propio contenido por su
+ * propio permiso VER (ver documentos.controller.ts).
+ */
 function tieneAcceso(req: AuthenticatedRequest, permisoClave: string | null): boolean {
   if (req.user!.isSuperadmin) return true;
   if (!permisoClave) return true;
-  return req.user!.permisos.includes(permisoClave);
+  const opciones = permisoClave.split(",").map((p) => p.trim()).filter(Boolean);
+  return opciones.some((p) => req.user!.permisos.includes(p));
+}
+
+/** El Dashboard debe verse siempre, incluso si un registro quedó con
+ * `activo=false` o `permisoClave` seteado de antes de que actualizarModulo
+ * empezara a bloquear esos cambios sobre este módulo. */
+function esVisibleSiempre(clave: string): boolean {
+  return clave === "dashboard";
 }
 
 /**
@@ -289,7 +367,9 @@ export const listarModulosMenu = async (req: AuthenticatedRequest, res: Response
     // El filtro de `activo` se aplica en memoria (no en SQL): ya se trajeron
     // todos los módulos accesibles para el chequeo de siembra de arriba, así
     // que reutilizamos ese mismo resultado en vez de una segunda consulta.
-    const visibles = modulos.filter((m) => m.activo && tieneAcceso(req, m.permisoClave));
+    const visibles = modulos.filter(
+      (m) => esVisibleSiempre(m.clave) || (m.activo && tieneAcceso(req, m.permisoClave)),
+    );
 
     return res.json(visibles.map(serializar));
   } catch (error) {
@@ -310,6 +390,19 @@ export const actualizarModulo = async (req: AuthenticatedRequest, res: Response)
     const existente = await prisma.modulo.findFirst({ where: { id, ...whereAlcance(tenantId) } });
     if (!existente) {
       return res.status(404).json({ message: "Módulo no encontrado." });
+    }
+    // El Dashboard es la pantalla de inicio para TODO usuario autenticado
+    // (ver CATALOGO_DEFECTO): no puede desactivarse ni exigir un permiso,
+    // sin importar quién lo edite desde Configuración > Módulos.
+    if (existente.clave === "dashboard") {
+      if (activo === false) {
+        return res.status(400).json({ message: "El módulo Dashboard no se puede desactivar." });
+      }
+      if (permisoClave) {
+        return res.status(400).json({
+          message: "El módulo Dashboard no puede exigir un permiso: debe ser accesible para todos.",
+        });
+      }
     }
     if (alcance !== undefined && alcance !== "GENERAL" && alcance !== "TENANT") {
       return res.status(400).json({ message: 'El alcance debe ser "GENERAL" o "TENANT".' });

@@ -35,6 +35,7 @@ describe.skipIf(!RUN)(
     let tokenB: string;
     let userAId: string;
     let usuarioNormalAId: string;
+    let usuarioNormalBId: string;
 
     const login = async (email: string): Promise<string> => {
       const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
@@ -78,6 +79,29 @@ describe.skipIf(!RUN)(
           activo: true,
         },
       });
+      // H-02: usuario normal de Tenant B, DISTINTO del Admin B que hace las
+      // llamadas con tokenB. El test "12-14." usa tokenB para otorgar una
+      // membresía "a un usuario de B" — si ese usuario resuelto por
+      // findFirst() resultara ser el propio Admin B (el único usuario que
+      // existía en B), la llamada sería indistinguible de auto-otorgarse una
+      // membresía, y crearMembresia la rechaza con 409 a propósito
+      // ("No puedes otorgarte una membresía a ti mismo.", ver
+      // membresias.controller.ts) — un guardado real contra escalación de
+      // privilegios, no un bug. Antes esta fixture solo creaba un usuario en
+      // B, así que `findFirst({ tenantId: tenantBId })` SIEMPRE devolvía el
+      // propio Admin B y el test chocaba con ese guardado 409 en vez de
+      // probar el camino feliz que dice probar.
+      const usuarioNormalB = await prisma.user.create({
+        data: {
+          tenantId: tenantBId,
+          email: `alcance-normal-b-${sufijo}@test.ricosoft.local`,
+          passwordHash,
+          nombre: "Usuario Normal B",
+          isSuperadmin: false,
+          activo: true,
+        },
+      });
+      usuarioNormalBId = usuarioNormalB.id;
       // Usuario normal (NO superadmin) de Tenant A: un superadmin no puede
       // que se le reasigne el rol (regla real de negocio en
       // usuarios.controller.ts, "No se puede reasignar el rol de un
@@ -221,9 +245,11 @@ describe.skipIf(!RUN)(
         // Dar a un usuario de B membresía HACIA Tenant A usando el rol de A
         // es válido (el rol pertenece al tenant DESTINO de la membresía) —
         // confirma que sí se pueden otorgar accesos cruzados legítimos.
-        const usuarioB = await prisma.user.findFirst({ where: { tenantId: tenantBId } });
+        // Usa usuarioNormalB (creado aparte, no el Admin B dueño de
+        // tokenB): otorgar una membresía a sí mismo está bloqueado a
+        // propósito (409, ver comentario en beforeAll).
         const membresiaValida = await request(app)
-          .post(`/api/membresias/usuarios/${usuarioB!.id}`)
+          .post(`/api/membresias/usuarios/${usuarioNormalBId}`)
           .set("Authorization", `Bearer ${tokenB}`)
           .send({ tenantId: tenantAId, rolId: crear.body.id });
         expect(membresiaValida.status).toBe(201);
@@ -238,35 +264,53 @@ describe.skipIf(!RUN)(
           data: {
             tenantId: tenantC.id,
             email: `alcance-c-${sufijo}@test.ricosoft.local`,
-            passwordHash: (await prisma.user.findUnique({ where: { id: usuarioB!.id } }))!
-              .passwordHash,
+            passwordHash: await bcrypt.hash(PASSWORD, 10),
             nombre: "Admin C",
             isSuperadmin: true,
             activo: true,
           },
         });
+        // Objetivo de la membresía: nativo de C pero DISTINTO del Admin C
+        // que llama con tokenC — igual que con usuarioNormalB más arriba,
+        // otorgarse una membresía a uno mismo está bloqueado a propósito
+        // (409) y taparía la barrera que este test realmente quiere probar.
+        const usuarioNormalC = await prisma.user.create({
+          data: {
+            tenantId: tenantC.id,
+            email: `alcance-normal-c-${sufijo}@test.ricosoft.local`,
+            passwordHash: await bcrypt.hash(PASSWORD, 10),
+            nombre: "Usuario Normal C",
+            isSuperadmin: false,
+            activo: true,
+          },
+        });
         const tokenC = await login(`alcance-c-${sufijo}@test.ricosoft.local`);
         const membresiaCrossTenant = await request(app)
-          .post(`/api/membresias/usuarios/${usuarioC.id}`)
+          .post(`/api/membresias/usuarios/${usuarioNormalC.id}`)
           .set("Authorization", `Bearer ${tokenC}`)
           .send({ tenantId: tenantAId, rolId: crear.body.id });
-        // usuarioC no es nativo de A ni de C-hacia-A tiene ese rol... en
-        // realidad el rol SÍ pertenece a A y el destino también es A, así
-        // que lo relevante acá es que un tenant ajeno (C) no puede ni
-        // siquiera iniciar la operación sobre un usuario que no es suyo si
-        // el actor no es de la empresa nativa correcta — pero usuarioC SÍ
-        // es nativo de C y actúa sobre sí mismo, así que la única barrera
-        // real que debe activarse es intentar usar el rol de A para un
-        // tenant destino que NO es A.
+        // El rol SÍ pertenece a A y el destino también es A, así que esta
+        // llamada es el camino feliz (201) — confirma que un superadmin de
+        // C sí puede otorgar a UNO DE LOS SUYOS acceso hacia A usando el rol
+        // de A. Lo relevante del test es la siguiente llamada.
+        expect(membresiaCrossTenant.status).toBe(201);
+
+        // El caso realmente inválido: usar ese mismo rol (exclusivo de A)
+        // para una membresía cuyo tenant DESTINO es un tercer tenant (B),
+        // donde el rol no pertenece ni es GENERAL — debe rechazarse.
         const membresiaRolAjeno = await request(app)
-          .post(`/api/membresias/usuarios/${usuarioC.id}`)
+          .post(`/api/membresias/usuarios/${usuarioNormalC.id}`)
           .set("Authorization", `Bearer ${tokenC}`)
           .send({ tenantId: tenantBId, rolId: crear.body.id });
         expect(membresiaRolAjeno.status).toBe(404);
 
-        await prisma.membresia.deleteMany({ where: { userId: usuarioC.id } });
-        await prisma.auditoria.deleteMany({ where: { usuarioId: usuarioC.id } });
-        await prisma.user.delete({ where: { id: usuarioC.id } });
+        await prisma.membresia.deleteMany({
+          where: { userId: { in: [usuarioC.id, usuarioNormalC.id] } },
+        });
+        await prisma.auditoria.deleteMany({
+          where: { usuarioId: { in: [usuarioC.id, usuarioNormalC.id] } },
+        });
+        await prisma.user.deleteMany({ where: { id: { in: [usuarioC.id, usuarioNormalC.id] } } });
         await prisma.tenant.delete({ where: { id: tenantC.id } });
       });
 
@@ -335,15 +379,18 @@ describe.skipIf(!RUN)(
         expect(asignarEnA.status).toBe(200);
       });
 
-      it("26-28. esSistemas de un departamento GENERAL sigue dando bypass solo dentro del tenant activo", async () => {
+      it("26-28. esSistemas ya NO concede permisos; el tenant activo sigue siendo el propio", async () => {
         const crear = await request(app)
           .post("/api/departamentos")
           .set("Authorization", `Bearer ${tokenA}`)
           .send({ nombre: `Sistemas General ${sufijo}`, alcance: "GENERAL", esSistemas: true });
 
         // Usuario normal (no superadmin) de Tenant B, sin ningún permiso,
-        // asignado al departamento Sistemas GENERAL: debe tener bypass DENTRO
-        // de Tenant B, y jamás acceso a datos de Tenant A.
+        // asignado al departamento Sistemas GENERAL. esSistemas dejó de ser
+        // un mecanismo de autorización (era una segunda vía de acceso total
+        // paralela a isSuperadmin, invisible en la pantalla de Roles): ahora
+        // este usuario NO recibe permiso alguno, y su tenant activo sigue
+        // siendo B, nunca A.
         const passwordHash = await bcrypt.hash(PASSWORD, 10);
         const empleado = await prisma.user.create({
           data: {
@@ -362,9 +409,11 @@ describe.skipIf(!RUN)(
           .get("/api/auth/me")
           .set("Authorization", `Bearer ${tokenEmpleado}`);
         expect(me.body.user.tenantId).toBe(tenantBId);
-        // El bypass de "Sistemas" se refleja en permisos efectivos amplios,
-        // pero el tenant activo sigue siendo B — nunca A.
         expect(me.body.user.tenantId).not.toBe(tenantAId);
+        // Sin rol y sin isSuperadmin, pertenecer a un departamento
+        // esSistemas no otorga NADA.
+        expect(me.body.user.isSuperadmin).toBe(false);
+        expect(me.body.user.permisos).toEqual([]);
 
         await prisma.auditoria.deleteMany({ where: { usuarioId: empleado.id } });
         await prisma.user.delete({ where: { id: empleado.id } });

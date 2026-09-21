@@ -1,13 +1,22 @@
+// Fallback de altísimo nivel: se ejecuta ANTES de que React monte (ver
+// server.ts/start.ts), así que deliberadamente no importa React, hooks, ni
+// nada de src/components/system/error-page.tsx — solo HTML/CSS plano. No
+// carga el logo como <img> porque en este punto no hay garantía de que el
+// bundle/estático esté disponible (el fallo puede ser justo ese); en su
+// lugar usa una representación textual sobria de la marca, consistente con
+// el resto del sistema de errores (ver src/components/system/error-page.tsx).
 export function renderErrorPage(): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8" />
-    <title>This page didn't load</title>
+    <title>RicoSoft</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #fafafa; color: #111; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
       .card { max-width: 28rem; width: 100%; text-align: center; padding: 2rem; }
+      .brand { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.01em; margin: 0 0 0.125rem; }
+      .brand-sub { font-size: 0.75rem; color: #6b7280; margin: 0 0 1.5rem; }
       h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
       p { color: #4b5563; margin: 0 0 1.5rem; }
       .actions { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
@@ -18,11 +27,13 @@ export function renderErrorPage(): string {
   </head>
   <body>
     <div class="card">
-      <h1>This page didn't load</h1>
-      <p>Something went wrong on our end. You can try refreshing or head back home.</p>
+      <p class="brand">RicoSoft</p>
+      <p class="brand-sub">Enterprise V1.0</p>
+      <h1>Se produjo un error inesperado</h1>
+      <p>No fue posible cargar RicoSoft correctamente. Intenta recargar la página.</p>
       <div class="actions">
-        <button class="primary" onclick="location.reload()">Try again</button>
-        <a class="secondary" href="/">Go home</a>
+        <button class="primary" onclick="location.reload()">Recargar página</button>
+        <a class="secondary" href="/">Ir al inicio</a>
       </div>
     </div>
   </body>

@@ -6,7 +6,7 @@ import { fetchAuth } from "@/lib/session";
 // catálogo ACCION_CONTACTO_OPORTUNIDAD/RESULTADO_CONTACTO_OPORTUNIDAD vía
 // useCatalogo), solo para tipar y para la lógica de negocio de abajo
 // (RESULTADOS_TERMINALES).
-const ACCIONES_CONTACTO_VALIDAS = [
+export const ACCIONES_CONTACTO_VALIDAS = [
   "Llamada",
   "WhatsApp",
   "Correo",
@@ -18,7 +18,7 @@ const ACCIONES_CONTACTO_VALIDAS = [
 ] as const;
 export type AccionContacto = (typeof ACCIONES_CONTACTO_VALIDAS)[number];
 
-const RESULTADOS_CONTACTO_VALIDOS = [
+export const RESULTADOS_CONTACTO_VALIDOS = [
   "Contactado",
   "SinRespuesta",
   "Interesado",
@@ -44,6 +44,11 @@ export interface SeguimientoOportunidad {
   proximaAccion: string | null;
   /** ISO string o null. */
   proximoSeguimientoFecha: string | null;
+  /** Compromiso = proximaAccion + proximoSeguimientoFecha de este evento. */
+  compromisoCompletado: boolean;
+  /** ISO string o null — fecha REAL de ejecución del compromiso, nunca igual a createdAt. */
+  compromisoCompletadoEn: string | null;
+  compromisoCompletadoPor: string | null;
   usuario: string;
   /** ISO string. */
   createdAt: string;
@@ -106,7 +111,17 @@ export function useSeguimientoOportunidad(clienteRowId: number | null) {
     [clienteRowId, refresh],
   );
 
-  return { ...timeline, loading, error, refresh, registrar };
+  const completar = useCallback(
+    async (seguimientoId: string) => {
+      await fetchAuth(`/oportunidades/seguimientos/${seguimientoId}/completar`, {
+        method: "PATCH",
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { ...timeline, loading, error, refresh, registrar, completar };
 }
 
 /** "¿Qué debo hacer hoy?" — próximos seguimientos pendientes de todo el tenant. */

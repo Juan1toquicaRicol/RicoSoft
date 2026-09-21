@@ -27,3 +27,20 @@ export function requirePermisoGuard(permiso: string) {
     }
   };
 }
+
+/**
+ * Variante de requirePermisoGuard para pantallas que agregan varias secciones
+ * (p. ej. la bandeja Comercial: Cotizaciones + Proformas + Pedidos), donde
+ * exigir un único permiso dejaría afuera a alguien que solo tiene visibilidad
+ * de otra sección que la pantalla también agrega. Pasa si el usuario tiene AL
+ * MENOS UNO de los permisos dados.
+ */
+export function requireAnyPermisoGuard(permisos: string[]) {
+  return () => {
+    if (typeof window === "undefined") return;
+    const user = getCachedUser();
+    if (!user || !permisos.some((p) => hasPermission(user, p))) {
+      throw redirect({ to: "/" });
+    }
+  };
+}

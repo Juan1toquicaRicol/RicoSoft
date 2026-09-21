@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 
+/**
+ * Ubicación de un permiso en la jerarquía Módulo → Sección declarada en
+ * server/src/lib/catalogo-permisos.ts. `null` para permisos personalizados
+ * del tenant (creados en Configuración > Permisos), que no forman parte de
+ * esa estructura — la UI los agrupa aparte, por `modulo` (columna libre).
+ */
+export interface JerarquiaPermiso {
+  moduloClave: string;
+  moduloNombre: string;
+  seccionClave: string;
+  seccionNombre: string;
+  tipo: "ver" | "gestionar" | "especial";
+  accion: string;
+  dependeDe: string | null;
+}
+
 export interface PermisoCatalogo {
   id: string;
   codigo: string;
@@ -9,6 +25,7 @@ export interface PermisoCatalogo {
   modulo: string;
   esSistema: boolean;
   activo: boolean;
+  jerarquia: JerarquiaPermiso | null;
 }
 
 export interface DatosPermiso {

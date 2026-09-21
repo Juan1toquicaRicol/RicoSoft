@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -39,6 +39,7 @@ export const Route = createFileRoute("/comercial/clientes")({
 });
 
 function ComercialClientesPage() {
+  const navigate = useNavigate();
   const { centro, loading: cargandoRiesgo } = useCentroComercial();
   const { oportunidad, loading: cargandoOportunidad } = useOportunidadComercial();
 
@@ -100,8 +101,17 @@ function ComercialClientesPage() {
                     </TableHeader>
                     <TableBody>
                       {(centro.clientesInactivos ?? []).map((c) => (
-                        <TableRow key={c.clienteRowId} className="hover:bg-slate-50/80">
-                          <TableCell className="text-xs font-semibold text-slate-800">
+                        <TableRow
+                          key={c.clienteRowId}
+                          className="cursor-pointer hover:bg-slate-50/80"
+                          onClick={() =>
+                            navigate({
+                              to: "/comercial/clientes/$clienteRowId",
+                              params: { clienteRowId: String(c.clienteRowId) },
+                            })
+                          }
+                        >
+                          <TableCell className="text-xs font-semibold text-blue-700 hover:underline">
                             {c.clienteNombre ?? "Cliente sin nombre"}
                           </TableCell>
                           <TableCell className="text-right text-xs">
@@ -133,9 +143,24 @@ function ComercialClientesPage() {
                     {(centro.caidasClientesTop ?? []).map((c) => (
                       <li
                         key={c.clienteRowId ?? c.clienteNombre}
-                        className="flex items-center justify-between text-xs"
+                        className={cn(
+                          "flex items-center justify-between text-xs",
+                          c.clienteRowId !== null && "cursor-pointer",
+                        )}
+                        onClick={() =>
+                          c.clienteRowId !== null &&
+                          navigate({
+                            to: "/comercial/clientes/$clienteRowId",
+                            params: { clienteRowId: String(c.clienteRowId) },
+                          })
+                        }
                       >
-                        <span className="min-w-0 truncate text-slate-700">
+                        <span
+                          className={cn(
+                            "min-w-0 truncate text-slate-700",
+                            c.clienteRowId !== null && "text-blue-700 hover:underline",
+                          )}
+                        >
                           {c.clienteNombre ?? "Cliente sin nombre"}
                         </span>
                         <span className="num shrink-0 font-semibold text-slate-900">

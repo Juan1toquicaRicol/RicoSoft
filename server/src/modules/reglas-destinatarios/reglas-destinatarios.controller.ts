@@ -18,58 +18,95 @@ import {
 
 const INCLUDE_REGLA = { destinatarios: true };
 
-async function nombresDestinatario(d: {
-  tipo: string;
+type DestinatarioBase = {
   usuarioId: string | null;
   perfilId: string | null;
   departamentoId: string | null;
-  permisoClave: string | null;
-}) {
-  const [usuario, perfil, departamento] = await Promise.all([
-    d.usuarioId
-      ? prisma.user.findUnique({ where: { id: d.usuarioId }, select: { nombre: true } })
-      : null,
-    d.perfilId
-      ? prisma.perfilFuncional.findUnique({ where: { id: d.perfilId }, select: { nombre: true } })
-      : null,
-    d.departamentoId
-      ? prisma.departamento.findUnique({
-          where: { id: d.departamentoId },
-          select: { nombre: true },
-        })
-      : null,
-  ]);
-  return {
-    usuarioNombre: usuario?.nombre ?? null,
-    perfilNombre: perfil?.nombre ?? null,
-    departamentoNombre: departamento?.nombre ?? null,
-  };
-}
+};
 
-async function serializarRegla(r: {
+type ReglaConDestinatarios = {
   id: string;
   evento: string;
   activa: boolean;
   createdAt: Date;
-  destinatarios: {
+  destinatarios: ({
     id: string;
     tipo: string;
-    usuarioId: string | null;
-    perfilId: string | null;
-    departamentoId: string | null;
     permisoClave: string | null;
-  }[];
-}) {
-  const destinatarios = await Promise.all(
-    r.destinatarios.map(async (d) => ({ ...d, ...(await nombresDestinatario(d)) })),
-  );
-  return {
+  } & DestinatarioBase)[];
+};
+
+/**
+ * H-03: resuelve los nombres de usuario/perfil/departamento de TODOS los
+ * destinatarios recibidos en 3 consultas por lote (findMany + IN), en vez de
+ * hasta 3 findUnique separados POR CADA destinatario. Antes,
+ * listarReglasDestinatarios (R reglas x D destinatarios) disparaba hasta
+ * 3×R×D round-trips a la base; ahora son como máximo 3 sin importar cuántos
+ * destinatarios haya. Devuelve una función de resolución en vez de un mapa
+ * plano para que el llamador no tenga que conocer la forma de los Maps.
+ */
+async function resolverNombresDestinatarios(destinatarios: readonly DestinatarioBase[]) {
+  const usuarioIds = [
+    ...new Set(destinatarios.map((d) => d.usuarioId).filter((v): v is string => !!v)),
+  ];
+  const perfilIds = [
+    ...new Set(destinatarios.map((d) => d.perfilId).filter((v): v is string => !!v)),
+  ];
+  const departamentoIds = [
+    ...new Set(destinatarios.map((d) => d.departamentoId).filter((v): v is string => !!v)),
+  ];
+
+  const [usuarios, perfiles, departamentos] = await Promise.all([
+    usuarioIds.length
+      ? prisma.user.findMany({
+          where: { id: { in: usuarioIds } },
+          select: { id: true, nombre: true },
+        })
+      : [],
+    perfilIds.length
+      ? prisma.perfilFuncional.findMany({
+          where: { id: { in: perfilIds } },
+          select: { id: true, nombre: true },
+        })
+      : [],
+    departamentoIds.length
+      ? prisma.departamento.findMany({
+          where: { id: { in: departamentoIds } },
+          select: { id: true, nombre: true },
+        })
+      : [],
+  ]);
+
+  const usuarioPorId = new Map(usuarios.map((u) => [u.id, u.nombre]));
+  const perfilPorId = new Map(perfiles.map((p) => [p.id, p.nombre]));
+  const departamentoPorId = new Map(departamentos.map((d) => [d.id, d.nombre]));
+
+  return (d: DestinatarioBase) => ({
+    usuarioNombre: d.usuarioId ? (usuarioPorId.get(d.usuarioId) ?? null) : null,
+    perfilNombre: d.perfilId ? (perfilPorId.get(d.perfilId) ?? null) : null,
+    departamentoNombre: d.departamentoId ? (departamentoPorId.get(d.departamentoId) ?? null) : null,
+  });
+}
+
+/** Serializa varias reglas a la vez, resolviendo los nombres de TODOS sus
+ * destinatarios combinados en un solo lote (ver resolverNombresDestinatarios) —
+ * el punto de entrada correcto para listarReglasDestinatarios. */
+async function serializarReglas(reglas: ReglaConDestinatarios[]) {
+  const resolver = await resolverNombresDestinatarios(reglas.flatMap((r) => r.destinatarios));
+  return reglas.map((r) => ({
     id: r.id,
     evento: r.evento,
     activa: r.activa,
     createdAt: r.createdAt,
-    destinatarios,
-  };
+    destinatarios: r.destinatarios.map((d) => ({ ...d, ...resolver(d) })),
+  }));
+}
+
+/** Serializa una sola regla — sigue acotado a 3 consultas como máximo
+ * (antes: hasta 3 por destinatario), reutilizando el mismo batching. */
+async function serializarRegla(r: ReglaConDestinatarios) {
+  const [serializada] = await serializarReglas([r]);
+  return serializada;
 }
 
 /**
@@ -118,7 +155,7 @@ export const listarReglasDestinatarios = async (req: AuthenticatedRequest, res: 
       include: INCLUDE_REGLA,
       orderBy: { createdAt: "desc" },
     });
-    return res.json(await Promise.all(reglas.map(serializarRegla)));
+    return res.json(await serializarReglas(reglas));
   } catch (error) {
     console.error("Error al listar reglas de destinatarios:", error);
     return res.status(500).json({ message: "Error al obtener las reglas de destinatarios." });

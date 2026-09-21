@@ -144,6 +144,14 @@ export const PERMISOS_SISTEMA = {
   GESTION_LIQUIDACION_VER: "gestion_liquidacion.ver",
   GESTION_LIQUIDACION_GESTIONAR: "gestion_liquidacion.gestionar",
   VENTAS_VER: "ventas.ver",
+  COTIZACIONES_VER: "cotizaciones.ver",
+  COTIZACIONES_GESTIONAR: "cotizaciones.gestionar",
+  COTIZACIONES_APROBAR: "cotizaciones.aprobar",
+  PEDIDOS_COMERCIALES_VER: "pedidos_comerciales.ver",
+  PEDIDOS_COMERCIALES_GESTIONAR: "pedidos_comerciales.gestionar",
+  PEDIDOS_COMERCIALES_CONFIRMAR: "pedidos_comerciales.confirmar",
+  PROFORMAS_VER: "proformas.ver",
+  PROFORMAS_GESTIONAR: "proformas.gestionar",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
   OBJETIVOS_VER: "objetivos.ver",
@@ -184,8 +192,10 @@ export interface PermisoDefinicion {
     | "Integraciones"
     | "Inventario"
     | "Ventas"
+    | "Comercial"
     | "Despachos"
-    | "Objetivos";
+    | "Objetivos"
+    | "Biométrico";
   nombre: string;
   descripcion: string;
 }
@@ -850,6 +860,59 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
       "Permite consultar disponibilidad comercial, clientes en riesgo y el histórico de ventas — sin necesitar el permiso completo de Analítica.",
   },
   {
+    id: PERMISOS_SISTEMA.COTIZACIONES_VER,
+    modulo: "Comercial",
+    nombre: "Cotizaciones · Ver",
+    descripcion: "Permite consultar cotizaciones comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
+  },
+  {
+    id: PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR,
+    modulo: "Comercial",
+    nombre: "Cotizaciones · Gestionar",
+    descripcion:
+      "Permite crear, editar, enviar, anular y vincular el documento ERP de cotizaciones. Incluye automáticamente Ver.",
+  },
+  {
+    id: PERMISOS_SISTEMA.COTIZACIONES_APROBAR,
+    modulo: "Comercial",
+    nombre: "Cotizaciones · Aprobar (especial)",
+    descripcion:
+      "Permiso especial: aprobar o rechazar cotizaciones. Es autoridad de decisión — no incluye editar, así se puede tener un aprobador que revisa sin modificar. Incluye automáticamente Ver.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER,
+    modulo: "Comercial",
+    nombre: "Pedidos comerciales · Ver",
+    descripcion: "Permite consultar pedidos comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR,
+    modulo: "Comercial",
+    nombre: "Pedidos comerciales · Gestionar",
+    descripcion:
+      "Permite crear pedidos (incluyendo desde una Proforma, que además exige Ver de Proformas) y anularlos. Incluye automáticamente Ver.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_CONFIRMAR,
+    modulo: "Comercial",
+    nombre: "Pedidos comerciales · Confirmar (especial)",
+    descripcion:
+      "Permiso especial: confirmar un pedido y marcarlo listo para el ERP. Es autoridad de decisión — no incluye crear ni anular. Incluye automáticamente Ver.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROFORMAS_VER,
+    modulo: "Comercial",
+    nombre: "Proformas · Ver",
+    descripcion: "Permite consultar proformas y su detalle. Sin este permiso la sección no aparece en el menú.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROFORMAS_GESTIONAR,
+    modulo: "Comercial",
+    nombre: "Proformas · Gestionar",
+    descripcion:
+      "Permite crear, editar, anular y vincular el documento ERP de proformas. Incluye automáticamente Ver.",
+  },
+  {
     id: PERMISOS_SISTEMA.DESPACHOS_VER,
     modulo: "Despachos",
     nombre: "Ver despachos",
@@ -894,5 +957,33 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Asignar objetivos",
     descripcion:
       "Permite asignar una meta individual a un vendedor desde el flujo de Centro Gerencial.",
+  },
+
+  // Biométrico (Gestión Humana)
+  {
+    id: PERMISOS_SISTEMA.BIOMETRICO_VER,
+    modulo: "Biométrico",
+    nombre: "Ver biométrico",
+    descripcion:
+      "Permite consultar fuentes, sincronizaciones, asociaciones empleado-CrossChex y marcaciones.",
+  },
+  {
+    id: PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR,
+    modulo: "Biométrico",
+    nombre: "Configurar fuentes biométricas",
+    descripcion: "Permite crear, editar y desactivar fuentes de captura biométrica (CrossChex).",
+  },
+  {
+    id: PERMISOS_SISTEMA.BIOMETRICO_SINCRONIZAR,
+    modulo: "Biométrico",
+    nombre: "Sincronizar biométrico",
+    descripcion: "Permite disparar manualmente la sincronización de una fuente biométrica.",
+  },
+  {
+    id: PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR,
+    modulo: "Biométrico",
+    nombre: "Asociar empleados",
+    descripcion:
+      "Permite crear, editar y eliminar la asociación entre un empleado y su usuario CrossChex.",
   },
 ];

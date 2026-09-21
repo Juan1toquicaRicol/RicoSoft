@@ -151,11 +151,12 @@ export async function resolverDestinatariosDesdeLista(
   if (tieneResponsable && contexto.responsableId) idsUsuarioDirectos.add(contexto.responsableId);
 
   if (idsUsuarioDirectos.size > 0) {
-    const usuarios = await prisma.user.findMany({
-      where: { id: { in: [...idsUsuarioDirectos] }, tenantId, activo: true },
-      select: { id: true },
-    });
-    for (const u of usuarios) resultado.add(u.id);
+    // H6: incluye tanto usuarios NATIVOS de este tenant como usuarios con
+    // acceso vía Membresia activa — antes solo el nativo calificaba, así que
+    // señalar como destinatario a alguien que solo tiene acceso por
+    // membresía nunca lo notificaba.
+    const idsConAcceso = await filtrarUsuariosConAccesoAlTenant([...idsUsuarioDirectos], tenantId);
+    for (const id of idsConAcceso) resultado.add(id);
   }
 
   // --- PERFIL ---
@@ -168,13 +169,24 @@ export async function resolverDestinatariosDesdeLista(
     const perfiles = await prisma.perfilFuncional.findMany({
       where: { id: { in: idsPerfil }, tenantId, activo: true },
       select: {
-        usuarios: { select: { user: { select: { id: true, activo: true, tenantId: true } } } },
+        usuarios: { select: { user: { select: { id: true, activo: true } } } },
       },
     });
+    const idsUsuariosDePerfil = new Set<string>();
     for (const perfil of perfiles) {
       for (const { user } of perfil.usuarios) {
-        if (user.activo && user.tenantId === tenantId) resultado.add(user.id);
+        if (user.activo) idsUsuariosDePerfil.add(user.id);
       }
+    }
+    // El perfil ya pertenece a este tenant (whereAlcance de la query de
+    // arriba); lo que faltaba validar es que CADA usuario asignado tenga
+    // acceso efectivo a este tenant — nativo o vía Membresia (H6).
+    if (idsUsuariosDePerfil.size > 0) {
+      const idsConAcceso = await filtrarUsuariosConAccesoAlTenant(
+        [...idsUsuariosDePerfil],
+        tenantId,
+      );
+      for (const id of idsConAcceso) resultado.add(id);
     }
   }
 
@@ -210,13 +222,20 @@ export async function resolverDestinatariosDesdeLista(
           esJefeDeArea: true,
         },
         select: {
-          usuarios: { select: { user: { select: { id: true, activo: true, tenantId: true } } } },
+          usuarios: { select: { user: { select: { id: true, activo: true } } } },
         },
       });
+      const idsJefesDeArea = new Set<string>();
       for (const perfil of perfilesJefe) {
         for (const { user } of perfil.usuarios) {
-          if (user.activo && user.tenantId === tenantId) resultado.add(user.id);
+          if (user.activo) idsJefesDeArea.add(user.id);
         }
+      }
+      // H6: mismo caso que PERFIL — un jefe de área con ese perfil asignado
+      // puede tener acceso a este tenant solo vía Membresia.
+      if (idsJefesDeArea.size > 0) {
+        const idsConAcceso = await filtrarUsuariosConAccesoAlTenant([...idsJefesDeArea], tenantId);
+        for (const id of idsConAcceso) resultado.add(id);
       }
     }
   }
@@ -261,11 +280,49 @@ async function agregarUsuariosDeDepartamentos(
   if (validos.length === 0) return;
   // Los usuarios SIEMPRE se filtran por tenantId, aunque el departamento sea
   // GENERAL (compartido) — un departamento compartido no comparte usuarios.
-  const usuarios = await prisma.user.findMany({
-    where: { departamentoId: { in: validos }, tenantId, activo: true },
-    select: { id: true },
-  });
-  for (const u of usuarios) resultado.add(u.id);
+  // H6: además de los NATIVOS de este departamento, se incluyen los usuarios
+  // cuya Membresia activa en este tenant tiene ese mismo departamento propio
+  // (ver H1 — Membresia.departamentoId ya es configurable).
+  const [nativos, membresias] = await Promise.all([
+    prisma.user.findMany({
+      where: { departamentoId: { in: validos }, tenantId, activo: true },
+      select: { id: true },
+    }),
+    prisma.membresia.findMany({
+      where: {
+        departamentoId: { in: validos },
+        tenantId,
+        activo: true,
+        user: { activo: true },
+      },
+      select: { userId: true },
+    }),
+  ]);
+  for (const u of nativos) resultado.add(u.id);
+  for (const m of membresias) resultado.add(m.userId);
+}
+
+/** Ids (de entre los dados) de usuarios con acceso EFECTIVO a `tenantId`,
+ * activos — ya sea porque es su tenant hogar (User.tenantId) o porque tienen
+ * una Membresia activa a ese tenant (con su User hogar también activo). Base
+ * compartida de H6: cualquier resolución de destinatarios por id de usuario
+ * debe considerar ambos caminos, no solo el nativo. */
+async function filtrarUsuariosConAccesoAlTenant(
+  ids: string[],
+  tenantId: string,
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const [nativos, membresias] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: ids }, tenantId, activo: true },
+      select: { id: true },
+    }),
+    prisma.membresia.findMany({
+      where: { userId: { in: ids }, tenantId, activo: true, user: { activo: true } },
+      select: { userId: true },
+    }),
+  ]);
+  return [...new Set([...nativos.map((u) => u.id), ...membresias.map((m) => m.userId)])];
 }
 
 /**

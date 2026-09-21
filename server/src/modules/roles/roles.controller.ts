@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
-import { parseRolPermisos, PERMISOS_SISTEMA } from "../../lib/permissions";
+import { parseRolPermisos, PERMISOS_SISTEMA, PERMISOS_LEGACY } from "../../lib/permissions";
 import { obtenerCodigosPermisosAsignables } from "../permisos/permisos.service";
 import { whereAlcance } from "../../lib/alcance";
 
@@ -22,7 +22,13 @@ function serializar(r: {
     esSistema: r.esSistema,
     activo: r.activo,
     alcance: r.tenantId === null ? "GENERAL" : "TENANT",
-    permisos: parseRolPermisos(r.permisos),
+    // Los códigos LEGACY se muestran ya traducidos a su equivalente vigente:
+    // el código viejo no está en el catálogo, así que la pantalla de Roles no
+    // tendría casilla que marcar y al guardar el rol perdería la capacidad.
+    // Traduciendo en lectura, el administrador ve marcada la casilla correcta
+    // y el primer guardado migra el dato solo. El registro en base no se toca
+    // hasta ese guardado, así que revertir este cambio no pierde nada.
+    permisos: [...new Set(parseRolPermisos(r.permisos).map((p) => PERMISOS_LEGACY[p] ?? p))],
     usuariosAsignados: r._count?.users ?? 0,
   };
 }
@@ -32,9 +38,21 @@ function serializar(r: {
 // ACTIVO creado por este tenant en Administración Global > Permisos — ver
 // permisos.service.ts. Esto es lo que hace que un permiso creado ahí sea
 // realmente asignable a roles, no solo un registro decorativo.
+/**
+ * Además de filtrar códigos inválidos, traduce los códigos LEGACY al código
+ * vigente al que equivalen (ver PERMISOS_LEGACY). Así un rol viejo se migra
+ * solo la primera vez que alguien lo guarda, en vez de perder el permiso:
+ * el código legacy ya no está en el catálogo asignable, así que la pantalla
+ * de Roles no lo envía de vuelta y sin esta traducción el rol quedaría sin
+ * la capacidad equivalente. Es la migración progresiva de roles existentes,
+ * sin tocar datos por lote ni dejar a nadie sin acceso.
+ */
 function sanearPermisos(input: unknown, validos: Set<string>): string[] {
   if (!Array.isArray(input)) return [];
-  return input.filter((p): p is string => typeof p === "string" && validos.has(p));
+  const traducidos = input
+    .filter((p): p is string => typeof p === "string")
+    .map((p) => PERMISOS_LEGACY[p] ?? p);
+  return [...new Set(traducidos.filter((p) => validos.has(p)))];
 }
 
 export const listarRoles = async (req: AuthenticatedRequest, res: Response) => {

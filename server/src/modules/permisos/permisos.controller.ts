@@ -3,9 +3,20 @@ import { Permiso } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { parseRolPermisos } from "../../lib/permissions";
+import { resolverPermiso } from "../../lib/catalogo-permisos";
 import { listarCatalogoPermisos } from "./permisos.service";
 
+/**
+ * Cada permiso viaja con su ubicación en la jerarquía Módulo → Sección →
+ * tipo, resuelta desde el código (lib/catalogo-permisos.ts) y NO desde la
+ * columna `Permiso.modulo`: esa columna se siembra una sola vez y en los
+ * tenants creados antes de la jerarquía guarda el agrupador viejo derivado
+ * del prefijo ("Pedidos_comerciales"). Resolviendo en cada respuesta, la
+ * pantalla de Roles agrupa igual para todos los tenants sin migrar datos.
+ * `modulo` se conserva tal cual está en base por compatibilidad.
+ */
 function serializar(p: Permiso) {
+  const ubicacion = resolverPermiso(p.codigo);
   return {
     id: p.id,
     codigo: p.codigo,
@@ -14,6 +25,18 @@ function serializar(p: Permiso) {
     modulo: p.modulo,
     esSistema: p.esSistema,
     activo: p.activo,
+    // null en permisos personalizados del tenant: no están en la jerarquía.
+    jerarquia: ubicacion
+      ? {
+          moduloClave: ubicacion.moduloClave,
+          moduloNombre: ubicacion.moduloNombre,
+          seccionClave: ubicacion.seccionClave,
+          seccionNombre: ubicacion.seccionNombre,
+          tipo: ubicacion.tipo,
+          accion: ubicacion.accion,
+          dependeDe: ubicacion.dependeDe,
+        }
+      : null,
   };
 }
 

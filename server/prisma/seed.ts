@@ -686,6 +686,13 @@ async function main() {
       "Crédito 90 días",
       "Contra entrega",
     ].map((c) => ({ tipo: "FORMA_PAGO", clave: c, etiqueta: c })),
+    // FORMA_PAGO_VENTAS — forma de pago de una Proforma (módulo Ventas),
+    // separado de FORMA_PAGO (Importaciones) para no mezclar opciones.
+    ...["Contado", "Crédito 1 día"].map((c) => ({
+      tipo: "FORMA_PAGO_VENTAS",
+      clave: c,
+      etiqueta: c,
+    })),
     // UNIDAD_MEDIDA (antes UNIDADES_MEDIDA_VALIDAS)
     ...["KG", "TON", "SACO25KG", "SACO50KG", "LT", "UND"].map((c) => ({
       tipo: "UNIDAD_MEDIDA",

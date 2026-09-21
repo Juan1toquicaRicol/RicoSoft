@@ -194,9 +194,6 @@ export function AppShell({ children, title, description, actions }: AppShellProp
   // Verificación de autorización real para la barra lateral (permisos efectivos del backend)
   const tieneAccesoAdmin = canAccessAdmin(user);
 
-  // Permisos específicos para subopciones
-  const canVerAuditoria = hasPermission(user, PERMISOS_SISTEMA.AUDITORIA_VER);
-
   const empresaActivaId = empresaIdDeTenant(user.tenantNombre);
 
   const handleLogout = () => {
@@ -317,22 +314,6 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                   <Settings className="h-4 w-4 text-black" />
                   <span>Configuración</span>
                 </Link>
-
-                {/* Auditoría no vive bajo /configuracion, así que queda como
-                    su propio ítem (antes era parte del submenú desplegable). */}
-                {canVerAuditoria && (
-                  <Link
-                    to="/auditoria"
-                    className={`mt-1 flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                      pathname.startsWith("/auditoria")
-                        ? "bg-slate-100 text-black font-semibold"
-                        : "hover:bg-slate-100 text-black"
-                    }`}
-                  >
-                    <History className="h-4 w-4 text-black" />
-                    <span>Auditoría</span>
-                  </Link>
-                )}
               </div>
             </>
           )}

@@ -19,6 +19,11 @@ function serializar(s: OportunidadSeguimiento) {
     comentario: s.comentario,
     proximaAccion: s.proximaAccion,
     proximoSeguimientoFecha: s.proximoSeguimientoFecha,
+    // Compromiso = proximaAccion + proximoSeguimientoFecha de ESTE evento.
+    // compromisoCompletadoEn es SIEMPRE distinto de createdAt (ver schema.prisma).
+    compromisoCompletado: s.compromisoCompletado,
+    compromisoCompletadoEn: s.compromisoCompletadoEn,
+    compromisoCompletadoPor: s.compromisoCompletadoPor,
     usuario: s.usuario,
     createdAt: s.createdAt,
   };
@@ -52,7 +57,8 @@ export const listarSeguimientosCliente = async (req: AuthenticatedRequest, res: 
     const proximoVigente =
       masReciente &&
       masReciente.proximoSeguimientoFecha &&
-      !RESULTADOS_TERMINALES.has(masReciente.resultado)
+      !RESULTADOS_TERMINALES.has(masReciente.resultado) &&
+      !masReciente.compromisoCompletado
         ? { fecha: masReciente.proximoSeguimientoFecha, accion: masReciente.proximaAccion }
         : null;
 
@@ -154,7 +160,12 @@ export const listarProximosSeguimientos = async (req: AuthenticatedRequest, res:
     });
 
     const pendientes = ultimosPorCliente
-      .filter((s) => s.proximoSeguimientoFecha && !RESULTADOS_TERMINALES.has(s.resultado))
+      .filter(
+        (s) =>
+          s.proximoSeguimientoFecha &&
+          !RESULTADOS_TERMINALES.has(s.resultado) &&
+          !s.compromisoCompletado,
+      )
       .sort(
         (a, b) =>
           new Date(a.proximoSeguimientoFecha!).getTime() -
@@ -166,5 +177,56 @@ export const listarProximosSeguimientos = async (req: AuthenticatedRequest, res:
   } catch (error) {
     console.error("Error al listar los próximos seguimientos:", error);
     return res.status(500).json({ message: "Error al obtener los próximos seguimientos." });
+  }
+};
+
+/**
+ * Marca como completado el compromiso (próxima acción + fecha) de UN
+ * seguimiento — compromisoCompletadoEn es la fecha real de ejecución,
+ * SIEMPRE distinta de createdAt (cuándo se registró el evento originalmente).
+ * Scoped por tenant vía tenantPrisma: un id de otro tenant simplemente no
+ * hace match y devuelve 404, nunca revela si existe en otro tenant.
+ */
+export const completarCompromiso = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { id } = req.params;
+
+    const seguimiento = await req.tenantPrisma!.oportunidadSeguimiento.findFirst({
+      where: { id },
+    });
+    if (!seguimiento) {
+      return res.status(404).json({ message: "Seguimiento no encontrado." });
+    }
+    if (seguimiento.compromisoCompletado) {
+      return res.status(409).json({ message: "Ese compromiso ya estaba marcado como completado." });
+    }
+    if (!seguimiento.proximaAccion || !seguimiento.proximoSeguimientoFecha) {
+      return res.status(409).json({ message: "Este seguimiento no tiene un compromiso pendiente." });
+    }
+
+    const actualizado = await req.tenantPrisma!.oportunidadSeguimiento.update({
+      where: { id },
+      data: {
+        compromisoCompletado: true,
+        compromisoCompletadoEn: new Date(),
+        compromisoCompletadoPorId: req.user!.id,
+        compromisoCompletadoPor: req.user!.nombre,
+      },
+    });
+
+    await req.tenantPrisma!.auditoria.create({
+      data: {
+        tenantId,
+        usuarioId: req.user!.id,
+        accion: "COMPROMISO_COMPLETADO",
+        detalle: `${req.user!.nombre} marcó como completado el compromiso "${seguimiento.proximaAccion}" del cliente "${seguimiento.clienteNombre}".`,
+      },
+    });
+
+    return res.json(serializar(actualizado));
+  } catch (error) {
+    console.error("Error al completar el compromiso:", error);
+    return res.status(500).json({ message: "Error al completar el compromiso." });
   }
 };

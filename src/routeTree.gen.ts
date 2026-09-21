@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnaliticaRouteImport } from './routes/analitica'
-import { Route as AuditoriaRouteImport } from './routes/auditoria'
 import { Route as BandejaRouteImport } from './routes/bandeja'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as CreditosRouteImport } from './routes/creditos'
@@ -30,8 +29,10 @@ import { Route as ReglasRouteImport } from './routes/reglas'
 import { Route as TomaFisicaRouteImport } from './routes/toma-fisica'
 import { Route as VentasRouteImport } from './routes/ventas'
 import { Route as ComercialClientesRouteImport } from './routes/comercial.clientes'
+import { Route as ComercialGestionRouteImport } from './routes/comercial.gestion'
 import { Route as ComercialObjetivosRouteImport } from './routes/comercial.objetivos'
 import { Route as ConfiguracionIndexRouteImport } from './routes/configuracion.index'
+import { Route as ConfiguracionAuditoriaRouteImport } from './routes/configuracion.auditoria'
 import { Route as ConfiguracionCatalogosRouteImport } from './routes/configuracion.catalogos'
 import { Route as ConfiguracionClasificacionItemsRouteImport } from './routes/configuracion.clasificacion-items'
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
@@ -60,6 +61,10 @@ import { Route as ServiciosIdRouteImport } from './routes/servicios.$id'
 import { Route as SolicitudesCompraIndexRouteImport } from './routes/solicitudes-compra.index'
 import { Route as SolicitudesCompraIdRouteImport } from './routes/solicitudes-compra.$id'
 import { Route as TomaFisicaIdRouteImport } from './routes/toma-fisica.$id'
+import { Route as ComercialClientesClienteRowIdRouteImport } from './routes/comercial.clientes.$clienteRowId'
+import { Route as ComercialCotizacionesIdRouteImport } from './routes/comercial.cotizaciones.$id'
+import { Route as ComercialPedidosIdRouteImport } from './routes/comercial.pedidos.$id'
+import { Route as ComercialProformasIdRouteImport } from './routes/comercial.proformas.$id'
 import { Route as ImportacionesBandejaIndexRouteImport } from './routes/importaciones.bandeja.index'
 import { Route as ImportacionesBandejaIdRouteImport } from './routes/importaciones.bandeja.$id'
 
@@ -71,11 +76,6 @@ const IndexRoute = IndexRouteImport.update({
 const AnaliticaRoute = AnaliticaRouteImport.update({
   id: '/analitica',
   path: '/analitica',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditoriaRoute = AuditoriaRouteImport.update({
-  id: '/auditoria',
-  path: '/auditoria',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BandejaRoute = BandejaRouteImport.update({
@@ -168,6 +168,11 @@ const ComercialClientesRoute = ComercialClientesRouteImport.update({
   path: '/comercial/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComercialGestionRoute = ComercialGestionRouteImport.update({
+  id: '/comercial/gestion',
+  path: '/comercial/gestion',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ComercialObjetivosRoute = ComercialObjetivosRouteImport.update({
   id: '/comercial/objetivos',
   path: '/comercial/objetivos',
@@ -176,6 +181,11 @@ const ComercialObjetivosRoute = ComercialObjetivosRouteImport.update({
 const ConfiguracionIndexRoute = ConfiguracionIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => ConfiguracionRoute,
+} as any)
+const ConfiguracionAuditoriaRoute = ConfiguracionAuditoriaRouteImport.update({
+  id: '/auditoria',
+  path: '/auditoria',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
 const ConfiguracionCatalogosRoute = ConfiguracionCatalogosRouteImport.update({
@@ -326,6 +336,27 @@ const TomaFisicaIdRoute = TomaFisicaIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => TomaFisicaRoute,
 } as any)
+const ComercialClientesClienteRowIdRoute =
+  ComercialClientesClienteRowIdRouteImport.update({
+    id: '/$clienteRowId',
+    path: '/$clienteRowId',
+    getParentRoute: () => ComercialClientesRoute,
+  } as any)
+const ComercialCotizacionesIdRoute = ComercialCotizacionesIdRouteImport.update({
+  id: '/comercial/cotizaciones/$id',
+  path: '/comercial/cotizaciones/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComercialPedidosIdRoute = ComercialPedidosIdRouteImport.update({
+  id: '/comercial/pedidos/$id',
+  path: '/comercial/pedidos/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComercialProformasIdRoute = ComercialProformasIdRouteImport.update({
+  id: '/comercial/proformas/$id',
+  path: '/comercial/proformas/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImportacionesBandejaIndexRoute =
   ImportacionesBandejaIndexRouteImport.update({
     id: '/importaciones/bandeja/',
@@ -341,7 +372,6 @@ const ImportacionesBandejaIdRoute = ImportacionesBandejaIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analitica': typeof AnaliticaRoute
-  '/auditoria': typeof AuditoriaRoute
   '/bandeja': typeof BandejaRoute
   '/configuracion': typeof ConfiguracionRouteWithChildren
   '/creditos': typeof CreditosRoute
@@ -359,8 +389,10 @@ export interface FileRoutesByFullPath {
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
-  '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/clientes': typeof ComercialClientesRouteWithChildren
+  '/comercial/gestion': typeof ComercialGestionRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/auditoria': typeof ConfiguracionAuditoriaRoute
   '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
@@ -390,13 +422,16 @@ export interface FileRoutesByFullPath {
   '/importaciones/': typeof ImportacionesIndexRoute
   '/servicios/': typeof ServiciosIndexRoute
   '/solicitudes-compra/': typeof SolicitudesCompraIndexRoute
+  '/comercial/clientes/$clienteRowId': typeof ComercialClientesClienteRowIdRoute
+  '/comercial/cotizaciones/$id': typeof ComercialCotizacionesIdRoute
+  '/comercial/pedidos/$id': typeof ComercialPedidosIdRoute
+  '/comercial/proformas/$id': typeof ComercialProformasIdRoute
   '/importaciones/bandeja/$id': typeof ImportacionesBandejaIdRoute
   '/importaciones/bandeja/': typeof ImportacionesBandejaIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analitica': typeof AnaliticaRoute
-  '/auditoria': typeof AuditoriaRoute
   '/bandeja': typeof BandejaRoute
   '/creditos': typeof CreditosRoute
   '/despachos': typeof DespachosRouteWithChildren
@@ -413,8 +448,10 @@ export interface FileRoutesByTo {
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
-  '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/clientes': typeof ComercialClientesRouteWithChildren
+  '/comercial/gestion': typeof ComercialGestionRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/auditoria': typeof ConfiguracionAuditoriaRoute
   '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
@@ -444,6 +481,10 @@ export interface FileRoutesByTo {
   '/importaciones': typeof ImportacionesIndexRoute
   '/servicios': typeof ServiciosIndexRoute
   '/solicitudes-compra': typeof SolicitudesCompraIndexRoute
+  '/comercial/clientes/$clienteRowId': typeof ComercialClientesClienteRowIdRoute
+  '/comercial/cotizaciones/$id': typeof ComercialCotizacionesIdRoute
+  '/comercial/pedidos/$id': typeof ComercialPedidosIdRoute
+  '/comercial/proformas/$id': typeof ComercialProformasIdRoute
   '/importaciones/bandeja/$id': typeof ImportacionesBandejaIdRoute
   '/importaciones/bandeja': typeof ImportacionesBandejaIndexRoute
 }
@@ -451,7 +492,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analitica': typeof AnaliticaRoute
-  '/auditoria': typeof AuditoriaRoute
   '/bandeja': typeof BandejaRoute
   '/configuracion': typeof ConfiguracionRouteWithChildren
   '/creditos': typeof CreditosRoute
@@ -469,8 +509,10 @@ export interface FileRoutesById {
   '/reglas': typeof ReglasRoute
   '/toma-fisica': typeof TomaFisicaRouteWithChildren
   '/ventas': typeof VentasRoute
-  '/comercial/clientes': typeof ComercialClientesRoute
+  '/comercial/clientes': typeof ComercialClientesRouteWithChildren
+  '/comercial/gestion': typeof ComercialGestionRoute
   '/comercial/objetivos': typeof ComercialObjetivosRoute
+  '/configuracion/auditoria': typeof ConfiguracionAuditoriaRoute
   '/configuracion/catalogos': typeof ConfiguracionCatalogosRoute
   '/configuracion/clasificacion-items': typeof ConfiguracionClasificacionItemsRoute
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
@@ -500,6 +542,10 @@ export interface FileRoutesById {
   '/importaciones/': typeof ImportacionesIndexRoute
   '/servicios/': typeof ServiciosIndexRoute
   '/solicitudes-compra/': typeof SolicitudesCompraIndexRoute
+  '/comercial/clientes/$clienteRowId': typeof ComercialClientesClienteRowIdRoute
+  '/comercial/cotizaciones/$id': typeof ComercialCotizacionesIdRoute
+  '/comercial/pedidos/$id': typeof ComercialPedidosIdRoute
+  '/comercial/proformas/$id': typeof ComercialProformasIdRoute
   '/importaciones/bandeja/$id': typeof ImportacionesBandejaIdRoute
   '/importaciones/bandeja/': typeof ImportacionesBandejaIndexRoute
 }
@@ -508,7 +554,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analitica'
-    | '/auditoria'
     | '/bandeja'
     | '/configuracion'
     | '/creditos'
@@ -527,7 +572,9 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/gestion'
     | '/comercial/objetivos'
+    | '/configuracion/auditoria'
     | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
@@ -557,13 +604,16 @@ export interface FileRouteTypes {
     | '/importaciones/'
     | '/servicios/'
     | '/solicitudes-compra/'
+    | '/comercial/clientes/$clienteRowId'
+    | '/comercial/cotizaciones/$id'
+    | '/comercial/pedidos/$id'
+    | '/comercial/proformas/$id'
     | '/importaciones/bandeja/$id'
     | '/importaciones/bandeja/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/analitica'
-    | '/auditoria'
     | '/bandeja'
     | '/creditos'
     | '/despachos'
@@ -581,7 +631,9 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/gestion'
     | '/comercial/objetivos'
+    | '/configuracion/auditoria'
     | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
@@ -611,13 +663,16 @@ export interface FileRouteTypes {
     | '/importaciones'
     | '/servicios'
     | '/solicitudes-compra'
+    | '/comercial/clientes/$clienteRowId'
+    | '/comercial/cotizaciones/$id'
+    | '/comercial/pedidos/$id'
+    | '/comercial/proformas/$id'
     | '/importaciones/bandeja/$id'
     | '/importaciones/bandeja'
   id:
     | '__root__'
     | '/'
     | '/analitica'
-    | '/auditoria'
     | '/bandeja'
     | '/configuracion'
     | '/creditos'
@@ -636,7 +691,9 @@ export interface FileRouteTypes {
     | '/toma-fisica'
     | '/ventas'
     | '/comercial/clientes'
+    | '/comercial/gestion'
     | '/comercial/objetivos'
+    | '/configuracion/auditoria'
     | '/configuracion/catalogos'
     | '/configuracion/clasificacion-items'
     | '/configuracion/departamentos'
@@ -666,6 +723,10 @@ export interface FileRouteTypes {
     | '/importaciones/'
     | '/servicios/'
     | '/solicitudes-compra/'
+    | '/comercial/clientes/$clienteRowId'
+    | '/comercial/cotizaciones/$id'
+    | '/comercial/pedidos/$id'
+    | '/comercial/proformas/$id'
     | '/importaciones/bandeja/$id'
     | '/importaciones/bandeja/'
   fileRoutesById: FileRoutesById
@@ -673,7 +734,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnaliticaRoute: typeof AnaliticaRoute
-  AuditoriaRoute: typeof AuditoriaRoute
   BandejaRoute: typeof BandejaRoute
   ConfiguracionRoute: typeof ConfiguracionRouteWithChildren
   CreditosRoute: typeof CreditosRoute
@@ -691,7 +751,8 @@ export interface RootRouteChildren {
   ReglasRoute: typeof ReglasRoute
   TomaFisicaRoute: typeof TomaFisicaRouteWithChildren
   VentasRoute: typeof VentasRoute
-  ComercialClientesRoute: typeof ComercialClientesRoute
+  ComercialClientesRoute: typeof ComercialClientesRouteWithChildren
+  ComercialGestionRoute: typeof ComercialGestionRoute
   ComercialObjetivosRoute: typeof ComercialObjetivosRoute
   FacturasIdRoute: typeof FacturasIdRoute
   ImportacionesIdRoute: typeof ImportacionesIdRoute
@@ -706,6 +767,9 @@ export interface RootRouteChildren {
   ImportacionesIndexRoute: typeof ImportacionesIndexRoute
   ServiciosIndexRoute: typeof ServiciosIndexRoute
   SolicitudesCompraIndexRoute: typeof SolicitudesCompraIndexRoute
+  ComercialCotizacionesIdRoute: typeof ComercialCotizacionesIdRoute
+  ComercialPedidosIdRoute: typeof ComercialPedidosIdRoute
+  ComercialProformasIdRoute: typeof ComercialProformasIdRoute
   ImportacionesBandejaIdRoute: typeof ImportacionesBandejaIdRoute
   ImportacionesBandejaIndexRoute: typeof ImportacionesBandejaIndexRoute
 }
@@ -724,13 +788,6 @@ declare module '@tanstack/react-router' {
       path: '/analitica'
       fullPath: '/analitica'
       preLoaderRoute: typeof AnaliticaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auditoria': {
-      id: '/auditoria'
-      path: '/auditoria'
-      fullPath: '/auditoria'
-      preLoaderRoute: typeof AuditoriaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bandeja': {
@@ -859,6 +916,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ComercialClientesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/comercial/gestion': {
+      id: '/comercial/gestion'
+      path: '/comercial/gestion'
+      fullPath: '/comercial/gestion'
+      preLoaderRoute: typeof ComercialGestionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/comercial/objetivos': {
       id: '/comercial/objetivos'
       path: '/comercial/objetivos'
@@ -871,6 +935,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/configuracion/'
       preLoaderRoute: typeof ConfiguracionIndexRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
+    '/configuracion/auditoria': {
+      id: '/configuracion/auditoria'
+      path: '/auditoria'
+      fullPath: '/configuracion/auditoria'
+      preLoaderRoute: typeof ConfiguracionAuditoriaRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
     '/configuracion/catalogos': {
@@ -1069,6 +1140,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TomaFisicaIdRouteImport
       parentRoute: typeof TomaFisicaRoute
     }
+    '/comercial/clientes/$clienteRowId': {
+      id: '/comercial/clientes/$clienteRowId'
+      path: '/$clienteRowId'
+      fullPath: '/comercial/clientes/$clienteRowId'
+      preLoaderRoute: typeof ComercialClientesClienteRowIdRouteImport
+      parentRoute: typeof ComercialClientesRoute
+    }
+    '/comercial/cotizaciones/$id': {
+      id: '/comercial/cotizaciones/$id'
+      path: '/comercial/cotizaciones/$id'
+      fullPath: '/comercial/cotizaciones/$id'
+      preLoaderRoute: typeof ComercialCotizacionesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comercial/pedidos/$id': {
+      id: '/comercial/pedidos/$id'
+      path: '/comercial/pedidos/$id'
+      fullPath: '/comercial/pedidos/$id'
+      preLoaderRoute: typeof ComercialPedidosIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comercial/proformas/$id': {
+      id: '/comercial/proformas/$id'
+      path: '/comercial/proformas/$id'
+      fullPath: '/comercial/proformas/$id'
+      preLoaderRoute: typeof ComercialProformasIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/importaciones/bandeja/': {
       id: '/importaciones/bandeja/'
       path: '/importaciones/bandeja'
@@ -1087,6 +1186,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ConfiguracionRouteChildren {
+  ConfiguracionAuditoriaRoute: typeof ConfiguracionAuditoriaRoute
   ConfiguracionCatalogosRoute: typeof ConfiguracionCatalogosRoute
   ConfiguracionClasificacionItemsRoute: typeof ConfiguracionClasificacionItemsRoute
   ConfiguracionDepartamentosRoute: typeof ConfiguracionDepartamentosRoute
@@ -1104,6 +1204,7 @@ interface ConfiguracionRouteChildren {
 }
 
 const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
+  ConfiguracionAuditoriaRoute: ConfiguracionAuditoriaRoute,
   ConfiguracionCatalogosRoute: ConfiguracionCatalogosRoute,
   ConfiguracionClasificacionItemsRoute: ConfiguracionClasificacionItemsRoute,
   ConfiguracionDepartamentosRoute: ConfiguracionDepartamentosRoute,
@@ -1148,10 +1249,20 @@ const TomaFisicaRouteWithChildren = TomaFisicaRoute._addFileChildren(
   TomaFisicaRouteChildren,
 )
 
+interface ComercialClientesRouteChildren {
+  ComercialClientesClienteRowIdRoute: typeof ComercialClientesClienteRowIdRoute
+}
+
+const ComercialClientesRouteChildren: ComercialClientesRouteChildren = {
+  ComercialClientesClienteRowIdRoute: ComercialClientesClienteRowIdRoute,
+}
+
+const ComercialClientesRouteWithChildren =
+  ComercialClientesRoute._addFileChildren(ComercialClientesRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnaliticaRoute: AnaliticaRoute,
-  AuditoriaRoute: AuditoriaRoute,
   BandejaRoute: BandejaRoute,
   ConfiguracionRoute: ConfiguracionRouteWithChildren,
   CreditosRoute: CreditosRoute,
@@ -1169,7 +1280,8 @@ const rootRouteChildren: RootRouteChildren = {
   ReglasRoute: ReglasRoute,
   TomaFisicaRoute: TomaFisicaRouteWithChildren,
   VentasRoute: VentasRoute,
-  ComercialClientesRoute: ComercialClientesRoute,
+  ComercialClientesRoute: ComercialClientesRouteWithChildren,
+  ComercialGestionRoute: ComercialGestionRoute,
   ComercialObjetivosRoute: ComercialObjetivosRoute,
   FacturasIdRoute: FacturasIdRoute,
   ImportacionesIdRoute: ImportacionesIdRoute,
@@ -1184,6 +1296,9 @@ const rootRouteChildren: RootRouteChildren = {
   ImportacionesIndexRoute: ImportacionesIndexRoute,
   ServiciosIndexRoute: ServiciosIndexRoute,
   SolicitudesCompraIndexRoute: SolicitudesCompraIndexRoute,
+  ComercialCotizacionesIdRoute: ComercialCotizacionesIdRoute,
+  ComercialPedidosIdRoute: ComercialPedidosIdRoute,
+  ComercialProformasIdRoute: ComercialProformasIdRoute,
   ImportacionesBandejaIdRoute: ImportacionesBandejaIdRoute,
   ImportacionesBandejaIndexRoute: ImportacionesBandejaIndexRoute,
 }

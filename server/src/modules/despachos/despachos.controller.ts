@@ -13,6 +13,7 @@ import {
   type EstadoDespacho,
 } from "../../lib/despachos";
 import { notificarPorPermiso, resolverPlantillaNotificacion } from "../../lib/notificaciones";
+import { resolverCiaSiesa } from "../../lib/siesa-tenant";
 import {
   crearDespachoSchema,
   actualizarEstadoDespachoSchema,
@@ -22,14 +23,6 @@ import {
   listarDespachosSchema,
   documentosVentaParaDespachoSchema,
 } from "./despachos.schemas";
-
-async function resolverCiaSiesa(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { siesaCiaId: true },
-  });
-  return tenant?.siesaCiaId ?? null;
-}
 
 /**
  * Busca el despacho por id verificando que pertenezca al tenant

@@ -5,6 +5,7 @@ import { crearMembresiaSchema, actualizarMembresiaSchema } from "./membresias.sc
 import {
   listarTenants,
   listarRolesDeTenant,
+  listarDepartamentosDeTenant,
   listarMembresiasUsuario,
   crearMembresia,
   actualizarMembresia,
@@ -17,6 +18,7 @@ router.use(authenticateJWT, requireSuperadmin);
 
 router.get("/tenants", listarTenants);
 router.get("/tenants/:tenantId/roles", listarRolesDeTenant);
+router.get("/tenants/:tenantId/departamentos", listarDepartamentosDeTenant);
 router.get("/usuarios/:userId", listarMembresiasUsuario);
 router.post("/usuarios/:userId", validarBody(crearMembresiaSchema), crearMembresia);
 router.patch("/:id", validarBody(actualizarMembresiaSchema), actualizarMembresia);

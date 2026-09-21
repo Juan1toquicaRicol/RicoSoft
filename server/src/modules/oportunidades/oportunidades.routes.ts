@@ -5,6 +5,7 @@ import {
   listarSeguimientosCliente,
   crearSeguimiento,
   listarProximosSeguimientos,
+  completarCompromiso,
 } from "./oportunidades.controller";
 
 const router = Router();
@@ -27,5 +28,10 @@ router.get(
   listarSeguimientosCliente,
 );
 router.post("/:clienteRowId/seguimientos", requirePermission("analitica.ver"), crearSeguimiento);
+router.patch(
+  "/seguimientos/:id/completar",
+  requirePermission("analitica.ver"),
+  completarCompromiso,
+);
 
 export default router;

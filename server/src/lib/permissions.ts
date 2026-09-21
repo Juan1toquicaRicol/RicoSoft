@@ -104,6 +104,28 @@ export const PERMISOS_SISTEMA = {
   GESTION_LIQUIDACION_VER: "gestion_liquidacion.ver",
   GESTION_LIQUIDACION_GESTIONAR: "gestion_liquidacion.gestionar",
   VENTAS_VER: "ventas.ver",
+  // Modelo Módulo → Sección → VER / GESTIONAR / ESPECIALES.
+  // VER  = acceso a la sección (menú, ruta y lectura).
+  // GESTIONAR = operaciones ordinarias de escritura (crear, editar, enviar,
+  //   anular, vincular ERP). Requiere VER — ver DEPENDENCIAS_PERMISO.
+  // ESPECIAL (aprobar/confirmar) = autoridad de decisión sobre el flujo, NO
+  //   incluida en GESTIONAR: permite un "aprobador puro" (ve y aprueba, no
+  //   edita). También requiere VER, nunca GESTIONAR.
+  // El verbo del sistema es "gestionar" (ya usado por créditos, despachos,
+  //   toma física, plan de producción...); los códigos ".manipular" del
+  //   piloto inicial quedan como alias legacy en PERMISOS_LEGACY.
+  COTIZACIONES_VER: "cotizaciones.ver",
+  COTIZACIONES_GESTIONAR: "cotizaciones.gestionar",
+  COTIZACIONES_APROBAR: "cotizaciones.aprobar",
+  PEDIDOS_COMERCIALES_VER: "pedidos_comerciales.ver",
+  PEDIDOS_COMERCIALES_GESTIONAR: "pedidos_comerciales.gestionar",
+  PEDIDOS_COMERCIALES_CONFIRMAR: "pedidos_comerciales.confirmar",
+  // Proformas tenía TODO (leer y escribir) detrás del permiso genérico de la
+  // pantalla Ventas ("ventas.ver") — se separa en su propia sección.
+  // "ventas.ver" se conserva intacto para la pantalla Centro Comercial
+  // (/ventas) y para Clientes (comercial.clientes).
+  PROFORMAS_VER: "proformas.ver",
+  PROFORMAS_GESTIONAR: "proformas.gestionar",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
   OBJETIVOS_VER: "objetivos.ver",
@@ -118,6 +140,39 @@ export const PERMISOS_SISTEMA = {
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
+
+/**
+ * Códigos retirados del catálogo que SIGUEN siendo válidos: si un rol o un
+ * permiso directo todavía los tiene guardados, conceden el código nuevo al
+ * que equivalen (ver expandirLegacy). Deliberadamente NO se borran de la
+ * base ni de los roles: la compatibilidad se resuelve en lectura, así que
+ * migrar un tenant nunca puede dejar a nadie sin acceso, y revertir este
+ * cambio no requiere tocar datos.
+ *
+ * Se ocultan del catálogo asignable (ver permisos.service.ts) para que un
+ * administrador no pueda seguir asignando códigos muertos ni vea duplicados
+ * ("Cotizaciones Manipular" junto a "Cotizaciones Gestionar").
+ */
+export const PERMISOS_LEGACY: Record<string, string> = {
+  // Piloto inicial de Comercial: se unifica el verbo en "gestionar".
+  "cotizaciones.manipular": PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR,
+  "proformas.manipular": PERMISOS_SISTEMA.PROFORMAS_GESTIONAR,
+  "pedidos_comerciales.manipular": PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR,
+  // CRUD granular previo al modelo VER/GESTIONAR: ninguna ruta los exigía ya.
+  "cotizaciones.crear": PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR,
+  "cotizaciones.editar": PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR,
+  "pedidos_comerciales.crear": PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR,
+  "pedidos_comerciales.editar": PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR,
+};
+
+/** Agrega a un conjunto de permisos el código nuevo de cada alias legacy que
+ * contenga, sin quitar el viejo (un rol guardado sigue siendo válido tal cual). */
+function expandirLegacy(permisos: Set<string>): Set<string> {
+  for (const [viejo, nuevo] of Object.entries(PERMISOS_LEGACY)) {
+    if (permisos.has(viejo)) permisos.add(nuevo);
+  }
+  return permisos;
+}
 
 export function parseRolPermisos(permisos: string | null | undefined): string[] {
   if (!permisos) return [];
@@ -180,8 +235,14 @@ export interface TenantAccesible {
 /**
  * Calcula el conjunto de permisos efectivos de un usuario: rol heredado +
  * permisos directos (que pueden agregar o revocar sobre lo que da el rol).
- * Los usuarios de Sistemas o superadmin tienen acceso total. Un usuario
- * inactivo nunca tiene permisos, sin importar rol o permisos directos.
+ * Solo `isSuperadmin` da acceso total. Un usuario inactivo nunca tiene
+ * permisos, sin importar rol o permisos directos.
+ *
+ * `departamento.esSistemas` YA NO concede permisos: era una segunda vía de
+ * acceso total, paralela a isSuperadmin, que no se reflejaba en la pantalla
+ * de Roles y por tanto era invisible para quien administra permisos. La
+ * bandera se conserva en Departamento (con sus guards de superadmin y su
+ * etiqueta en Configuración) como marca organizativa, no como autorización.
  * Compartida por loadSessionUser (un usuario) y listarUsuariosConPermiso
  * (en bloque, para saber a quién notificar), para no calcular esto dos veces.
  */
@@ -189,7 +250,7 @@ function calcularPermisosEfectivos(user: UsuarioConPermisosCrudos): Set<string> 
   const permisos = new Set<string>();
   if (!user.activo) return permisos;
 
-  if (user.isSuperadmin || user.departamento?.esSistemas) {
+  if (user.isSuperadmin) {
     Object.values(PERMISOS_SISTEMA).forEach((p) => permisos.add(p));
   } else {
     // Un rol desactivado no debe seguir concediendo permisos a quienes lo
@@ -202,7 +263,7 @@ function calcularPermisosEfectivos(user: UsuarioConPermisosCrudos): Set<string> 
       else permisos.delete(directo.permisoId);
     }
   }
-  return permisos;
+  return expandirLegacy(permisos);
 }
 
 /**
@@ -210,7 +271,7 @@ function calcularPermisosEfectivos(user: UsuarioConPermisosCrudos): Set<string> 
  * tenant adicional al "hogar" del usuario). A diferencia del tenant hogar,
  * una membresía NO tiene permisos directos propios (PermisoUsuario está
  * ligado al usuario, no a la membresía) — sus permisos vienen solo de su rol
- * o de isSuperadmin/departamento.esSistemas dentro de ese tenant.
+ * o de isSuperadmin dentro de ese tenant.
  */
 function calcularPermisosEfectivosMembresia(membresia: {
   activo: boolean;
@@ -221,12 +282,12 @@ function calcularPermisosEfectivosMembresia(membresia: {
   const permisos = new Set<string>();
   if (!membresia.activo) return permisos;
 
-  if (membresia.isSuperadmin || membresia.departamento?.esSistemas) {
+  if (membresia.isSuperadmin) {
     Object.values(PERMISOS_SISTEMA).forEach((p) => permisos.add(p));
   } else if (membresia.rolRel && membresia.rolRel.activo) {
     parseRolPermisos(membresia.rolRel.permisos).forEach((p) => permisos.add(p));
   }
-  return permisos;
+  return expandirLegacy(permisos);
 }
 
 /**
@@ -339,25 +400,37 @@ export async function listarTenantsAccesibles(userId: string): Promise<TenantAcc
 }
 
 /**
- * Ids de todos los usuarios activos del tenant que tienen un permiso
- * concreto (por rol, por acceso total de Sistemas/superadmin, o por permiso
- * directo), usado para saber a quién avisarle de un evento (p. ej. "nueva
- * solicitud de compra pendiente de aprobar"). Carga los usuarios activos del
- * tenant una sola vez y calcula en memoria: en un ERP interno el volumen de
- * usuarios por tenant es lo bastante chico para que esto sea más simple y
- * más fácil de mantener en sincronía con loadSessionUser que replicar la
- * lógica en SQL.
+ * Ids de todos los usuarios con acceso efectivo al tenant (nativos + vía
+ * Membresia activa) que tienen un permiso concreto (por rol, por acceso
+ * total de Sistemas/superadmin, o por permiso directo), usado para saber a
+ * quién avisarle de un evento (p. ej. "nueva solicitud de compra pendiente
+ * de aprobar"). H6: antes solo consideraba `User.tenantId` nativo, así que
+ * alguien con acceso a este tenant solo por Membresia nunca era notificado
+ * aunque tuviera el permiso ahí. Carga usuarios/membresías del tenant una
+ * sola vez y calcula en memoria: en un ERP interno el volumen por tenant es
+ * lo bastante chico para que esto sea más simple que replicar la lógica en SQL.
  */
 export async function listarUsuariosConPermiso(
   tenantId: string,
   permiso: string,
 ): Promise<string[]> {
-  const usuarios = await prisma.user.findMany({
-    where: { tenantId, activo: true },
-    include: { rolRel: true, permisosDirectos: true, departamento: true },
-  });
+  const [nativos, membresias] = await Promise.all([
+    prisma.user.findMany({
+      where: { tenantId, activo: true },
+      include: { rolRel: true, permisosDirectos: true, departamento: true },
+    }),
+    prisma.membresia.findMany({
+      where: { tenantId, activo: true, user: { activo: true } },
+      include: { rolRel: true, departamento: true },
+    }),
+  ]);
 
-  return usuarios.filter((u) => calcularPermisosEfectivos(u).has(permiso)).map((u) => u.id);
+  const ids = new Set<string>();
+  nativos.filter((u) => calcularPermisosEfectivos(u).has(permiso)).forEach((u) => ids.add(u.id));
+  membresias
+    .filter((m) => calcularPermisosEfectivosMembresia(m).has(permiso))
+    .forEach((m) => ids.add(m.userId));
+  return Array.from(ids);
 }
 
 /**

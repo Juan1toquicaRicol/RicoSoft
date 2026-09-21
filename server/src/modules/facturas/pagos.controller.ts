@@ -16,8 +16,71 @@ import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller"
 // persiste nada), pero antes de este fix el error genérico caía al catch y
 // respondía 500, indistinguible de un error real para el cliente. Solo este
 // código conocido se traduce a 409; cualquier otro error sigue siendo 500.
+//
+// H-02 (2026-09-20): bajo contención aún más alta (ej. toda la suite de
+// integración escribiendo en paralelo contra el mismo SQL Server real), la
+// MISMA colisión de locks puede manifestarse como P2028 ("Transaction
+// already closed... the timeout for this transaction was 5000ms, however
+// N ms passed") en vez de P2034 — Prisma agota el timeout por defecto de la
+// transacción interactiva esperando el lock, en lugar de recibir el
+// deadlock explícito de SQL Server. Es el mismo tipo de conflicto
+// transitorio (nadie perdió datos), así que se trata igual: 409, no 500.
 function esErrorDeConcurrencia(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2028")
+  );
+}
+
+/** H-02 (2026-09-20): reintenta hasta 3 veces antes de rendirse con 409 —
+ * mismo criterio que facturas.controller.ts (conReintentoDeConcurrencia):
+ * P2034/P2028 son colisiones TRANSITORIAS de locks, no conflictos de
+ * negocio. Para el escenario que M-10 sí quiere probar a propósito (dos
+ * pagos simultáneos reales que agotan el saldo de la misma factura), el
+ * reintento no cambia el resultado esperado — el que pierde la carrera
+ * simplemente ve, en su reintento, el saldo ya actualizado por el otro y
+ * responde con el 409 de NEGOCIO ("supera el saldo pendiente") en vez de
+ * un 409 genérico de colisión de locks; el que gana sigue respondiendo 201.
+ * Lo que sí evita es que un pago SIN ningún conflicto de negocio real
+ * (ninguna otra escritura concurrente sobre ESTA factura) le devuelva 409 al
+ * usuario solo porque el propio proceso de pruebas tenía decenas de otros
+ * archivos escribiendo en paralelo contra el mismo SQL Server. */
+/** Rechazo de NEGOCIO (no de concurrencia): el pago excede el saldo
+ * pendiente recién recalculado. Nunca la trata conReintentoDeConcurrencia
+ * como retryable (no es un PrismaClientKnownRequestError P2034/P2028), así
+ * que se propaga de inmediato al primer intento en que ocurra. */
+class SaldoInsuficienteError extends Error {
+  constructor(public readonly saldoPendiente: number) {
+    super("Saldo insuficiente");
+  }
+}
+
+/** Mismo criterio que SaldoInsuficienteError, para anularPago: un rechazo
+ * de negocio (el pago ya estaba anulado), nunca retryable. */
+class PagoYaAnuladoError extends Error {
+  constructor() {
+    super("El pago ya está anulado");
+  }
+}
+
+async function conReintentoDeConcurrencia<T>(
+  intentar: () => Promise<T>,
+  etiqueta: string,
+): Promise<T> {
+  const MAX_INTENTOS = 3;
+  for (let intento = 1; intento <= MAX_INTENTOS; intento += 1) {
+    try {
+      return await intentar();
+    } catch (error) {
+      if (!esErrorDeConcurrencia(error) || intento === MAX_INTENTOS) {
+        throw error;
+      }
+      console.warn(
+        `Conflicto de concurrencia (P2034/P2028) al ${etiqueta}, reintentando (${intento}/${MAX_INTENTOS})...`,
+      );
+    }
+  }
+  throw new Error("conReintentoDeConcurrencia: estado inesperado.");
 }
 
 function serializarPago(p: Pago) {
@@ -176,80 +239,100 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
-    // El saldo pendiente se recalcula desde los pagos Confirmados reales
-    // (no desde un contador de la factura), así que es imposible que quede
-    // desactualizado por una carrera entre dos pagos concurrentes.
-    const agregadoPrevio = await req.tenantPrisma!.pago.aggregate({
-      where: { facturaId, tenantId, estado: "Confirmado" },
-      _sum: { valor: true },
-    });
-    const saldoPendiente = Number(factura.total) - Number(agregadoPrevio._sum.valor ?? 0);
-    if (valorNum > saldoPendiente) {
-      return res.status(409).json({
-        message: `El pago ($${valorNum.toLocaleString("es-CO")}) supera el saldo pendiente de la factura ($${saldoPendiente.toLocaleString("es-CO")}).`,
-      });
-    }
+    // H-02 (2026-09-20): el chequeo de saldo pendiente y la transacción que
+    // crea el pago van JUNTOS dentro del bloque reintentable — nunca por
+    // separado. Si el reintento solo envolviera la transacción (dejando el
+    // chequeo de saldo antes, evaluado una sola vez con datos ya viejos), un
+    // segundo pago que SÍ debía rechazarse por sobrepasar el saldo (porque
+    // el primero ya se confirmó en el intento anterior) se reintentaría
+    // ciegamente y terminaría creando un pago igual, produciendo un
+    // sobrepago real. Recalcular el saldo desde cero en cada intento es lo
+    // que mantiene la garantía "el saldo pendiente nunca queda mal
+    // calculado por una carrera" que ya documentaba el comentario original.
+    let pago: Pago;
+    let facturaActualizada: Awaited<ReturnType<typeof recalcularEstadoPorPagos>>;
+    try {
+      ({ pago, facturaActualizada } = await conReintentoDeConcurrencia(async () => {
+        const agregadoPrevio = await req.tenantPrisma!.pago.aggregate({
+          where: { facturaId, tenantId, estado: "Confirmado" },
+          _sum: { valor: true },
+        });
+        const saldoPendiente = Number(factura.total) - Number(agregadoPrevio._sum.valor ?? 0);
+        if (valorNum > saldoPendiente) {
+          throw new SaldoInsuficienteError(saldoPendiente);
+        }
 
-    // create + historial + recálculo de estado + auditoría son una sola
-    // unidad: si algo falla a mitad de camino, no debe quedar un pago
-    // registrado sin su auditoría, ni una factura en un estado que no
-    // corresponde a la suma real de sus pagos.
-    const { pago, facturaActualizada } = await req.tenantPrisma!.$transaction(async (tx) => {
-      const pago = await tx.pago.create({
-        data: {
-          tenantId,
-          facturaId,
-          fecha: fecha ? new Date(fecha) : new Date(),
-          valor: valorNum,
-          metodoPago,
-          referencia:
-            typeof referencia === "string" && referencia.trim() ? referencia.trim() : null,
-          observaciones:
-            typeof observaciones === "string" && observaciones.trim() ? observaciones.trim() : null,
-          registradoPorId: req.user!.id,
-          registradoPorNombre: req.user!.nombre,
-        },
-      });
-
-      await tx.factura.update({
-        where: { id: facturaId },
-        data: {
-          historial: {
-            create: {
-              actor: req.user!.nombre,
-              accion: "Pago registrado",
-              detalle: `${metodoPago}: $${valorNum.toLocaleString("es-CO")}${referencia ? ` · Ref: ${referencia}` : ""}`,
+        // create + historial + recálculo de estado + auditoría son una sola
+        // unidad: si algo falla a mitad de camino, no debe quedar un pago
+        // registrado sin su auditoría, ni una factura en un estado que no
+        // corresponde a la suma real de sus pagos.
+        return req.tenantPrisma!.$transaction(async (tx) => {
+          const pago = await tx.pago.create({
+            data: {
+              tenantId,
+              facturaId,
+              fecha: fecha ? new Date(fecha) : new Date(),
+              valor: valorNum,
+              metodoPago,
+              referencia:
+                typeof referencia === "string" && referencia.trim() ? referencia.trim() : null,
+              observaciones:
+                typeof observaciones === "string" && observaciones.trim()
+                  ? observaciones.trim()
+                  : null,
+              registradoPorId: req.user!.id,
+              registradoPorNombre: req.user!.nombre,
             },
-          },
-        },
-      });
+          });
 
-      const facturaActualizada = await recalcularEstadoPorPagos(
-        tx,
-        tenantId,
-        facturaId,
-        req.user!.nombre,
-      );
+          await tx.factura.update({
+            where: { id: facturaId },
+            data: {
+              historial: {
+                create: {
+                  actor: req.user!.nombre,
+                  accion: "Pago registrado",
+                  detalle: `${metodoPago}: $${valorNum.toLocaleString("es-CO")}${referencia ? ` · Ref: ${referencia}` : ""}`,
+                },
+              },
+            },
+          });
 
-      await tx.auditoria.create({
-        data: {
-          tenantId,
-          usuarioId: req.user!.id,
-          accion: "PAGO_REGISTRADO",
-          detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${factura.numero}"`,
-          entidadTipo: "Pago",
-          entidadId: pago.id,
-          datosNuevos: JSON.stringify({
+          const facturaActualizada = await recalcularEstadoPorPagos(
+            tx,
+            tenantId,
             facturaId,
-            valor: valorNum,
-            metodoPago,
-            estadoFactura: facturaActualizada?.estado,
-          }),
-        },
-      });
+            req.user!.nombre,
+          );
 
-      return { pago, facturaActualizada };
-    });
+          await tx.auditoria.create({
+            data: {
+              tenantId,
+              usuarioId: req.user!.id,
+              accion: "PAGO_REGISTRADO",
+              detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${factura.numero}"`,
+              entidadTipo: "Pago",
+              entidadId: pago.id,
+              datosNuevos: JSON.stringify({
+                facturaId,
+                valor: valorNum,
+                metodoPago,
+                estadoFactura: facturaActualizada?.estado,
+              }),
+            },
+          });
+
+          return { pago, facturaActualizada };
+        });
+      }, "registrar pago"));
+    } catch (error) {
+      if (error instanceof SaldoInsuficienteError) {
+        return res.status(409).json({
+          message: `El pago ($${valorNum.toLocaleString("es-CO")}) supera el saldo pendiente de la factura ($${error.saldoPendiente.toLocaleString("es-CO")}).`,
+        });
+      }
+      throw error;
+    }
 
     return res.status(201).json({
       pago: serializarPago(pago),
@@ -293,47 +376,73 @@ export const anularPago = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(409).json({ message: "Este pago ya está anulado." });
     }
 
-    const facturaActualizada = await req.tenantPrisma!.$transaction(async (tx) => {
-      await tx.pago.update({ where: { id: pagoId }, data: { estado: "Anulado" } });
+    // H-02: el chequeo "¿ya estaba anulado?" se repite DENTRO del bloque
+    // reintentable con una lectura fresca — mismo motivo que en
+    // registrarPago: si un reintento reusara el `pago` ya leído antes de la
+    // primera colisión, no vería que otra anulación concurrente ya lo marcó
+    // Anulado mientras tanto, y produciría un segundo registro de Auditoria
+    // "PAGO_ANULADO" duplicado para la misma anulación.
+    let facturaActualizada: Awaited<ReturnType<typeof recalcularEstadoPorPagos>>;
+    try {
+      facturaActualizada = await conReintentoDeConcurrencia(async () => {
+        const pagoFresco = await req.tenantPrisma!.pago.findFirst({
+          where: { id: pagoId, facturaId, tenantId },
+        });
+        if (!pagoFresco || pagoFresco.estado === "Anulado") {
+          throw new PagoYaAnuladoError();
+        }
 
-      await tx.factura.update({
-        where: { id: facturaId },
-        data: {
-          historial: {
-            create: {
-              actor: req.user!.nombre,
-              accion: "Pago anulado",
-              detalle: `Se anuló el pago de $${Number(pago.valor).toLocaleString("es-CO")} (${pago.metodoPago}).`,
+        return req.tenantPrisma!.$transaction(async (tx) => {
+          await tx.pago.update({ where: { id: pagoId }, data: { estado: "Anulado" } });
+
+          await tx.factura.update({
+            where: { id: facturaId },
+            data: {
+              historial: {
+                create: {
+                  actor: req.user!.nombre,
+                  accion: "Pago anulado",
+                  detalle: `Se anuló el pago de $${Number(pago.valor).toLocaleString("es-CO")} (${pago.metodoPago}).`,
+                },
+              },
             },
-          },
-        },
-      });
+          });
 
-      const facturaActualizada = await recalcularEstadoPorPagos(
-        tx,
-        tenantId,
-        facturaId,
-        req.user!.nombre,
-      );
+          const facturaActualizada = await recalcularEstadoPorPagos(
+            tx,
+            tenantId,
+            facturaId,
+            req.user!.nombre,
+          );
 
-      await tx.auditoria.create({
-        data: {
-          tenantId,
-          usuarioId: req.user!.id,
-          accion: "PAGO_ANULADO",
-          detalle: `${req.user!.nombre} anuló un pago de $${Number(pago.valor).toLocaleString("es-CO")} de la factura "${factura.numero}"`,
-          entidadTipo: "Pago",
-          entidadId: pagoId,
-          datosAnteriores: JSON.stringify({ estado: "Confirmado" }),
-          datosNuevos: JSON.stringify({
-            estado: "Anulado",
-            estadoFactura: facturaActualizada?.estado,
-          }),
-        },
-      });
+          await tx.auditoria.create({
+            data: {
+              tenantId,
+              usuarioId: req.user!.id,
+              accion: "PAGO_ANULADO",
+              detalle: `${req.user!.nombre} anuló un pago de $${Number(pago.valor).toLocaleString("es-CO")} de la factura "${factura.numero}"`,
+              entidadTipo: "Pago",
+              entidadId: pagoId,
+              datosAnteriores: JSON.stringify({ estado: "Confirmado" }),
+              datosNuevos: JSON.stringify({
+                estado: "Anulado",
+                estadoFactura: facturaActualizada?.estado,
+              }),
+            },
+          });
 
-      return facturaActualizada;
-    });
+          return facturaActualizada;
+        });
+      }, "anular pago");
+    } catch (error) {
+      if (error instanceof PagoYaAnuladoError) {
+        // Alguien más lo anuló entre la primera lectura y este intento:
+        // mismo resultado observable que el chequeo original (409), ahora
+        // también cubre la carrera, no solo la lectura inicial.
+        return res.status(409).json({ message: "Este pago ya está anulado." });
+      }
+      throw error;
+    }
 
     return res.json({
       pago: serializarPago({ ...pago, estado: "Anulado" }),

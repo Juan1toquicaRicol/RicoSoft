@@ -131,6 +131,9 @@ export async function leerExistenciasSiesa(ciaId: number): Promise<ExistenciaIte
  */
 export interface BodegaSiesa {
   bodegaRowId: number;
+  /** Código visible de la bodega en Siesa (f150_id, ej. "023") — distinto
+   * del bodegaRowId interno, es el número que el usuario reconoce. */
+  codigo: string;
   nombre: string;
 }
 
@@ -138,15 +141,17 @@ export async function leerBodegasSiesa(ciaId: number): Promise<BodegaSiesa[]> {
   const pool = await getSiesaPool();
   const { recordset } = await pool.request().input("ciaId", ciaId).query<{
     bodegaRowId: number;
+    codigo: string | null;
     nombre: string | null;
   }>(`
-    SELECT f150_rowid AS bodegaRowId, f150_descripcion AS nombre
+    SELECT f150_rowid AS bodegaRowId, f150_id AS codigo, f150_descripcion AS nombre
     FROM t150_mc_bodegas
     WHERE f150_id_cia = @ciaId
-    ORDER BY f150_descripcion
+    ORDER BY f150_id
   `);
   return recordset.map((r) => ({
     bodegaRowId: r.bodegaRowId,
+    codigo: r.codigo?.trim() || String(r.bodegaRowId),
     nombre: r.nombre?.trim() || `Bodega ${r.bodegaRowId}`,
   }));
 }

@@ -165,6 +165,59 @@ const INCLUDE_FACTURA = {
 
 type FacturaConRelaciones = Prisma.FacturaGetPayload<{ include: typeof INCLUDE_FACTURA }>;
 
+// H-02 (hardening 2026-09-20): mismo patrón que pagos.controller.ts
+// (esErrorDeConcurrencia, M-10) — bajo carga concurrente real (dos facturas
+// creándose casi al mismo tiempo, o simplemente muchas transacciones
+// simultáneas contra la misma base), SQL Server puede resolver el conflicto
+// de escritura entre transacciones con un P2034 ("write conflict or
+// deadlock") en vez de serializarlas silenciosamente. Bajo contención aún
+// mayor la misma colisión de locks puede manifestarse como P2028
+// ("Transaction already closed", el timeout por defecto de 5s de la
+// transacción interactiva agotado esperando el lock) en vez del P2034
+// explícito — mismo conflicto transitorio, mismo tratamiento. No hay
+// corrupción de datos (la transacción que pierde no persiste nada), pero
+// sin este manejo el error genérico caía al catch de más abajo y respondía
+// 500 — indistinguible de un error real para el cliente, y sin indicarle
+// que reintentar normalmente basta. Detectado por
+// compras-cotizaciones.integration.test.ts y facturas.tenant-prisma bajo la
+// suite completa (muchos archivos de integración escribiendo en paralelo
+// contra el mismo SQL Server real).
+function esErrorDeConcurrencia(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2028")
+  );
+}
+
+/** Reintenta una operación de escritura hasta 3 veces si SQL Server la
+ * aborta por conflicto de escritura (P2034) — recomendación oficial de
+ * Prisma para este código: es una colisión transitoria de locks (confirmado
+ * en la práctica: aparece tanto en la transacción de crearFactura como en
+ * el UPDATE suelto de cambiarEstadoFactura bajo escritura concurrida real),
+ * no un error de negocio, así que casi siempre basta con reintentar para
+ * que la segunda (o tercera) vez sí serialice limpiamente contra la otra
+ * transacción/sentencia. `etiqueta` es solo para el log de warning. */
+async function conReintentoDeConcurrencia<T>(
+  intentar: () => Promise<T>,
+  etiqueta: string,
+): Promise<T> {
+  const MAX_INTENTOS = 3;
+  for (let intento = 1; intento <= MAX_INTENTOS; intento += 1) {
+    try {
+      return await intentar();
+    } catch (error) {
+      if (!esErrorDeConcurrencia(error) || intento === MAX_INTENTOS) {
+        throw error;
+      }
+      console.warn(
+        `Conflicto de concurrencia (P2034) al ${etiqueta}, reintentando (${intento}/${MAX_INTENTOS})...`,
+      );
+    }
+  }
+  // Inalcanzable: el bucle siempre retorna o relanza en la última iteración.
+  throw new Error("conReintentoDeConcurrencia: estado inesperado.");
+}
+
 export const listarFacturas = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -438,70 +491,74 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
           ]
         : [{ actor: req.user!.nombre, accion: "Factura recibida", detalle: "Ingreso al sistema" }];
 
-    const factura = await req.tenantPrisma!.$transaction(async (tx) => {
-      const creada = await tx.factura.create({
-        data: {
-          tenantId,
-          empresaId,
-          numero,
-          proveedorId: proveedorId || null,
-          proveedor: proveedorNombre,
-          nit: proveedorNit,
-          servicioId: servicioId || null,
-          solicitudCompraId: solicitudCompraId || null,
-          centroCostos: centroCostos || null,
-          area,
-          responsableId: responsableId || null,
-          responsable: responsableNombre,
-          vence: new Date(vence),
-          condicionesPago: condicionesPagoFinal,
-          datosPago: datosPagoFinal,
-          subtotal: sub,
-          iva: ivaNum,
-          total: sub + ivaNum,
-          moneda: monedaFinal,
-          estado: autoAprobada ? "Aprobada" : "Pendiente",
-          prioridad: prioridadFinal,
-          origen: typeof origen === "string" ? origen : "Carga manual",
-          historial: { create: historialInicial },
-        },
-        include: INCLUDE_FACTURA,
-      });
-
-      await tx.auditoria.create({
-        data: {
-          tenantId,
-          usuarioId: req.user!.id,
-          accion: "FACTURA_CREADA",
-          detalle: `${req.user!.nombre} registró la factura "${creada.numero}" (${creada.proveedor})`,
-        },
-      });
-
-      if (solicitudDb) {
-        // Idempotente si ya estaba "Facturada" (segunda/tercera factura de
-        // la misma solicitud) — no hay una transición real que registrar dos
-        // veces, solo el mensaje de auditoría cambia para reflejarlo.
-        const yaEstabaFacturada = solicitudDb.estado === "Facturada";
-        if (!yaEstabaFacturada) {
-          await tx.solicitudCompra.update({
-            where: { id: solicitudDb.id },
-            data: { estado: "Facturada" },
+    const factura = await conReintentoDeConcurrencia(
+      () =>
+        req.tenantPrisma!.$transaction(async (tx) => {
+          const creada = await tx.factura.create({
+            data: {
+              tenantId,
+              empresaId,
+              numero,
+              proveedorId: proveedorId || null,
+              proveedor: proveedorNombre,
+              nit: proveedorNit,
+              servicioId: servicioId || null,
+              solicitudCompraId: solicitudCompraId || null,
+              centroCostos: centroCostos || null,
+              area,
+              responsableId: responsableId || null,
+              responsable: responsableNombre,
+              vence: new Date(vence),
+              condicionesPago: condicionesPagoFinal,
+              datosPago: datosPagoFinal,
+              subtotal: sub,
+              iva: ivaNum,
+              total: sub + ivaNum,
+              moneda: monedaFinal,
+              estado: autoAprobada ? "Aprobada" : "Pendiente",
+              prioridad: prioridadFinal,
+              origen: typeof origen === "string" ? origen : "Carga manual",
+              historial: { create: historialInicial },
+            },
+            include: INCLUDE_FACTURA,
           });
-        }
-        await tx.auditoria.create({
-          data: {
-            tenantId,
-            usuarioId: req.user!.id,
-            accion: "SOLICITUD_COMPRA_FACTURADA",
-            detalle: yaEstabaFacturada
-              ? `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}" (factura adicional; la solicitud ya estaba "Facturada"); quedó aprobada automáticamente.`
-              : `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}"; quedó aprobada automáticamente y la solicitud pasó a "Facturada".`,
-          },
-        });
-      }
 
-      return creada;
-    });
+          await tx.auditoria.create({
+            data: {
+              tenantId,
+              usuarioId: req.user!.id,
+              accion: "FACTURA_CREADA",
+              detalle: `${req.user!.nombre} registró la factura "${creada.numero}" (${creada.proveedor})`,
+            },
+          });
+
+          if (solicitudDb) {
+            // Idempotente si ya estaba "Facturada" (segunda/tercera factura de
+            // la misma solicitud) — no hay una transición real que registrar dos
+            // veces, solo el mensaje de auditoría cambia para reflejarlo.
+            const yaEstabaFacturada = solicitudDb.estado === "Facturada";
+            if (!yaEstabaFacturada) {
+              await tx.solicitudCompra.update({
+                where: { id: solicitudDb.id },
+                data: { estado: "Facturada" },
+              });
+            }
+            await tx.auditoria.create({
+              data: {
+                tenantId,
+                usuarioId: req.user!.id,
+                accion: "SOLICITUD_COMPRA_FACTURADA",
+                detalle: yaEstabaFacturada
+                  ? `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}" (factura adicional; la solicitud ya estaba "Facturada"); quedó aprobada automáticamente.`
+                  : `${req.user!.nombre} vinculó la factura "${creada.numero}" a la solicitud "${solicitudDb.item}"; quedó aprobada automáticamente y la solicitud pasó a "Facturada".`,
+              },
+            });
+          }
+
+          return creada;
+        }),
+      "crear factura",
+    );
 
     if (solicitudDb) {
       if (solicitudDb.solicitanteId) {
@@ -552,6 +609,13 @@ export const crearFactura = async (req: AuthenticatedRequest, res: Response) => 
 
     return res.status(201).json(serializar(factura));
   } catch (error) {
+    if (esErrorDeConcurrencia(error)) {
+      console.warn("Conflicto de concurrencia al crear factura (P2034):", error);
+      return res.status(409).json({
+        message:
+          "Otra operación se procesó al mismo tiempo. Intenta registrar la factura de nuevo.",
+      });
+    }
     console.error("Error al crear factura:", error);
     return res.status(500).json({ message: "Error al registrar la factura." });
   }
@@ -644,20 +708,24 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
           ? "Factura rechazada"
           : "Pago registrado";
 
-    const actualizada = await req.tenantPrisma!.factura.update({
-      where: { id },
-      data: {
-        estado: nuevoEstado,
-        historial: {
-          create: {
-            actor: req.user!.nombre,
-            accion: accionLabel,
-            detalle: typeof detalle === "string" ? detalle : undefined,
+    const actualizada = await conReintentoDeConcurrencia(
+      () =>
+        req.tenantPrisma!.factura.update({
+          where: { id },
+          data: {
+            estado: nuevoEstado,
+            historial: {
+              create: {
+                actor: req.user!.nombre,
+                accion: accionLabel,
+                detalle: typeof detalle === "string" ? detalle : undefined,
+              },
+            },
           },
-        },
-      },
-      include: INCLUDE_FACTURA,
-    });
+          include: INCLUDE_FACTURA,
+        }),
+      "cambiar estado de factura",
+    );
 
     await req.tenantPrisma!.auditoria.create({
       data: {
@@ -670,6 +738,12 @@ export const cambiarEstadoFactura = async (req: AuthenticatedRequest, res: Respo
 
     return res.json(serializar(actualizada));
   } catch (error) {
+    if (esErrorDeConcurrencia(error)) {
+      console.warn("Conflicto de concurrencia al cambiar estado de factura (P2034):", error);
+      return res.status(409).json({
+        message: "Otra operación se procesó al mismo tiempo sobre esta factura. Intenta de nuevo.",
+      });
+    }
     console.error("Error al cambiar estado de factura:", error);
     return res.status(500).json({ message: "Error al actualizar la factura." });
   }

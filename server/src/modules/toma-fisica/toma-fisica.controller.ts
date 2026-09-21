@@ -12,19 +12,7 @@ import {
   type OcurrenciaDiferencia,
 } from "../../lib/toma-fisica";
 import { crearTomaFisicaSchema, registrarConteoSchema } from "./toma-fisica.schemas";
-
-/**
- * Trae el tenant + su compañía Siesa, o null si no está configurada — mismo
- * patrón de autoridad usado en el resto del módulo Inventario (Tenant.siesaCiaId
- * resuelto SIEMPRE desde el tenant autenticado, nunca del body/query).
- */
-async function resolverCiaSiesa(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { siesaCiaId: true },
-  });
-  return tenant?.siesaCiaId ?? null;
-}
+import { resolverCiaSiesa } from "../../lib/siesa-tenant";
 
 /**
  * Busca la toma física por id VERIFICANDO que pertenezca al tenant

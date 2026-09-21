@@ -66,6 +66,7 @@ const MODELOS_TENANT_SCOPED = new Set([
   "GestionLiquidacion",
   "Despacho",
   "OportunidadSeguimiento",
+  "IndicadorCreditoCliente",
   "ImportacionActividad",
   "ImportacionNovedad",
   "ImportacionPago",
@@ -98,6 +99,10 @@ const MODELOS_TENANT_SCOPED = new Set([
   //   quedaban fuera de esta lista curada sin ninguna razón documentada.
   "OrdenCompraIntlDocumento",
   "ConfiguracionInventario",
+  // ConfiguracionComercial (Ventas/Proformas): mismo patrón que
+  // ConfiguracionInventario arriba — una fila por tenant, sin ninguna
+  // semántica GENERAL, usada vía req.tenantPrisma.configuracionComercial.
+  "ConfiguracionComercial",
   "FuenteBiometrica",
   "EmpleadoBiometrico",
   "MarcacionBiometrica",
@@ -189,7 +194,13 @@ export function getTenantPrisma(tenantId: string) {
               a.create = { ...(a.create as object), tenantId };
             }
             if (!existente) {
-              a.where = { ...(a.where as object), id: "__tenant_mismatch__" };
+              // GUID nulo, no un string arbitrario: `id` es UNIQUEIDENTIFIER
+              // en SQL Server, y un valor no-GUID aquí hace que el propio
+              // driver lance "Conversion failed" en vez del P2025 esperado
+              // (bug preexistente, expuesto al probar un upsert de primera
+              // vez — p. ej. ConfiguracionComercial/ConfiguracionInventario
+              // para un tenant que nunca había guardado su configuración).
+              a.where = { ...(a.where as object), id: "00000000-0000-0000-0000-000000000000" };
             }
             return query(args);
           }

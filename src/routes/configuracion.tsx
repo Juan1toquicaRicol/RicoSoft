@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   Tags,
   Megaphone,
+  History,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
@@ -130,6 +131,13 @@ function Configuracion() {
       icon: Cloud,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER),
+    },
+    {
+      to: "/configuracion/auditoria",
+      label: "Auditoría",
+      icon: History,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.AUDITORIA_VER),
     },
   ] as const;
 

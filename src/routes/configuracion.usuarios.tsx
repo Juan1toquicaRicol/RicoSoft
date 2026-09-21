@@ -108,6 +108,8 @@ interface MembresiaApi {
   isSuperadmin: boolean;
   tenant: { id: string; nombre: string };
   rolRel: { id: string; nombre: string } | null;
+  departamentoId: string | null;
+  departamento: { id: string; nombre: string } | null;
 }
 
 function UsuariosConfigPage() {
@@ -162,10 +164,26 @@ function UsuariosConfigPage() {
   const [cargandoMembresias, setCargandoMembresias] = useState(false);
   const [nuevaMembresiaTenantId, setNuevaMembresiaTenantId] = useState("");
   const [rolesTenantElegido, setRolesTenantElegido] = useState<RolOpcion[]>([]);
+  const [departamentosTenantElegido, setDepartamentosTenantElegido] = useState<DepartamentoOpcion[]>(
+    [],
+  );
   const [nuevaMembresiaRolId, setNuevaMembresiaRolId] = useState("");
+  const [nuevaMembresiaDepartamentoId, setNuevaMembresiaDepartamentoId] = useState("");
   const [nuevaMembresiaSuperadmin, setNuevaMembresiaSuperadmin] = useState(false);
   const [guardandoMembresia, setGuardandoMembresia] = useState(false);
   const [eliminandoMembresiaId, setEliminandoMembresiaId] = useState<string | null>(null);
+
+  // Edición inline (rol/departamento) de una membresía YA existente — sin
+  // esto, la única forma de corregir el rol/departamento de un acceso ya
+  // otorgado era eliminarlo y volver a crearlo desde cero (H2).
+  const [editandoMembresiaId, setEditandoMembresiaId] = useState<string | null>(null);
+  const [editMembresiaRolId, setEditMembresiaRolId] = useState("");
+  const [editMembresiaDepartamentoId, setEditMembresiaDepartamentoId] = useState("");
+  const [editMembresiaRoles, setEditMembresiaRoles] = useState<RolOpcion[]>([]);
+  const [editMembresiaDepartamentos, setEditMembresiaDepartamentos] = useState<DepartamentoOpcion[]>(
+    [],
+  );
+  const [guardandoEdicionMembresia, setGuardandoEdicionMembresia] = useState(false);
 
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
@@ -195,8 +213,11 @@ function UsuariosConfigPage() {
     setMembresias([]);
     setNuevaMembresiaTenantId("");
     setNuevaMembresiaRolId("");
+    setNuevaMembresiaDepartamentoId("");
     setNuevaMembresiaSuperadmin(false);
     setRolesTenantElegido([]);
+    setDepartamentosTenantElegido([]);
+    setEditandoMembresiaId(null);
     if (sesion?.isSuperadmin) {
       fetchMembresias(u.id);
       if (tenants.length === 0) fetchTenants();
@@ -227,13 +248,19 @@ function UsuariosConfigPage() {
   const handleElegirTenantNuevaMembresia = async (tenantId: string) => {
     setNuevaMembresiaTenantId(tenantId);
     setNuevaMembresiaRolId("");
+    setNuevaMembresiaDepartamentoId("");
     setRolesTenantElegido([]);
+    setDepartamentosTenantElegido([]);
     if (!tenantId) return;
     try {
-      const data = await fetchAuth(`/membresias/tenants/${tenantId}/roles`);
-      setRolesTenantElegido(Array.isArray(data) ? data : []);
+      const [roles, deptos] = await Promise.all([
+        fetchAuth(`/membresias/tenants/${tenantId}/roles`),
+        fetchAuth(`/membresias/tenants/${tenantId}/departamentos`),
+      ]);
+      setRolesTenantElegido(Array.isArray(roles) ? roles : []);
+      setDepartamentosTenantElegido(Array.isArray(deptos) ? deptos : []);
     } catch {
-      // Selector secundario; si falla, se puede seguir sin rol o con superadmin.
+      // Selectores secundarios; si fallan, se puede seguir sin rol/departamento o con superadmin.
     }
   };
 
@@ -246,19 +273,61 @@ function UsuariosConfigPage() {
         body: JSON.stringify({
           tenantId: nuevaMembresiaTenantId,
           rolId: nuevaMembresiaSuperadmin ? null : nuevaMembresiaRolId || null,
+          departamentoId: nuevaMembresiaDepartamentoId || null,
           isSuperadmin: nuevaMembresiaSuperadmin,
         }),
       });
       toast.success("Acceso otorgado correctamente.");
       setNuevaMembresiaTenantId("");
       setNuevaMembresiaRolId("");
+      setNuevaMembresiaDepartamentoId("");
       setNuevaMembresiaSuperadmin(false);
       setRolesTenantElegido([]);
+      setDepartamentosTenantElegido([]);
       fetchMembresias(usuarioEditando.id);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al otorgar el acceso.");
     } finally {
       setGuardandoMembresia(false);
+    }
+  };
+
+  const handleAbrirEdicionMembresia = async (m: MembresiaApi) => {
+    setEditandoMembresiaId(m.id);
+    setEditMembresiaRolId(m.rolRel?.id ?? "");
+    setEditMembresiaDepartamentoId(m.departamentoId ?? "");
+    setEditMembresiaRoles([]);
+    setEditMembresiaDepartamentos([]);
+    try {
+      const [roles, deptos] = await Promise.all([
+        fetchAuth(`/membresias/tenants/${m.tenant.id}/roles`),
+        fetchAuth(`/membresias/tenants/${m.tenant.id}/departamentos`),
+      ]);
+      setEditMembresiaRoles(Array.isArray(roles) ? roles : []);
+      setEditMembresiaDepartamentos(Array.isArray(deptos) ? deptos : []);
+    } catch {
+      // Selectores secundarios; si fallan, se puede seguir sin cambiar rol/departamento.
+    }
+  };
+
+  const handleGuardarEdicionMembresia = async () => {
+    if (!usuarioEditando || !editandoMembresiaId) return;
+    setGuardandoEdicionMembresia(true);
+    try {
+      await fetchAuth(`/membresias/${editandoMembresiaId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          rolId: editMembresiaRolId || null,
+          departamentoId: editMembresiaDepartamentoId || null,
+        }),
+      });
+      toast.success("Acceso actualizado correctamente.");
+      setEditandoMembresiaId(null);
+      fetchMembresias(usuarioEditando.id);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el acceso.");
+    } finally {
+      setGuardandoEdicionMembresia(false);
     }
   };
 
@@ -818,36 +887,105 @@ function UsuariosConfigPage() {
                     {membresias.map((m) => (
                       <div
                         key={m.id}
-                        className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2.5 py-1.5"
+                        className="rounded-md border border-slate-200 px-2.5 py-1.5 space-y-2"
                       >
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-800 truncate">
-                            {m.tenant.nombre}
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            {m.isSuperadmin ? "Superadmin" : (m.rolRel?.nombre ?? "Sin rol")}
-                          </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 truncate">
+                              {m.tenant.nombre}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {m.isSuperadmin ? "Superadmin" : (m.rolRel?.nombre ?? "Sin rol")}
+                              {" · "}
+                              {m.departamento?.nombre ?? "Sin departamento propio"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant={m.activo ? "outline" : "success"}
+                              className="h-7 text-[11px] px-2"
+                              onClick={() => handleToggleMembresia(m)}
+                            >
+                              {m.activo ? "Activo" : "Inactivo"}
+                            </Button>
+                            {!m.isSuperadmin && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px] px-2"
+                                onClick={() =>
+                                  editandoMembresiaId === m.id
+                                    ? setEditandoMembresiaId(null)
+                                    : handleAbrirEdicionMembresia(m)
+                                }
+                              >
+                                {editandoMembresiaId === m.id ? "Cancelar" : "Editar"}
+                              </Button>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              title="Quitar acceso"
+                              disabled={eliminandoMembresiaId === m.id}
+                              onClick={() => handleEliminarMembresia(m)}
+                            >
+                              <X className="h-3.5 w-3.5 text-slate-500" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            size="sm"
-                            variant={m.activo ? "outline" : "success"}
-                            className="h-7 text-[11px] px-2"
-                            onClick={() => handleToggleMembresia(m)}
-                          >
-                            {m.activo ? "Activo" : "Inactivo"}
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            title="Quitar acceso"
-                            disabled={eliminandoMembresiaId === m.id}
-                            onClick={() => handleEliminarMembresia(m)}
-                          >
-                            <X className="h-3.5 w-3.5 text-slate-500" />
-                          </Button>
-                        </div>
+
+                        {editandoMembresiaId === m.id && (
+                          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+                            <Select
+                              value={editMembresiaRolId || "__sin_rol__"}
+                              onValueChange={(v) =>
+                                setEditMembresiaRolId(v === "__sin_rol__" ? "" : v)
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Sin rol" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__sin_rol__">Sin rol asignado</SelectItem>
+                                {editMembresiaRoles.map((r) => (
+                                  <SelectItem key={r.id} value={r.id}>
+                                    {r.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={editMembresiaDepartamentoId || "__sin_departamento__"}
+                              onValueChange={(v) =>
+                                setEditMembresiaDepartamentoId(v === "__sin_departamento__" ? "" : v)
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Sin departamento" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__sin_departamento__">
+                                  Sin departamento propio
+                                </SelectItem>
+                                {editMembresiaDepartamentos.map((d) => (
+                                  <SelectItem key={d.id} value={d.id}>
+                                    {d.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              className="col-span-2 h-8 text-xs"
+                              disabled={guardandoEdicionMembresia}
+                              onClick={handleGuardarEdicionMembresia}
+                            >
+                              {guardandoEdicionMembresia ? "Guardando..." : "Guardar cambios"}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -889,6 +1027,29 @@ function UsuariosConfigPage() {
                           {rolesTenantElegido.map((r) => (
                             <SelectItem key={r.id} value={r.id}>
                               {r.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {nuevaMembresiaTenantId && (
+                      <Select
+                        value={nuevaMembresiaDepartamentoId || "__sin_departamento__"}
+                        onValueChange={(v) =>
+                          setNuevaMembresiaDepartamentoId(v === "__sin_departamento__" ? "" : v)
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Sin departamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__sin_departamento__">
+                            Sin departamento propio en esa empresa
+                          </SelectItem>
+                          {departamentosTenantElegido.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.nombre}
                             </SelectItem>
                           ))}
                         </SelectContent>

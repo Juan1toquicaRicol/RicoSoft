@@ -11,6 +11,11 @@ export const TIPOS_CATALOGO_VALIDOS = [
   "MONEDA",
   "PAIS_ORIGEN",
   "FORMA_PAGO",
+  // Forma de pago del módulo Ventas/Proformas — tipo separado de FORMA_PAGO
+  // (ese es de Importaciones: "Carta de crédito", "Contra entrega", etc.,
+  // ruido semántico para una proforma de venta nacional) aunque comparte el
+  // mismo mecanismo de CatalogoValor, sin tabla nueva.
+  "FORMA_PAGO_VENTAS",
   "UNIDAD_MEDIDA",
   "METODO_PAGO",
   "MOTIVO_NOVEDAD_IMPORTACION",

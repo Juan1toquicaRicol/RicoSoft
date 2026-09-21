@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ShieldCheck,
   Plus,
@@ -18,7 +18,7 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
-import { usePermisosCatalogo } from "@/hooks/use-permisos";
+import { usePermisosCatalogo, type PermisoCatalogo } from "@/hooks/use-permisos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +51,69 @@ function RolesConfigPage() {
   // necesidad de un deploy. Solo se ofrecen los activos.
   const { permisos: catalogoPermisos } = usePermisosCatalogo();
   const permisosAsignables = catalogoPermisos.filter((p) => p.activo);
-  const MODULOS = Array.from(new Set(permisosAsignables.map((p) => p.modulo)));
+  const permisosPorCodigo = useMemo(
+    () => new Map(permisosAsignables.map((p) => [p.codigo, p])),
+    [permisosAsignables],
+  );
+
+  // Agrupa Módulo → Sección → Ver/Gestionar/Especiales a partir de
+  // `jerarquia` (server/src/lib/catalogo-permisos.ts) — no de la columna
+  // `modulo` (agrupador plano/legacy, ver serializar() en
+  // permisos.controller.ts). Los permisos personalizados del tenant (sin
+  // jerarquia) se agrupan aparte, por su `modulo` libre.
+  const gruposModulo = useMemo(() => {
+    interface SeccionGrupo {
+      clave: string;
+      nombre: string;
+      ver?: PermisoCatalogo;
+      gestionar?: PermisoCatalogo;
+      especiales: PermisoCatalogo[];
+    }
+    interface ModuloGrupo {
+      clave: string;
+      nombre: string;
+      secciones: Map<string, SeccionGrupo>;
+      sueltos: PermisoCatalogo[];
+    }
+    const modulos = new Map<string, ModuloGrupo>();
+
+    for (const p of permisosAsignables) {
+      if (!p.jerarquia) {
+        const clave = `__custom__${p.modulo}`;
+        if (!modulos.has(clave)) {
+          modulos.set(clave, { clave, nombre: p.modulo, secciones: new Map(), sueltos: [] });
+        }
+        modulos.get(clave)!.sueltos.push(p);
+        continue;
+      }
+      const { moduloClave, moduloNombre, seccionClave, seccionNombre, tipo } = p.jerarquia;
+      if (!modulos.has(moduloClave)) {
+        modulos.set(moduloClave, {
+          clave: moduloClave,
+          nombre: moduloNombre,
+          secciones: new Map(),
+          sueltos: [],
+        });
+      }
+      const modulo = modulos.get(moduloClave)!;
+      if (!modulo.secciones.has(seccionClave)) {
+        modulo.secciones.set(seccionClave, {
+          clave: seccionClave,
+          nombre: seccionNombre,
+          especiales: [],
+        });
+      }
+      const seccion = modulo.secciones.get(seccionClave)!;
+      if (tipo === "ver") seccion.ver = p;
+      else if (tipo === "gestionar") seccion.gestionar = p;
+      else seccion.especiales.push(p);
+    }
+
+    return Array.from(modulos.values()).map((m) => ({
+      ...m,
+      secciones: Array.from(m.secciones.values()),
+    }));
+  }, [permisosAsignables]);
 
   const [roles, setRoles] = useState<RolApi[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,10 +164,35 @@ function RolesConfigPage() {
     }
   };
 
-  const handleTogglePermiso = async (rol: RolApi, permiso: string) => {
-    const permisos = rol.permisos.includes(permiso)
-      ? rol.permisos.filter((p) => p !== permiso)
-      : [...rol.permisos, permiso];
+  /**
+   * Además de marcar/desmarcar, mantiene consistente la dependencia
+   * VER ⊂ Gestionar/Especial (server/src/lib/catalogo-permisos.ts,
+   * `exigeVer`): activar un permiso que depende de otro activa también ese
+   * otro; desactivar un VER del que dependen otros permisos ya marcados los
+   * desactiva en cascada — el backend igual la exige por su cuenta
+   * (`requirePermission` expande prerrequisitos), esto es solo para que la
+   * matriz nunca muestre una casilla marcada sin sentido funcional real.
+   */
+  const handleTogglePermiso = async (rol: RolApi, codigo: string) => {
+    const activando = !rol.permisos.includes(codigo);
+    let permisos: string[];
+
+    if (activando) {
+      const dependeDe = permisosPorCodigo.get(codigo)?.jerarquia?.dependeDe;
+      permisos = [...new Set([...rol.permisos, codigo, ...(dependeDe ? [dependeDe] : [])])];
+    } else {
+      const dependientes = permisosAsignables
+        .filter((p) => p.jerarquia?.dependeDe === codigo && rol.permisos.includes(p.codigo))
+        .map((p) => p.codigo);
+      const aQuitar = new Set([codigo, ...dependientes]);
+      permisos = rol.permisos.filter((p) => !aQuitar.has(p));
+      if (dependientes.length > 0) {
+        toast.info(
+          `Al quitar "Ver" también se quitaron ${dependientes.length} permiso(s) que dependían de él.`,
+        );
+      }
+    }
+
     // Optimista, luego confirmado por el servidor
     setRoles((prev) => prev.map((r) => (r.id === rol.id ? { ...r, permisos } : r)));
     try {
@@ -340,31 +427,100 @@ function RolesConfigPage() {
                     No tienes permiso para modificar la matriz de este rol.
                   </p>
                 ) : (
-                  MODULOS.map((modulo) => (
-                    <div key={modulo}>
+                  gruposModulo.map((modulo) => (
+                    <div key={modulo.clave}>
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">
-                        {modulo}
+                        {modulo.nombre}
                       </p>
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        {permisosAsignables
-                          .filter((p) => p.modulo === modulo)
-                          .map((p) => (
-                            <label
-                              key={p.id}
-                              className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={rol.permisos.includes(p.codigo)}
-                                onChange={() => handleTogglePermiso(rol, p.codigo)}
-                                className="mt-0.5 accent-blue-600"
-                              />
-                              <span>
-                                <span className="font-medium text-slate-800">{p.nombre}</span>
-                                <span className="block text-slate-500">{p.descripcion}</span>
-                              </span>
-                            </label>
-                          ))}
+                      <div className="space-y-3">
+                        {modulo.secciones.map((seccion) => (
+                          <div
+                            key={seccion.clave}
+                            className="rounded-md border border-slate-200 bg-white p-2.5"
+                          >
+                            <p className="text-xs font-semibold text-slate-700 mb-1.5">
+                              {seccion.nombre}
+                            </p>
+                            <div className="grid sm:grid-cols-2 gap-2">
+                              {[seccion.ver, seccion.gestionar].filter(Boolean).map((p) => (
+                                <label
+                                  key={p!.id}
+                                  className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={rol.permisos.includes(p!.codigo)}
+                                    onChange={() => handleTogglePermiso(rol, p!.codigo)}
+                                    className="mt-0.5 accent-blue-600"
+                                  />
+                                  <span>
+                                    <span className="font-medium text-slate-800">
+                                      {p!.jerarquia
+                                        ? p!.jerarquia.accion === "ver"
+                                          ? "Ver"
+                                          : "Gestionar"
+                                        : p!.nombre}
+                                    </span>
+                                    <span className="block text-slate-500">{p!.descripcion}</span>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                            {seccion.especiales.length > 0 && (
+                              <div className="mt-2 border-t border-slate-100 pt-2 grid sm:grid-cols-2 gap-2">
+                                {seccion.especiales.map((p) => (
+                                  <label
+                                    key={p.id}
+                                    className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={rol.permisos.includes(p.codigo)}
+                                      onChange={() => handleTogglePermiso(rol, p.codigo)}
+                                      className="mt-0.5 accent-amber-600"
+                                    />
+                                    <span>
+                                      <span className="font-medium text-slate-800">
+                                        {p.jerarquia
+                                          ? p.jerarquia.accion.charAt(0).toUpperCase() +
+                                            p.jerarquia.accion.slice(1)
+                                          : p.nombre}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className="ml-1.5 h-4 px-1 text-[9px] align-middle"
+                                      >
+                                        especial
+                                      </Badge>
+                                      <span className="block text-slate-500">{p.descripcion}</span>
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {modulo.sueltos.length > 0 && (
+                          <div className="grid sm:grid-cols-2 gap-2">
+                            {modulo.sueltos.map((p) => (
+                              <label
+                                key={p.id}
+                                className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={rol.permisos.includes(p.codigo)}
+                                  onChange={() => handleTogglePermiso(rol, p.codigo)}
+                                  className="mt-0.5 accent-blue-600"
+                                />
+                                <span>
+                                  <span className="font-medium text-slate-800">{p.nombre}</span>
+                                  <span className="block text-slate-500">{p.descripcion}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

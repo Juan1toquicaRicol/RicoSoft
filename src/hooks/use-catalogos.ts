@@ -18,6 +18,7 @@ export const TIPOS_CATALOGO_ADMINISTRABLES: { tipo: string; etiqueta: string }[]
   { tipo: "MONEDA", etiqueta: "Monedas" },
   { tipo: "PAIS_ORIGEN", etiqueta: "Países de origen" },
   { tipo: "FORMA_PAGO", etiqueta: "Formas de pago" },
+  { tipo: "FORMA_PAGO_VENTAS", etiqueta: "Formas de pago (Ventas/Proformas)" },
   { tipo: "UNIDAD_MEDIDA", etiqueta: "Unidades de medida" },
   { tipo: "METODO_PAGO", etiqueta: "Métodos de pago" },
   { tipo: "MOTIVO_NOVEDAD_IMPORTACION", etiqueta: "Motivos de novedad (importaciones)" },
