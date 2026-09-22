@@ -1,25 +1,72 @@
 import { Response } from "express";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import {
+  MODULOS_AUDITORIA,
+  construirWhereAuditoria,
+  derivarModulo,
+  derivarResultado,
+  validarFiltroAuditoria,
+  type FiltroAuditoria,
+} from "../../lib/auditoria-filtros";
 
-/** Mismos filtros de fecha/acción/usuario para el listado paginado y para la
- * exportación — para que "exportar" siempre traiga exactamente lo que la
- * pantalla está mostrando filtrado, tenant incluido. */
-function construirFiltro(req: AuthenticatedRequest): Prisma.AuditoriaWhereInput {
-  const tenantId = req.user!.tenantId;
-  const { desde, hasta, accion, usuarioId } = req.query;
-  const where: Prisma.AuditoriaWhereInput = { tenantId };
-  if (typeof desde === "string" && desde) {
-    where.createdAt = { ...(where.createdAt as object), gte: new Date(`${desde}T00:00:00.000Z`) };
-  }
-  if (typeof hasta === "string" && hasta) {
-    where.createdAt = { ...(where.createdAt as object), lte: new Date(`${hasta}T23:59:59.999Z`) };
-  }
-  if (typeof accion === "string" && accion) where.accion = { contains: accion };
-  if (typeof usuarioId === "string" && usuarioId) where.usuarioId = usuarioId;
-  return where;
+const texto = (valor: unknown): string | undefined =>
+  typeof valor === "string" && valor.trim() ? valor.trim() : undefined;
+
+/** Filtros de la petición (fecha, usuario, módulo, acción, entidad). */
+function leerFiltro(req: AuthenticatedRequest): FiltroAuditoria {
+  const { desde, hasta, accion, usuarioId, modulo, entidadTipo, entidadId } = req.query;
+  return {
+    desde: texto(desde),
+    hasta: texto(hasta),
+    accion: texto(accion),
+    usuarioId: texto(usuarioId),
+    modulo: texto(modulo),
+    entidadTipo: texto(entidadTipo),
+    entidadId: texto(entidadId),
+  };
 }
+
+/** Mismos filtros para el listado paginado y para la exportación — para que
+ * "exportar" siempre traiga exactamente lo que la pantalla está mostrando
+ * filtrado, tenant incluido (siempre el de la sesión, nunca del request). */
+function construirFiltro(req: AuthenticatedRequest): Prisma.AuditoriaWhereInput {
+  return construirWhereAuditoria(req.user!.tenantId, leerFiltro(req));
+}
+
+/** Agrega los campos derivados (módulo y resultado) a un evento de auditoría. */
+function conClasificacion<T extends { accion: string }>(evento: T) {
+  const modulo = derivarModulo(evento.accion);
+  return {
+    ...evento,
+    modulo: modulo.clave,
+    moduloEtiqueta: modulo.etiqueta,
+    resultado: derivarResultado(evento.accion),
+  };
+}
+
+/** GET /auditoria/filtros — opciones para los selectores de la pantalla (módulos y usuarios del tenant). */
+export const opcionesFiltrosAuditoria = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const usuarios = await prisma.user.findMany({
+      where: { tenantId: req.user!.tenantId },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+      take: 500,
+    });
+    return res.json({
+      modulos: [
+        ...MODULOS_AUDITORIA.map((m) => ({ clave: m.clave, etiqueta: m.etiqueta })),
+        { clave: "OTROS", etiqueta: "Otros" },
+      ],
+      usuarios,
+    });
+  } catch (error) {
+    console.error("Error al obtener las opciones de filtro de auditoría:", error);
+    return res.status(500).json({ message: "Error al obtener las opciones de filtro." });
+  }
+};
 
 export const listarAuditoria = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -31,7 +78,9 @@ export const listarAuditoria = async (req: AuthenticatedRequest, res: Response) 
 
     // Filtros reales contra el backend (antes la pantalla solo reordenaba
     // visualmente los primeros 50 registros ya cargados) — rango de fechas
-    // sobre `createdAt`, más acción/usuario opcionales para acotar búsquedas.
+    // sobre `createdAt`, más usuario/módulo/acción para acotar búsquedas.
+    const errorFiltro = validarFiltroAuditoria(leerFiltro(req));
+    if (errorFiltro) return res.status(400).json({ message: errorFiltro });
     const where = construirFiltro(req);
 
     const [data, total] = await Promise.all([
@@ -45,7 +94,7 @@ export const listarAuditoria = async (req: AuthenticatedRequest, res: Response) 
       prisma.auditoria.count({ where }),
     ]);
 
-    return res.json({ data, total, page, pageSize });
+    return res.json({ data: data.map(conClasificacion), total, page, pageSize });
   } catch (error) {
     console.error("Error al listar auditoría:", error);
     return res.status(500).json({ message: "Error al obtener el registro de auditoría." });
@@ -74,6 +123,8 @@ function celdaCsv(valor: string): string {
  */
 export const exportarAuditoria = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const errorFiltro = validarFiltroAuditoria(leerFiltro(req));
+    if (errorFiltro) return res.status(400).json({ message: errorFiltro });
     const where = construirFiltro(req);
 
     const eventos = await prisma.auditoria.findMany({
@@ -87,7 +138,9 @@ export const exportarAuditoria = async (req: AuthenticatedRequest, res: Response
       "Fecha",
       "Usuario",
       "Correo",
+      "Módulo",
       "Acción",
+      "Resultado",
       "Detalle",
       "Entidad",
       "ID entidad",
@@ -99,7 +152,9 @@ export const exportarAuditoria = async (req: AuthenticatedRequest, res: Response
         e.createdAt.toISOString(),
         e.usuario?.nombre ?? e.usuarioAfectado ?? "",
         e.usuario?.email ?? "",
+        derivarModulo(e.accion).etiqueta,
         e.accion,
+        derivarResultado(e.accion),
         e.detalle,
         e.entidadTipo ?? "",
         e.entidadId ?? "",

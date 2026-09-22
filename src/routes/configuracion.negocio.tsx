@@ -30,6 +30,15 @@ const VALORES_INICIALES: Valores = {
   umbralAlertaTrmPct: 5,
   plazoCreditoDiasDefecto: 30,
   minimoCotizacionesSolicitud: 3,
+  // Parámetros de negocio — mismos defaults que
+  // server/src/lib/parametros-negocio.ts (PARAMETROS_NEGOCIO_DEFECTO):
+  // neutros, no activan ninguna restricción nueva solo por existir.
+  margenMinimoVentaPct: 0,
+  diasMaximosMora: 30,
+  porcentajeMaximoUsoCupo: 100,
+  toleranciaMermaPesajePct: 0.5,
+  diasValidezOferta: 15,
+  montoMinimoCotizaciones: 0,
 };
 
 interface CampoNumerico {
@@ -130,6 +139,87 @@ const CAMPOS_NUEVOS: CampoNumerico[] = [
   },
 ];
 
+/** Parámetros de negocio (solo se almacenan hoy — ver
+ * server/src/lib/parametros-negocio.ts): agrupados conceptualmente por
+ * Ventas / Crédito / Inventario-Logística / Compras, aunque técnicamente
+ * viven en la misma ConfiguracionInventario que los umbrales de arriba. */
+interface SeccionParametrosNegocio {
+  titulo: string;
+  campos: CampoNumerico[];
+}
+
+const SECCIONES_PARAMETROS_NEGOCIO: SeccionParametrosNegocio[] = [
+  {
+    titulo: "Ventas",
+    campos: [
+      {
+        campo: "margenMinimoVentaPct",
+        etiqueta: "Margen mínimo de venta (%)",
+        ayuda:
+          "Margen mínimo esperado en una venta. Solo se almacena: no bloquea ninguna venta todavía.",
+        min: 0,
+        max: 100,
+        step: 0.01,
+      },
+      {
+        campo: "diasValidezOferta",
+        etiqueta: "Días de validez estándar de oferta",
+        ayuda: "Días que una cotización/oferta se considera vigente por defecto.",
+        min: 1,
+        max: 365,
+      },
+    ],
+  },
+  {
+    titulo: "Crédito",
+    campos: [
+      {
+        campo: "diasMaximosMora",
+        etiqueta: "Días máximos de mora",
+        ayuda: "Días de mora tolerados a un cliente antes de considerarlo en riesgo.",
+        min: 0,
+        max: 3650,
+      },
+      {
+        campo: "porcentajeMaximoUsoCupo",
+        etiqueta: "% máximo de uso de cupo",
+        ayuda: "Porcentaje del cupo de crédito que un cliente puede usar.",
+        min: 1,
+        max: 100,
+        step: 0.01,
+      },
+    ],
+  },
+  {
+    titulo: "Inventario / Logística",
+    campos: [
+      {
+        campo: "toleranciaMermaPesajePct",
+        etiqueta: "Tolerancia de merma de pesaje (%)",
+        ayuda:
+          "Diferencia de peso tolerada entre lo despachado y lo pesado, antes de marcarla como novedad.",
+        min: 0,
+        max: 20,
+        step: 0.01,
+      },
+    ],
+  },
+  {
+    titulo: "Compras",
+    campos: [
+      {
+        campo: "montoMinimoCotizaciones",
+        etiqueta: "Monto mínimo para exigir cotizaciones",
+        ayuda:
+          "Monto (moneda local) a partir del cual una solicitud de compra debe traer cotizaciones. 0 = sin monto mínimo.",
+        min: 0,
+        max: 1_000_000_000_000,
+        step: 0.01,
+      },
+    ],
+  },
+];
+
 function ConfiguracionNegocioPage() {
   const { configuracion, loading, error, guardar } = useConfiguracionInventario();
   const [valores, setValores] = useState<Valores>(VALORES_INICIALES);
@@ -213,6 +303,34 @@ function ConfiguracionNegocioPage() {
               />
             ))}
           </div>
+        </fieldset>
+
+        <fieldset className="space-y-5 pt-2 border-t border-slate-100">
+          <legend className="text-sm font-semibold text-slate-700 mb-1 pt-4">
+            Parámetros de negocio
+          </legend>
+          <p className="text-xs text-slate-500 -mt-3">
+            Se guardan como referencia central; hoy ninguna regla de Ventas, Crédito, Inventario o
+            Compras los aplica automáticamente todavía.
+          </p>
+          {SECCIONES_PARAMETROS_NEGOCIO.map((seccion) => (
+            <div key={seccion.titulo} className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                {seccion.titulo}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {seccion.campos.map((campo) => (
+                  <CampoUmbral
+                    key={campo.campo}
+                    campo={campo}
+                    valor={valores[campo.campo] ?? 0}
+                    disabled={loading}
+                    onChange={(v) => actualizarCampo(campo.campo, v)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
         </fieldset>
 
         <div className="flex justify-end pt-2">

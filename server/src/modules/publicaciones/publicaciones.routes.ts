@@ -7,7 +7,14 @@ import {
   crearPublicacion,
   actualizarPublicacion,
   eliminarPublicacion,
+  subirArchivosPublicacion,
+  obtenerArchivoPublicacion,
+  eliminarArchivoPublicacion,
 } from "./publicaciones.controller";
+import {
+  uploadArchivosPublicacion,
+  validarPublicacionIdParaArchivo,
+} from "../../middleware/upload.middleware";
 
 const router = Router();
 
@@ -35,6 +42,24 @@ router.delete(
   "/:id",
   requirePermission(PERMISOS_SISTEMA.PUBLICACIONES_GESTIONAR),
   eliminarPublicacion,
+);
+
+// Adjuntos (fotos/videos/documentos). Leer un archivo lo puede cualquier
+// usuario con sesión (es contenido del Home; el controller valida alcance y
+// vigencia); subir/eliminar requiere gestionar.
+router.get("/:id/archivos/:archivoId", validarPublicacionIdParaArchivo, obtenerArchivoPublicacion);
+router.post(
+  "/:id/archivos",
+  requirePermission(PERMISOS_SISTEMA.PUBLICACIONES_GESTIONAR),
+  validarPublicacionIdParaArchivo,
+  uploadArchivosPublicacion,
+  subirArchivosPublicacion,
+);
+router.delete(
+  "/:id/archivos/:archivoId",
+  requirePermission(PERMISOS_SISTEMA.PUBLICACIONES_GESTIONAR),
+  validarPublicacionIdParaArchivo,
+  eliminarArchivoPublicacion,
 );
 
 export default router;

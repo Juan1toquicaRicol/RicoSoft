@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
 import { calcularOtif } from "../../domain/logistica/otif";
 import { calcularAgregacionNovedades } from "../../domain/logistica/novedades";
+import { obtenerMapaAliasCatalogo } from "../catalogos/catalogos.controller";
 
 /**
  * Cumplimiento de entregas (OTIF) — Fase 2.1 del Motor de Decisiones (P0
@@ -67,10 +68,18 @@ export const obtenerNovedadesAbiertas = async (req: AuthenticatedRequest, res: R
       },
     });
 
+    // Un mismo motivo puede estar guardado con su clave heredada
+    // ("PRODUCTO_FALTANTE") o la canónica del catálogo ("FALTANTE"): se
+    // reconcilian para que la recurrencia por tipo no se parta en dos.
+    const aliasATipo = await obtenerMapaAliasCatalogo(
+      req.user!.tenantId,
+      "MOTIVO_NOVEDAD_DESPACHO",
+    );
+
     const paraAgregar = novedades.map((n) => ({
       id: n.id,
       despachoId: n.despachoId,
-      tipo: n.tipo,
+      tipo: aliasATipo.get(n.tipo) ?? n.tipo,
       descripcion: n.descripcion,
       createdAt: n.createdAt,
       clienteNombre: n.despacho.clienteNombre,

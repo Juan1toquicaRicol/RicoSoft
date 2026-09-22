@@ -2,6 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { schedule, type ScheduledTask } from "node-cron";
+import { ejecutarRegistrado, quitarScheduler, registrarScheduler } from "../../lib/job-registry";
 import { prisma } from "../../config/prisma";
 import { GoogleWorkspaceEmailProvider } from "../../integrations/email/google-workspace-email-provider";
 import { EmailProviderError, type EmailProvider } from "../../integrations/email/email-provider";
@@ -176,12 +177,13 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
   tareaProgramada = schedule(
     configProcesamiento.cronIngesta,
     () => {
-      ejecutarCicloIngestaCorreos().catch((error) => {
+      ejecutarRegistrado("bandeja-ingesta", () => ejecutarCicloIngestaCorreos()).catch((error) => {
         console.error("[bandeja-ingesta] Error inesperado en el ciclo de ingesta:", error);
       });
     },
     { noOverlap: true, name: "bandeja-ingesta-correos" },
   );
+  registrarScheduler("bandeja-ingesta", configProcesamiento.cronIngesta, tareaProgramada);
   console.log(
     `[bandeja-ingesta] Scheduler iniciado (expresión cron: "${configProcesamiento.cronIngesta}").`,
   );
@@ -191,4 +193,5 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
 export function detenerSchedulerIngestaCorreos(): void {
   tareaProgramada?.stop();
   tareaProgramada = null;
+  quitarScheduler("bandeja-ingesta");
 }

@@ -226,3 +226,187 @@ const documentoOrdenCompraIntl = crearUploadArchivo("ordenes-compra-intl");
 export const UPLOADS_DIR_ORDENES_COMPRA_INTL = documentoOrdenCompraIntl.UPLOADS_DIR;
 export const validarOrdenIdParaArchivo = documentoOrdenCompraIntl.validarIdParaArchivo;
 export const uploadDocumentoOrdenCompraIntl = documentoOrdenCompraIntl.uploadArchivo;
+
+// ---------------------------------------------------------------------------
+// Adjuntos de Publicaciones (Home): fotos, videos y documentos, varios por
+// solicitud. Se mantiene aparte de crearUploadArchivo() porque allí el
+// contrato es "un solo PDF/imagen de 10MB"; aquí se aceptan más tipos y un
+// tope mayor para video, y cada archivo se valida por su contenido real.
+// ---------------------------------------------------------------------------
+
+/**
+ * multer (busboy) decodifica el nombre del multipart como latin1: un "Acta
+ * años.pdf" llega como "Acta aÃ±os.pdf". Se re-decodifica a UTF-8.
+ */
+export function nombreArchivoUtf8(nombre: string): string {
+  return Buffer.from(nombre, "latin1").toString("utf8").slice(0, 255);
+}
+
+export type TipoArchivoPublicacion = "IMAGEN" | "VIDEO" | "DOCUMENTO";
+
+const MIME_OOXML = [
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+];
+const MIME_OLE = [
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+];
+
+const TIPOS_PUBLICACION: Record<string, { ext: string; tipo: TipoArchivoPublicacion }> = {
+  "image/png": { ext: ".png", tipo: "IMAGEN" },
+  "image/jpeg": { ext: ".jpg", tipo: "IMAGEN" },
+  "image/webp": { ext: ".webp", tipo: "IMAGEN" },
+  "image/gif": { ext: ".gif", tipo: "IMAGEN" },
+  "video/mp4": { ext: ".mp4", tipo: "VIDEO" },
+  "video/webm": { ext: ".webm", tipo: "VIDEO" },
+  "video/quicktime": { ext: ".mov", tipo: "VIDEO" },
+  "application/pdf": { ext: ".pdf", tipo: "DOCUMENTO" },
+  "application/msword": { ext: ".doc", tipo: "DOCUMENTO" },
+  "application/vnd.ms-excel": { ext: ".xls", tipo: "DOCUMENTO" },
+  "application/vnd.ms-powerpoint": { ext: ".ppt", tipo: "DOCUMENTO" },
+  [MIME_OOXML[0]]: { ext: ".docx", tipo: "DOCUMENTO" },
+  [MIME_OOXML[1]]: { ext: ".xlsx", tipo: "DOCUMENTO" },
+  [MIME_OOXML[2]]: { ext: ".pptx", tipo: "DOCUMENTO" },
+};
+
+export const MAX_ARCHIVOS_POR_SUBIDA_PUBLICACION = 10;
+export const MAX_ARCHIVOS_POR_PUBLICACION = 20;
+const MAX_BYTES_VIDEO = 100 * 1024 * 1024;
+const MAX_BYTES_OTROS = 25 * 1024 * 1024;
+
+export function tipoArchivoPublicacion(mime: string): TipoArchivoPublicacion | null {
+  return TIPOS_PUBLICACION[mime]?.tipo ?? null;
+}
+
+/**
+ * true si los primeros bytes del archivo son coherentes con el mime que
+ * declaró el cliente. Los .docx/.xlsx/.pptx son ZIP (no hay firma propia de
+ * cada uno), así que solo se puede confirmar "es un ZIP" para los tres.
+ */
+export function contenidoCoincideConMime(cabecera: Buffer, mime: string): boolean {
+  if (TIPOS_PERMITIDOS[mime]) return detectarTipoRealPorMagicBytes(cabecera) === mime;
+  if (mime === "image/gif") {
+    const firma = cabecera.toString("latin1", 0, 6);
+    return firma === "GIF87a" || firma === "GIF89a";
+  }
+  if (mime === "video/mp4" || mime === "video/quicktime") {
+    return cabecera.length >= 12 && cabecera.toString("latin1", 4, 8) === "ftyp";
+  }
+  if (mime === "video/webm") {
+    return (
+      cabecera.length >= 4 &&
+      cabecera[0] === 0x1a &&
+      cabecera[1] === 0x45 &&
+      cabecera[2] === 0xdf &&
+      cabecera[3] === 0xa3
+    );
+  }
+  if (MIME_OOXML.includes(mime)) {
+    return cabecera.length >= 4 && cabecera[0] === 0x50 && cabecera[1] === 0x4b;
+  }
+  if (MIME_OLE.includes(mime)) {
+    return (
+      cabecera.length >= 8 &&
+      cabecera[0] === 0xd0 &&
+      cabecera[1] === 0xcf &&
+      cabecera[2] === 0x11 &&
+      cabecera[3] === 0xe0 &&
+      cabecera[4] === 0xa1 &&
+      cabecera[5] === 0xb1 &&
+      cabecera[6] === 0x1a &&
+      cabecera[7] === 0xe1
+    );
+  }
+  return false;
+}
+
+const PUBLICACIONES_UPLOADS_DIR = path.join(__dirname, "..", "..", "uploads", "publicaciones");
+export const UPLOADS_DIR_PUBLICACIONES = PUBLICACIONES_UPLOADS_DIR;
+
+export const validarPublicacionIdParaArchivo = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (
+    !UUID_REGEX.test(req.params.id) ||
+    (req.params.archivoId && !UUID_REGEX.test(req.params.archivoId))
+  ) {
+    return res.status(400).json({ message: "Identificador no válido." });
+  }
+  next();
+};
+
+const multerPublicacion = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      fs.mkdirSync(UPLOADS_TMP_DIR, { recursive: true });
+      cb(null, UPLOADS_TMP_DIR);
+    },
+    filename: (_req, file, cb) => {
+      const ext = TIPOS_PUBLICACION[file.mimetype]?.ext ?? "";
+      cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: MAX_BYTES_VIDEO, files: MAX_ARCHIVOS_POR_SUBIDA_PUBLICACION },
+  fileFilter: (_req, file, cb) => {
+    if (!TIPOS_PUBLICACION[file.mimetype]) {
+      cb(
+        new Error(
+          `"${nombreArchivoUtf8(file.originalname)}": tipo no permitido. Usa imágenes (PNG, JPG, WEBP, GIF), videos (MP4, WEBM, MOV) o documentos (PDF, Word, Excel, PowerPoint).`,
+        ),
+      );
+      return;
+    }
+    cb(null, true);
+  },
+}).array("archivos", MAX_ARCHIVOS_POR_SUBIDA_PUBLICACION);
+
+function mensajeErrorSubida(err: unknown): string {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE")
+      return "Un archivo supera el tamaño máximo permitido (100 MB para video, 25 MB para el resto).";
+    if (err.code === "LIMIT_UNEXPECTED_FILE" || err.code === "LIMIT_FILE_COUNT") {
+      return `Solo puedes subir hasta ${MAX_ARCHIVOS_POR_SUBIDA_PUBLICACION} archivos a la vez.`;
+    }
+  }
+  return err instanceof Error ? err.message : "Error al procesar los archivos.";
+}
+
+/**
+ * Recibe varios archivos (campo "archivos") en la carpeta temporal y valida
+ * cada uno (tamaño por tipo + contenido real). Si CUALQUIERA falla, se borran
+ * todos los de la solicitud: la subida es todo-o-nada. Igual que
+ * crearUploadArchivo, el controller es quien luego los mueve a su carpeta
+ * definitiva, y solo después de validar el tenant de la publicación.
+ */
+export const uploadArchivosPublicacion = (req: Request, res: Response, next: NextFunction) => {
+  multerPublicacion(req, res, (err: unknown) => {
+    const archivos = ((req as Request & { files?: Express.Multer.File[] }).files ?? []).slice();
+    const rechazar = (message: string) => {
+      archivos.forEach((a) => fs.unlink(a.path, () => {}));
+      return res.status(400).json({ message });
+    };
+
+    if (err) return rechazar(mensajeErrorSubida(err));
+
+    for (const archivo of archivos) {
+      const esVideo = TIPOS_PUBLICACION[archivo.mimetype]?.tipo === "VIDEO";
+      if (!esVideo && archivo.size > MAX_BYTES_OTROS) {
+        return rechazar(
+          `"${nombreArchivoUtf8(archivo.originalname)}" supera los 25 MB permitidos para fotos y documentos.`,
+        );
+      }
+      if (!contenidoCoincideConMime(leerCabeceraArchivo(archivo.path), archivo.mimetype)) {
+        return rechazar(
+          `El contenido de "${nombreArchivoUtf8(archivo.originalname)}" no corresponde al tipo declarado. Verifica que no esté corrupto o renombrado.`,
+        );
+      }
+    }
+
+    next();
+  });
+};

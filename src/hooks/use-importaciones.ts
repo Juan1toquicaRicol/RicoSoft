@@ -510,8 +510,11 @@ export function useImportaciones() {
   );
 
   const anularOrden = useCallback(
-    async (id: string) => {
-      await fetchAuth(`/importaciones/${id}`, { method: "DELETE" });
+    async (id: string, motivo?: string) => {
+      await fetchAuth(`/importaciones/${id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ motivo: motivo?.trim() || undefined }),
+      });
       await refresh();
     },
     [refresh],

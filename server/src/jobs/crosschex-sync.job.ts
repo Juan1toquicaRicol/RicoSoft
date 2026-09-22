@@ -1,4 +1,10 @@
 import { schedule, type ScheduledTask } from "node-cron";
+import {
+  ejecutarRegistrado,
+  quitarScheduler,
+  registrarScheduler,
+  reportarFalloEnCorrida,
+} from "../lib/job-registry";
 import { prisma } from "../config/prisma";
 import {
   sincronizarFuenteBiometrica,
@@ -55,6 +61,7 @@ export async function ejecutarCicloSincronizacionCrossChex(tamanoLote = TAMANO_L
       const reporte = await sincronizarFuenteBiometrica(fuente.nombre, { tamanoLote });
       if (reporte.estado === "FALLIDO") {
         console.error(`[crosschex-sync] "${fuente.nombre}" terminó FALLIDA: ${reporte.mensajeError}`);
+        reportarFalloEnCorrida("crosschex-sync", `"${fuente.nombre}": ${reporte.mensajeError}`);
       } else if (reporte.leidos > 0) {
         console.log(
           `[crosschex-sync] "${fuente.nombre}": ${reporte.leidos} leídas, ${reporte.insertados} insertadas, ` +
@@ -71,6 +78,10 @@ export async function ejecutarCicloSincronizacionCrossChex(tamanoLote = TAMANO_L
         console.log(`[crosschex-sync] "${fuente.nombre}": omitida, ya hay una sincronización en curso.`);
       } else {
         console.error(`[crosschex-sync] Error inesperado sincronizando "${fuente.nombre}":`, error);
+        reportarFalloEnCorrida(
+          "crosschex-sync",
+          `"${fuente.nombre}": ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -96,7 +107,9 @@ export function iniciarSchedulerCrossChex(): ScheduledTask | null {
   tareaProgramada = schedule(
     config.expresionCron,
     () => {
-      ejecutarCicloSincronizacionCrossChex(config.tamanoLote).catch((error) => {
+      ejecutarRegistrado("crosschex-sync", () =>
+        ejecutarCicloSincronizacionCrossChex(config.tamanoLote),
+      ).catch((error) => {
         console.error("[crosschex-sync] Error inesperado en el ciclo de sincronización:", error);
       });
     },
@@ -107,6 +120,7 @@ export function iniciarSchedulerCrossChex(): ScheduledTask | null {
     // evita trabajo redundante dentro de este mismo proceso.
     { noOverlap: true, name: "crosschex-sync" },
   );
+  registrarScheduler("crosschex-sync", config.expresionCron, tareaProgramada);
   console.log(`[crosschex-sync] Scheduler iniciado (expresión cron: "${config.expresionCron}").`);
   return tareaProgramada;
 }
@@ -116,4 +130,5 @@ export function iniciarSchedulerCrossChex(): ScheduledTask | null {
 export function detenerSchedulerCrossChex(): void {
   tareaProgramada?.stop();
   tareaProgramada = null;
+  quitarScheduler("crosschex-sync");
 }

@@ -30,6 +30,7 @@ import {
   UMBRALES_INVENTARIO_OBJETIVO_DEFECTO,
 } from "../../domain/planeacion/inventario-objetivo";
 import { actualizarConfiguracionInventarioSchema } from "./inventario.schemas";
+import { CAMPOS_PARAMETROS_NEGOCIO, extraerParametrosNegocio } from "../../lib/parametros-negocio";
 
 /**
  * Umbrales configurables por tenant (Parte 16) — lee ConfiguracionInventario
@@ -494,12 +495,17 @@ export const obtenerConfiguracionInventario = async (req: AuthenticatedRequest, 
     where: { tenantId },
   });
 
+  // Los parámetros de negocio (DECIMAL) se exponen como number, con sus
+  // defaults cuando el tenant nunca guardó configuración.
   return res.json(
-    config ?? {
-      ...UMBRALES_INVENTARIO_DEFECTO,
-      ...UMBRALES_COBERTURA_DEFECTO,
-      ...UMBRALES_INVENTARIO_OBJETIVO_DEFECTO,
-    },
+    config
+      ? { ...config, ...extraerParametrosNegocio(config) }
+      : {
+          ...UMBRALES_INVENTARIO_DEFECTO,
+          ...UMBRALES_COBERTURA_DEFECTO,
+          ...UMBRALES_INVENTARIO_OBJETIVO_DEFECTO,
+          ...extraerParametrosNegocio(null),
+        },
   );
 };
 
@@ -520,13 +526,39 @@ export const actualizarConfiguracionInventario = async (
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
 
+  const anterior = await req.tenantPrisma!.configuracionInventario.findUnique({
+    where: { tenantId },
+  });
   const config = await req.tenantPrisma!.configuracionInventario.upsert({
     where: { tenantId },
     create: { tenantId, ...parseo.data },
     update: { ...parseo.data },
   });
 
-  return res.json(config);
+  // Los parámetros de negocio gobiernan reglas con impacto económico: se deja
+  // constancia de qué cambió (solo los campos que vinieron en el request).
+  const enviados = CAMPOS_PARAMETROS_NEGOCIO.filter((campo) => parseo.data[campo] !== undefined);
+  if (enviados.length > 0) {
+    const antes = extraerParametrosNegocio(anterior);
+    const despues = extraerParametrosNegocio(config);
+    const cambiados = enviados.filter((campo) => antes[campo] !== despues[campo]);
+    if (cambiados.length > 0) {
+      await prisma.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PARAMETROS_NEGOCIO_ACTUALIZADOS",
+          detalle: `${req.user!.nombre} actualizó parámetros de negocio: ${cambiados.join(", ")}.`,
+          entidadTipo: "ConfiguracionInventario",
+          entidadId: config.id,
+          datosAnteriores: JSON.stringify(Object.fromEntries(cambiados.map((c) => [c, antes[c]]))),
+          datosNuevos: JSON.stringify(Object.fromEntries(cambiados.map((c) => [c, despues[c]]))),
+        },
+      });
+    }
+  }
+
+  return res.json({ ...config, ...extraerParametrosNegocio(config) });
 };
 
 /**

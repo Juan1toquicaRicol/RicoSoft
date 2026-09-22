@@ -115,6 +115,12 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
 
   afterAll(async () => {
     const tenantIds = [tenantAId, tenantBId];
+    // El cierre forzado (más abajo) ahora dispara notificarEventoImportacion
+    // (Fase 11: EVENTO_ORDEN_CERRADA), que crea Notificacion/InboxItem con
+    // FK a User — deben borrarse antes que los usuarios o el cleanup falla
+    // con una violación de llave foránea.
+    await prisma.notificacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
+    await prisma.inboxItem.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.importacionNovedad.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.importacionPago.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.importacionActividad.deleteMany({ where: { tenantId: { in: tenantIds } } });

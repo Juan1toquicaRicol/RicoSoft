@@ -13,7 +13,7 @@ let pool: sql.ConnectionPool | null = null;
 // vuelo: la primera llamada la crea, las siguientes esperan la misma.
 let poolConectando: Promise<sql.ConnectionPool> | null = null;
 
-function leerConfigSiesa(): sql.config {
+export function leerConfigSiesa(): sql.config {
   const { SIESA_DB_HOST, SIESA_DB_PORT, SIESA_DB_NAME, SIESA_DB_USER, SIESA_DB_PASSWORD } =
     process.env;
 

@@ -118,22 +118,27 @@ export async function fetchAuth(endpoint: string, options: RequestInit = {}) {
  * Wrapper de fetchApiUpload que adjunta el Bearer token, para subir
  * archivos (multipart/form-data) a endpoints protegidos.
  */
-export async function fetchAuthUpload(endpoint: string, formData: FormData) {
+export async function fetchAuthUpload(endpoint: string, formData: FormData, timeoutMs?: number) {
   const token = getToken();
-  return fetchApiUpload(endpoint, formData, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  return fetchApiUpload(
+    endpoint,
+    formData,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    timeoutMs,
+  );
 }
 
 /**
  * Wrapper de fetchApiBlob que adjunta el Bearer token, para descargar
  * archivos binarios (PDF/imágenes) de endpoints protegidos.
  */
-export async function fetchAuthBlob(endpoint: string): Promise<Blob> {
+export async function fetchAuthBlob(endpoint: string, timeoutMs?: number): Promise<Blob> {
   const token = getToken();
-  return fetchApiBlob(endpoint, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  return fetchApiBlob(
+    endpoint,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    timeoutMs,
+  );
 }
 
 export function hasPermission(user: SessionUser | null, permiso: string): boolean {

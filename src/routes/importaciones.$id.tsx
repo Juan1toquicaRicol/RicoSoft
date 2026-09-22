@@ -724,22 +724,39 @@ function DetalleOrdenIntl() {
                           <Package className="h-3 w-3 mr-1" /> Recibir en planta (pre-compra)
                         </Button>
                       )}
-                      {puedeLiquidar && ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado) && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => {
-                            setLoteLiquidando(lote);
-                            setLiquidacionForm({
-                              ...liquidacionVacia,
-                              trmLiquidacion: orden.trmPactada,
-                            });
-                          }}
-                          className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
-                        >
-                          Liquidar costeo de importación
-                        </Button>
-                      )}
+                      {puedeLiquidar &&
+                        ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado) &&
+                        (() => {
+                          const vistosPendientes = (lote.expediente?.vistosBuenos ?? []).filter(
+                            (v) => v.estado !== "Aprobado",
+                          ).length;
+                          const listoParaLiquidar =
+                            lote.expediente?.estado === "Levantado" && vistosPendientes === 0;
+                          return (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => {
+                                setLoteLiquidando(lote);
+                                setLiquidacionForm({
+                                  ...liquidacionVacia,
+                                  trmLiquidacion: orden.trmPactada,
+                                });
+                              }}
+                              title={
+                                listoParaLiquidar
+                                  ? undefined
+                                  : 'La liquidación definitiva requiere el levante aduanero (expediente en estado "Levantado") y todos los vistos buenos aprobados. El sistema lo validará al confirmar.'
+                              }
+                              className="h-7 text-[11px] font-bold border-blue-300 text-blue-800 hover:bg-blue-50"
+                            >
+                              Liquidar costeo de importación
+                              {!listoParaLiquidar && (
+                                <AlertTriangle className="h-3 w-3 ml-1.5 text-amber-600" />
+                              )}
+                            </Button>
+                          );
+                        })()}
                     </div>
 
                     {lote.costeos.length > 0 && (

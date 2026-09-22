@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { schedule, type ScheduledTask } from "node-cron";
+import { ejecutarRegistrado, quitarScheduler, registrarScheduler } from "../../lib/job-registry";
 import { prisma } from "../../config/prisma";
 import { getTenantPrisma } from "../../lib/tenant-prisma";
 import { resolverDestinatarios } from "../../lib/motor-destinatarios";
@@ -348,15 +349,18 @@ export function iniciarSchedulerProcesamientoCorreos(): ScheduledTask | null {
   tareaProgramada = schedule(
     config.cronProcesamiento,
     () => {
-      ejecutarCicloProcesamientoCorreos().catch((error) => {
-        console.error(
-          "[bandeja-procesamiento] Error inesperado en el ciclo de procesamiento:",
-          error,
-        );
-      });
+      ejecutarRegistrado("bandeja-procesamiento", () => ejecutarCicloProcesamientoCorreos()).catch(
+        (error) => {
+          console.error(
+            "[bandeja-procesamiento] Error inesperado en el ciclo de procesamiento:",
+            error,
+          );
+        },
+      );
     },
     { noOverlap: true, name: "bandeja-procesamiento-correos" },
   );
+  registrarScheduler("bandeja-procesamiento", config.cronProcesamiento, tareaProgramada);
   console.log(
     `[bandeja-procesamiento] Scheduler iniciado (expresión cron: "${config.cronProcesamiento}").`,
   );
@@ -366,4 +370,5 @@ export function iniciarSchedulerProcesamientoCorreos(): ScheduledTask | null {
 export function detenerSchedulerProcesamientoCorreos(): void {
   tareaProgramada?.stop();
   tareaProgramada = null;
+  quitarScheduler("bandeja-procesamiento");
 }

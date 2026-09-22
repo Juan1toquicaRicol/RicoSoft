@@ -1,4 +1,5 @@
 import { schedule, type ScheduledTask } from "node-cron";
+import { ejecutarRegistrado, quitarScheduler, registrarScheduler } from "../../lib/job-registry";
 import { prisma } from "../../config/prisma";
 import { getTenantPrisma } from "../../lib/tenant-prisma";
 import { resolverDestinatarios } from "../../lib/motor-destinatarios";
@@ -397,12 +398,18 @@ export function iniciarSchedulerTrackingEmbarques(): ScheduledTask | null {
   tareaProgramada = schedule(
     config.cronSincronizacion,
     () => {
-      ejecutarCicloSincronizacionEmbarques().catch((error) => {
-        console.error("[tracking-maritimo] Error inesperado en el ciclo de sincronización:", error);
-      });
+      ejecutarRegistrado("tracking-maritimo", () => ejecutarCicloSincronizacionEmbarques()).catch(
+        (error) => {
+          console.error(
+            "[tracking-maritimo] Error inesperado en el ciclo de sincronización:",
+            error,
+          );
+        },
+      );
     },
     { noOverlap: true, name: "tracking-maritimo-embarques" },
   );
+  registrarScheduler("tracking-maritimo", config.cronSincronizacion, tareaProgramada);
   console.log(
     `[tracking-maritimo] Scheduler iniciado (expresión cron: "${config.cronSincronizacion}").`,
   );
@@ -414,4 +421,5 @@ export function detenerSchedulerTrackingEmbarques(): void {
     tareaProgramada.stop();
     tareaProgramada = null;
   }
+  quitarScheduler("tracking-maritimo");
 }

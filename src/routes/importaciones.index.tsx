@@ -8,6 +8,7 @@ import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -125,6 +126,7 @@ function ImportacionesPage() {
   const [ordenAAnular, setOrdenAAnular] = useState<{ id: string; numeroOrden: string } | null>(
     null,
   );
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const [anulando, setAnulando] = useState(false);
 
   const filteredOrdenes = useMemo(() => {
@@ -162,9 +164,10 @@ function ImportacionesPage() {
     if (!ordenAAnular) return;
     setAnulando(true);
     try {
-      await anularOrden(ordenAAnular.id);
+      await anularOrden(ordenAAnular.id, motivoAnulacion);
       toast.success(`Orden ${ordenAAnular.numeroOrden} anulada.`);
       setOrdenAAnular(null);
+      setMotivoAnulacion("");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "No fue posible anular la orden.");
     } finally {
@@ -377,7 +380,7 @@ function ImportacionesPage() {
                             Ver detalle
                           </Button>
                         </Link>
-                        {puedeEliminar && o.estado !== "Anulada" && (
+                        {puedeEliminar && o.estado !== "Anulada" && o.estado !== "Cerrada" && (
                           <Button
                             size="xs"
                             variant="ghost"
@@ -426,15 +429,37 @@ function ImportacionesPage() {
         </Table>
       </div>
 
-      <AlertDialog open={!!ordenAAnular} onOpenChange={(open) => !open && setOrdenAAnular(null)}>
+      <AlertDialog
+        open={!!ordenAAnular}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdenAAnular(null);
+            setMotivoAnulacion("");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Anular la orden {ordenAAnular?.numeroOrden}?</AlertDialogTitle>
             <AlertDialogDescription>
               La orden dejará de aparecer en el listado activo, pero queda registrada en el
-              historial.
+              historial. No se puede anular si algún lote ya fue nacionalizado — en ese caso
+              registra una novedad en el detalle de la orden.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700" htmlFor="motivo-anulacion">
+              Motivo (opcional, queda en el historial de la orden)
+            </label>
+            <Textarea
+              id="motivo-anulacion"
+              value={motivoAnulacion}
+              onChange={(e) => setMotivoAnulacion(e.target.value)}
+              placeholder="Ej: el proveedor no pudo cumplir el pedido."
+              className="min-h-[70px] text-sm"
+              disabled={anulando}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={anulando}>Cancelar</AlertDialogCancel>
             <AlertDialogAction

@@ -114,7 +114,7 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
       expect(segunda.body.numero).toBe(primera.body.numero);
     });
 
-    it("permite crear con un número manual, y el siguiente sugerido avanza después de crear", async () => {
+    it("permite crear con un número manual (botón 'Editar' del diálogo), y el siguiente sugerido avanza después de crear", async () => {
       const sugerido = await request(app)
         .get("/api/proformas/siguiente-numero")
         .set("Authorization", `Bearer ${token}`);
@@ -209,6 +209,22 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
       expect(creadaA.body.numero).toBe(creadaB.body.numero);
       expect(creadaA.body.tenantId).toBe(tenantId);
       expect(creadaB.body.tenantId).toBe(otroTenantId);
+    });
+
+    it("dos creaciones simultáneas SIN número manual nunca terminan con el mismo número (condición de carrera real del cálculo automático, sin findFirst previo)", async () => {
+      const [a, b] = await Promise.all([
+        request(app)
+          .post("/api/proformas")
+          .set("Authorization", `Bearer ${token}`)
+          .send({ clienteRowId: 1, clienteNombre: "Carrera A", items: [itemBase()] }),
+        request(app)
+          .post("/api/proformas")
+          .set("Authorization", `Bearer ${token}`)
+          .send({ clienteRowId: 1, clienteNombre: "Carrera B", items: [itemBase()] }),
+      ]);
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.numero).not.toBe(b.body.numero);
     });
 
     it("sin número explícito conserva el comportamiento automático anterior", async () => {

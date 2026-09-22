@@ -15,6 +15,7 @@ import {
   Tags,
   Megaphone,
   History,
+  Activity,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
@@ -138,6 +139,13 @@ function Configuracion() {
       icon: History,
       exact: false,
       show: hasPermission(user, PERMISOS_SISTEMA.AUDITORIA_VER),
+    },
+    {
+      to: "/configuracion/monitoreo",
+      label: "Monitoreo",
+      icon: Activity,
+      exact: false,
+      show: hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER),
     },
   ] as const;
 

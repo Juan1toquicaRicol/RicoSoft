@@ -1,4 +1,5 @@
 import { schedule, type ScheduledTask } from "node-cron";
+import { ejecutarRegistrado, quitarScheduler, registrarScheduler } from "../lib/job-registry";
 import { ejecutarCicloRenovacionesServicios } from "../lib/servicios-renovacion.service";
 
 /**
@@ -45,15 +46,18 @@ export function iniciarSchedulerServiciosRenovacion(): ScheduledTask | null {
   tareaProgramada = schedule(
     config.expresionCron,
     () => {
-      ejecutarCicloRenovacionesServicios().catch((error) => {
-        console.error(
-          "[servicios-renovacion] Error inesperado en el ciclo de renovaciones:",
-          error,
-        );
-      });
+      ejecutarRegistrado("servicios-renovacion", () => ejecutarCicloRenovacionesServicios()).catch(
+        (error) => {
+          console.error(
+            "[servicios-renovacion] Error inesperado en el ciclo de renovaciones:",
+            error,
+          );
+        },
+      );
     },
     { noOverlap: true, name: "servicios-renovacion" },
   );
+  registrarScheduler("servicios-renovacion", config.expresionCron, tareaProgramada);
   console.log(
     `[servicios-renovacion] Scheduler iniciado (expresión cron: "${config.expresionCron}").`,
   );
@@ -65,4 +69,5 @@ export function iniciarSchedulerServiciosRenovacion(): ScheduledTask | null {
 export function detenerSchedulerServiciosRenovacion(): void {
   tareaProgramada?.stop();
   tareaProgramada = null;
+  quitarScheduler("servicios-renovacion");
 }

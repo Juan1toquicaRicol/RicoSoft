@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 
 export interface Empresa {
   id: string;
@@ -54,6 +55,56 @@ export function empresaIdDeTenant(tenantNombre: string | undefined | null): stri
 export function abreviarNombreTenant(tenantNombre: string): string {
   const id = empresaIdDeTenant(tenantNombre);
   return id ? siglaEmpresa(id) : tenantNombre;
+}
+
+// No existe un archivo de logo individual transparente por empresa — solo
+// el logo del grupo y `/3logos.jpg` (FlexiPack, Ricol y Green Solutions
+// apilados verticalmente en ese orden, cada uno en su propio tercio). En vez
+// de pedir 3 archivos nuevos, se recorta ese mismo sprite con
+// background-position para mostrar solo el tercio que corresponde a la
+// empresa activa. Compartido entre AppShell (logo de la barra superior) y
+// la Proforma (encabezado corporativo del documento) — un solo lugar con la
+// matemática del recorte, cada llamador solo elige el alto en px que necesita.
+export const POSICION_Y_LOGO_EMPRESA: Record<string, "top" | "center" | "bottom"> = {
+  FL: "top",
+  RC: "center",
+  GR: "bottom",
+};
+
+/** Recorta `/3logos.jpg` (1545x2000px, 3 tercios iguales de 667px de alto)
+ * para mostrar solo el logo de `empresaId`, al alto (px) pedido — el ancho
+ * se calcula contra el alto total escalado (alto * 3), no contra un solo
+ * tercio, para no distorsionar el sprite. Devuelve null si `empresaId` no
+ * es una de las 3 empresas conocidas (ver POSICION_Y_LOGO_EMPRESA): el
+ * llamador decide el fallback (logo de grupo, nada, etc.) — este componente
+ * nunca asume una empresa por defecto. */
+export function LogoEmpresa({
+  empresaId,
+  alto,
+  className,
+}: {
+  empresaId: string | null;
+  alto: number;
+  className?: string;
+}) {
+  if (!empresaId || !POSICION_Y_LOGO_EMPRESA[empresaId]) return null;
+  const ancho = Math.round((1545 / 2000) * (alto * 3));
+  const style: CSSProperties = {
+    width: ancho,
+    height: alto,
+    backgroundImage: "url(/3logos.jpg)",
+    backgroundSize: `${ancho}px ${alto * 3}px`,
+    backgroundPosition: `left ${POSICION_Y_LOGO_EMPRESA[empresaId]}`,
+    backgroundRepeat: "no-repeat",
+  };
+  return (
+    <div
+      role="img"
+      aria-label={`Logo de ${siglaEmpresa(empresaId)}`}
+      className={className}
+      style={style}
+    />
+  );
 }
 
 interface TenantContextType {

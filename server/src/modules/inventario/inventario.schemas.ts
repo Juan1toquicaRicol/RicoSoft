@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parametrosNegocioShape } from "../../lib/parametros-negocio";
 
 // Umbrales del módulo Producción & Planeación (Parte 16) — enteros positivos,
 // con un techo razonable (10 años) para evitar valores absurdos que
@@ -57,6 +58,9 @@ export const actualizarConfiguracionInventarioSchema = z
       .int("minimoCotizacionesSolicitud debe ser un entero.")
       .min(1, "minimoCotizacionesSolicitud debe ser mayor o igual a 1.")
       .optional(),
+    // Parámetros de negocio (Ventas/Crédito/Inventario/Compras): solo se
+    // almacenan; ver lib/parametros-negocio.ts.
+    ...parametrosNegocioShape,
   })
   .refine((v) => v.diasVendible < v.diasExceso, {
     message: "diasVendible debe ser menor que diasExceso.",

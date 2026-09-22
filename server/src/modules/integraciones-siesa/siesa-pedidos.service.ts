@@ -27,7 +27,8 @@ export interface PedidoClienteSiesa {
   cantidadFacturada: number;
 }
 
-const WHERE_PEDIDOS_CLIENTE = "d.f430_id_cia = @ciaId AND d.f430_rowid_tercero_fact = @clienteRowId";
+const WHERE_PEDIDOS_CLIENTE =
+  "d.f430_id_cia = @ciaId AND d.f430_rowid_tercero_fact = @clienteRowId";
 
 export async function contarPedidosClienteSiesa(
   ciaId: number,
@@ -38,7 +39,9 @@ export async function contarPedidosClienteSiesa(
     .request()
     .input("ciaId", ciaId)
     .input("clienteRowId", clienteRowId)
-    .query<{ n: number }>(`SELECT COUNT(*) AS n FROM t430_cm_pv_docto d WHERE ${WHERE_PEDIDOS_CLIENTE}`);
+    .query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM t430_cm_pv_docto d WHERE ${WHERE_PEDIDOS_CLIENTE}`,
+    );
   return recordset[0]?.n ?? 0;
 }
 
@@ -296,7 +299,9 @@ export async function leerCotizacionSiesa(
       const precioUnitario = Number(l.precioUnitario ?? 0);
       const base = cantidad * precioUnitario;
       const descuentoPct =
-        base > 0 && l.descuentoLinea ? Math.round((Number(l.descuentoLinea) / base) * 10000) / 100 : 0;
+        base > 0 && l.descuentoLinea
+          ? Math.round((Number(l.descuentoLinea) / base) * 10000) / 100
+          : 0;
       const ivaPct =
         l.valorNeto && Number(l.valorNeto) > 0 && l.impuesto
           ? Math.round((Number(l.impuesto) / Number(l.valorNeto)) * 10000) / 100
@@ -311,6 +316,74 @@ export async function leerCotizacionSiesa(
         ivaPct,
       };
     }),
+  };
+}
+
+export interface PdvSiesaResumen {
+  /** f430_rowid — identidad técnica del PDV, la misma que se persiste en
+   * PedidoComercial.erpRowId. */
+  pdvRowId: number;
+  /** Número visible, mismo formato "PDV-<consecutivo>" que ya usa
+   * leerCotizacionSiesa para su propio erpDocumentoNumero (convención de UI
+   * existente, no un campo real de Siesa). */
+  pdvNumero: string;
+  clienteRowId: number;
+  clienteNombre: string | null;
+  clienteNit: string | null;
+  fecha: Date;
+}
+
+/**
+ * Encabezado de UN PDV real por su identidad técnica (f430_rowid) — usado
+ * por modules/comercial/pedidos.controller.ts::asignarErpPedido para
+ * vincular un PedidoComercial con el PDV real correspondiente.
+ *
+ * DELIBERADAMENTE separada de leerCotizacionSiesa (que filtra
+ * f430_id_tipo_docto = 'CDV'): t430_cm_pv_docto guarda tanto cotizaciones
+ * (CDV) como pedidos de venta (PDV) con consecutivos numerados de forma
+ * INDEPENDIENTE entre ambos tipos — un mismo f430_consec_docto puede
+ * repetirse entre un CDV y un PDV que son filas (f430_rowid) distintas (ver
+ * siesa-pedidos.service.test.ts). Filtrar aquí por 'PDV' es lo que impide
+ * que esta función devuelva por error el CDV homónimo de un PDV real, o
+ * viceversa.
+ *
+ * No trae líneas (f431): la V1 de esta integración vincula solo a nivel de
+ * documento, sin persistir mapeo línea a línea.
+ */
+export async function leerPdvSiesa(
+  ciaId: number,
+  pdvRowId: number,
+): Promise<PdvSiesaResumen | null> {
+  const pool = await getSiesaPool();
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("rowId", pdvRowId).query<{
+    pdvRowId: number;
+    pdvNumero: number;
+    clienteRowId: number;
+    clienteNombre: string | null;
+    clienteNit: string | null;
+    fecha: Date;
+  }>(`
+    SELECT
+      d.f430_rowid AS pdvRowId,
+      d.f430_consec_docto AS pdvNumero,
+      d.f430_rowid_tercero_fact AS clienteRowId,
+      tc.f200_razon_social AS clienteNombre,
+      tc.f200_nit AS clienteNit,
+      d.f430_id_fecha AS fecha
+    FROM t430_cm_pv_docto d
+    LEFT JOIN t200_mm_terceros tc ON tc.f200_rowid = d.f430_rowid_tercero_fact
+    WHERE d.f430_id_cia = @ciaId AND d.f430_rowid = @rowId AND d.f430_id_tipo_docto = 'PDV'
+  `);
+
+  const r = recordset[0];
+  if (!r) return null;
+  return {
+    pdvRowId: r.pdvRowId,
+    pdvNumero: `PDV-${r.pdvNumero}`,
+    clienteRowId: r.clienteRowId,
+    clienteNombre: r.clienteNombre?.trim() || null,
+    clienteNit: r.clienteNit?.trim() || null,
+    fecha: r.fecha,
   };
 }
 
@@ -393,7 +466,10 @@ export async function leerLineasPedidoClienteSiesa(
     cantidadPedida: Number(r.cantidadPedida ?? 0),
     cantidadRemisionada: Number(r.cantidadRemisionada ?? 0),
     cantidadFacturada: Number(r.cantidadFacturada ?? 0),
-    cantidadPendiente: Math.max(0, Number(r.cantidadPedida ?? 0) - Number(r.cantidadRemisionada ?? 0)),
+    cantidadPendiente: Math.max(
+      0,
+      Number(r.cantidadPedida ?? 0) - Number(r.cantidadRemisionada ?? 0),
+    ),
     precioUnitario: Number(r.precioUnitario ?? 0),
     descuentoLinea: Number(r.descuentoLinea ?? 0),
     descuentoGlobal: Number(r.descuentoGlobal ?? 0),

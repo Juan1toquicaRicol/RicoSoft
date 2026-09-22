@@ -42,6 +42,12 @@ export const actualizarLineaDespachoSchema = z.object({
   observacion: z.string().max(500).nullable().optional(),
 });
 
+/**
+ * Conjunto histórico FIJO de tipos de novedad. Los tipos vigentes viven ahora
+ * en CatalogoValor (tipo="MOTIVO_NOVEDAD_DESPACHO", administrable desde
+ * Configuración → Catálogos); esta lista queda solo como respaldo cuando el
+ * catálogo aún no fue sembrado en la base (ver crearNovedad).
+ */
 export const TIPOS_NOVEDAD = [
   "PRODUCTO_FALTANTE",
   "DIRECCION_INCORRECTA",
@@ -55,7 +61,13 @@ export const TIPOS_NOVEDAD = [
 ] as const;
 
 export const crearNovedadSchema = z.object({
-  tipo: z.enum(TIPOS_NOVEDAD, { required_error: "tipo es requerido." }),
+  // La validación contra el catálogo dinámico (por tenant) la hace el
+  // controller: aquí solo la forma, para no fijar la lista en el esquema.
+  tipo: z
+    .string({ required_error: "tipo es requerido." })
+    .trim()
+    .min(1, "tipo es requerido.")
+    .max(30, "tipo no puede superar 30 caracteres."),
   descripcion: z.string().min(1, "descripcion es requerida.").max(500),
 });
 

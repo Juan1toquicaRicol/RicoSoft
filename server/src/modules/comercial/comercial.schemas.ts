@@ -73,6 +73,13 @@ export const asignarErpCotizacionSchema = z.object({
   erpRowId: z.coerce.number().int().positive("erpRowId debe ser un entero positivo."),
 });
 
+/** Vincular a mano el PDV real de Siesa (t430, f430_id_tipo_docto='PDV') de
+ * un PedidoComercial — mismo schema que asignarErpCotizacionSchema, tipo
+ * de documento distinto (ver asignarErpPedido en pedidos.controller.ts). */
+export const asignarErpPedidoSchema = z.object({
+  erpRowId: z.coerce.number().int().positive("erpRowId debe ser un entero positivo."),
+});
+
 export const listarDocumentosSchema = z.object({
   tipo: z.enum(["todos", "cotizacion", "proforma", "pedido"]).optional().default("todos"),
   estado: z.string().trim().max(20).optional(),

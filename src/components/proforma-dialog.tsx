@@ -1,17 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -282,7 +276,16 @@ function BuscadorCotizacion({
   );
 }
 
-export function ProformaDialog() {
+/** Controlado por el padre (NuevoDocumentoMenu): a diferencia de antes, ya
+ * no lleva su propio botón disparador — el punto de entrada único a "crear
+ * proforma" es el menú "Nuevo documento" de Gestión Comercial. */
+export function ProformaDialog({
+  open: abierto,
+  onOpenChange: setAbierto,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const navigate = useNavigate();
   const { consultar: consultarDatosFacturacion } = useDatosFacturacionCliente();
   const { crear, loading: guardando } = useCrearProforma();
@@ -292,10 +295,12 @@ export function ProformaDialog() {
   const { data: formasPagoVentas } = useCatalogo("FORMA_PAGO_VENTAS");
   const { consultar: consultarDetalleCotizacion } = useDetalleCotizacion();
 
-  const [abierto, setAbierto] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [cotizacion, setCotizacion] = useState<CotizacionBusqueda | null>(null);
   const [numero, setNumero] = useState<number | "">("");
+  // El consecutivo sugerido empieza bloqueado (de solo lectura) — el botón
+  // "Editar" junto al campo lo habilita para escribir un número a mano.
+  const [editandoNumero, setEditandoNumero] = useState(false);
   const [clienteRowId, setClienteRowId] = useState<number | null>(null);
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteNit, setClienteNit] = useState("");
@@ -324,6 +329,7 @@ export function ProformaDialog() {
   useEffect(() => {
     if (!abierto) return;
     consultarSiguienteNumero().then(setNumero);
+    setEditandoNumero(false);
     if (configComercial) {
       setRetencionPct(configComercial.retencionFuentePct);
       setRetencionIvaPct(configComercial.retencionIvaPct);
@@ -335,6 +341,7 @@ export function ProformaDialog() {
   const resetForm = () => {
     setCotizacion(null);
     setNumero("");
+    setEditandoNumero(false);
     setClienteRowId(null);
     setClienteNombre("");
     setClienteNit("");
@@ -502,11 +509,6 @@ export function ProformaDialog() {
         if (!open) resetForm();
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1.5">
-          <FileText className="h-3.5 w-3.5" /> Realizar proforma
-        </Button>
-      </DialogTrigger>
       <DialogContent className="h-[95vh] w-[95vw] max-w-[1600px] overflow-y-auto p-10">
         <DialogHeader>
           <DialogTitle className="text-xl">Nueva proforma</DialogTitle>
@@ -525,17 +527,43 @@ export function ProformaDialog() {
 
           {clienteRowId && (
             <>
-              {/* Primer dato propio de la proforma después del cliente: el consecutivo. */}
+              {/* Primer dato propio de la proforma después del cliente: el
+                  consecutivo. Bloqueado por defecto (muestra el siguiente
+                  sugerido, GET /proformas/siguiente-numero) — el botón
+                  "Editar" lo habilita para escribir un número a mano; lo
+                  que quede ahí al guardar es lo que se persiste tal cual
+                  (ver crearProforma en el backend). */}
               <div className="w-48 space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-500 uppercase">
                   Número de proforma
                 </Label>
-                <Input
-                  type="number"
-                  value={numero}
-                  onChange={(e) => setNumero(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="h-10 text-sm font-semibold"
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    value={numero}
+                    onChange={(e) => setNumero(e.target.value === "" ? "" : Number(e.target.value))}
+                    disabled={!editandoNumero}
+                    readOnly={!editandoNumero}
+                    className="h-10 text-sm font-semibold"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-10 w-10 shrink-0"
+                    onClick={() => setEditandoNumero((v) => !v)}
+                    aria-label={
+                      editandoNumero ? "Dejar de editar el número" : "Editar el número de proforma"
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  {editandoNumero
+                    ? "Editando a mano — verifica que no choque con un número ya existente."
+                    : "Consecutivo automático — pulsa el lápiz para editarlo."}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

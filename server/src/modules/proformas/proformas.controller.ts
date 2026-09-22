@@ -587,8 +587,18 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
-  const { items, numero: numeroSolicitado, cotizacionIdExterno, cotizacionId, ...encabezado } =
-    parseo.data;
+  // numero: sugerido/editable (GET /proformas/siguiente-numero calcula
+  // SIEMPRE el real MAX(numero)+1 del tenant, fresco, nunca un contador
+  // aparte) — si el usuario lo edita a mano en el diálogo (botón "Editar"
+  // junto al campo), se respeta tal cual; si no, se usa el consecutivo real
+  // calculado aquí mismo dentro de la transacción.
+  const {
+    items,
+    numero: numeroSolicitado,
+    cotizacionIdExterno,
+    cotizacionId,
+    ...encabezado
+  } = parseo.data;
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   const errorBodegas = await validarBodegasDelTenant(siesaCiaId, items);
@@ -666,6 +676,9 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
 
   try {
     const creada = await prisma.$transaction(async (tx) => {
+      // Respeta un número editado a mano (numeroSolicitado); si no vino
+      // ninguno, calcula el consecutivo real fresco dentro de esta misma
+      // transacción.
       const numero = numeroSolicitado ?? (await siguienteNumeroProforma(tx, tenantId));
 
       // Re-chequeo de duplicados dentro de la misma transacción, para cerrar

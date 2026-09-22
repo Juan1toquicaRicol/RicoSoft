@@ -11,7 +11,7 @@ import { money } from "@/lib/data";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requireAnyPermisoGuard } from "@/lib/route-guards";
 import { useDocumentosComerciales, type DocumentoBandeja } from "@/hooks/use-comercial";
-import { CotizacionDialog } from "@/components/cotizacion-dialog";
+import { NuevoDocumentoMenu } from "@/components/nuevo-documento-menu";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 
@@ -73,7 +73,6 @@ function GestionComercial() {
   // beforeLoad con requireAnyPermisoGuard) pero no debe ver ni poder elegir
   // las pestañas de Cotizaciones o Proformas.
   const tabsVisibles = TABS.filter((t) => !t.permiso || hasPermission(user, t.permiso));
-  const puedeCrearCotizacion = hasPermission(user, PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR);
 
   const [tab, setTab] = useState<DocumentoBandeja["tipo"] | "todos">("todos");
   const [search, setSearch] = useState("");
@@ -99,7 +98,7 @@ function GestionComercial() {
     <AppShell
       title="Gestión Comercial"
       description="Cotizaciones, Proformas y Pedidos comerciales en un solo lugar."
-      actions={puedeCrearCotizacion ? <CotizacionDialog /> : undefined}
+      actions={<NuevoDocumentoMenu />}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1">

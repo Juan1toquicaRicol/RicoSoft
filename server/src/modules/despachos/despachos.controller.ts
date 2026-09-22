@@ -15,10 +15,15 @@ import {
 import { notificarPorPermiso, resolverPlantillaNotificacion } from "../../lib/notificaciones";
 import { resolverCiaSiesa } from "../../lib/siesa-tenant";
 import {
+  obtenerClavesActivasCatalogo,
+  resolverClaveCatalogo,
+} from "../catalogos/catalogos.controller";
+import {
   crearDespachoSchema,
   actualizarEstadoDespachoSchema,
   actualizarLineaDespachoSchema,
   crearNovedadSchema,
+  TIPOS_NOVEDAD,
   resolverNovedadSchema,
   listarDespachosSchema,
   documentosVentaParaDespachoSchema,
@@ -404,6 +409,21 @@ export const actualizarLineaDespacho = async (req: AuthenticatedRequest, res: Re
   return res.json(actualizada);
 };
 
+/**
+ * Clave canónica del motivo de novedad según el catálogo MOTIVO_NOVEDAD_DESPACHO
+ * del tenant (acepta también los alias heredados, p. ej. "PRODUCTO_FALTANTE"
+ * → "FALTANTE"). Si el catálogo no tiene NINGÚN valor para el tenant (base que
+ * aún no corrió el seed) se conserva el conjunto histórico fijo, para no
+ * bloquear el registro de novedades por una migración pendiente.
+ */
+async function resolverTipoNovedad(tenantId: string, valor: string): Promise<string | null> {
+  const canonica = await resolverClaveCatalogo(tenantId, "MOTIVO_NOVEDAD_DESPACHO", valor);
+  if (canonica) return canonica;
+  const vigentes = await obtenerClavesActivasCatalogo(tenantId, "MOTIVO_NOVEDAD_DESPACHO");
+  if (vigentes.size === 0 && (TIPOS_NOVEDAD as readonly string[]).includes(valor)) return valor;
+  return null;
+}
+
 /** Registra una novedad — no cambia el estado automáticamente (ver lib/despachos.ts). */
 export const crearNovedad = async (req: AuthenticatedRequest, res: Response) => {
   const despacho = await buscarDespachoDelTenant(req, req.params.id);
@@ -414,10 +434,15 @@ export const crearNovedad = async (req: AuthenticatedRequest, res: Response) => 
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
 
+  const tipoNovedad = await resolverTipoNovedad(req.user!.tenantId, parseo.data.tipo);
+  if (!tipoNovedad) {
+    return res.status(400).json({ message: "El tipo de novedad no es válido." });
+  }
+
   const novedad = await prisma.despachoNovedad.create({
     data: {
       despachoId: despacho.id,
-      tipo: parseo.data.tipo,
+      tipo: tipoNovedad,
       descripcion: parseo.data.descripcion,
       usuarioId: req.user!.id,
       usuario: req.user!.nombre,
@@ -429,7 +454,7 @@ export const crearNovedad = async (req: AuthenticatedRequest, res: Response) => 
       tenantId: req.user!.tenantId,
       usuarioId: req.user!.id,
       accion: "NOVEDAD_REGISTRADA",
-      detalle: `${parseo.data.tipo}: ${parseo.data.descripcion}`,
+      detalle: `${tipoNovedad}: ${parseo.data.descripcion}`,
       entidadTipo: "Despacho",
       entidadId: despacho.id,
     },
@@ -441,12 +466,12 @@ export const crearNovedad = async (req: AuthenticatedRequest, res: Response) => 
       "DESPACHO_NOVEDAD_REGISTRADA",
       {
         cliente: despacho.clienteNombre,
-        tipoNovedad: parseo.data.tipo,
+        tipoNovedad,
         descripcion: parseo.data.descripcion,
       },
       {
         titulo: "Novedad en despacho",
-        mensaje: `${despacho.clienteNombre}: ${parseo.data.tipo} — ${parseo.data.descripcion}`,
+        mensaje: `${despacho.clienteNombre}: ${tipoNovedad} — ${parseo.data.descripcion}`,
       },
     );
     await notificarPorPermiso(

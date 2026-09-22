@@ -29,6 +29,7 @@ import {
   confirmarPedido,
   marcarListoParaErpPedido,
   anularPedido,
+  asignarErpPedido,
   eliminarPedido,
 } from "./pedidos.controller";
 
@@ -53,7 +54,11 @@ router.get(
 );
 
 // Cotizaciones
-router.get("/cotizaciones", requirePermission(PERMISOS_SISTEMA.COTIZACIONES_VER), listarCotizaciones);
+router.get(
+  "/cotizaciones",
+  requirePermission(PERMISOS_SISTEMA.COTIZACIONES_VER),
+  listarCotizaciones,
+);
 router.get(
   "/cotizaciones/:id",
   requirePermission(PERMISOS_SISTEMA.COTIZACIONES_VER),
@@ -119,11 +124,7 @@ router.post(
 router.delete("/cotizaciones/:id", requireSuperadmin, eliminarCotizacion);
 
 // Pedidos comerciales
-router.get(
-  "/pedidos",
-  requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
-  listarPedidos,
-);
+router.get("/pedidos", requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER), listarPedidos);
 router.get(
   "/pedidos/:id",
   requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
@@ -147,6 +148,15 @@ router.post(
   "/pedidos/:id/anular",
   requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR),
   anularPedido,
+);
+// Vincular/corregir a mano el PDV real de Siesa de un pedido (V1: solo
+// documento, ver asignarErpPedido) — mismo permiso que el resto de
+// operaciones ordinarias de gestión de Pedidos, sin permiso nuevo (mismo
+// criterio que asignar-erp de Cotización, que tampoco tiene uno propio).
+router.post(
+  "/pedidos/:id/asignar-erp",
+  requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR),
+  asignarErpPedido,
 );
 // Borrado PERMANENTE — solo superadmin.
 router.delete("/pedidos/:id", requireSuperadmin, eliminarPedido);

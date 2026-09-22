@@ -915,6 +915,23 @@ model ConfiguracionInventario {
   plazoCreditoDiasDefecto         Int      @default(30)
   /// Mínimo de cotizaciones de proveedor requeridas para poder aprobar una SolicitudCompra.
   minimoCotizacionesSolicitud     Int      @default(3)
+  /// --- Parámetros de negocio (fuente central) ---------------------------
+  /// Solo se ALMACENAN aquí: ninguna regla de Ventas/Crédito/Compras/Logística
+  /// los consume todavía (ver lib/parametros-negocio.ts). Decimal, no Float,
+  /// porque son porcentajes/montos financieros.
+  /// Margen mínimo de venta (%) — Ventas.
+  margenMinimoVentaPct            Decimal  @default(0) @db.Decimal(5, 2)
+  /// Días máximos de mora tolerados a un cliente — Crédito.
+  diasMaximosMora                 Int      @default(30)
+  /// % máximo del cupo de crédito que se puede usar — Crédito.
+  porcentajeMaximoUsoCupo         Decimal  @default(100) @db.Decimal(5, 2)
+  /// Tolerancia de merma de pesaje (%) — Inventario / Logística.
+  toleranciaMermaPesajePct        Decimal  @default(0.5) @db.Decimal(5, 2)
+  /// Días de validez estándar de una oferta/cotización — Ventas.
+  diasValidezOferta               Int      @default(15)
+  /// Monto (moneda local) desde el cual se exigen cotizaciones — Compras.
+  /// 0 = sin monto mínimo definido.
+  montoMinimoCotizaciones         Decimal  @default(0) @db.Decimal(18, 2)
   updatedAt                       DateTime @updatedAt
   tenant                          Tenant   @relation(fields: [tenantId], references: [id])
 }
@@ -945,21 +962,32 @@ model ConfiguracionComercial {
 /// para todos los tenants); con valor = exclusivo de esa empresa. Mismo
 /// patrón que Departamento/Rol/Modulo (ver lib/alcance.ts, whereAlcance).
 model CatalogoValor {
-  id        String   @id @default(uuid()) @db.UniqueIdentifier
-  /// Discriminador: "INCOTERM" | "MONEDA" | "PAIS_ORIGEN" | "FORMA_PAGO" |
-  /// "UNIDAD_MEDIDA" | "METODO_PAGO" | "MOTIVO_NOVEDAD_IMPORTACION" |
-  /// "ACCION_CONTACTO_OPORTUNIDAD" | "RESULTADO_CONTACTO_OPORTUNIDAD".
-  tipo      String   @db.VarChar(60)
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  /// Discriminador. Lista vigente en TIPOS_CATALOGO_VALIDOS
+  /// (modules/catalogos/catalogos.controller.ts): INCOTERM, MONEDA, PAIS,
+  /// CONDICION_PAGO, METODO_PAGO, UNIDAD_MEDIDA, MOTIVO_NOVEDAD_DESPACHO,
+  /// ESTADO_COMERCIAL, TIPO_OPORTUNIDAD y los tipos heredados (PAIS_ORIGEN,
+  /// FORMA_PAGO, FORMA_PAGO_VENTAS, MOTIVO_NOVEDAD_IMPORTACION,
+  /// ACCION_CONTACTO_OPORTUNIDAD, RESULTADO_CONTACTO_OPORTUNIDAD).
+  tipo        String   @db.VarChar(60)
   /// Valor estable usado por el código/datos ya guardados (ej. "FOB") — nunca
   /// se debe cambiar una clave existente sin migrar los datos que la usan.
-  clave     String   @db.VarChar(100)
-  etiqueta  String   @db.VarChar(255)
-  orden     Int      @default(0)
-  activo    Boolean  @default(true)
-  tenantId  String?  @db.UniqueIdentifier
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  clave       String   @db.VarChar(100)
+  etiqueta    String   @db.VarChar(255)
+  /// Texto explicativo opcional (p. ej. qué significa un Incoterm).
+  descripcion String?  @db.NVarChar(500)
+  /// JSON validado en el backend (ver lib/catalogos.ts, esquemaMetadata):
+  /// { simbolo?, responsabilidad?, documento?, aliases?: string[] }.
+  /// `aliases` son claves heredadas que ya viven en datos históricos (p. ej.
+  /// "TON" para la clave "TN"): los validadores aceptan clave o alias, y así
+  /// se puede normalizar el catálogo sin romper filas antiguas.
+  metadata    String?  @db.NVarChar(Max)
+  orden       Int      @default(0)
+  activo      Boolean  @default(true)
+  tenantId    String?  @db.UniqueIdentifier
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@unique([tipo, clave, tenantId])
   @@index([tipo, tenantId, activo])
@@ -1021,7 +1049,29 @@ model Publicacion {
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   autor  User    @relation("PublicacionAutor", fields: [autorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  archivos PublicacionArchivo[]
+
   @@index([tenantId, categoria, activo])
+}
+
+/// Archivo adjunto de una Publicacion (foto, video o documento). No lleva
+/// tenantId propio: el alcance (GENERAL / tenant) lo define la publicación
+/// padre, y todo acceso al archivo pasa primero por whereAlcance() sobre ella.
+model PublicacionArchivo {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  publicacionId  String   @db.UniqueIdentifier
+  /// IMAGEN | VIDEO | DOCUMENTO — derivado del mime real al subir.
+  tipo           String   @db.VarChar(20)
+  nombreOriginal String   @db.VarChar(255)
+  mime           String   @db.VarChar(100)
+  tamano         Int
+  /// Ruta relativa dentro de uploads/publicaciones/, nunca una URL pública.
+  ruta           String   @db.VarChar(500)
+  createdAt      DateTime @default(now())
+
+  publicacion Publicacion @relation(fields: [publicacionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([publicacionId])
 }
 
 /// Plan de producción con estados — Etapa J del módulo Producción &
@@ -2665,8 +2715,38 @@ model PedidoComercial {
   estado                  String                @default("BORRADOR") @db.VarChar(20)
   moneda                  String                @default("PESOS") @db.VarChar(20)
   observaciones           String?               @db.Text
-  /// Preparado para la integración Siesa de escritura (fase futura) — ver
-  /// mismo comentario en Cotizacion. Sin usar todavía.
+  /// Vínculo con el PDV real de Siesa (t430_cm_pv_docto, f430_id_tipo_docto =
+  /// 'PDV') — ver modules/comercial/pedidos.controller.ts::asignarErpPedido.
+  /// erpTipoDocumento vale "PDV" (nunca "CDV": ese es el tipo que usa
+  /// Cotizacion, un documento distinto en la misma tabla t430). erpRowId es
+  /// f430_rowid. erpEstadoSincronizacion es el estado de INTEGRACIÓN
+  /// (NO_VINCULADO si erpRowId es null — no se persiste como texto, se
+  /// deriva de erpRowId — | VINCULADO | ERROR_VINCULACION), deliberadamente
+  /// separado del estado COMERCIAL de la columna `estado` de arriba — nunca
+  /// se mezclan en la misma columna.
+  ///
+  /// (tenantId, erpRowId) debe ser único cuando erpRowId no es null — un
+  /// mismo PDV no puede vincularse a dos pedidos del mismo tenant. Esto NO
+  /// se expresa aquí como `@@unique([tenantId, erpRowId])` a propósito:
+  /// Prisma Schema Language no puede representar un índice único FILTRADO
+  /// (WHERE erpRowId IS NOT NULL) para SQL Server, y un `@@unique` sin
+  /// filtro rompería con el segundo pedido sin vincular de cualquier tenant
+  /// (SQL Server trata NULL como valor comparable en un índice único
+  /// compuesto, a diferencia de PostgreSQL). La unicidad real la impone el
+  /// índice `PedidoComercial_tenantId_erpRowId_filtered_uq`, administrado
+  /// por SQL manual en la migración
+  /// 20260922100000_pedido_comercial_erp_row_id_filtered_unique — no existe
+  /// como `@@unique` en este schema, así que Prisma no lo conoce como
+  /// constraint declarado. Verificado empíricamente (Prisma 5.22.0 + SQL
+  /// Server, microaudit 2026-09-22): esto NO impide que Prisma reporte su
+  /// violación como P2002/PrismaClientKnownRequestError — el motor mapea
+  /// cualquier violación de índice único del driver (incluida esta, no
+  /// declarada) a P2002, con `meta.target` nombrando el índice real. El
+  /// controller (asignarErpPedido::esViolacionIndiceUnicoErpRowId) usa esto
+  /// para distinguir esta violación de cualquier otra. Este comportamiento
+  /// es del motor de Prisma sobre errores nativos del driver, no una
+  /// garantía documentada de forma estable entre versiones — debe
+  /// revalidarse si se actualiza Prisma o el driver de SQL Server.
   erpTipoDocumento        String?               @db.VarChar(10)
   erpRowId                Int?
   erpNumero               String?               @db.VarChar(50)

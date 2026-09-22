@@ -1,16 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,11 +93,19 @@ function AutocompletadoCliente({
   );
 }
 
-export function CotizacionDialog() {
+/** Controlado por el padre (NuevoDocumentoMenu): ya no lleva su propio botón
+ * disparador — el punto de entrada único a "crear cotización" es el menú
+ * "Nuevo documento" de Gestión Comercial. */
+export function CotizacionDialog({
+  open,
+  onOpenChange: setOpen,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const navigate = useNavigate();
   const { crear, loading } = useCrearCotizacion();
   const { consultar } = useDatosFacturacionCliente();
-  const [open, setOpen] = useState(false);
 
   const [clienteRowId, setClienteRowId] = useState<number | null>(null);
   const [clienteNombre, setClienteNombre] = useState("");
@@ -192,11 +194,6 @@ export function CotizacionDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1.5">
-          <FileText className="h-3.5 w-3.5" /> Nueva Cotización
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva cotización</DialogTitle>

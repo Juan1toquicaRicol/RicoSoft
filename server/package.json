@@ -10,6 +10,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx prisma/seed.ts",
+    "catalogos:sincronizar": "tsx scripts/sincronizar-catalogos-generales.ts",
     "purgar-auditoria": "tsx scripts/purgar-auditoria.ts",
     "sync-siesa": "tsx scripts/sync-siesa.ts",
     "explore-siesa": "tsx scripts/explore-siesa.ts",

@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Megaphone, Plus, Search, Send, Eye, Trash2, Globe2, Building2 } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  Megaphone,
+  Plus,
+  Search,
+  Send,
+  Eye,
+  Trash2,
+  Globe2,
+  Building2,
+  Paperclip,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { useSession } from "@/lib/session-context";
@@ -14,7 +25,14 @@ import {
   type EstadoPublicacion,
   type AlcancePublicacion,
   type DatosPublicacion,
+  type ArchivoPublicacion,
+  formatTamano,
 } from "@/hooks/use-publicaciones";
+import {
+  ChipAdjuntos,
+  IconoTipoArchivo,
+  ListaArchivos,
+} from "@/components/publicaciones/archivos-publicacion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +125,44 @@ function isoParaInput(iso: string | null | undefined) {
 
 const SENTINEL_TODAS = "TODAS";
 
+// Mismas reglas que el backend (upload.middleware.ts): el servidor es quien
+// manda, esto solo evita subir 80 MB para enterarse de un rechazo.
+const MAX_ARCHIVOS_POR_PUBLICACION = 20;
+const MAX_BYTES_VIDEO = 100 * 1024 * 1024;
+const MAX_BYTES_OTROS = 25 * 1024 * 1024;
+const ACCEPT_ARCHIVOS =
+  "image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+const MIME_DOCUMENTOS = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+];
+
+function tipoDeArchivoLocal(archivo: File): ArchivoPublicacion["tipo"] | null {
+  if (["image/png", "image/jpeg", "image/webp", "image/gif"].includes(archivo.type))
+    return "IMAGEN";
+  if (["video/mp4", "video/webm", "video/quicktime"].includes(archivo.type)) return "VIDEO";
+  if (MIME_DOCUMENTOS.includes(archivo.type)) return "DOCUMENTO";
+  return null;
+}
+
+/** Devuelve el motivo del rechazo, o null si el archivo es válido. */
+function motivoRechazoArchivo(archivo: File): string | null {
+  const tipo = tipoDeArchivoLocal(archivo);
+  if (!tipo) return `"${archivo.name}": tipo no permitido.`;
+  if (tipo === "VIDEO" && archivo.size > MAX_BYTES_VIDEO) {
+    return `"${archivo.name}" supera los 100 MB permitidos para video.`;
+  }
+  if (tipo !== "VIDEO" && archivo.size > MAX_BYTES_OTROS) {
+    return `"${archivo.name}" supera los 25 MB permitidos para fotos y documentos.`;
+  }
+  return null;
+}
+
 function PublicacionesConfigPage() {
   const { user: sesion } = useSession();
   const esSuperadmin = Boolean(sesion?.isSuperadmin);
@@ -124,6 +180,8 @@ function PublicacionesConfigPage() {
     actualizar,
     publicarAhora,
     cambiarActivo,
+    subirArchivos,
+    eliminarArchivo,
     eliminar,
   } = usePublicacionesAdmin({
     q: busqueda,
@@ -309,7 +367,10 @@ function PublicacionesConfigPage() {
                       >
                         {p.titulo}
                       </button>
-                      <p className="text-[11px] text-slate-400">{p.tipo}</p>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <span>{p.tipo}</span>
+                        <ChipAdjuntos archivos={p.archivos} />
+                      </div>
                     </TableCell>
                     <TableCell className="text-slate-600">{CATEGORIA_LABEL[p.categoria]}</TableCell>
                     <TableCell>
@@ -389,14 +450,35 @@ function PublicacionesConfigPage() {
       <FormularioPublicacion
         abierto={formAbierto}
         onOpenChange={setFormAbierto}
-        publicacion={editando}
+        // La lista se refresca tras cada cambio: se lee de ahí (y no del
+        // objeto capturado al abrir) para ver los adjuntos ya actualizados.
+        publicacion={
+          editando ? (publicaciones.find((p) => p.id === editando.id) ?? editando) : null
+        }
         esSuperadmin={esSuperadmin}
-        onGuardar={async (datos) => {
+        onGuardar={async (datos, { nuevos, quitar }) => {
           if (editando) {
             await actualizar(editando.id, datos);
+            for (const archivoId of quitar) await eliminarArchivo(editando.id, archivoId);
+            if (nuevos.length > 0) await subirArchivos(editando.id, nuevos);
             toast.success("Publicación actualizada.");
           } else {
-            await crear(datos);
+            const creada = await crear(datos);
+            if (nuevos.length > 0) {
+              try {
+                await subirArchivos(creada.id, nuevos);
+              } catch (err: unknown) {
+                // La publicación ya existe: no se pierde el trabajo, se avisa
+                // y se cierra para que el usuario la edite y reintente.
+                toast.error(
+                  `Publicación creada, pero no se subieron los archivos: ${
+                    err instanceof Error ? err.message : "error desconocido"
+                  }. Edítala para volver a intentarlo.`,
+                );
+                setFormAbierto(false);
+                return;
+              }
+            }
             toast.success("Publicación creada.");
           }
           setFormAbierto(false);
@@ -435,7 +517,10 @@ function FormularioPublicacion({
   onOpenChange: (v: boolean) => void;
   publicacion: PublicacionAdmin | null;
   esSuperadmin: boolean;
-  onGuardar: (datos: DatosPublicacion) => Promise<void>;
+  onGuardar: (
+    datos: DatosPublicacion,
+    archivos: { nuevos: File[]; quitar: string[] },
+  ) => Promise<void>;
 }) {
   const esEdicion = publicacion !== null;
   // key en el Dialog (más abajo) remonta este formulario en cada apertura,
@@ -457,6 +542,37 @@ function FormularioPublicacion({
   const [alcance, setAlcance] = useState<AlcancePublicacion>(publicacion?.alcance ?? "TENANT");
   const [mostrarPreview, setMostrarPreview] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
+  const [archivosAQuitar, setArchivosAQuitar] = useState<string[]>([]);
+  const inputArchivosRef = useRef<HTMLInputElement>(null);
+
+  const archivosExistentes = publicacion?.archivos ?? [];
+  const totalArchivos = archivosExistentes.length - archivosAQuitar.length + archivosNuevos.length;
+
+  const agregarArchivos = (seleccion: FileList | null) => {
+    if (!seleccion) return;
+    const aceptados: File[] = [];
+    for (const archivo of Array.from(seleccion)) {
+      const motivo = motivoRechazoArchivo(archivo);
+      if (motivo) {
+        toast.error(motivo);
+        continue;
+      }
+      aceptados.push(archivo);
+    }
+    if (totalArchivos + aceptados.length > MAX_ARCHIVOS_POR_PUBLICACION) {
+      toast.error(`Una publicación admite hasta ${MAX_ARCHIVOS_POR_PUBLICACION} archivos.`);
+      return;
+    }
+    setArchivosNuevos((prev) => [...prev, ...aceptados]);
+    // Permite volver a elegir el mismo archivo tras quitarlo.
+    if (inputArchivosRef.current) inputArchivosRef.current.value = "";
+  };
+
+  const alternarQuitar = (archivoId: string) =>
+    setArchivosAQuitar((prev) =>
+      prev.includes(archivoId) ? prev.filter((id) => id !== archivoId) : [...prev, archivoId],
+    );
 
   // Un publicación GENERAL solo la puede editar/crear un superadmin (misma
   // regla que el backend) — si el usuario actual no lo es y la publicación
@@ -475,16 +591,19 @@ function FormularioPublicacion({
     }
     setGuardando(true);
     try {
-      await onGuardar({
-        categoria,
-        tipo: tipo.trim(),
-        titulo: titulo.trim(),
-        contenido: contenido.trim(),
-        fechaPublicacion: fechaPublicacion ? new Date(fechaPublicacion).toISOString() : undefined,
-        fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento).toISOString() : null,
-        fechaEvento: fechaEvento ? new Date(fechaEvento).toISOString() : null,
-        ...(esEdicion ? {} : { alcance }),
-      });
+      await onGuardar(
+        {
+          categoria,
+          tipo: tipo.trim(),
+          titulo: titulo.trim(),
+          contenido: contenido.trim(),
+          fechaPublicacion: fechaPublicacion ? new Date(fechaPublicacion).toISOString() : undefined,
+          fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento).toISOString() : null,
+          fechaEvento: fechaEvento ? new Date(fechaEvento).toISOString() : null,
+          ...(esEdicion ? {} : { alcance }),
+        },
+        { nuevos: archivosNuevos, quitar: archivosAQuitar },
+      );
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar la publicación.");
     } finally {
@@ -599,6 +718,84 @@ function FormularioPublicacion({
             </div>
           )}
 
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-semibold text-slate-700">
+                Archivos adjuntos{" "}
+                <span className="font-normal text-slate-400">
+                  ({totalArchivos}/{MAX_ARCHIVOS_POR_PUBLICACION})
+                </span>
+              </Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => inputArchivosRef.current?.click()}
+              >
+                <Paperclip className="h-3.5 w-3.5" /> Agregar archivos
+              </Button>
+              <input
+                ref={inputArchivosRef}
+                type="file"
+                multiple
+                accept={ACCEPT_ARCHIVOS}
+                onChange={(e) => agregarArchivos(e.target.files)}
+                className="hidden"
+              />
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Fotos (PNG, JPG, WEBP, GIF), videos (MP4, WEBM, MOV) y documentos (PDF, Word, Excel,
+              PowerPoint). Hasta 100 MB por video y 25 MB por foto o documento.
+            </p>
+
+            {(archivosExistentes.length > 0 || archivosNuevos.length > 0) && (
+              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+                {archivosExistentes.map((a) => {
+                  const quitando = archivosAQuitar.includes(a.id);
+                  return (
+                    <li key={a.id} className="flex items-center gap-2.5 px-3 py-2">
+                      <IconoTipoArchivo tipo={a.tipo} />
+                      <span
+                        className={`min-w-0 flex-1 truncate text-xs ${quitando ? "text-slate-400 line-through" : "text-slate-700"}`}
+                      >
+                        {a.nombre}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{formatTamano(a.tamano)}</span>
+                      <button
+                        type="button"
+                        onClick={() => alternarQuitar(a.id)}
+                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 hover:underline"
+                      >
+                        {quitando ? "Deshacer" : "Quitar"}
+                      </button>
+                    </li>
+                  );
+                })}
+                {archivosNuevos.map((archivo, i) => (
+                  <li key={`${archivo.name}-${i}`} className="flex items-center gap-2.5 px-3 py-2">
+                    <IconoTipoArchivo tipo={tipoDeArchivoLocal(archivo) ?? "DOCUMENTO"} />
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-700">
+                      {archivo.name}
+                    </span>
+                    <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
+                      Nuevo
+                    </Badge>
+                    <span className="text-[11px] text-slate-400">{formatTamano(archivo.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setArchivosNuevos((prev) => prev.filter((_, j) => j !== i))}
+                      className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+                      title="Quitar archivo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-slate-700">Alcance</Label>
             {esEdicion ? (
@@ -672,7 +869,11 @@ function FormularioPublicacion({
 
           <DialogFooter>
             <Button type="submit" disabled={guardando || alcanceBloqueado}>
-              {guardando ? "Guardando..." : "Guardar"}
+              {guardando
+                ? archivosNuevos.length > 0
+                  ? "Guardando y subiendo archivos..."
+                  : "Guardando..."
+                : "Guardar"}
             </Button>
           </DialogFooter>
         </form>
@@ -755,6 +956,9 @@ function VistaPrevia({
             fechaEvento={publicacion.fechaEvento}
             alcance={publicacion.alcance}
           />
+        )}
+        {publicacion && publicacion.archivos.length > 0 && (
+          <ListaArchivos publicacionId={publicacion.id} archivos={publicacion.archivos} />
         )}
       </DialogContent>
     </Dialog>

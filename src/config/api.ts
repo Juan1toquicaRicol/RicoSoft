@@ -42,7 +42,10 @@ export function classifyFetchError(error: unknown, timedOut: boolean): ApiError 
   if (timedOut) {
     return new ApiError("La solicitud tardó demasiado en responder.", "timeout");
   }
-  if (error instanceof Error && (error.name === "AbortError" || error.message === "Failed to fetch")) {
+  if (
+    error instanceof Error &&
+    (error.name === "AbortError" || error.message === "Failed to fetch")
+  ) {
     return new ApiError(
       "No se pudo conectar con el servidor backend. Asegúrate de que Node.js esté corriendo en http://localhost:4000",
       "network",
@@ -82,15 +85,25 @@ export function suscribirBackendAlcanzable(cb: (alcanzable: boolean) => void): (
   return () => listenersReachability.delete(cb);
 }
 
-async function fetchWithTimeout(input: string, options: RequestInit): Promise<Response> {
+/** Subir/bajar videos y documentos grandes tarda mucho más que un JSON. */
+export const TRANSFER_TIMEOUT_MS = 5 * 60_000;
+
+async function fetchWithTimeout(
+  input: string,
+  options: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let timedOut = false;
   controller.signal.addEventListener("abort", () => {
     timedOut = true;
   });
   try {
-    const response = await fetch(input, { ...options, signal: options.signal ?? controller.signal });
+    const response = await fetch(input, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+    });
     marcarAlcanzabilidad(true);
     return response;
   } catch (error) {
@@ -123,7 +136,11 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
 
   // Si el servidor responde con un código de error (400, 401, 500, etc.)
   if (!response.ok) {
-    throw new ApiError(data.message || "Error en la petición al servidor.", "http", response.status);
+    throw new ApiError(
+      data.message || "Error en la petición al servidor.",
+      "http",
+      response.status,
+    );
   }
 
   return data;
@@ -137,14 +154,19 @@ export const fetchApiUpload = async (
   endpoint: string,
   formData: FormData,
   options: RequestInit = {},
+  timeoutMs?: number,
 ) => {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
-      method: "POST",
-      ...options,
-      body: formData,
-    });
+    response = await fetchWithTimeout(
+      `${API_URL}${endpoint}`,
+      {
+        method: "POST",
+        ...options,
+        body: formData,
+      },
+      timeoutMs,
+    );
   } catch (error) {
     throw error instanceof ApiError ? error : classifyFetchError(error, false);
   }
@@ -160,10 +182,14 @@ export const fetchApiUpload = async (
  * Variante de fetchApi para descargar contenido binario (PDF/imágenes) en
  * vez de JSON. Devuelve el Blob para poder previsualizarlo en el navegador.
  */
-export const fetchApiBlob = async (endpoint: string, options: RequestInit = {}) => {
+export const fetchApiBlob = async (
+  endpoint: string,
+  options: RequestInit = {},
+  timeoutMs?: number,
+) => {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}${endpoint}`, options);
+    response = await fetchWithTimeout(`${API_URL}${endpoint}`, options, timeoutMs);
   } catch (error) {
     throw error instanceof ApiError ? error : classifyFetchError(error, false);
   }

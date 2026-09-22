@@ -21,6 +21,11 @@ import { obtenerTrmOficial } from "../../integrations/trm/trm.service";
 import { buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
 import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller";
 import { buscarItemsOrdenSchema } from "./importaciones.schemas";
+import { getTenantPrisma } from "../../lib/tenant-prisma";
+import { resolverDestinatarios } from "../../lib/motor-destinatarios";
+import { crearNotificacion } from "../../lib/notificaciones";
+import { crearItemDeTrabajo } from "../../lib/inbox";
+import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import type { z } from "zod";
 import type { itemOrdenSchema } from "./importaciones.schemas";
 
@@ -90,6 +95,99 @@ const TIPOS_DOCUMENTO_ORDEN: Record<string, string> = {
 // (crear costeo provisional / costeo definitivo).
 const ESTADOS_TRANSITO_MANUAL = ["En tránsito", "En puerto", "En inspección"];
 const ESTADOS_LOTE_LIQUIDABLES = ["En puerto", "En inspección", "Liberado pre-compra"];
+
+// --- Notificaciones del ciclo de vida (Fase 11) ---
+// Eventos configurables vía ReglaDestinatarios (módulo reglas-destinatarios,
+// texto libre — no requieren catálogo previo). Se eligieron los que
+// realmente representan un hito del proceso de negocio (nunca cada mutación
+// menor): anulación/cierre de la orden, nacionalización de un lote, y
+// novedad crítica (prioridad Alta) — mismo criterio que
+// embarques-tracking.job.ts (EVENTO_ALERTA_EMBARQUE), reutilizando el mismo
+// mecanismo (crearItemDeTrabajo + resolverDestinatarios + crearNotificacion),
+// sin inventar un sistema de notificaciones paralelo.
+const EVENTO_ORDEN_ANULADA = "IMPORTACION_ORDEN_ANULADA";
+const EVENTO_ORDEN_CERRADA = "IMPORTACION_ORDEN_CERRADA";
+const EVENTO_LOTE_NACIONALIZADO = "IMPORTACION_LOTE_NACIONALIZADO";
+const EVENTO_NOVEDAD_ALTA = "IMPORTACION_NOVEDAD_ALTA";
+
+/**
+ * Notifica un hito del ciclo de vida de una importación. Siempre llega al
+ * responsable de la orden (si tiene uno asignado) SIN necesitar que el
+ * tenant configure una ReglaDestinatarios primero (mismo espíritu que
+ * `asignadoPermiso` en InboxItem: un piso garantizado) — y adicionalmente a
+ * quien resuelva `resolverDestinatarios` para ese evento, si el tenant
+ * configuró una regla. Nunca lanza: una notificación es una conveniencia,
+ * jamás debe tumbar la operación de negocio que la origina (mismo principio
+ * que crearNotificacion/crearItemDeTrabajo).
+ */
+async function notificarEventoImportacion(params: {
+  tenantId: string;
+  evento: string;
+  categoria: "ACCION" | "APROBACION" | "REVISION" | "INCIDENCIA" | "ALERTA" | "SEGUIMIENTO";
+  prioridadInbox: "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
+  entidadTipo: string;
+  entidadId: string;
+  ordenCompraId: string;
+  responsableId?: string | null;
+  actorId?: string | null;
+  titulo: string;
+  mensaje: string;
+  permisoFallback: string;
+}): Promise<void> {
+  try {
+    const {
+      tenantId,
+      evento,
+      categoria,
+      prioridadInbox,
+      entidadTipo,
+      entidadId,
+      ordenCompraId,
+      responsableId,
+      actorId,
+      titulo,
+      mensaje,
+      permisoFallback,
+    } = params;
+    const tenantPrisma = getTenantPrisma(tenantId);
+    const enlace = `/importaciones/${ordenCompraId}`;
+
+    await crearItemDeTrabajo(tenantPrisma, {
+      tenantId,
+      tipo: evento,
+      categoria,
+      sourceModule: "importaciones",
+      sourceEntityTipo: entidadTipo,
+      sourceEntityId: entidadId,
+      titulo,
+      descripcion: mensaje,
+      prioridad: prioridadInbox,
+      asignadoPermiso: permisoFallback,
+      enlace,
+    });
+
+    const destinatarios = await resolverDestinatarios(tenantPrisma, tenantId, evento, {
+      responsableId: responsableId ?? null,
+    });
+    if (responsableId) destinatarios.add(responsableId);
+    if (actorId) destinatarios.delete(actorId);
+
+    for (const usuarioId of destinatarios) {
+      await crearNotificacion({
+        tenantId,
+        usuarioId,
+        tipo: evento,
+        titulo,
+        mensaje,
+        enlace,
+        entidadTipo,
+        entidadId,
+      });
+    }
+  } catch (error) {
+    console.error(`Error al notificar evento de importación "${params.evento}":`, error);
+  }
+}
 
 // --- Expediente vivo: actividades / eventos / novedades / pagos / cierre ---
 const ETAPAS_VALIDAS = [
@@ -641,6 +739,10 @@ async function sincronizarNovedadesAutomaticas(tenantId: string, ordenCompraId: 
   const reglasExistentes = new Set(novedadesAutomaticasAbiertas.map((n) => n.reglaOrigen));
 
   const operaciones = [];
+  // Solo las sugeridas NUEVAS (no las que ya existían abiertas) de prioridad
+  // Alta disparan notificación — evita re-notificar en cada GET del detalle
+  // (esta función corre en cada consulta, ver comentario de arriba).
+  const nuevasAlta: typeof sugeridas = [];
 
   for (const s of sugeridas) {
     if (reglasExistentes.has(s.reglaOrigen)) continue; // ya existe abierta, no se duplica
@@ -662,6 +764,7 @@ async function sincronizarNovedadesAutomaticas(tenantId: string, ordenCompraId: 
         },
       }),
     );
+    if (s.prioridad === "Alta") nuevasAlta.push(s);
   }
 
   for (const n of novedadesAutomaticasAbiertas) {
@@ -680,6 +783,30 @@ async function sincronizarNovedadesAutomaticas(tenantId: string, ordenCompraId: 
   }
 
   if (operaciones.length > 0) await prisma.$transaction(operaciones);
+
+  if (nuevasAlta.length > 0) {
+    const orden = await prisma.ordenCompraIntl.findUnique({
+      where: { id: ordenCompraId },
+      select: { numeroOrden: true, responsableId: true },
+    });
+    if (orden) {
+      for (const s of nuevasAlta) {
+        await notificarEventoImportacion({
+          tenantId,
+          evento: EVENTO_NOVEDAD_ALTA,
+          categoria: "INCIDENCIA",
+          prioridadInbox: "ALTA",
+          entidadTipo: "ImportacionNovedad",
+          entidadId: `${ordenCompraId}:${s.reglaOrigen}`,
+          ordenCompraId,
+          responsableId: orden.responsableId,
+          titulo: `Novedad crítica: ${orden.numeroOrden}`,
+          mensaje: s.descripcion,
+          permisoFallback: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
+        });
+      }
+    }
+  }
 }
 
 export const obtenerOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
@@ -806,12 +933,23 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
       }
     }
 
-    const [incotermsValidos, paisesValidos, monedasValidas, formasPagoValidas] = await Promise.all([
+    const [
+      incotermsValidos,
+      paisesOrigenValidos,
+      paisesIsoValidos,
+      monedasValidas,
+      formasPagoValidas,
+    ] = await Promise.all([
       obtenerClavesActivasCatalogo(tenantId, "INCOTERM"),
       obtenerClavesActivasCatalogo(tenantId, "PAIS_ORIGEN"),
+      obtenerClavesActivasCatalogo(tenantId, "PAIS"),
       obtenerClavesActivasCatalogo(tenantId, "MONEDA"),
       obtenerClavesActivasCatalogo(tenantId, "FORMA_PAGO"),
     ]);
+    // País: las órdenes guardan hoy el NOMBRE (catálogo heredado PAIS_ORIGEN),
+    // pero también se acepta el código ISO/alias del catálogo canónico PAIS,
+    // para que ambos convivan mientras se migran los datos guardados.
+    const paisesValidos = new Set([...paisesOrigenValidos, ...paisesIsoValidos]);
     if (!incotermsValidos.has(incoterm)) {
       return res.status(400).json({
         message: `Incoterm inválido. Valores permitidos: ${[...incotermsValidos].join(", ")}.`,
@@ -1345,12 +1483,36 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
     const tenantId = req.user!.tenantId;
     const lote = await prisma.loteImportacion.findFirst({
       where: { id: req.params.id, tenantId },
-      include: { ordenCompra: { include: { items: true } } },
+      include: {
+        ordenCompra: { include: { items: true } },
+        expediente: { include: { vistosBuenos: true } },
+      },
     });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
     if (!ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado)) {
       return res.status(400).json({
         message: `No se puede liquidar un lote en estado "${lote.estado}". Debe estar en: ${ESTADOS_LOTE_LIQUIDABLES.join(", ")}.`,
+      });
+    }
+
+    // Decisión #13 (ARCHITECTURAL_DECISIONS_PENDING.md): la liquidación
+    // DEFINITIVA (esProvisional=false) es, en los hechos, la nacionalización
+    // de la mercancía — no debe poder ocurrir sin el levante aduanero real.
+    // El costeo PROVISIONAL (recibirPreCompraPlanta) sigue sin esta
+    // exigencia a propósito: existe justo para cubrir el momento en que la
+    // mercancía ya está en planta pero el trámite aduanero aún no cierra.
+    if (!lote.expediente || lote.expediente.estado !== "Levantado") {
+      return res.status(400).json({
+        message:
+          'No se puede liquidar el costeo definitivo sin el levante aduanero: el expediente de este lote debe estar en estado "Levantado".',
+      });
+    }
+    const vistosNoAprobados = lote.expediente.vistosBuenos.filter((v) => v.estado !== "Aprobado");
+    if (vistosNoAprobados.length > 0) {
+      return res.status(400).json({
+        message: `No se puede liquidar el costeo definitivo: hay visto(s) bueno(s) sin aprobar (${vistosNoAprobados
+          .map((v) => `${v.entidad}: ${v.estado}`)
+          .join(", ")}).`,
       });
     }
 
@@ -1461,6 +1623,21 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
       },
     });
 
+    await notificarEventoImportacion({
+      tenantId,
+      evento: EVENTO_LOTE_NACIONALIZADO,
+      categoria: "SEGUIMIENTO",
+      prioridadInbox: "MEDIA",
+      entidadTipo: "LoteImportacion",
+      entidadId: lote.id,
+      ordenCompraId: lote.ordenCompraId,
+      responsableId: lote.ordenCompra.responsableId,
+      actorId: req.user!.id,
+      titulo: `Lote nacionalizado: ${lote.blAwb}`,
+      mensaje: `${req.user!.nombre} liquidó el costeo definitivo del lote ${lote.blAwb} (orden ${lote.ordenCompra.numeroOrden}). La mercancía queda nacionalizada.`,
+      permisoFallback: PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR,
+    });
+
     return res.json(serializarLote(actualizado!));
   } catch (error) {
     console.error("Error al liquidar costeo de importación:", error);
@@ -1468,21 +1645,76 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
   }
 };
 
+/**
+ * Anula la orden — a diferencia de cerrar (que es el desenlace exitoso del
+ * proceso), anular representa "esta importación no debe continuar". Por eso
+ * tiene guardas de retroceso arbitrario que cerrar no necesita (Fase 5): una
+ * orden ya Cerrada es definitiva, y un lote ya Nacionalizado significa que
+ * la mercancía real ya llegó, se costeó y probablemente ya se pagó — en ese
+ * punto anular TODA la orden borraría un hecho que ya ocurrió. Si algo salió
+ * mal con un lote nacionalizado, la vía correcta es registrar una novedad
+ * (Dano/Faltante/ProblemaAduanero/etc.), no anular el expediente completo.
+ */
 export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
     const orden = await prisma.ordenCompraIntl.findFirst({
       where: { id: req.params.id, tenantId, eliminado: false },
+      include: { lotes: { select: { id: true, estado: true, blAwb: true } } },
     });
     if (!orden)
       return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
 
-    await prisma.ordenCompraIntl.update({
-      where: { id: orden.id },
-      data: { estado: "Anulada", eliminado: true },
-    });
-    await prisma.importacionHistorial.create({
-      data: { ordenCompraId: orden.id, actor: req.user!.nombre, accion: "Orden anulada" },
+    if (orden.estado === "Cerrada") {
+      return res.status(400).json({
+        message: "No se puede anular una importación ya cerrada: el cierre es definitivo.",
+      });
+    }
+    if (orden.estado === "Anulada") {
+      return res.status(400).json({ message: "La orden ya está anulada." });
+    }
+    const lotesNacionalizados = orden.lotes.filter((l) => l.estado === "Nacionalizado");
+    if (lotesNacionalizados.length > 0) {
+      return res.status(400).json({
+        message: `No se puede anular: ${lotesNacionalizados.length} lote(s) ya fueron nacionalizados (mercancía recibida y costeada: ${lotesNacionalizados
+          .map((l) => l.blAwb)
+          .join(", ")}). Registra una novedad para la incidencia en vez de anular toda la orden.`,
+      });
+    }
+
+    const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
+
+    await prisma.$transaction([
+      prisma.ordenCompraIntl.update({
+        where: { id: orden.id },
+        data: { estado: "Anulada", eliminado: true },
+      }),
+      prisma.importacionHistorial.create({
+        data: {
+          ordenCompraId: orden.id,
+          actor: req.user!.nombre,
+          accion: "Orden anulada",
+          detalle: motivo || null,
+          etapa: "Cierre",
+        },
+      }),
+    ]);
+
+    await notificarEventoImportacion({
+      tenantId,
+      evento: EVENTO_ORDEN_ANULADA,
+      categoria: "ALERTA",
+      prioridadInbox: "ALTA",
+      entidadTipo: "OrdenCompraIntl",
+      entidadId: orden.id,
+      ordenCompraId: orden.id,
+      responsableId: orden.responsableId,
+      actorId: req.user!.id,
+      titulo: `Importación anulada: ${orden.numeroOrden}`,
+      mensaje: motivo
+        ? `${req.user!.nombre} anuló la importación ${orden.numeroOrden}. Motivo: ${motivo}`
+        : `${req.user!.nombre} anuló la importación ${orden.numeroOrden}.`,
+      permisoFallback: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
     });
 
     return res.status(204).send();
@@ -2230,6 +2462,23 @@ export const crearNovedadImportacion = async (req: AuthenticatedRequest, res: Re
       },
     });
 
+    if (prioridadFinal === "Alta") {
+      await notificarEventoImportacion({
+        tenantId,
+        evento: EVENTO_NOVEDAD_ALTA,
+        categoria: "INCIDENCIA",
+        prioridadInbox: "ALTA",
+        entidadTipo: "ImportacionNovedad",
+        entidadId: novedad.id,
+        ordenCompraId: orden.id,
+        responsableId: orden.responsableId,
+        actorId: req.user!.id,
+        titulo: `Novedad crítica: ${orden.numeroOrden}`,
+        mensaje: descripcion.trim(),
+        permisoFallback: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
+      });
+    }
+
     return res.status(201).json(serializarNovedad(novedad));
   } catch (error) {
     console.error("Error al crear novedad de importación:", error);
@@ -2449,6 +2698,23 @@ export const cerrarOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
     if (!actualizada) {
       return res.status(404).json({ message: "Orden de compra internacional no encontrada." });
     }
+
+    await notificarEventoImportacion({
+      tenantId,
+      evento: EVENTO_ORDEN_CERRADA,
+      categoria: "SEGUIMIENTO",
+      prioridadInbox: "MEDIA",
+      entidadTipo: "OrdenCompraIntl",
+      entidadId: orden.id,
+      ordenCompraId: orden.id,
+      responsableId: orden.responsableId,
+      actorId: req.user!.id,
+      titulo: `Importación cerrada: ${orden.numeroOrden}`,
+      mensaje: resultado.puedeCerrarse
+        ? `${req.user!.nombre} cerró la importación ${orden.numeroOrden}.`
+        : `${req.user!.nombre} cerró la importación ${orden.numeroOrden} de forma forzada. Justificación: ${justificacion?.trim()}`,
+      permisoFallback: PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO,
+    });
 
     return res.json(serializarOrden(actualizada));
   } catch (error) {

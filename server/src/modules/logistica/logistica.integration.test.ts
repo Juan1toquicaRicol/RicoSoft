@@ -198,7 +198,12 @@ describe.skipIf(!RUN)("Logística — Motor de Decisiones (multi-tenant real)", 
     expect(res.body.novedades).toHaveLength(1);
     expect(res.body.novedades[0].clienteNombre).toBe("Cliente A Puntual");
     expect(typeof res.body.novedades[0].diasAbierta).toBe("number");
-    expect(res.body.porTipo).toEqual([{ clave: "PRODUCTO_FALTANTE", cantidad: 1 }]);
+    // La novedad se guardó con la clave heredada; si el catálogo
+    // MOTIVO_NOVEDAD_DESPACHO ya está sembrado en esa BD, se reconcilia con su
+    // clave canónica ("FALTANTE") — ambas cuentan como el mismo motivo.
+    expect(res.body.porTipo).toHaveLength(1);
+    expect(["PRODUCTO_FALTANTE", "FALTANTE"]).toContain(res.body.porTipo[0].clave);
+    expect(res.body.porTipo[0].cantidad).toBe(1);
     // Nunca debe aparecer la novedad de Tenant B.
     expect(
       res.body.novedades.some((n: { clienteNombre: string }) => n.clienteNombre === "Cliente B"),

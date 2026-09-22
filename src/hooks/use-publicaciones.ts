@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAuth } from "@/lib/session";
+import { fetchAuth, fetchAuthBlob, fetchAuthUpload } from "@/lib/session";
+import { TRANSFER_TIMEOUT_MS } from "@/config/api";
 import { useSession } from "@/lib/session-context";
 
 export type CategoriaPublicacion = "NOVEDAD" | "AVISO" | "EVENTO";
 export type EstadoPublicacion = "PROGRAMADA" | "PUBLICADA" | "DESACTIVADA" | "VENCIDA";
 export type AlcancePublicacion = "GENERAL" | "TENANT";
+
+export type TipoArchivoPublicacion = "IMAGEN" | "VIDEO" | "DOCUMENTO";
+
+export interface ArchivoPublicacion {
+  id: string;
+  tipo: TipoArchivoPublicacion;
+  nombre: string;
+  mime: string;
+  tamano: number;
+}
 
 export interface Publicacion {
   id: string;
@@ -19,6 +30,7 @@ export interface Publicacion {
   activo: boolean;
   autorNombre: string | null;
   alcance: AlcancePublicacion;
+  archivos: ArchivoPublicacion[];
 }
 
 export interface PublicacionAdmin extends Publicacion {
@@ -59,6 +71,54 @@ export function usePublicaciones(categoria: CategoriaPublicacion) {
     loading: query.isLoading,
     error: query.error instanceof Error ? query.error.message : "",
   };
+}
+
+/**
+ * Eventos de un rango de fechas (el mes visible del calendario del Inicio),
+ * incluidos los días ya pasados. El backend filtra por tenant y vigencia igual
+ * que en usePublicaciones; solo cambia "eventos futuros" por "eventos entre
+ * desde y hasta". La key lleva desde/hasta: cada mes se cachea por separado.
+ */
+export function useEventosCalendario(desde: Date, hasta: Date) {
+  const { user } = useSession();
+  const desdeIso = desde.toISOString();
+  const hastaIso = hasta.toISOString();
+
+  const query = useQuery({
+    queryKey: ["publicaciones", "EVENTO", "rango", desdeIso, hastaIso, user?.tenantId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ categoria: "EVENTO", desde: desdeIso, hasta: hastaIso });
+      const data = await fetchAuth(`/publicaciones?${params.toString()}`);
+      return (Array.isArray(data) ? data : []) as Publicacion[];
+    },
+    enabled: Boolean(user?.tenantId),
+    staleTime: STALE_TIME_PUBLICACIONES_MS,
+    retry: false,
+    // Al cambiar de mes se sigue mostrando el anterior mientras carga el nuevo
+    // (sin parpadeo del calendario a "vacío").
+    placeholderData: (previo) => previo,
+  });
+
+  return {
+    eventos: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : "",
+  };
+}
+
+export function formatTamano(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Ruta autenticada de un adjunto (no hay URL pública: siempre pasa por la API). */
+export function rutaArchivoPublicacion(publicacionId: string, archivoId: string) {
+  return `/publicaciones/${publicacionId}/archivos/${archivoId}`;
+}
+
+/** Descarga un adjunto como Blob (los <img>/<video> no pueden mandar el Bearer). */
+export function descargarArchivoPublicacion(publicacionId: string, archivoId: string) {
+  return fetchAuthBlob(rutaArchivoPublicacion(publicacionId, archivoId), TRANSFER_TIMEOUT_MS);
 }
 
 export interface FiltrosPublicacionesAdmin {
@@ -117,8 +177,12 @@ export function usePublicacionesAdmin(filtros: FiltrosPublicacionesAdmin) {
 
   const crear = useCallback(
     async (datos: DatosPublicacion) => {
-      await fetchAuth("/publicaciones", { method: "POST", body: JSON.stringify(datos) });
+      const creada = (await fetchAuth("/publicaciones", {
+        method: "POST",
+        body: JSON.stringify(datos),
+      })) as PublicacionAdmin;
       await refrescar();
+      return creada;
     },
     [refrescar],
   );
@@ -153,6 +217,29 @@ export function usePublicacionesAdmin(filtros: FiltrosPublicacionesAdmin) {
     [refrescar],
   );
 
+  const subirArchivos = useCallback(
+    async (id: string, archivos: File[]) => {
+      const formData = new FormData();
+      archivos.forEach((archivo) => formData.append("archivos", archivo));
+      const actualizada = (await fetchAuthUpload(
+        `/publicaciones/${id}/archivos`,
+        formData,
+        TRANSFER_TIMEOUT_MS,
+      )) as PublicacionAdmin;
+      await refrescar();
+      return actualizada;
+    },
+    [refrescar],
+  );
+
+  const eliminarArchivo = useCallback(
+    async (id: string, archivoId: string) => {
+      await fetchAuth(rutaArchivoPublicacion(id, archivoId), { method: "DELETE" });
+      await refrescar();
+    },
+    [refrescar],
+  );
+
   const eliminar = useCallback(
     async (id: string) => {
       await fetchAuth(`/publicaciones/${id}`, { method: "DELETE" });
@@ -170,6 +257,8 @@ export function usePublicacionesAdmin(filtros: FiltrosPublicacionesAdmin) {
     actualizar,
     publicarAhora,
     cambiarActivo,
+    subirArchivos,
+    eliminarArchivo,
     eliminar,
   };
 }

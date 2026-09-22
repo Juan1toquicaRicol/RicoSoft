@@ -263,6 +263,16 @@ export interface ConfiguracionInventario {
   umbralAlertaTrmPct?: number;
   plazoCreditoDiasDefecto?: number;
   minimoCotizacionesSolicitud?: number;
+  /** Parámetros de negocio (Ventas/Crédito/Inventario/Compras) — solo se
+   * almacenan hoy, ver server/src/lib/parametros-negocio.ts. Opcionales por
+   * el mismo motivo que los umbrales de arriba: si se omiten al guardar, el
+   * backend conserva el valor guardado o su default. */
+  margenMinimoVentaPct?: number;
+  diasMaximosMora?: number;
+  porcentajeMaximoUsoCupo?: number;
+  toleranciaMermaPesajePct?: number;
+  diasValidezOferta?: number;
+  montoMinimoCotizaciones?: number;
 }
 
 /** Umbrales configurables del módulo (Parte 16) — días de vendible/exceso/ruptura/sobre-cobertura. */

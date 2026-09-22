@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
+import { sincronizarCatalogosGenerales } from "../src/lib/catalogos-generales";
 
 const prisma = new PrismaClient();
 
@@ -618,155 +619,14 @@ async function main() {
     `✅ Créditos de clientes de demostración creados: ${creditosCreados} (de ${creditosDemo.length} definidos)`,
   );
 
-  // Catálogos GENERALES (tenantId=null) — auditoría de datos hardcodeados:
-  // reemplazan los arrays que antes vivían en importaciones.controller.ts,
-  // pagos.controller.ts y use-oportunidades.ts. Mismas claves/orden/etiquetas
-  // EXACTAS que las listas hardcodeadas originales — no se puede perder ni
-  // cambiar una clave porque ya hay datos guardados como texto (ej.
-  // OrdenCompraIntl.incoterm/moneda/paisOrigen) que deben seguir siendo
-  // válidos contra este catálogo.
-  const catalogosValor: { tipo: string; clave: string; etiqueta: string }[] = [
-    // INCOTERM (antes INCOTERMS_VALIDOS)
-    ...["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"].map((c) => ({
-      tipo: "INCOTERM",
-      clave: c,
-      etiqueta: c,
-    })),
-    // MONEDA (antes MONEDAS_VALIDAS)
-    ...["USD", "EUR", "CNY", "GBP", "JPY"].map((c) => ({ tipo: "MONEDA", clave: c, etiqueta: c })),
-    // PAIS_ORIGEN (antes PAISES_VALIDOS)
-    ...[
-      "Alemania",
-      "Arabia Saudita",
-      "Argentina",
-      "Bélgica",
-      "Bolivia",
-      "Brasil",
-      "Canadá",
-      "Chile",
-      "China",
-      "Colombia",
-      "Corea del Sur",
-      "Costa Rica",
-      "Ecuador",
-      "Emiratos Árabes Unidos",
-      "España",
-      "Estados Unidos",
-      "Francia",
-      "Guatemala",
-      "Hong Kong",
-      "India",
-      "Indonesia",
-      "Israel",
-      "Italia",
-      "Japón",
-      "Malasia",
-      "México",
-      "Países Bajos",
-      "Panamá",
-      "Perú",
-      "Polonia",
-      "Portugal",
-      "Reino Unido",
-      "República Dominicana",
-      "Singapur",
-      "Sudáfrica",
-      "Suiza",
-      "Tailandia",
-      "Taiwán",
-      "Turquía",
-      "Vietnam",
-    ].map((c) => ({ tipo: "PAIS_ORIGEN", clave: c, etiqueta: c })),
-    // FORMA_PAGO (antes FORMAS_PAGO_VALIDAS)
-    ...[
-      "Anticipado",
-      "Carta de crédito",
-      "Crédito 30 días",
-      "Crédito 60 días",
-      "Crédito 90 días",
-      "Contra entrega",
-    ].map((c) => ({ tipo: "FORMA_PAGO", clave: c, etiqueta: c })),
-    // FORMA_PAGO_VENTAS — forma de pago de una Proforma (módulo Ventas),
-    // separado de FORMA_PAGO (Importaciones) para no mezclar opciones.
-    ...["Contado", "Crédito 1 día"].map((c) => ({
-      tipo: "FORMA_PAGO_VENTAS",
-      clave: c,
-      etiqueta: c,
-    })),
-    // UNIDAD_MEDIDA (antes UNIDADES_MEDIDA_VALIDAS)
-    ...["KG", "TON", "SACO25KG", "SACO50KG", "LT", "UND"].map((c) => ({
-      tipo: "UNIDAD_MEDIDA",
-      clave: c,
-      etiqueta: c,
-    })),
-    // METODO_PAGO (antes METODOS_PAGO_VALIDOS en pagos.controller.ts)
-    ...["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"].map((c) => ({
-      tipo: "METODO_PAGO",
-      clave: c,
-      etiqueta: c,
-    })),
-    // MOTIVO_NOVEDAD_IMPORTACION (antes TIPOS_NOVEDAD_VALIDOS en importaciones.controller.ts)
-    ...[
-      { clave: "Retraso", etiqueta: "Retraso" },
-      { clave: "DocumentoFaltante", etiqueta: "Documento faltante" },
-      { clave: "Inconsistencia", etiqueta: "Inconsistencia" },
-      { clave: "Dano", etiqueta: "Daño" },
-      { clave: "Faltante", etiqueta: "Faltante" },
-      { clave: "ProblemaAduanero", etiqueta: "Problema aduanero" },
-      { clave: "ProblemaProveedor", etiqueta: "Problema con el proveedor" },
-      { clave: "ProblemaTransporte", etiqueta: "Problema de transporte" },
-      { clave: "ProblemaFinanciero", etiqueta: "Problema financiero" },
-      { clave: "Bloqueo", etiqueta: "Bloqueo" },
-      { clave: "Otro", etiqueta: "Otro" },
-    ].map((c) => ({ tipo: "MOTIVO_NOVEDAD_IMPORTACION", ...c })),
-    // ACCION_CONTACTO_OPORTUNIDAD (antes ACCIONES_CONTACTO en use-oportunidades.ts)
-    ...[
-      "Llamada",
-      "WhatsApp",
-      "Correo",
-      "Reunion",
-      "Visita",
-      "Cotizacion",
-      "Seguimiento",
-      "Otro",
-    ].map((c) => ({ tipo: "ACCION_CONTACTO_OPORTUNIDAD", clave: c, etiqueta: c })),
-    // RESULTADO_CONTACTO_OPORTUNIDAD (antes RESULTADOS_CONTACTO + ETIQUETA_RESULTADO en use-oportunidades.ts)
-    ...[
-      { clave: "Contactado", etiqueta: "Contactado" },
-      { clave: "SinRespuesta", etiqueta: "Sin respuesta" },
-      { clave: "Interesado", etiqueta: "Interesado" },
-      { clave: "CotizacionSolicitada", etiqueta: "Cotización solicitada" },
-      { clave: "CotizacionEnviada", etiqueta: "Cotización enviada" },
-      { clave: "EnNegociacion", etiqueta: "En negociación" },
-      { clave: "NoInteresado", etiqueta: "No interesado" },
-      { clave: "VentaRealizada", etiqueta: "Venta realizada" },
-    ].map((c) => ({ tipo: "RESULTADO_CONTACTO_OPORTUNIDAD", ...c })),
-  ];
-
-  let catalogosCreados = 0;
-  for (let i = 0; i < catalogosValor.length; i++) {
-    // orden = índice dentro de su propio tipo — recalculado abajo por tipo.
-    const c = catalogosValor[i];
-    const ordenDentroDeTipo = catalogosValor
-      .filter((x) => x.tipo === c.tipo)
-      .findIndex((x) => x.clave === c.clave);
-    const existente = await prisma.catalogoValor.findFirst({
-      where: { tipo: c.tipo, clave: c.clave, tenantId: null },
-    });
-    if (existente) continue;
-    await prisma.catalogoValor.create({
-      data: {
-        tipo: c.tipo,
-        clave: c.clave,
-        etiqueta: c.etiqueta,
-        orden: ordenDentroDeTipo,
-        tenantId: null,
-      },
-    });
-    catalogosCreados++;
-  }
+  // Catálogos GENERALES (tenantId=null): la definición de los valores vive en
+  // src/lib/catalogos-generales.ts (única fuente, compartida con
+  // scripts/sincronizar-catalogos-generales.ts). Es idempotente y no pisa lo
+  // que un administrador ya haya editado; conserva las claves heredadas
+  // (datos guardados como texto en OrdenCompraIntl, Pago, etc.).
+  const catalogos = await sincronizarCatalogosGenerales(prisma);
   console.log(
-    `✅ Valores de catálogo GENERAL creados: ${catalogosCreados} (de ${catalogosValor.length} definidos)`,
+    `✅ Catálogos GENERALES: ${catalogos.creados} creados, ${catalogos.enriquecidos} enriquecidos, ${catalogos.desactivados} duplicados heredados desactivados.`,
   );
 
   // Plantillas de notificación GENERALES — texto EXACTO que estaba

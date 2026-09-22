@@ -14,6 +14,13 @@ import {
   SelectorAgrupacion,
 } from "@/components/ui/selector-agrupacion";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -45,7 +52,18 @@ interface EventoAuditoria {
   entidadId: string | null;
   datosAnteriores: string | null;
   datosNuevos: string | null;
+  /** Derivados en el backend a partir de `accion` (ver lib/auditoria-filtros.ts). */
+  modulo: string;
+  moduloEtiqueta: string;
+  resultado: "EXITOSO" | "FALLIDO";
 }
+
+interface OpcionesFiltroAuditoria {
+  modulos: { clave: string; etiqueta: string }[];
+  usuarios: { id: string; nombre: string }[];
+}
+
+const SENTINEL_TODOS = "TODOS";
 
 /** Compara los campos presentes en `nuevos` contra `anteriores` y devuelve
  * solo los que cambiaron, para no repetir en el diff los campos que no se
@@ -75,9 +93,17 @@ function AuditoriaConfigPage() {
   const [agrupacion, setAgrupacion] = useState(OPCION_SIN_AGRUPAR.value);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const [modulo, setModulo] = useState("");
+  const [usuarioId, setUsuarioId] = useState("");
   const [page, setPage] = useState(1);
   const [exportando, setExportando] = useState(false);
   const PAGE_SIZE = 50;
+
+  const { data: opcionesFiltro } = useQuery<OpcionesFiltroAuditoria>({
+    queryKey: ["auditoria-filtros"],
+    queryFn: () => fetchAuth("/auditoria/filtros"),
+    staleTime: 5 * 60_000,
+  });
 
   const claveDeAgrupacion = useMemo(() => {
     switch (agrupacion) {
@@ -94,8 +120,10 @@ function AuditoriaConfigPage() {
     const params = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page) });
     if (desde) params.set("desde", desde);
     if (hasta) params.set("hasta", hasta);
+    if (modulo) params.set("modulo", modulo);
+    if (usuarioId) params.set("usuarioId", usuarioId);
     return params;
-  }, [desde, hasta, page]);
+  }, [desde, hasta, modulo, usuarioId, page]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["auditoria", paramsFiltro.toString()],
@@ -116,6 +144,8 @@ function AuditoriaConfigPage() {
       const filtroExport = new URLSearchParams();
       if (desde) filtroExport.set("desde", desde);
       if (hasta) filtroExport.set("hasta", hasta);
+      if (modulo) filtroExport.set("modulo", modulo);
+      if (usuarioId) filtroExport.set("usuarioId", usuarioId);
       const blob = await fetchAuthBlob(`/auditoria/exportar?${filtroExport.toString()}`);
       const url = URL.createObjectURL(blob);
       const enlace = document.createElement("a");
@@ -190,13 +220,59 @@ function AuditoriaConfigPage() {
                 className="h-9 w-40 text-xs border-slate-300 bg-white"
               />
             </div>
-            {(desde || hasta) && (
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Módulo</Label>
+              <Select
+                value={modulo || SENTINEL_TODOS}
+                onValueChange={(v) => {
+                  setModulo(v === SENTINEL_TODOS ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-44 text-xs border-slate-300 bg-white">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SENTINEL_TODOS}>Todos</SelectItem>
+                  {opcionesFiltro?.modulos.map((m) => (
+                    <SelectItem key={m.clave} value={m.clave}>
+                      {m.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Usuario</Label>
+              <Select
+                value={usuarioId || SENTINEL_TODOS}
+                onValueChange={(v) => {
+                  setUsuarioId(v === SENTINEL_TODOS ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-44 text-xs border-slate-300 bg-white">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SENTINEL_TODOS}>Todos</SelectItem>
+                  {opcionesFiltro?.usuarios.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(desde || hasta || modulo || usuarioId) && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setDesde("");
                   setHasta("");
+                  setModulo("");
+                  setUsuarioId("");
                   setPage(1);
                 }}
                 className="text-xs text-slate-500"
@@ -226,7 +302,16 @@ function AuditoriaConfigPage() {
                 Usuario
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Módulo
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Acción
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Resultado
+              </TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                Entidad
               </TableHead>
               <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
                 Detalle
@@ -236,14 +321,14 @@ function AuditoriaConfigPage() {
           <TableBody className="text-slate-800 font-medium">
             {isLoading && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="px-4 py-6 text-center text-xs text-slate-500">
+                <TableCell colSpan={8} className="px-4 py-6 text-center text-xs text-slate-500">
                   Cargando...
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && eventos.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   {error ? (
                     <div className="px-4 py-6 text-center text-xs text-slate-500">
                       {error instanceof Error
@@ -259,7 +344,7 @@ function AuditoriaConfigPage() {
             {gruposEventos.map((grupo) => (
               <Fragment key={grupo.clave || "sin-grupo"}>
                 {grupo.clave && (
-                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={5} />
+                  <FilaGrupo clave={grupo.clave} cantidad={grupo.filas.length} colSpan={8} />
                 )}
                 {grupo.filas.map((e) => {
                   let anteriores: Record<string, unknown> | null = null;
@@ -298,6 +383,9 @@ function AuditoriaConfigPage() {
                         <TableCell className="px-4 py-3 font-bold text-xs text-slate-900">
                           {e.usuario?.nombre ?? e.usuarioAfectado ?? "—"}
                         </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-500">
+                          {e.moduloEtiqueta}
+                        </TableCell>
                         <TableCell className="px-4 py-3">
                           <Badge
                             variant="outline"
@@ -306,6 +394,30 @@ function AuditoriaConfigPage() {
                             {e.accion}
                           </Badge>
                         </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className={
+                              e.resultado === "FALLIDO"
+                                ? "border-red-200 bg-red-50 text-red-700"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            }
+                          >
+                            {e.resultado === "FALLIDO" ? "Fallido" : "Exitoso"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-500">
+                          {e.entidadTipo ? (
+                            <>
+                              {e.entidadTipo}
+                              {e.entidadId && (
+                                <span className="text-slate-400"> · {e.entidadId.slice(0, 8)}</span>
+                              )}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                         <TableCell className="px-4 py-3 text-xs text-slate-600">
                           {e.detalle}
                         </TableCell>
@@ -313,7 +425,7 @@ function AuditoriaConfigPage() {
                       {abierta && tieneDetalleTecnico && (
                         <TableRow className="bg-slate-50/60 hover:bg-slate-50/60">
                           <TableCell />
-                          <TableCell colSpan={4} className="px-4 py-3">
+                          <TableCell colSpan={7} className="px-4 py-3">
                             {cambios.length > 0 ? (
                               <table className="text-xs">
                                 <thead>

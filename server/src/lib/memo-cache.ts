@@ -41,6 +41,18 @@ export async function getOrSetCache<T>(
   return valor;
 }
 
+/**
+ * Invalida todas las entradas cuya clave empieza con `prefijo`. Para datos
+ * editables (p. ej. catálogos) que se cachean unos segundos: al escribir se
+ * invalida, así el mismo proceso nunca sirve un valor recién editado como
+ * viejo. No cubre otros procesos (ahí manda el TTL corto).
+ */
+export function invalidarCachePorPrefijo(prefijo: string): void {
+  for (const clave of almacen.keys()) {
+    if (clave.startsWith(prefijo)) almacen.delete(clave);
+  }
+}
+
 /** Solo para tests: limpia todas las entradas cacheadas. */
 export function limpiarCache(): void {
   almacen.clear();

@@ -43,7 +43,12 @@ import { useSession } from "@/lib/session-context";
 import { hasPermission, canAccessAdmin } from "@/lib/session";
 import { useModulosMenu } from "@/hooks/use-modulos";
 import { useTenantsAccesibles } from "@/hooks/use-tenants-accesibles";
-import { abreviarNombreTenant, empresaIdDeTenant, siglaEmpresa } from "@/lib/tenant-context";
+import {
+  abreviarNombreTenant,
+  empresaIdDeTenant,
+  LogoEmpresa,
+  POSICION_Y_LOGO_EMPRESA,
+} from "@/lib/tenant-context";
 import { NotificationBell } from "@/components/notification-bell";
 import {
   DropdownMenu,
@@ -86,28 +91,16 @@ interface AppShellProps {
   actions?: React.ReactNode;
 }
 
-// No existe un archivo de logo individual por empresa — solo el logo del
-// grupo y `3logos.jpg` (FlexiPack, Ricol y Green Solutions apilados
-// verticalmente en ese orden, cada uno en su propio tercio). En vez de pedir
-// 3 archivos nuevos, se recorta ese mismo sprite con background-position
-// para mostrar solo el tercio que corresponde a la empresa activa.
-const ALTO_LOGO_EMPRESA = 28; // px, equivalente a h-7
-// 3logos.jpg mide 1545x2000px con los 3 logos apilados en tercios iguales
-// (667px de alto cada uno) — el ancho de recorte se calcula contra el alto
-// total escalado (ALTO_LOGO_EMPRESA * 3), no contra un solo tercio, para no
-// distorsionar el sprite.
-const ANCHO_LOGO_EMPRESA = Math.round((1545 / 2000) * (ALTO_LOGO_EMPRESA * 3));
-const POSICION_Y_LOGO: Record<string, "top" | "center" | "bottom"> = {
-  FL: "top",
-  RC: "center",
-  GR: "bottom",
-};
+// px, equivalente a h-7 — recorte real (sprite /3logos.jpg) vive en
+// lib/tenant-context.tsx::LogoEmpresa, compartido con el encabezado de la
+// Proforma (ver comercial.proformas.$id.tsx).
+const ALTO_LOGO_EMPRESA = 28;
 
 /** Logo de la empresa (tenant) activa junto al título de cada pantalla. Si
  * el tenant no mapea a ninguna de las 3 empresas conocidas (dato aún no
  * migrado, entorno de pruebas, etc.) cae al logo del grupo como antes. */
 function LogoEmpresaActiva({ empresaId }: { empresaId: string | null }) {
-  if (!empresaId || !POSICION_Y_LOGO[empresaId]) {
+  if (!empresaId || !POSICION_Y_LOGO_EMPRESA[empresaId]) {
     return (
       <img
         src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
@@ -117,18 +110,10 @@ function LogoEmpresaActiva({ empresaId }: { empresaId: string | null }) {
     );
   }
   return (
-    <div
-      role="img"
-      aria-label={`Logo de ${siglaEmpresa(empresaId)}`}
+    <LogoEmpresa
+      empresaId={empresaId}
+      alto={ALTO_LOGO_EMPRESA}
       className="hidden lg:block shrink-0 overflow-hidden"
-      style={{
-        width: ANCHO_LOGO_EMPRESA,
-        height: ALTO_LOGO_EMPRESA,
-        backgroundImage: "url(/3logos.jpg)",
-        backgroundSize: `${ANCHO_LOGO_EMPRESA}px ${ALTO_LOGO_EMPRESA * 3}px`,
-        backgroundPosition: `left ${POSICION_Y_LOGO[empresaId]}`,
-        backgroundRepeat: "no-repeat",
-      }}
     />
   );
 }

@@ -38,6 +38,7 @@ import { Route as ConfiguracionClasificacionItemsRouteImport } from './routes/co
 import { Route as ConfiguracionDepartamentosRouteImport } from './routes/configuracion.departamentos'
 import { Route as ConfiguracionIntegracionesSiesaRouteImport } from './routes/configuracion.integraciones-siesa'
 import { Route as ConfiguracionModulosRouteImport } from './routes/configuracion.modulos'
+import { Route as ConfiguracionMonitoreoRouteImport } from './routes/configuracion.monitoreo'
 import { Route as ConfiguracionNegocioRouteImport } from './routes/configuracion.negocio'
 import { Route as ConfiguracionPerfilesFuncionalesRouteImport } from './routes/configuracion.perfiles-funcionales'
 import { Route as ConfiguracionPermisosRouteImport } from './routes/configuracion.permisos'
@@ -214,6 +215,11 @@ const ConfiguracionIntegracionesSiesaRoute =
 const ConfiguracionModulosRoute = ConfiguracionModulosRouteImport.update({
   id: '/modulos',
   path: '/modulos',
+  getParentRoute: () => ConfiguracionRoute,
+} as any)
+const ConfiguracionMonitoreoRoute = ConfiguracionMonitoreoRouteImport.update({
+  id: '/monitoreo',
+  path: '/monitoreo',
   getParentRoute: () => ConfiguracionRoute,
 } as any)
 const ConfiguracionNegocioRoute = ConfiguracionNegocioRouteImport.update({
@@ -398,6 +404,7 @@ export interface FileRoutesByFullPath {
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/monitoreo': typeof ConfiguracionMonitoreoRoute
   '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
@@ -457,6 +464,7 @@ export interface FileRoutesByTo {
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/monitoreo': typeof ConfiguracionMonitoreoRoute
   '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
@@ -518,6 +526,7 @@ export interface FileRoutesById {
   '/configuracion/departamentos': typeof ConfiguracionDepartamentosRoute
   '/configuracion/integraciones-siesa': typeof ConfiguracionIntegracionesSiesaRoute
   '/configuracion/modulos': typeof ConfiguracionModulosRoute
+  '/configuracion/monitoreo': typeof ConfiguracionMonitoreoRoute
   '/configuracion/negocio': typeof ConfiguracionNegocioRoute
   '/configuracion/perfiles-funcionales': typeof ConfiguracionPerfilesFuncionalesRoute
   '/configuracion/permisos': typeof ConfiguracionPermisosRoute
@@ -580,6 +589,7 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/monitoreo'
     | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
@@ -639,6 +649,7 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/monitoreo'
     | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
@@ -699,6 +710,7 @@ export interface FileRouteTypes {
     | '/configuracion/departamentos'
     | '/configuracion/integraciones-siesa'
     | '/configuracion/modulos'
+    | '/configuracion/monitoreo'
     | '/configuracion/negocio'
     | '/configuracion/perfiles-funcionales'
     | '/configuracion/permisos'
@@ -979,6 +991,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionModulosRouteImport
       parentRoute: typeof ConfiguracionRoute
     }
+    '/configuracion/monitoreo': {
+      id: '/configuracion/monitoreo'
+      path: '/monitoreo'
+      fullPath: '/configuracion/monitoreo'
+      preLoaderRoute: typeof ConfiguracionMonitoreoRouteImport
+      parentRoute: typeof ConfiguracionRoute
+    }
     '/configuracion/negocio': {
       id: '/configuracion/negocio'
       path: '/negocio'
@@ -1192,6 +1211,7 @@ interface ConfiguracionRouteChildren {
   ConfiguracionDepartamentosRoute: typeof ConfiguracionDepartamentosRoute
   ConfiguracionIntegracionesSiesaRoute: typeof ConfiguracionIntegracionesSiesaRoute
   ConfiguracionModulosRoute: typeof ConfiguracionModulosRoute
+  ConfiguracionMonitoreoRoute: typeof ConfiguracionMonitoreoRoute
   ConfiguracionNegocioRoute: typeof ConfiguracionNegocioRoute
   ConfiguracionPerfilesFuncionalesRoute: typeof ConfiguracionPerfilesFuncionalesRoute
   ConfiguracionPermisosRoute: typeof ConfiguracionPermisosRoute
@@ -1210,6 +1230,7 @@ const ConfiguracionRouteChildren: ConfiguracionRouteChildren = {
   ConfiguracionDepartamentosRoute: ConfiguracionDepartamentosRoute,
   ConfiguracionIntegracionesSiesaRoute: ConfiguracionIntegracionesSiesaRoute,
   ConfiguracionModulosRoute: ConfiguracionModulosRoute,
+  ConfiguracionMonitoreoRoute: ConfiguracionMonitoreoRoute,
   ConfiguracionNegocioRoute: ConfiguracionNegocioRoute,
   ConfiguracionPerfilesFuncionalesRoute: ConfiguracionPerfilesFuncionalesRoute,
   ConfiguracionPermisosRoute: ConfiguracionPermisosRoute,
