@@ -11,5 +11,11 @@ export default defineConfig({
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    router: {
+      // Archivos auxiliares que conviven con una ruta pero NO son rutas
+      // (lógica pura extraída y sus tests, p. ej. comercial.proformas.$id.logic.ts):
+      // sin esto el generador avisa "does not export a Route" en cada build.
+      routeFileIgnorePattern: "\\.logic(\\.test)?\\.tsx?$",
+    },
   },
 });

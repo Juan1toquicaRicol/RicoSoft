@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
 import {
@@ -137,53 +138,77 @@ export const crearDespacho = async (req: AuthenticatedRequest, res: Response) =>
     });
   }
 
+  const mensajeYaExiste = `Ya existe un despacho para el documento ${doc.referencia ?? doc.id}.`;
+
+  // Comprobación previa solo para responder rápido en el caso común; NO es la
+  // garantía de unicidad (tendría una carrera real bajo concurrencia). La
+  // garantía es @@unique([tenantId, siesaDocRowId]) — ver el catch de abajo.
   const yaExiste = await req.tenantPrisma!.despacho.findFirst({ where: { siesaDocRowId: doc.id } });
   if (yaExiste) {
-    return res
-      .status(409)
-      .json({ message: `Ya existe un despacho para el documento ${doc.referencia ?? doc.id}.` });
+    return res.status(409).json({ message: mensajeYaExiste });
   }
 
-  const despacho = await req.tenantPrisma!.despacho.create({
-    data: {
-      tenantId,
-      siesaDocRowId: doc.id,
-      siesaDocReferencia: doc.referencia,
-      clienteNombre: doc.clienteNombre ?? "Cliente sin nombre",
-      clienteNit: doc.clienteNit,
-      direccionEntrega: parseo.data.direccionEntrega ?? null,
-      contactoEntrega: parseo.data.contactoEntrega ?? null,
-      telefonoContacto: parseo.data.telefonoContacto ?? null,
-      bodegaRowId: parseo.data.bodegaRowId ?? null,
-      bodegaNombre: parseo.data.bodegaNombre ?? null,
-      valorPedido: doc.neto,
-      fechaEntregaEstimada: parseo.data.fechaEntregaEstimada ?? null,
-      responsableId: req.user!.id,
-      responsable: req.user!.nombre,
-      lineas: {
-        create: lineas.map((l) => ({
-          itemRowId: l.itemRowId,
-          descripcion: l.descripcion,
-          referencia: l.referencia,
-          unidadMedida: l.unidadMedida,
-          cantidadSolicitada: l.cantidad,
-        })),
-      },
-    },
-    include: { _count: { select: { lineas: true } } },
-  });
+  // Despacho + líneas + auditoría en UNA sola transacción: si la auditoría (o
+  // cualquier línea) falla, no queda un despacho huérfano ni sin trazabilidad.
+  // Se usa el cliente base `prisma` (no req.tenantPrisma, que no participa en
+  // $transaction): el aislamiento por tenant se garantiza fijando tenantId en
+  // el create.
+  let despacho;
+  try {
+    despacho = await prisma.$transaction(async (tx) => {
+      const creado = await tx.despacho.create({
+        data: {
+          tenantId,
+          siesaDocRowId: doc.id,
+          siesaDocReferencia: doc.referencia,
+          clienteNombre: doc.clienteNombre ?? "Cliente sin nombre",
+          clienteNit: doc.clienteNit,
+          direccionEntrega: parseo.data.direccionEntrega ?? null,
+          contactoEntrega: parseo.data.contactoEntrega ?? null,
+          telefonoContacto: parseo.data.telefonoContacto ?? null,
+          bodegaRowId: parseo.data.bodegaRowId ?? null,
+          bodegaNombre: parseo.data.bodegaNombre ?? null,
+          valorPedido: doc.neto,
+          fechaEntregaEstimada: parseo.data.fechaEntregaEstimada ?? null,
+          responsableId: req.user!.id,
+          responsable: req.user!.nombre,
+          lineas: {
+            create: lineas.map((l) => ({
+              itemRowId: l.itemRowId,
+              descripcion: l.descripcion,
+              referencia: l.referencia,
+              unidadMedida: l.unidadMedida,
+              cantidadSolicitada: l.cantidad,
+            })),
+          },
+        },
+        include: { _count: { select: { lineas: true } } },
+      });
 
-  await prisma.auditoria.create({
-    data: {
-      tenantId,
-      usuarioId: req.user!.id,
-      accion: "PEDIDO_RECIBIDO",
-      detalle: `Despacho creado desde el documento de venta ${doc.referencia ?? doc.id} (${doc.clienteNombre ?? "cliente sin nombre"}).`,
-      entidadTipo: "Despacho",
-      entidadId: despacho.id,
-      datosNuevos: JSON.stringify({ estado: "RECIBIDO" }),
-    },
-  });
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PEDIDO_RECIBIDO",
+          detalle: `Despacho creado desde el documento de venta ${doc.referencia ?? doc.id} (${doc.clienteNombre ?? "cliente sin nombre"}).`,
+          entidadTipo: "Despacho",
+          entidadId: creado.id,
+          datosNuevos: JSON.stringify({ estado: "RECIBIDO" }),
+        },
+      });
+
+      return creado;
+    });
+  } catch (error) {
+    // Dos peticiones simultáneas pasan ambas la comprobación previa; la
+    // segunda choca contra el índice único y su transacción se revierte
+    // completa (sin despacho, líneas ni auditoría huérfanos).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: mensajeYaExiste });
+    }
+    console.error("Error al crear el despacho:", error);
+    return res.status(500).json({ message: "No fue posible crear el despacho." });
+  }
 
   return res.status(201).json(despacho);
 };

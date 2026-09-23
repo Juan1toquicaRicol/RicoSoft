@@ -15,6 +15,7 @@ import serviciosRoutes from "./modules/servicios/servicios.routes";
 import reglasRoutes from "./modules/reglas/reglas.routes";
 import creditosRoutes from "./modules/creditos/creditos.routes";
 import gestionHumanaRoutes from "./modules/gestion-humana/gestion-humana.routes";
+import { respuestaErrorSiesa } from "./lib/siesa-errores";
 import analiticaRoutes from "./modules/analitica/analitica.routes";
 import modulosRoutes from "./modules/modulos/modulos.routes";
 import notificacionesRoutes from "./modules/notificaciones/notificaciones.routes";
@@ -149,6 +150,10 @@ export function createApp() {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error("Error no controlado:", err);
     if (res.headersSent) return;
+    // Fallo de Siesa no capturado por el controlador: 502 uniforme con
+    // mensaje fijo (nunca el texto del driver, que puede traer host/usuario).
+    const siesa = respuestaErrorSiesa(err);
+    if (siesa) return res.status(siesa.status).json({ message: siesa.message });
     res.status(500).json({
       message: "Ocurrió un error inesperado en el servidor.",
       ...(isProduction ? {} : { detalle: err instanceof Error ? err.message : String(err) }),

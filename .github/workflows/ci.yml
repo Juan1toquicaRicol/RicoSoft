@@ -50,16 +50,25 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Job independiente y aditivo: no reemplaza ni depende de los jobs
-  # frontend/backend de arriba, y no los bloquea si este falla. Corre la
-  # suite de integración con una base de datos SQL Server REAL (contenedor
-  # de servicio, efímero, destruido junto con el runner al terminar el job)
-  # para probar de verdad el aislamiento multi-tenant de los endpoints de
-  # Importaciones — algo que los tests con el DATABASE_URL placeholder del
-  # job "backend" nunca ejercitan (ver
-  # server/src/modules/importaciones/importaciones.integration.test.ts).
+  # GATE OBLIGATORIO. Corre la suite de integración contra una base SQL
+  # Server REAL (contenedor de servicio efímero, destruido con el runner) para
+  # probar aislamiento multi-tenant, índices únicos, transacciones y
+  # concurrencia — lo que los tests con DATABASE_URL placeholder del job
+  # "backend" nunca ejercitan.
+  #
+  # Bloqueante de dos maneras: (1) si falla, el job falla; (2) el paso
+  # "Gate anti-omisión" falla si hubo 0 tests o CUALQUIER test omitido
+  # (describe.skipIf(!RUN) dejaría todo en verde sin ejecutar nada).
+  # Para que bloquee un PR, "CI gate" (job de abajo) debe estar marcado como
+  # required status check en la protección de la rama main (ajuste del
+  # repositorio en GitHub, no configurable desde este archivo).
+  #
+  # Estabilidad: se ejecuta con --maxWorkers=1 --no-file-parallelism
+  # (test:integration:ci): un solo archivo a la vez, para evitar los
+  # deadlocks/write conflicts (P2034/P2028) de SQL Server por contención.
   backend-integration:
-    name: Backend integration (aislamiento multi-tenant, SQL Server real)
+    name: Backend integration (SQL Server real, bloqueante)
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -91,5 +100,24 @@ jobs:
       - run: npx prisma generate
       - name: Aplicar migraciones reales contra la base efímera
         run: npx prisma migrate deploy
-      - name: Suite de integración (multi-tenant, expediente/vistos buenos)
-        run: npm run test:integration
+      - name: Suite de integración (secuencial, --maxWorkers=1)
+        run: npm run test:integration:ci
+      - name: Gate anti-omisión (0 tests u omitidos = fallo)
+        if: ${{ !cancelled() }}
+        run: npm run test:integration:gate
+
+  # Punto ÚNICO a exigir como required status check en main. Falla si
+  # cualquiera de los jobs no terminó en "success" — incluido "skipped" o
+  # "cancelled" (por eso if: always()): un job omitido no cuenta como verde.
+  ci-gate:
+    name: CI gate
+    if: ${{ always() }}
+    needs: [frontend, backend, backend-integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar que todos los jobs obligatorios fueron success
+        run: |
+          echo "frontend=${{ needs.frontend.result }} backend=${{ needs.backend.result }} backend-integration=${{ needs.backend-integration.result }}"
+          [ "${{ needs.frontend.result }}" = "success" ] || exit 1
+          [ "${{ needs.backend.result }}" = "success" ] || exit 1
+          [ "${{ needs.backend-integration.result }}" = "success" ] || exit 1

@@ -5,7 +5,7 @@ No es un diario de conversaciones. Solo deben registrarse decisiones, reglas,
 arquitectura, contratos, integraciones, hallazgos importantes y cambios que deban
 sobrevivir a nuevas sesiones de Claude Code.
 
-Última actualización de referencia: 2026-09-22.
+Última actualización de referencia: 2026-09-23.
 
 ## 1. Identidad del proyecto
 
@@ -413,6 +413,45 @@ Restricciones: no remover el botón "Editar" ni el fallback automático sin una
 decisión explícita. No inferir número de otro tenant. No asumir que Cotización
 tiene el mismo botón de edición en su diálogo — hoy no lo tiene, aunque el backend
 lo soporte.
+
+### 2026-09-23 — Hardening Fase 1-2 (unicidad, gate CI, resiliencia Siesa)
+Decisión:
+- **Cotizacion.erpRowId**: unicidad por tenant con índice único FILTRADO
+  `Cotizacion_tenantId_erpRowId_filtered_uq` (WHERE erpRowId IS NOT NULL), por SQL
+  manual — NO `@@unique` (SQL Server trata NULL como comparable; la 2ª cotización sin
+  vincular ya lo violaría). Misma técnica que PedidoComercial. `asignarErpCotizacion`:
+  mismo erpRowId ya vinculado → 200 idempotente (sin Siesa ni auditoría duplicada);
+  erpRowId distinto o CDV ya usado por otra cotización del tenant → 409; P2002 → 409;
+  update condicional (`erpRowId IS NULL`) + auditoría en UNA `$transaction`;
+  cotización de otro tenant → 404 (nunca revela existencia ajena).
+- **Despacho**: `@@unique([tenantId, siesaDocRowId])` plano (campo NOT NULL). `crearDespacho`
+  crea despacho+líneas+auditoría en una `$transaction` (cliente base `prisma`, no
+  `tenantPrisma`, fijando tenantId); P2002 bajo carrera → 409, nunca 500. El
+  `findFirst` previo es solo atajo, no la garantía.
+- **Gate de integración obligatorio en CI**: job `backend-integration` (SQL Server
+  efímero) corre `npm run test:integration:ci` = `--maxWorkers=1 --no-file-parallelism`
+  (evita deadlocks P2034/P2028) + reporte JSON; `test:integration:gate`
+  (scripts/verificar-integracion-sin-omisiones.mjs) falla con 0 tests, fallos u
+  omitidos (`describe.skipIf(!RUN)` dejaría todo verde sin ejecutar). Job `CI gate`
+  exige success de frontend/backend/integración; debe ser *required check* en main
+  (ajuste manual en GitHub).
+- **Pool Siesa** (config/siesa.ts): un fallo de transporte o timeout de CONEXIÓN
+  invalida el pool (`invalidarSiesaPool`: descarta la instancia memoizada y cierra
+  best-effort) para reconectar en la siguiente petición; también ante evento `error`
+  del pool (sin listener tumbaría el proceso) o `connected=false`. Un error tardío de
+  un pool viejo no invalida al nuevo. Se instrumenta `request().query/batch/execute`
+  desde getSiesaPool, así los servicios siesa-*.service.ts no cambian.
+- **Timeout de conexión ≠ timeout de consulta**: `connectionTimeout` 15 s vs
+  `requestTimeout` 60 s. mssql usa ETIMEOUT para ambos: `ConnectionError`→invalida pool;
+  `RequestError`→NO invalida (el pool está sano).
+- **502 uniforme**: solo errores MARCADOS como de Siesa (Symbol `ricosoft.siesa.error`,
+  `marcarErrorSiesa`, aplicado a errores de conexión y de query del cliente Siesa) se
+  traducen en el manejador global a 502 con mensaje fijo. Un ECONNRESET/ETIMEDOUT de
+  otra librería sigue siendo 500 genérico, nunca "Siesa no disponible".
+Motivo: cerrar carreras de integridad y hacer verificable/estable la CI.
+Restricciones: no usar `@@unique` sobre columnas nullable en SQL Server; no bajar el
+paralelismo del gate ni permitir tests omitidos; no clasificar errores de red por
+código sin la marca de origen Siesa.
 
 ## 17. Cómo mantener esta memoria
 

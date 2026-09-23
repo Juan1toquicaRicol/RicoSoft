@@ -49,3 +49,7 @@ server/uploads/
 *.sw?
 
 /src/generated/prisma
+
+# Cachés de build/tests
+*.tsbuildinfo
+server/integration-report.json

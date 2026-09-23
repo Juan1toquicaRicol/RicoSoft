@@ -351,11 +351,54 @@ export const rechazarCotizacion = (req: AuthenticatedRequest, res: Response) =>
 export const anularCotizacion = (req: AuthenticatedRequest, res: Response) =>
   cambiarEstadoCotizacion(req, res, "ANULADA", "COTIZACION_ANULADA");
 
-/** POST /comercial/cotizaciones/:id/asignar-erp — vincula/corrige a mano el
+/** Nombre real del índice único filtrado creado por SQL manual (migración
+ * 20260923100000_cotizacion_erp_row_id_filtered_unique) — no existe como
+ * @@unique en schema.prisma (ver comentario junto a los campos erp* de
+ * Cotizacion). Mismo mecanismo que PedidoComercial: Prisma igualmente
+ * reporta su violación como P2002 con `meta.target` = nombre del índice. */
+const INDICE_UNICO_ERP_ROW_ID_COTIZACION = "Cotizacion_tenantId_erpRowId_filtered_uq";
+
+function esViolacionIndiceUnicoErpRowId(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    String(error.meta?.target ?? "").includes(INDICE_UNICO_ERP_ROW_ID_COTIZACION)
+  );
+}
+
+function respuestaVinculoErpCotizacion(c: {
+  id: string;
+  erpTipoDocumento: string | null;
+  erpRowId: number | null;
+  erpNumero: string | null;
+}) {
+  return {
+    id: c.id,
+    erpTipoDocumento: c.erpTipoDocumento,
+    erpRowId: c.erpRowId,
+    erpNumero: c.erpNumero,
+  };
+}
+
+/** POST /comercial/cotizaciones/:id/asignar-erp — vincula a mano el
  * documento Siesa (CDV) de esta Cotización interna, para cuando el
  * adaptador automático de sincronización todavía no existe (fase futura).
  * erpRowId SIEMPRE se revalida contra Siesa antes de guardar, mismo
- * criterio que asignarDocumentoErpProforma. */
+ * criterio que asignarDocumentoErpProforma.
+ *
+ * Reglas:
+ *  1. Idempotente: si la cotización YA tiene este mismo erpRowId, responde
+ *     200 sin tocar Siesa ni escribir (ni duplicar auditoría).
+ *  2. Nunca reemplaza en silencio: si ya tiene un erpRowId DISTINTO -> 409.
+ *  3. Un mismo CDV no puede vincularse a dos cotizaciones del mismo tenant
+ *     -> 409. La comprobación previa solo evita trabajo inútil; la garantía
+ *     real (bajo concurrencia) es el índice único filtrado de BD, cuyo P2002
+ *     también se traduce a 409.
+ *  4. Update + auditoría en UNA sola $transaction: si la auditoría falla, el
+ *     vínculo se revierte. El update es condicional (erpRowId IS NULL) para
+ *     que dos vinculaciones simultáneas con CDV distintos no se pisen.
+ *  5. Ningún mensaje de error revela documentos de otros tenants: todas las
+ *     búsquedas van acotadas por tenantId y una cotización ajena es 404. */
 export const asignarErpCotizacion = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
   const parseoParams = idParamSchema.safeParse(req.params);
@@ -368,13 +411,39 @@ export const asignarErpCotizacion = async (req: AuthenticatedRequest, res: Respo
   if (!parseoBody.success) {
     return res.status(400).json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
   }
+  const { erpRowId } = parseoBody.data;
 
   const existente = await prisma.cotizacion.findFirst({
     where: { id: parseoParams.data.id, tenantId },
-    select: { id: true, numero: true },
+    select: {
+      id: true,
+      numero: true,
+      erpTipoDocumento: true,
+      erpRowId: true,
+      erpNumero: true,
+    },
   });
   if (!existente) {
     return res.status(404).json({ message: "Cotización no encontrada." });
+  }
+
+  if (existente.erpRowId !== null) {
+    if (existente.erpRowId === erpRowId) {
+      return res.json(respuestaVinculoErpCotizacion(existente));
+    }
+    return res.status(409).json({
+      message: `Esta cotización ya está vinculada al documento Siesa ${existente.erpNumero ?? existente.erpRowId}. No se puede vincular a otro documento sin desvincularlo primero.`,
+    });
+  }
+
+  const yaVinculadaAOtra = await prisma.cotizacion.findFirst({
+    where: { tenantId, erpRowId, id: { not: existente.id } },
+    select: { id: true },
+  });
+  if (yaVinculadaAOtra) {
+    return res.status(409).json({
+      message: "Este documento Siesa ya está vinculado a otra cotización de esta empresa.",
+    });
   }
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
@@ -382,7 +451,6 @@ export const asignarErpCotizacion = async (req: AuthenticatedRequest, res: Respo
     return res.status(400).json({ message: "Este tenant no tiene Siesa configurado." });
   }
 
-  const { erpRowId } = parseoBody.data;
   let cotizacionSiesa;
   try {
     cotizacionSiesa = await leerCotizacionSiesa(siesaCiaId, String(erpRowId));
@@ -394,30 +462,64 @@ export const asignarErpCotizacion = async (req: AuthenticatedRequest, res: Respo
     return res.status(400).json({ message: "El documento indicado no existe en esta compañía." });
   }
 
-  const actualizada = await prisma.cotizacion.update({
-    where: { id: existente.id },
-    data: {
-      erpTipoDocumento: "CDV",
-      erpRowId,
-      erpNumero: cotizacionSiesa.erpDocumentoNumero ?? cotizacionSiesa.cotizacionNumero,
-    },
-  });
-  await prisma.auditoria.create({
-    data: {
-      tenantId,
-      usuarioId: req.user!.id,
-      accion: "COTIZACION_DOCUMENTO_ERP_ASIGNADO",
-      detalle: `${req.user!.nombre} vinculó a mano la cotización ${formatearNumeroCotizacion(actualizada.numero)} con el documento Siesa ${cotizacionSiesa.cotizacionNumero}.`,
-      entidadTipo: "Cotizacion",
-      entidadId: actualizada.id,
-    },
-  });
-  return res.json({
-    id: actualizada.id,
-    erpTipoDocumento: actualizada.erpTipoDocumento,
-    erpRowId: actualizada.erpRowId,
-    erpNumero: actualizada.erpNumero,
-  });
+  // Siesa se consulta ANTES y fuera de la transacción a propósito: es una
+  // conexión de red externa y no debe mantener abierta una transacción de BD.
+  let resultado;
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.cotizacion.updateMany({
+        where: { id: existente.id, tenantId, erpRowId: null },
+        data: {
+          erpTipoDocumento: "CDV",
+          erpRowId,
+          erpNumero: cotizacionSiesa.erpDocumentoNumero ?? cotizacionSiesa.cotizacionNumero,
+        },
+      });
+      if (count === 0) {
+        // Otra petición la vinculó entre la lectura y este update.
+        const actual = await tx.cotizacion.findFirst({
+          where: { id: existente.id, tenantId },
+          select: { id: true, erpTipoDocumento: true, erpRowId: true, erpNumero: true },
+        });
+        return { vinculadaAhora: false as const, actual };
+      }
+
+      const actualizada = await tx.cotizacion.findFirstOrThrow({
+        where: { id: existente.id, tenantId },
+        select: { id: true, numero: true, erpTipoDocumento: true, erpRowId: true, erpNumero: true },
+      });
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "COTIZACION_DOCUMENTO_ERP_ASIGNADO",
+          detalle: `${req.user!.nombre} vinculó a mano la cotización ${formatearNumeroCotizacion(actualizada.numero)} con el documento Siesa ${cotizacionSiesa.cotizacionNumero}.`,
+          entidadTipo: "Cotizacion",
+          entidadId: actualizada.id,
+        },
+      });
+      return { vinculadaAhora: true as const, actual: actualizada };
+    });
+  } catch (error) {
+    if (esViolacionIndiceUnicoErpRowId(error)) {
+      return res.status(409).json({
+        message: "Este documento Siesa ya está vinculado a otra cotización de esta empresa.",
+      });
+    }
+    console.error("Error al guardar la vinculación Siesa de la cotización:", error);
+    return res.status(500).json({ message: "No fue posible vincular la cotización." });
+  }
+
+  const { vinculadaAhora, actual } = resultado;
+  if (!actual) {
+    return res.status(404).json({ message: "Cotización no encontrada." });
+  }
+  if (!vinculadaAhora && actual.erpRowId !== erpRowId) {
+    return res.status(409).json({
+      message: `Esta cotización ya está vinculada al documento Siesa ${actual.erpNumero ?? actual.erpRowId}. No se puede vincular a otro documento sin desvincularlo primero.`,
+    });
+  }
+  return res.json(respuestaVinculoErpCotizacion(actual));
 };
 
 /** DELETE /comercial/cotizaciones/:id — borrado PERMANENTE, solo superadmin

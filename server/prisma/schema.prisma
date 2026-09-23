@@ -1195,8 +1195,8 @@ model Despacho {
   lineas               DespachoLinea[]
   novedades            DespachoNovedad[]
 
+  @@unique([tenantId, siesaDocRowId])
   @@index([tenantId, estado])
-  @@index([tenantId, siesaDocRowId])
 }
 
 /// Línea de producto del despacho — snapshot congelado de la línea de venta
@@ -2644,6 +2644,18 @@ model Cotizacion {
   /// documento ERP (ej. "CDV"), identidad técnica (rowid), número visible,
   /// y estado/última fecha de sincronización. Sin adaptador todavía: estas
   /// columnas quedan siempre null en esta fase.
+  ///
+  /// (tenantId, erpRowId) debe ser único cuando erpRowId no es null — un
+  /// mismo CDV no puede vincularse a dos cotizaciones del mismo tenant. Igual
+  /// que en PedidoComercial, NO se declara como `@@unique([tenantId,
+  /// erpRowId])`: en SQL Server ese @@unique genera un UNIQUE sin filtro y
+  /// SQL Server trata NULL como valor comparable, así que la SEGUNDA
+  /// cotización sin vincular de un tenant ya lo violaría. La unicidad real la
+  /// impone el índice filtrado `Cotizacion_tenantId_erpRowId_filtered_uq`
+  /// (WHERE erpRowId IS NOT NULL), creado por SQL manual en la migración
+  /// 20260923100000_cotizacion_erp_row_id_filtered_unique. Prisma reporta su
+  /// violación igualmente como P2002 con `meta.target` = nombre del índice
+  /// (ver asignarErpCotizacion::esViolacionIndiceUnicoErpRowId).
   erpTipoDocumento        String?           @db.VarChar(10)
   erpRowId                Int?
   erpNumero               String?           @db.VarChar(50)
