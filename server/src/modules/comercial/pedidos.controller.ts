@@ -13,6 +13,11 @@ import {
 import { formatearNumeroPedido } from "./cotizaciones.controller";
 import { resolverCiaSiesa } from "../../lib/siesa-tenant";
 import { leerPdvSiesa } from "../integraciones-siesa/siesa-pedidos.service";
+import {
+  obtenerCompromisoInventarioPedidos,
+  SiesaConsultaError,
+  SiesaNoConfiguradoError,
+} from "./pedidos-compromiso.service";
 
 const PRIMER_NUMERO_PEDIDO = 1;
 
@@ -106,7 +111,7 @@ export const listarPedidos = async (req: AuthenticatedRequest, res: Response) =>
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
-  const { clienteRowId, estado, search, page, pageSize } = parseo.data;
+  const { clienteRowId, estado, search, incluirCompromiso, page, pageSize } = parseo.data;
 
   const where: Prisma.PedidoComercialWhereInput = {
     tenantId,
@@ -135,12 +140,69 @@ export const listarPedidos = async (req: AuthenticatedRequest, res: Response) =>
     prisma.pedidoComercial.count({ where }),
   ]);
 
+  // Compromiso de inventario en Siesa de TODA la página en UNA consulta en
+  // lote (sin N+1). Si Siesa falla, el listado sigue funcionando: cada pedido
+  // queda con compromiso null y se avisa con compromisoDisponible=false.
+  let compromisoPorPedido: Map<string, unknown> | null = null;
+  let compromisoDisponible = true;
+  if (incluirCompromiso) {
+    try {
+      const dtos = await obtenerCompromisoInventarioPedidos(
+        tenantId,
+        items.map((p) => p.id),
+      );
+      compromisoPorPedido = new Map(dtos.map((d) => [d.pedidoId, d]));
+    } catch (error) {
+      console.error("Error enriqueciendo pedidos con compromiso de Siesa:", error);
+      compromisoDisponible = false;
+    }
+  }
+
   return res.json({
-    items: items.map((p) => ({ ...p, numeroFormateado: formatearNumeroPedido(p.numero) })),
+    items: items.map((p) => ({
+      ...p,
+      numeroFormateado: formatearNumeroPedido(p.numero),
+      ...(incluirCompromiso ? { compromiso: compromisoPorPedido?.get(p.id) ?? null } : {}),
+    })),
     page,
     pageSize,
     total,
+    ...(incluirCompromiso ? { compromisoDisponible } : {}),
   });
+};
+
+/** GET /comercial/pedidos/:id/compromiso-inventario — trazabilidad del
+ * compromiso de inventario del pedido en Siesa. Une SOLO por
+ * PedidoComercial.erpRowId = t430.f430_rowid (nunca por número visible ni
+ * cliente); la compañía Siesa sale del tenant autenticado (el cliente no
+ * puede enviar ciaId/tenantId). Pedido de otro tenant -> 404. Sin vínculo
+ * ERP -> 200 con compromiso SIN_VINCULO_ERP (sin consultar Siesa). Siesa
+ * caído -> 502 con mensaje fijo. */
+export const obtenerCompromisoInventarioPedido = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  const tenantId = req.user!.tenantId;
+  const parseo = idParamSchema.safeParse(req.params);
+  if (!parseo.success) {
+    return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+  }
+  try {
+    const [dto] = await obtenerCompromisoInventarioPedidos(tenantId, [parseo.data.id]);
+    if (!dto) return res.status(404).json({ message: "Pedido no encontrado." });
+    return res.json(dto);
+  } catch (error) {
+    if (error instanceof SiesaNoConfiguradoError) {
+      return res.status(400).json({ message: error.message });
+    }
+    if (error instanceof SiesaConsultaError) {
+      console.error("Error consultando el compromiso de inventario en Siesa:", error.causa);
+      return res.status(502).json({
+        message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      });
+    }
+    throw error;
+  }
 };
 
 export const obtenerPedido = async (req: AuthenticatedRequest, res: Response) => {

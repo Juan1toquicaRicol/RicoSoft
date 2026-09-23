@@ -13,6 +13,7 @@ import { requirePermisoGuard } from "@/lib/route-guards";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { usePedidoComercial, useAccionesPedido } from "@/hooks/use-comercial";
+import { PanelCompromisoInventario } from "@/components/panel-compromiso-inventario";
 
 export const Route = createFileRoute("/comercial/pedidos/$id")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
@@ -31,6 +32,7 @@ function DetallePedido() {
   const [procesando, setProcesando] = useState(false);
 
   const puedeConfirmar = hasPermission(user, PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_CONFIRMAR);
+  const puedeVerComprometidoSiesa = hasPermission(user, PERMISOS_SISTEMA.ANALITICA_VER);
 
   const eliminarDefinitivamente = async () => {
     if (!pedido) return;
@@ -185,6 +187,11 @@ function DetallePedido() {
           </div>
         </div>
       </div>
+
+      <PanelCompromisoInventario
+        pedidoId={pedido.id}
+        puedeVerComprometidoSiesa={puedeVerComprometidoSiesa}
+      />
 
       {user?.isSuperadmin && (
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">

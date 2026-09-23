@@ -25,6 +25,7 @@ import {
 import {
   listarPedidos,
   obtenerPedido,
+  obtenerCompromisoInventarioPedido,
   crearPedidoDesdeProforma,
   confirmarPedido,
   marcarListoParaErpPedido,
@@ -129,6 +130,12 @@ router.get(
   "/pedidos/:id",
   requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
   obtenerPedido,
+);
+// Compromiso de inventario en Siesa (solo lectura; unión por erpRowId).
+router.get(
+  "/pedidos/:id/compromiso-inventario",
+  requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
+  obtenerCompromisoInventarioPedido,
 );
 // Confirmar y marcar listo para ERP avanzan el pedido hacia el ERP: son la
 // decisión de autoridad de esta sección (permiso especial).

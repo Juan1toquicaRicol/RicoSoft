@@ -479,6 +479,32 @@ proformas): un manual bajo (p. ej. 5) ya NO mueve la secuencia, sigue 3890.
 Restricciones: no calcular el consecutivo fuera del helper; no bajar el contador (ni por
 PUT ni por números manuales); migración 20260923140000 (aditiva, default 3890).
 
+### 2026-09-23 — Trazabilidad de Compromiso de Inventario Siesa en Pedidos Comerciales
+Decisión (dictamen Lead Architect): el Comprometido de Inventario NO se traslada ni
+elimina: sigue en /inventario/comprometidos, ahora rotulado "Comprometido en Siesa".
+Gestión Comercial → Pedidos gana trazabilidad de SOLO LECTURA vinculando
+`PedidoComercial.erpRowId = t430_cm_pv_docto.f430_rowid` (documento PDV).
+- Servicio: server/src/modules/comercial/pedidos-compromiso.service.ts. Une ÚNICAMENTE por
+  erpRowId = f430_rowid (+ f430_id_cia = cia del tenant y f430_id_tipo_docto = 'PDV'); nunca
+  por número visible ni cliente. Las Proformas jamás cuentan como comprometidas (no se
+  consultan). Siesa se lee EN LOTE (1 consulta por cada 500 pedidos vinculados, `IN` con
+  parámetros; sin N+1). siesaCiaId sale solo del Tenant autenticado (resolverCiaSiesa);
+  ciaId/tenantId del querystring se ignoran. Todo acotado por tenantId.
+- DTO por pedido: separa estadoComercial (RicoSoft), estadoSincronizacion (NO_VINCULADO si
+  no hay erpRowId) y `siesa.estadoOperativo` (determinarEstadoPedidoVentaSiesa sobre flags
+  reales), más cantidades pedida/comprometida/remisionada/facturada. `compromiso` ∈
+  SIN_VINCULO_ERP | SIESA_NO_ENCONTRADO | NO_COMPROMETIDO (cant. comprometida = 0) |
+  COMPROMETIDO (> 0).
+- Endpoints (permiso pedidos_comerciales.ver): GET /comercial/pedidos/:id/compromiso-inventario
+  (404 si es de otro tenant; 400 si el tenant no tiene siesaCiaId y hay vínculo; 502 con mensaje
+  fijo si Siesa falla) y GET /comercial/pedidos?incluirCompromiso=true (enriquece la página en
+  un solo lote; si Siesa falla el listado responde 200 con compromisoDisponible=false).
+- Frontend: panel "Compromiso de Inventario" (components/panel-compromiso-inventario.tsx,
+  textos en lib/compromiso-inventario.ts) en comercial.pedidos.$id.tsx: "Sin vínculo ERP",
+  "No comprometido" y enlace a /inventario/comprometidos?pedido=<PDV> (solo con analitica.ver).
+Restricciones: no unir por número/cliente; no contar proformas; no consultar Siesa por pedido;
+no aceptar ciaId/tenantId del cliente; RicoSoft nunca escribe hacia Siesa.
+
 ## 17. Cómo mantener esta memoria
 
 Añadir una entrada cuando exista:

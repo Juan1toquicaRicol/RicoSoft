@@ -70,11 +70,41 @@ export interface PedidoComercial extends TotalesComercial {
   moneda: string;
   observaciones: string | null;
   erpNumero: string | null;
+  erpRowId?: number | null;
   creadoPorNombre: string;
   createdAt: string;
   items: ItemComercial[];
   cotizacion?: { id: string; numero: number; estado: string } | null;
   proforma?: { id: string; numero: number; estado: string } | null;
+}
+
+export type EstadoCompromiso =
+  | "SIN_VINCULO_ERP"
+  | "SIESA_NO_ENCONTRADO"
+  | "NO_COMPROMETIDO"
+  | "COMPROMETIDO";
+
+/** Compromiso de inventario de un pedido en Siesa (solo lectura). Mantiene
+ * separados el estado comercial (RicoSoft), el de sincronización y el
+ * operativo de Siesa. */
+export interface CompromisoInventarioPedido {
+  pedidoId: string;
+  numero: number;
+  erpRowId: number | null;
+  estadoComercial: string;
+  estadoSincronizacion: string;
+  compromiso: EstadoCompromiso;
+  siesa: {
+    pdvRowId: number;
+    pdvNumero: number;
+    estadoOperativo: string;
+    cantidadPedida: number;
+    cantidadComprometida: number;
+    cantidadRemisionada: number;
+    cantidadFacturada: number;
+    lineas: number;
+    lineasComprometidas: number;
+  } | null;
 }
 
 export interface DocumentoBandeja {
@@ -198,6 +228,32 @@ export function usePedidoComercial(id: string | null) {
   }, [refresh]);
 
   return { pedido, loading, error, refresh };
+}
+
+export function useCompromisoInventarioPedido(id: string | null) {
+  const [compromiso, setCompromiso] = useState<CompromisoInventarioPedido | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      setCompromiso(await fetchAuth(`/comercial/pedidos/${id}/compromiso-inventario`));
+    } catch (err: unknown) {
+      setCompromiso(null);
+      setError(err instanceof Error ? err.message : "No fue posible consultar Siesa.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { compromiso, loading, error, refresh };
 }
 
 export function useCrearCotizacion() {

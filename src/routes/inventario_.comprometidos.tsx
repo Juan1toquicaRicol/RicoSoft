@@ -20,9 +20,16 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 
 export const Route = createFileRoute("/inventario_/comprometidos")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.ANALITICA_VER),
+  // ?pedido=<número Siesa>: prefiltra la tabla (enlace desde Gestión Comercial → Pedidos).
+  validateSearch: (search: Record<string, unknown>): { pedido?: string } => ({
+    pedido:
+      typeof search.pedido === "string" || typeof search.pedido === "number"
+        ? String(search.pedido)
+        : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "Pedidos que generan compromiso | RicoSoft" },
+      { title: "Comprometido en Siesa | RicoSoft" },
       {
         name: "description",
         content: "Detalle completo de los pedidos de venta que Siesa tiene comprometidos.",
@@ -119,7 +126,8 @@ const FILAS_POR_PAGINA = 30;
 
 function InventarioComprometidos() {
   const { datos, loading, error } = usePedidosComprometidosTodos();
-  const [busqueda, setBusqueda] = useState("");
+  const { pedido: pedidoInicial } = Route.useSearch();
+  const [busqueda, setBusqueda] = useState(pedidoInicial ?? "");
   const [pagina, setPagina] = useState(1);
 
   const pedidosFiltrados = useMemo(() => {

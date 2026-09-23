@@ -61,6 +61,13 @@ export const listarPedidosSchema = z.object({
   clienteRowId: z.coerce.number().int().optional(),
   estado: z.string().trim().max(20).optional(),
   search: z.string().trim().max(100).optional(),
+  // Enriquecer cada pedido de la página con su compromiso de inventario en
+  // Siesa (una sola consulta en lote). NUNCA acepta ciaId/tenantId: la
+  // compañía se deriva del tenant autenticado.
+  incluirCompromiso: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   page: z.coerce.number().int().positive().optional().default(1),
   pageSize: z.coerce.number().int().positive().max(100).optional().default(25),
 });

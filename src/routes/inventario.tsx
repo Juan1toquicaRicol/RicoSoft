@@ -520,7 +520,7 @@ function Inventario() {
               to="/inventario/comprometidos"
               className="panel p-5 bg-white border-slate-200 shadow-2xs text-left cursor-pointer transition hover:border-slate-300 hover:shadow-md"
             >
-              <p className="text-xs font-semibold text-slate-500">Comprometido (estimado)</p>
+              <p className="text-xs font-semibold text-slate-500">Comprometido en Siesa</p>
               <p className="num mt-2 text-xl font-bold text-slate-900">
                 {money(inventario.totalComprometidoValor ?? 0)}
               </p>
