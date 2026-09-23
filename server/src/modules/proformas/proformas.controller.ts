@@ -25,11 +25,7 @@ import {
   obtenerCotizacionSchema,
   asignarDocumentoErpProformaSchema,
 } from "./proformas.schemas";
-
-/** Numeración de proformas: continúa la secuencia manual anterior (la
- * última proforma en Excel fue la 3889) — la primera creada en RicoSoft
- * debe ser la 3890, aunque el tenant todavía no tenga ninguna. */
-const PRIMER_NUMERO_PROFORMA = 3890;
+import { siguienteNumeroProforma } from "./proformas-consecutivo";
 
 /** Defaults de ConfiguracionComercial cuando el tenant todavía no configuró
  * nada — mismos valores que el default de la columna en Prisma, mismo
@@ -533,33 +529,15 @@ export const obtenerProforma = async (req: AuthenticatedRequest, res: Response) 
   return res.json(serializarProforma(proforma));
 };
 
-/** Siguiente número dentro de una transacción, con piso en PRIMER_NUMERO_PROFORMA —
- * evita duplicados en creación concurrente usando el mismo tx para leer y escribir. */
-function calcularSiguienteNumero(ultimoNumero: number | null): number {
-  return Math.max(PRIMER_NUMERO_PROFORMA, (ultimoNumero ?? PRIMER_NUMERO_PROFORMA - 1) + 1);
-}
-
-async function siguienteNumeroProforma(tx: Prisma.TransactionClient, tenantId: string) {
-  const ultima = await tx.proforma.findFirst({
-    where: { tenantId },
-    orderBy: { numero: "desc" },
-    select: { numero: true },
-  });
-  return calcularSiguienteNumero(ultima?.numero ?? null);
-}
-
-/** GET /proformas/siguiente-numero — SOLO sugiere, no reserva ni bloquea el
- * número (dos consultas seguidas pueden devolver el mismo valor si todavía
- * no se creó ninguna proforma con él) — la unicidad real la garantiza
- * @@unique([tenantId, numero]) al crear, con manejo explícito de P2002. */
+/** GET /proformas/siguiente-numero — INFORMATIVO: sugiere, no reserva ni
+ * bloquea el número (dos consultas seguidas pueden devolver el mismo valor
+ * si todavía no se creó ninguna proforma con él). Usa el mismo helper que la
+ * creación automática (proformas-consecutivo.ts). La autoridad real es la
+ * creación en backend; la unicidad la garantiza @@unique([tenantId, numero])
+ * con manejo explícito de P2002. */
 export const obtenerSiguienteNumeroProforma = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
-  const ultima = await prisma.proforma.findFirst({
-    where: { tenantId },
-    orderBy: { numero: "desc" },
-    select: { numero: true },
-  });
-  return res.json({ numero: calcularSiguienteNumero(ultima?.numero ?? null) });
+  return res.json({ numero: await siguienteNumeroProforma(prisma, tenantId) });
 };
 
 /** SQL Server no reporta meta.target como array de columnas (a diferencia de
@@ -580,6 +558,9 @@ function esViolacionUnicidad(error: unknown): boolean {
  * creación (re-chequeo contra condición de carrera) — se distingue de
  * esViolacionUnicidad (P2002 de número) en el catch de crearProforma. */
 class DuplicadoCotizacionError extends Error {}
+
+/** Tope de reintentos del consecutivo automático ante carreras (P2002). */
+const MAX_INTENTOS_NUMERO_AUTOMATICO = 8;
 
 export const crearProforma = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
@@ -675,103 +656,126 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
   }
 
   try {
-    const creada = await prisma.$transaction(async (tx) => {
-      // Respeta un número editado a mano (numeroSolicitado); si no vino
-      // ninguno, calcula el consecutivo real fresco dentro de esta misma
-      // transacción.
-      const numero = numeroSolicitado ?? (await siguienteNumeroProforma(tx, tenantId));
+    const crearEnTransaccion = () =>
+      prisma.$transaction(async (tx) => {
+        // Respeta un número editado a mano (numeroSolicitado); si no vino
+        // ninguno, calcula el consecutivo real fresco dentro de esta misma
+        // transacción.
+        const numero = numeroSolicitado ?? (await siguienteNumeroProforma(tx, tenantId));
 
-      // Re-chequeo de duplicados dentro de la misma transacción, para cerrar
-      // la ventana de carrera entre la validación de arriba y el commit.
-      if (cotizacionIdExterno) {
-        const duplicada = await tx.proforma.findFirst({
-          where: { tenantId, cotizacionIdExterno, estado: "activa" },
-          select: { numero: true },
-        });
-        if (duplicada) {
-          throw new DuplicadoCotizacionError(
-            `La cotización ${cotizacionValidada?.numero} ya tiene una proforma activa: ${duplicada.numero}.`,
-          );
+        // Re-chequeo de duplicados dentro de la misma transacción, para cerrar
+        // la ventana de carrera entre la validación de arriba y el commit.
+        if (cotizacionIdExterno) {
+          const duplicada = await tx.proforma.findFirst({
+            where: { tenantId, cotizacionIdExterno, estado: "activa" },
+            select: { numero: true },
+          });
+          if (duplicada) {
+            throw new DuplicadoCotizacionError(
+              `La cotización ${cotizacionValidada?.numero} ya tiene una proforma activa: ${duplicada.numero}.`,
+            );
+          }
         }
-      }
-      if (cotizacionInterna) {
-        const duplicadaInterna = await tx.proforma.findFirst({
-          where: { tenantId, cotizacionId: cotizacionInterna.id, estado: "activa" },
-          select: { numero: true },
-        });
-        if (duplicadaInterna) {
-          throw new DuplicadoCotizacionError(
-            `La cotización COT-${cotizacionInterna.numero} ya tiene una proforma activa: ${duplicadaInterna.numero}.`,
-          );
+        if (cotizacionInterna) {
+          const duplicadaInterna = await tx.proforma.findFirst({
+            where: { tenantId, cotizacionId: cotizacionInterna.id, estado: "activa" },
+            select: { numero: true },
+          });
+          if (duplicadaInterna) {
+            throw new DuplicadoCotizacionError(
+              `La cotización COT-${cotizacionInterna.numero} ya tiene una proforma activa: ${duplicadaInterna.numero}.`,
+            );
+          }
         }
-      }
 
-      const proformaCreada = await tx.proforma.create({
-        data: {
-          tenantId,
-          numero,
-          ...encabezado,
-          cotizacionOrigen: cotizacionIdExterno ? "siesa" : cotizacionInterna ? "ricosoft" : null,
-          cotizacionIdExterno: cotizacionIdExterno ?? null,
-          cotizacionId: cotizacionInterna?.id ?? null,
-          cotizacionNumero:
-            cotizacionValidada?.numero ??
-            (cotizacionInterna
-              ? `COT-${String(cotizacionInterna.numero).padStart(5, "0")}`
-              : null),
-          erpDocumentoNumero: cotizacionValidada?.erpDocumentoNumero ?? null,
-          creadoPorId: req.user!.id,
-          creadoPorNombre: req.user!.nombre,
-          items: {
-            create: items.map((it, idx) => ({
-              orden: idx,
-              itemRowId: it.itemRowId ?? null,
-              referencia: it.referencia ?? null,
-              descripcion: it.descripcion,
-              bodegaRowId: it.bodegaRowId ?? null,
-              bodega: it.bodega ?? null,
-              unidadMedida: it.unidadMedida ?? null,
-              cantidad: it.cantidad,
-              precioUnitario: it.precioUnitario,
-              descuentoPct: it.descuentoPct,
-              ivaPct: it.ivaPct,
-            })),
-          },
-        },
-        include: { items: { orderBy: { orden: "asc" } } },
-      });
-
-      // La cotización interna queda CONVERTIDA una vez que tiene una proforma
-      // activa — no se recalcula ni se modifica ningún otro dato de la
-      // cotización; solo su estado.
-      if (cotizacionInterna) {
-        await tx.cotizacion.update({
-          where: { id: cotizacionInterna.id },
-          data: { estado: "CONVERTIDA" },
-        });
-        await tx.auditoria.create({
+        const proformaCreada = await tx.proforma.create({
           data: {
             tenantId,
-            usuarioId: req.user!.id,
-            accion: "PROFORMA_CREADA_DESDE_COTIZACION",
-            detalle: `${req.user!.nombre} creó la proforma ${proformaCreada.numero} desde la cotización COT-${cotizacionInterna.numero}.`,
-            entidadTipo: "Proforma",
-            entidadId: proformaCreada.id,
+            numero,
+            ...encabezado,
+            cotizacionOrigen: cotizacionIdExterno ? "siesa" : cotizacionInterna ? "ricosoft" : null,
+            cotizacionIdExterno: cotizacionIdExterno ?? null,
+            cotizacionId: cotizacionInterna?.id ?? null,
+            cotizacionNumero:
+              cotizacionValidada?.numero ??
+              (cotizacionInterna
+                ? `COT-${String(cotizacionInterna.numero).padStart(5, "0")}`
+                : null),
+            erpDocumentoNumero: cotizacionValidada?.erpDocumentoNumero ?? null,
+            creadoPorId: req.user!.id,
+            creadoPorNombre: req.user!.nombre,
+            items: {
+              create: items.map((it, idx) => ({
+                orden: idx,
+                itemRowId: it.itemRowId ?? null,
+                referencia: it.referencia ?? null,
+                descripcion: it.descripcion,
+                bodegaRowId: it.bodegaRowId ?? null,
+                bodega: it.bodega ?? null,
+                unidadMedida: it.unidadMedida ?? null,
+                cantidad: it.cantidad,
+                precioUnitario: it.precioUnitario,
+                descuentoPct: it.descuentoPct,
+                ivaPct: it.ivaPct,
+              })),
+            },
           },
+          include: { items: { orderBy: { orden: "asc" } } },
         });
-      }
 
-      return proformaCreada;
-    });
+        // La cotización interna queda CONVERTIDA una vez que tiene una proforma
+        // activa — no se recalcula ni se modifica ningún otro dato de la
+        // cotización; solo su estado.
+        if (cotizacionInterna) {
+          await tx.cotizacion.update({
+            where: { id: cotizacionInterna.id },
+            data: { estado: "CONVERTIDA" },
+          });
+          await tx.auditoria.create({
+            data: {
+              tenantId,
+              usuarioId: req.user!.id,
+              accion: "PROFORMA_CREADA_DESDE_COTIZACION",
+              detalle: `${req.user!.nombre} creó la proforma ${proformaCreada.numero} desde la cotización COT-${cotizacionInterna.numero}.`,
+              entidadTipo: "Proforma",
+              entidadId: proformaCreada.id,
+            },
+          });
+        }
+
+        return proformaCreada;
+      });
+
+    // Número AUTOMÁTICO: dos creaciones simultáneas pueden calcular el mismo
+    // MAX+1; la que pierde choca contra @@unique([tenantId, numero]) (P2002),
+    // su transacción se revierte completa y se reintenta con el máximo ya
+    // actualizado, así ambas terminan con números distintos. Un número
+    // MANUAL nunca se reintenta: su duplicado es un 409 legítimo.
+    let creada;
+    for (let intento = 1; ; intento++) {
+      try {
+        creada = await crearEnTransaccion();
+        break;
+      } catch (error) {
+        const reintentable =
+          numeroSolicitado === undefined &&
+          esViolacionUnicidad(error) &&
+          intento < MAX_INTENTOS_NUMERO_AUTOMATICO;
+        if (!reintentable) throw error;
+      }
+    }
     return res.status(201).json(serializarProforma(creada));
   } catch (error) {
     if (error instanceof DuplicadoCotizacionError) {
       return res.status(409).json({ message: error.message });
     }
     if (esViolacionUnicidad(error)) {
-      return res
-        .status(409)
-        .json({ message: `Ya existe una proforma con el número ${numeroSolicitado}.` });
+      return res.status(409).json({
+        message:
+          numeroSolicitado === undefined
+            ? "No fue posible asignar un número consecutivo por alta concurrencia. Intenta de nuevo."
+            : `Ya existe una proforma con el número ${numeroSolicitado}.`,
+      });
     }
     console.error("Error creando la proforma:", error);
     return res.status(500).json({ message: "No fue posible crear la proforma." });
