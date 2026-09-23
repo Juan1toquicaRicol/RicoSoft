@@ -251,7 +251,7 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
         .get("/api/proformas/configuracion-comercial")
         .set("Authorization", `Bearer ${otroToken}`);
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         retencionFuentePct: 2.5,
         retencionIvaPct: 15,
         retencionIcaPct: 0.7,
@@ -264,12 +264,12 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
         .set("Authorization", `Bearer ${token}`)
         .send({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
       expect(put.status).toBe(200);
-      expect(put.body).toEqual({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
+      expect(put.body).toMatchObject({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
 
       const get = await request(app)
         .get("/api/proformas/configuracion-comercial")
         .set("Authorization", `Bearer ${token}`);
-      expect(get.body).toEqual({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
+      expect(get.body).toMatchObject({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
     });
 
     it("cambiar la configuración NO afecta proformas ya creadas (snapshot conservado)", async () => {
@@ -311,7 +311,7 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
         .set("Authorization", `Bearer ${otroToken}`);
       // El tenant A ya modificó la suya en el test anterior; el tenant B sigue en default.
       expect(configA.body.retencionFuentePct).not.toBe(configB.body.retencionFuentePct);
-      expect(configB.body).toEqual({
+      expect(configB.body).toMatchObject({
         retencionFuentePct: 2.5,
         retencionIvaPct: 15,
         retencionIcaPct: 0.7,

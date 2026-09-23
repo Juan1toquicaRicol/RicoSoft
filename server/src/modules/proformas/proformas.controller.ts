@@ -25,7 +25,11 @@ import {
   obtenerCotizacionSchema,
   asignarDocumentoErpProformaSchema,
 } from "./proformas.schemas";
-import { siguienteNumeroProforma } from "./proformas-consecutivo";
+import {
+  siguienteNumeroProforma,
+  avanzarContadorProforma,
+  PRIMER_NUMERO_PROFORMA,
+} from "./proformas-consecutivo";
 
 /** Defaults de ConfiguracionComercial cuando el tenant todavía no configuró
  * nada — mismos valores que el default de la columna en Prisma, mismo
@@ -439,27 +443,44 @@ export const eliminarProforma = async (req: AuthenticatedRequest, res: Response)
   return res.status(204).send();
 };
 
+/** Serializa la configuración comercial del tenant. `siguienteConsecutivoProforma`
+ * es el siguiente número EFECTIVO vigente (max(contador, MAX(numero)+1)), no
+ * el contador crudo: es lo que el usuario ve y el mínimo aceptado por el PUT. */
+async function serializarConfiguracionComercial(
+  db: Pick<Prisma.TransactionClient, "proforma" | "configuracionComercial">,
+  tenantId: string,
+) {
+  const config = await db.configuracionComercial.findFirst({ where: { tenantId } });
+  return {
+    retencionFuentePct: config
+      ? Number(config.retencionFuentePct)
+      : RETENCIONES_DEFECTO.retencionFuentePct,
+    retencionIvaPct: config ? Number(config.retencionIvaPct) : RETENCIONES_DEFECTO.retencionIvaPct,
+    retencionIcaPct: config ? Number(config.retencionIcaPct) : RETENCIONES_DEFECTO.retencionIcaPct,
+    siguienteConsecutivoProforma: await siguienteNumeroProforma(db, tenantId),
+  };
+}
+
 /** GET /proformas/configuracion-comercial — tasas de retención vigentes del
- * tenant (o los defaults documentados si nunca las configuró), mismo patrón
- * que obtenerConfiguracionInventario en inventario.controller.ts. */
+ * tenant (o los defaults documentados si nunca las configuró) y el siguiente
+ * consecutivo de Proforma efectivo. Todo acotado a tenantId. */
 export const obtenerConfiguracionComercial = async (req: AuthenticatedRequest, res: Response) => {
-  const tenantId = req.user!.tenantId;
-  const config = await req.tenantPrisma!.configuracionComercial.findUnique({ where: { tenantId } });
-  return res.json(
-    config
-      ? {
-          retencionFuentePct: Number(config.retencionFuentePct),
-          retencionIvaPct: Number(config.retencionIvaPct),
-          retencionIcaPct: Number(config.retencionIcaPct),
-        }
-      : RETENCIONES_DEFECTO,
-  );
+  return res.json(await serializarConfiguracionComercial(prisma, req.user!.tenantId));
 };
+
+/** El nuevo consecutivo pedido es inferior al siguiente efectivo vigente. */
+class ConsecutivoInferiorError extends Error {}
 
 /** PUT /proformas/configuracion-comercial — solo administración
  * (configuracion.editar), crea la fila si el tenant nunca la tuvo. Cambiar
- * esto NUNCA afecta proformas ya creadas: cada una guarda su propio
- * snapshot de porcentajes al momento de crearse. */
+ * las retenciones NUNCA afecta proformas ya creadas: cada una guarda su
+ * propio snapshot de porcentajes al momento de crearse.
+ *
+ * siguienteConsecutivoProforma (opcional): solo puede SUBIR el contador; un
+ * valor inferior al siguiente efectivo vigente se rechaza con 400. El
+ * update del contador es condicional (nunca retrocede aunque una creación
+ * concurrente lo haya subido). Actualización + auditoría (valores anterior
+ * y nuevo) en UNA $transaction. */
 export const actualizarConfiguracionComercial = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -469,18 +490,69 @@ export const actualizarConfiguracionComercial = async (
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
+  const { siguienteConsecutivoProforma: consecutivoSolicitado, ...retenciones } = parseo.data;
 
-  const config = await req.tenantPrisma!.configuracionComercial.upsert({
-    where: { tenantId },
-    create: { tenantId, ...parseo.data },
-    update: { ...parseo.data },
-  });
+  try {
+    const resultado = await prisma.$transaction(async (tx) => {
+      const antes = await serializarConfiguracionComercial(tx, tenantId);
+      if (
+        consecutivoSolicitado !== undefined &&
+        consecutivoSolicitado < antes.siguienteConsecutivoProforma
+      ) {
+        throw new ConsecutivoInferiorError(
+          `El siguiente consecutivo de Proforma debe ser igual o superior al vigente (${antes.siguienteConsecutivoProforma}).`,
+        );
+      }
 
-  return res.json({
-    retencionFuentePct: Number(config.retencionFuentePct),
-    retencionIvaPct: Number(config.retencionIvaPct),
-    retencionIcaPct: Number(config.retencionIcaPct),
-  });
+      const config = await tx.configuracionComercial.upsert({
+        where: { tenantId },
+        create: {
+          tenantId,
+          ...retenciones,
+          siguienteConsecutivoProforma: Math.max(
+            PRIMER_NUMERO_PROFORMA,
+            consecutivoSolicitado ?? 0,
+          ),
+        },
+        update: { ...retenciones },
+      });
+      if (consecutivoSolicitado !== undefined) {
+        await tx.configuracionComercial.updateMany({
+          where: { tenantId, siguienteConsecutivoProforma: { lt: consecutivoSolicitado } },
+          data: { siguienteConsecutivoProforma: consecutivoSolicitado },
+        });
+      }
+
+      const despues = await serializarConfiguracionComercial(tx, tenantId);
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "CONFIGURACION_COMERCIAL_ACTUALIZADA",
+          detalle: `${req.user!.nombre} actualizó la configuración comercial (siguiente consecutivo de Proforma: ${antes.siguienteConsecutivoProforma} → ${despues.siguienteConsecutivoProforma}).`,
+          entidadTipo: "ConfiguracionComercial",
+          entidadId: config.id,
+          datosAnteriores: JSON.stringify(antes),
+          datosNuevos: JSON.stringify(despues),
+        },
+      });
+      return despues;
+    });
+    return res.json(resultado);
+  } catch (error) {
+    if (error instanceof ConsecutivoInferiorError) {
+      return res.status(400).json({ message: error.message });
+    }
+    if (esViolacionContadorConsecutivo(error) || esConflictoTransitorio(error)) {
+      return res
+        .status(409)
+        .json({ message: "La configuración se estaba actualizando a la vez. Intenta de nuevo." });
+    }
+    console.error("Error actualizando la configuración comercial:", error);
+    return res
+      .status(500)
+      .json({ message: "No fue posible actualizar la configuración comercial." });
+  }
 };
 
 export const listarProformas = async (req: AuthenticatedRequest, res: Response) => {
@@ -552,6 +624,22 @@ function esViolacionUnicidad(error: unknown): boolean {
     error.code === "P2002" &&
     error.meta?.modelName === "Proforma"
   );
+}
+
+/** P2002 sobre ConfiguracionComercial: dos transacciones intentaron crear a la
+ * vez la fila del contador del tenant (unique tenantId). Es una carrera
+ * benigna: se reintenta la transacción, que ya encontrará la fila. */
+function esViolacionContadorConsecutivo(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    error.meta?.modelName === "ConfiguracionComercial"
+  );
+}
+
+/** Conflicto de escritura/deadlock transitorio de SQL Server (P2034). */
+function esConflictoTransitorio(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
 }
 
 /** Señaliza el 409 de duplicado detectado DENTRO de la transacción de
@@ -723,6 +811,11 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
           include: { items: { orderBy: { orden: "asc" } } },
         });
 
+        // Contador monotónico del tenant: max(contador, numero + 1). Un número
+        // manual menor al vigente no lo reduce; si esto falla, la proforma
+        // también se revierte (misma transacción).
+        await avanzarContadorProforma(tx, tenantId, proformaCreada.numero);
+
         // La cotización interna queda CONVERTIDA una vez que tiene una proforma
         // activa — no se recalcula ni se modifica ningún otro dato de la
         // cotización; solo su estado.
@@ -749,8 +842,16 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
     // Número AUTOMÁTICO: dos creaciones simultáneas pueden calcular el mismo
     // MAX+1; la que pierde choca contra @@unique([tenantId, numero]) (P2002),
     // su transacción se revierte completa y se reintenta con el máximo ya
-    // actualizado, así ambas terminan con números distintos. Un número
-    // MANUAL nunca se reintenta: su duplicado es un 409 legítimo.
+    // actualizado, así ambas terminan con números distintos.
+    // Contrato de reintentos (máx. MAX_INTENTOS_NUMERO_AUTOMATICO):
+    //  - P2002 de número: SOLO en número automático. En número MANUAL es un
+    //    409 legítimo (duplicado real), nunca se reintenta.
+    //  - P2002 de ConfiguracionComercial (dos transacciones crean a la vez la
+    //    fila del contador): benigna, se reintenta en manual y automático.
+    //  - P2034 (write conflict/deadlock de SQL Server): conflicto
+    //    transaccional genérico; reintentar es seguro también en manual porque
+    //    la transacción revertida no dejó nada y la unicidad la sigue
+    //    garantizando @@unique([tenantId, numero]) (no puede haber duplicados).
     let creada;
     for (let intento = 1; ; intento++) {
       try {
@@ -758,9 +859,10 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
         break;
       } catch (error) {
         const reintentable =
-          numeroSolicitado === undefined &&
-          esViolacionUnicidad(error) &&
-          intento < MAX_INTENTOS_NUMERO_AUTOMATICO;
+          intento < MAX_INTENTOS_NUMERO_AUTOMATICO &&
+          ((numeroSolicitado === undefined && esViolacionUnicidad(error)) ||
+            esViolacionContadorConsecutivo(error) ||
+            esConflictoTransitorio(error));
         if (!reintentable) throw error;
       }
     }

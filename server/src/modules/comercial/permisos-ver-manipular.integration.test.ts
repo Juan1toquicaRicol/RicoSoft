@@ -147,6 +147,7 @@ describe.skipIf(!RUN)("Comercial — permisos Ver/Manipular (Cotizaciones/Profor
     await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.permiso.deleteMany({ where: { tenantId: { in: tenantIds } } });
+    await prisma.configuracionComercial.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
     await prisma.$disconnect();
   });

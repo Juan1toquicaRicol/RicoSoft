@@ -158,6 +158,7 @@ describe.skipIf(!RUN)("Proformas — vinculación con cotización de origen", ()
     await prisma.proforma.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
+    await prisma.configuracionComercial.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
     await prisma.$disconnect();
   });

@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { requirePermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { hasPermission } from "@/lib/session";
+import { useSession } from "@/lib/session-context";
 import { useConfiguracionInventario, type ConfiguracionInventario } from "@/hooks/use-inventario";
 import { useConfiguracionComercial, type ConfiguracionComercial } from "@/hooks/use-proformas";
 import { Button } from "@/components/ui/button";
@@ -356,8 +358,13 @@ function ConfiguracionComercialSection() {
     retencionFuentePct: 2.5,
     retencionIvaPct: 15,
     retencionIcaPct: 0.7,
+    siguienteConsecutivoProforma: 3890,
   });
   const [guardando, setGuardando] = useState(false);
+  const [errorConsecutivo, setErrorConsecutivo] = useState("");
+  // El PUT exige configuracion.editar; sin él el formulario queda en solo lectura.
+  const { user: sesion } = useSession();
+  const puedeEditar = hasPermission(sesion, PERMISOS_SISTEMA.CONFIGURACION_EDITAR);
 
   useEffect(() => {
     if (configuracion) setValores(configuracion);
@@ -365,12 +372,18 @@ function ConfiguracionComercialSection() {
 
   const handleGuardar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!puedeEditar) return;
     setGuardando(true);
+    setErrorConsecutivo("");
     try {
       await guardar(valores);
-      toast.success("Retenciones de Ventas actualizadas.");
+      toast.success("Configuración comercial actualizada.");
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar las retenciones.");
+      // Errores de validación 400 de la API (p. ej. consecutivo inferior al
+      // vigente) se muestran junto al campo además del toast.
+      const mensaje = err instanceof Error ? err.message : "Error al guardar la configuración.";
+      setErrorConsecutivo(mensaje);
+      toast.error(mensaje);
     } finally {
       setGuardando(false);
     }
@@ -414,9 +427,42 @@ function ConfiguracionComercialSection() {
           onChange={(v) => setValores((prev) => ({ ...prev, retencionIcaPct: v }))}
         />
       </div>
+      <div className="space-y-1 max-w-xs">
+        <label className="text-sm font-medium text-slate-700">
+          Siguiente consecutivo de Proforma
+        </label>
+        <Input
+          type="number"
+          required
+          min="3890"
+          step={1}
+          value={valores.siguienteConsecutivoProforma}
+          disabled={loading || !puedeEditar}
+          onChange={(e) => {
+            setErrorConsecutivo("");
+            setValores((prev) => ({
+              ...prev,
+              siguienteConsecutivoProforma: Number(e.target.value),
+            }));
+          }}
+        />
+        <p className="text-xs text-slate-500">
+          Debe ser igual o superior al siguiente consecutivo vigente.
+        </p>
+        {errorConsecutivo && (
+          <p role="alert" className="text-xs text-red-600">
+            {errorConsecutivo}
+          </p>
+        )}
+      </div>
+      {!puedeEditar && (
+        <p className="text-xs text-amber-700">
+          Necesitas el permiso configuracion.editar para modificar esta configuración.
+        </p>
+      )}
       <div className="flex justify-end pt-2">
-        <Button type="submit" variant="success" disabled={guardando || loading}>
-          {guardando ? "Guardando..." : "Guardar retenciones"}
+        <Button type="submit" variant="success" disabled={guardando || loading || !puedeEditar}>
+          {guardando ? "Guardando..." : "Guardar configuración"}
         </Button>
       </div>
     </form>

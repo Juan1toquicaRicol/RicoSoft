@@ -74,6 +74,13 @@ export const actualizarConfiguracionComercialSchema = z.object({
   retencionFuentePct: z.number().min(0).max(100),
   retencionIvaPct: z.number().min(0).max(100),
   retencionIcaPct: z.number().min(0).max(100),
+  // Opcional: los clientes que solo editan retenciones no lo envían y el
+  // contador queda intacto. Si viene, solo puede subir (ver el controller).
+  siguienteConsecutivoProforma: z
+    .number({ invalid_type_error: "El siguiente consecutivo debe ser un número." })
+    .int("El siguiente consecutivo debe ser un entero.")
+    .positive("El siguiente consecutivo debe ser positivo.")
+    .optional(),
 });
 
 export const listarProformasSchema = z.object({

@@ -42,6 +42,9 @@ export interface ConfiguracionComercial {
   retencionFuentePct: number;
   retencionIvaPct: number;
   retencionIcaPct: number;
+  /** Siguiente consecutivo de Proforma vigente (max(contador, MAX+1)); el PUT
+   * solo acepta valores iguales o superiores a él. */
+  siguienteConsecutivoProforma: number;
 }
 
 export interface ProformaItem {

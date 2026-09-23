@@ -951,6 +951,13 @@ model ConfiguracionComercial {
   retencionIvaPct    Decimal  @default(15) @db.Decimal(5, 2)
   /// Retención ICA = Total bruto × este %.
   retencionIcaPct    Decimal  @default(0.7) @db.Decimal(5, 2)
+  /// Contador MONOTÓNICO del consecutivo de Proforma del tenant (piso
+  /// histórico 3890: la última proforma en Excel fue la 3889). Nunca
+  /// retrocede: el siguiente número efectivo es
+  /// max(este valor, MAX(Proforma.numero) + 1) — ver
+  /// modules/proformas/proformas-consecutivo.ts. Se sube al crear una
+  /// proforma (auto o manual mayor) y por PUT solo hacia arriba.
+  siguienteConsecutivoProforma Int @default(3890)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   tenant             Tenant   @relation(fields: [tenantId], references: [id])

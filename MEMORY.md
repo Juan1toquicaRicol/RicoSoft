@@ -453,6 +453,32 @@ Restricciones: no usar `@@unique` sobre columnas nullable en SQL Server; no baja
 paralelismo del gate ni permitir tests omitidos; no clasificar errores de red por
 código sin la marca de origen Siesa.
 
+### 2026-09-23 — Consecutivo MONOTÓNICO de Proforma en ConfiguracionComercial (inicio 3890)
+Decisión: regla de negocio confirmada — el valor histórico inicial sigue siendo 3890.
+`ConfiguracionComercial.siguienteConsecutivoProforma Int @default(3890)` es un contador
+por tenant que NUNCA retrocede. Siguiente número efectivo =
+max(contador, MAX(Proforma.numero)+1), calculado solo en
+server/src/modules/proformas/proformas-consecutivo.ts (siguienteNumeroProforma), con
+ambas consultas acotadas a `where: { tenantId }`; lo usan GET /proformas/siguiente-numero,
+GET/PUT configuracion-comercial (informativos) y la creación automática. Esto REEMPLAZA la
+regla del 2026-09-22 (MAX+1 puro) y la de un commit intermedio (piso solo si no hay
+proformas): un manual bajo (p. ej. 5) ya NO mueve la secuencia, sigue 3890.
+- crearProforma: en la misma $transaction llama avanzarContadorProforma →
+  UPDATE condicional `contador < numero+1` (atómico, jamás baja; manual menor no lo toca;
+  crea la fila si el tenant no tiene). Reintenta (máx. 8) ante P2002 de número AUTOMÁTICO,
+  P2002 de la fila ConfiguracionComercial (carrera benigna) y P2034; manual duplicado → 409.
+- GET configuracion-comercial devuelve `siguienteConsecutivoProforma` = siguiente EFECTIVO.
+  PUT lo acepta opcional (sin él, contador intacto): valor < efectivo vigente → 400; solo
+  sube (UPDATE condicional). Update + Auditoría (CONFIGURACION_COMERCIAL_ACTUALIZADA con
+  datosAnteriores/datosNuevos) en una $transaction: si la auditoría falla, todo revierte.
+- Frontend: campo "Siguiente consecutivo de Proforma" (min 3890) en
+  configuracion.negocio.tsx > ConfiguracionComercialSection, muestra el 400 inline y exige
+  el permiso configuracion.editar (solo lectura sin él).
+- actualizarProforma (editar el número de un borrador) no avanza el contador; el MAX(numero)
+  del cálculo evita igualmente reusar un número.
+Restricciones: no calcular el consecutivo fuera del helper; no bajar el contador (ni por
+PUT ni por números manuales); migración 20260923140000 (aditiva, default 3890).
+
 ## 17. Cómo mantener esta memoria
 
 Añadir una entrada cuando exista:
