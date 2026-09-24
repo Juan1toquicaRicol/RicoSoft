@@ -64,18 +64,18 @@ export const marcarLeida = async (req: AuthenticatedRequest, res: Response) => {
     const usuarioId = req.user!.id;
     const tenantId = req.user!.tenantId;
 
-    // El id sale del JWT, no confía en el tenant/usuario del body: no es
-    // posible marcar como leída una notificación de otra persona (IDOR), ni
-    // — con tenantId aquí también — una notificación propia pero de otro
-    // tenant en el que el usuario tenga membresía.
-    const notificacion = await prisma.notificacion.findFirst({
+    // ATÓMICO: la propiedad se comprueba en el MISMO UPDATE (id + usuarioId +
+    // tenantId), sin lectura previa ni update por { id } — no existe ventana
+    // entre "verificar" y "mutar" y no es posible marcar la notificación de otra
+    // persona (IDOR) ni una propia de otro tenant. count = 0 -> 404 (mismo
+    // mensaje para inexistente/ajena, sin revelar que existe).
+    const { count } = await prisma.notificacion.updateMany({
       where: { id, usuarioId, tenantId },
+      data: { leida: true },
     });
-    if (!notificacion) {
+    if (count === 0) {
       return res.status(404).json({ message: "Notificación no encontrada." });
     }
-
-    await prisma.notificacion.update({ where: { id }, data: { leida: true } });
     return res.status(204).send();
   } catch (error) {
     console.error("Error al marcar notificación como leída:", error);
