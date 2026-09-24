@@ -608,6 +608,32 @@ Decisión:
 Restricciones: no exponer error.message crudo en rutas públicas; permisos nuevos de acción se declaran en
 los dos catálogos (backend/frontend) y en catalogo-permisos.ts.
 
+### 2026-09-24 — Ingesta de Cotizaciones desde Siesa CRM (CDV → Cotizacion)
+Decisión:
+- Fuente: t430_cm_pv_docto con f430_id_tipo_docto = 'CDV' (+ t431 líneas, t120 ítem), compañía = siesaCiaId
+  del tenant; identidad = f430_rowid (`Cotizacion.erpRowId`, índice único filtrado por tenant). Lectura en
+  lote (encabezados + líneas de a 500), servicio en modules/comercial/cotizaciones-siesa.service.ts.
+- **Columnas reales de Siesa** (Reportes/INSPECCION-ESQUEMA-SIESA-2026-09-24.md + verificación en vivo del
+  SQL): t430 → `f430_id_moneda_docto` (NO existe f430_id_moneda), `f430_fecha_vcto_cotizacion` (NO existe
+  f430_fecha_vto; si viene NULL → fecha + 15 días, `vencimientoEstimado`), `f430_id_cond_pago` (+ descripción
+  t208), `f430_tasa_dscto_global_cap` (expuesta en el DTO pero NO aplicada: semántica "cap" sin validar con
+  UnoEE); t431_cm_pv_movto (t431_cm_pv_docto_linea NO existe) → `f431_id_unidad_medida`,
+  `f431_id_lista_precio`, `f431_rowid_bodega`; IVA = `t433_cm_pv_movto_imp.f433_tasa` (porcentaje 16/19, base
+  100, un impuesto por línea CDV; join por f433_rowid_pv_movto = f431_rowid + f433_id_cia, agregado con SUM).
+  Moneda vacía → 'COP'. Las CDV reales están en la compañía 1 (Ricol); la 3 (Green) no tiene.
+- Endpoint `POST /api/comercial/cotizaciones/siesa/sincronizar` (asyncHandler + cotizaciones.gestionar),
+  body `{ desde?, limite? (1-200), guardar? }`. Sin `guardar` solo SIMULA. Con `guardar: true`, cada documento
+  en su PROPIA $transaction (cotización + ítems + Auditoría COTIZACION_SIESA_CREADA/ACTUALIZADA): NUEVA →
+  crea BORRADOR (numero = consecutivo interno de RicoSoft, `erpNumero` = "COT-<consec Siesa>",
+  erpTipoDocumento CDV, VINCULADO); YA_VINCULADA → se actualiza SOLO si sigue en BORRADOR (UPDATE condicional)
+  y se reemplazan los ítems; otro estado → omitida. Un error de un documento no revierte los demás;
+  la carrera entre sincronizaciones (P2002 del índice por erpRowId) se reporta como omitida.
+- `lib/async-handler.ts` (asyncHandler): obligatorio en handlers async nuevos (Express 4 no maneja rechazos).
+- UI: botón "Sincronizar desde Siesa CRM" (solo cotizaciones.gestionar) en la pestaña Cotizaciones de Gestión
+  Comercial; diálogo con `desde`, "Simular" y "Sincronizar y guardar", resumen Nuevas creadas / Ya vinculadas.
+Restricciones: no aceptar ciaId/tenantId del cliente; no pisar cotizaciones que ya no son BORRADOR; RicoSoft
+nunca escribe hacia Siesa.
+
 ## 17. Cómo mantener esta memoria
 
 Añadir una entrada cuando exista:

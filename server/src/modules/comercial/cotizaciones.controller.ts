@@ -34,7 +34,7 @@ function calcularSiguienteNumero(ultimoNumero: number | null, piso: number): num
   return Math.max(piso, (ultimoNumero ?? piso - 1) + 1);
 }
 
-async function siguienteNumeroCotizacion(tx: Prisma.TransactionClient, tenantId: string) {
+export async function siguienteNumeroCotizacion(tx: Prisma.TransactionClient, tenantId: string) {
   const ultima = await tx.cotizacion.findFirst({
     where: { tenantId },
     orderBy: { numero: "desc" },

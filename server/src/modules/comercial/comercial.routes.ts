@@ -9,6 +9,8 @@ import {
 import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { listarDocumentosComerciales } from "./documentos.controller";
+import { asyncHandler } from "../../lib/async-handler";
+import { sincronizarCotizacionesSiesaController } from "./cotizaciones-siesa.controller";
 import {
   listarCotizaciones,
   obtenerCotizacion,
@@ -56,6 +58,13 @@ router.get(
 );
 
 // Cotizaciones
+// Ingesta de cotizaciones desde Siesa (esqueleto: simulación, solo lectura). Va ANTES de las rutas
+// "/cotizaciones/:id..." para que "siesa" nunca se interprete como un id.
+router.post(
+  "/cotizaciones/siesa/sincronizar",
+  requirePermission(PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR),
+  asyncHandler(sincronizarCotizacionesSiesaController),
+);
 router.get(
   "/cotizaciones",
   requirePermission(PERMISOS_SISTEMA.COTIZACIONES_VER),

@@ -57,6 +57,16 @@ export const actualizarPedidoSchema = z.object({
   items: z.array(itemComercialSchema).min(1, "Agrega al menos un ítem.").optional(),
 });
 
+/** Sincronización de cotizaciones desde Siesa. NUNCA acepta ciaId/tenantId
+ * (zod descarta las claves desconocidas): la compañía sale del tenant autenticado. */
+export const sincronizarCotizacionesSiesaSchema = z.object({
+  /** Solo cotizaciones con fecha >= desde. */
+  desde: z.coerce.date().optional(),
+  limite: z.coerce.number().int().min(1).max(200).optional().default(50),
+  /** true = persiste (crea/actualiza BORRADOR); false (default) = solo simula. */
+  guardar: z.boolean().optional().default(false),
+});
+
 export const listarPedidosSchema = z.object({
   clienteRowId: z.coerce.number().int().optional(),
   estado: z.string().trim().max(20).optional(),

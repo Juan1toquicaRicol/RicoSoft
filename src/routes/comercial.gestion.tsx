@@ -22,6 +22,7 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requireAnyPermisoGuard } from "@/lib/route-guards";
 import { useDocumentosComerciales, type DocumentoBandeja } from "@/hooks/use-comercial";
 import { NuevoDocumentoMenu } from "@/components/nuevo-documento-menu";
+import { SincronizarCotizacionesSiesa } from "@/components/sincronizar-cotizaciones-siesa-dialog";
 import {
   tabDesdeUrl,
   tabEfectiva,
@@ -219,6 +220,8 @@ function GestionComercial() {
   const tabsVisibles = calcularTabsVisibles((permiso) => hasPermission(user, permiso));
 
   const [tab, setTab] = useState<TabGestion>(tabDesdeUrl(tabUrl) ?? "todos");
+  // Cambia tras sincronizar con Siesa para recargar la bandeja (remonta BandejaDocumentos).
+  const [refresco, setRefresco] = useState(0);
 
   // Si el tab activo deja de ser válido para este usuario (p. ej. un enlace
   // ?tab=pedidos sin pedidos_comerciales.ver) se cae de vuelta a "todos".
@@ -243,7 +246,13 @@ function GestionComercial() {
         ))}
       </div>
 
-      <BandejaDocumentos key={tabEfectivo} tipo={tabEfectivo} />
+      {tabEfectivo === "cotizacion" && (
+        <div className="mt-3 flex justify-end">
+          {/* Solo con cotizaciones.gestionar (el componente se oculta sin el permiso). */}
+          <SincronizarCotizacionesSiesa onSincronizado={() => setRefresco((n) => n + 1)} />
+        </div>
+      )}
+      <BandejaDocumentos key={`${tabEfectivo}-${refresco}`} tipo={tabEfectivo} />
     </AppShell>
   );
 }

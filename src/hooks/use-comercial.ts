@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
+import type { ResultadoSincronizacionCotizaciones } from "@/lib/sincronizacion-cotizaciones";
 
 export interface ItemComercial {
   id?: string;
@@ -340,6 +341,33 @@ export function useAccionesCotizacion() {
     /** Borrado PERMANENTE — solo superadmin, distinto de anular. */
     eliminar: (id: string) => fetchAuth(`/comercial/cotizaciones/${id}`, { method: "DELETE" }),
   };
+}
+
+/** POST /comercial/cotizaciones/siesa/sincronizar (permiso cotizaciones.gestionar). */
+export function useSincronizarCotizacionesSiesa() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const sincronizar = useCallback(
+    async (params: { desde?: string; guardar: boolean; limite?: number }) => {
+      setLoading(true);
+      setError("");
+      try {
+        return (await fetchAuth("/comercial/cotizaciones/siesa/sincronizar", {
+          method: "POST",
+          body: JSON.stringify(params),
+        })) as ResultadoSincronizacionCotizaciones;
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "No fue posible sincronizar con Siesa.");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  return { sincronizar, loading, error };
 }
 
 export function useAccionesPedido() {
