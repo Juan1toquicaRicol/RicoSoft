@@ -482,9 +482,32 @@ function PanelConfiguracion() {
   );
 }
 
+/** Cuerpo de la tarjeta resumen "Comprometido en Siesa". El detalle vive en
+ * Gestión Comercial → Pedidos → pestaña "Comprometido en Siesa". */
+function TarjetaComprometidoSiesa({ valor, conEnlace }: { valor: number; conEnlace?: boolean }) {
+  return (
+    <>
+      <p className="text-xs font-semibold text-slate-500">Comprometido en Siesa</p>
+      <p className="num mt-2 text-xl font-bold text-slate-900">{money(valor)}</p>
+      <p className="mt-1 text-[11px] text-slate-500">
+        {conEnlace
+          ? "Ya destinado a pedidos — clic para ver el estado de cada pedido en Gestión Comercial → Pedidos"
+          : "Ya destinado a pedidos en Siesa"}
+      </p>
+    </>
+  );
+}
+
 function Inventario() {
   const { user: sesion } = useSession();
   const puedeConfigurar = hasPermission(sesion, PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR);
+  // El detalle vive en Gestión Comercial → pestaña Pedidos (estado operativo de
+  // Siesa por pedido): el enlace solo aparece con pedidos_comerciales.ver; sin
+  // él la tarjeta sigue siendo informativa (sin enlace).
+  const puedeVerComprometidoEnPedidos = hasPermission(
+    sesion,
+    PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER,
+  );
   const { inventario, loading } = useInventarioGerencial();
   const { pronostico, loading: cargandoPronostico } = usePronosticoDemanda();
   const { produccion, loading: cargandoProduccion } = useProduccionRecomendada();
@@ -516,18 +539,19 @@ function Inventario() {
                 {money(inventario.totalValorVendible ?? 0)} es mercancía vendible
               </p>
             </div>
-            <Link
-              to="/inventario/comprometidos"
-              className="panel p-5 bg-white border-slate-200 shadow-2xs text-left cursor-pointer transition hover:border-slate-300 hover:shadow-md"
-            >
-              <p className="text-xs font-semibold text-slate-500">Comprometido en Siesa</p>
-              <p className="num mt-2 text-xl font-bold text-slate-900">
-                {money(inventario.totalComprometidoValor ?? 0)}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Ya destinado a pedidos — clic para ver todos los pedidos que lo generan
-              </p>
-            </Link>
+            {puedeVerComprometidoEnPedidos ? (
+              <Link
+                to="/comercial/gestion"
+                search={{ tab: "pedidos" }}
+                className="panel p-5 bg-white border-slate-200 shadow-2xs text-left cursor-pointer transition hover:border-slate-300 hover:shadow-md"
+              >
+                <TarjetaComprometidoSiesa valor={inventario.totalComprometidoValor ?? 0} conEnlace />
+              </Link>
+            ) : (
+              <div className="panel p-5 bg-white border-slate-200 shadow-2xs text-left">
+                <TarjetaComprometidoSiesa valor={inventario.totalComprometidoValor ?? 0} />
+              </div>
+            )}
             <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
               <p className="text-xs font-semibold text-slate-500">Vendible</p>
               <p className="num mt-2 text-xl font-bold text-emerald-600">

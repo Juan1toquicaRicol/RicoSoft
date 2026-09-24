@@ -182,6 +182,13 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
 
   // 5, 6, 8, 12, 14 — Proforma desde Cotización, anti-duplicado, cadena completa, snapshots, detalle con relacionados
   describe("Cadena Cotización → Proforma → Pedido", () => {
+    /** Una Proforma nace ENVIADA; solo una ACEPTADA puede originar un Pedido. */
+    const aceptar = (id: string) =>
+      request(app)
+        .post(`/api/proformas/${id}/aceptar`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+
     it("crea una Proforma desde una Cotización (reutilizando el endpoint de Proforma), bloquea una segunda activa, y permite Pedido desde la Proforma", async () => {
       const crearCot = await request(app)
         .post("/api/comercial/cotizaciones")
@@ -218,7 +225,16 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
         .send({});
       expect(segundaProforma.status).toBe(409);
 
-      // 7: crear Pedido desde la Proforma activa
+      // Una proforma ENVIADA todavía NO puede originar un pedido...
+      expect(crearProforma.body.estado).toBe("ENVIADA");
+      const prematuro = await request(app)
+        .post(`/api/comercial/proformas/${proformaId}/pedido`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      expect(prematuro.status).toBe(409);
+
+      // 7: ...hay que aceptarla primero; luego crear el Pedido
+      expect((await aceptar(proformaId)).status).toBe(200);
       const crearPedido = await request(app)
         .post(`/api/comercial/proformas/${proformaId}/pedido`)
         .set("Authorization", `Bearer ${token}`)
@@ -238,23 +254,51 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
       expect(detalleProforma.body.pedidosComerciales).toHaveLength(1);
       expect(detalleProforma.body.pedidosComerciales[0].id).toBe(crearPedido.body.id);
 
-      // 12: snapshot independiente — anular la Proforma no debe alterar el Pedido ya creado
-      await request(app)
+      // La proforma quedó PEDIDO_CREADO (inmutable): no se puede anular ni
+      // volver a aceptar, y el pedido conserva su snapshot.
+      expect(detalleProforma.body.estado).toBe("PEDIDO_CREADO");
+      const anularInmutable = await request(app)
         .post(`/api/proformas/${proformaId}/anular`)
         .set("Authorization", `Bearer ${token}`)
         .send({});
-      const pedidoTrasAnular = await request(app)
+      expect(anularInmutable.status).toBe(409);
+      expect((await aceptar(proformaId)).status).toBe(409);
+      const pedidoIntacto = await request(app)
         .get(`/api/comercial/pedidos/${crearPedido.body.id}`)
         .set("Authorization", `Bearer ${token}`);
-      expect(pedidoTrasAnular.body.estado).toBe("BORRADOR");
-      expect(Number(pedidoTrasAnular.body.items[0].cantidad)).toBe(5);
+      expect(pedidoIntacto.body.estado).toBe("BORRADOR");
+      expect(Number(pedidoIntacto.body.items[0].cantidad)).toBe(5);
 
-      // Anular la Proforma libera la Cotización para una nueva Proforma activa
-      const terceraProforma = await request(app)
+      // Una proforma PEDIDO_CREADO sigue bloqueando otra proforma sobre la misma cotización
+      const otraProforma = await request(app)
         .post(`/api/comercial/cotizaciones/${cotizacionId}/proforma`)
         .set("Authorization", `Bearer ${token}`)
         .send({});
-      expect(terceraProforma.status).toBe(201);
+      expect(otraProforma.status).toBe(409);
+    });
+
+    it("anular una proforma ENVIADA libera la cotización para una nueva proforma", async () => {
+      const cot = await request(app)
+        .post("/api/comercial/cotizaciones")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ clienteRowId: 2009, clienteNombre: "Cliente Libera", items: [itemBase()] });
+      const prof = await request(app)
+        .post(`/api/comercial/cotizaciones/${cot.body.id}/proforma`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      expect(prof.status).toBe(201);
+      const anular = await request(app)
+        .post(`/api/proformas/${prof.body.id}/anular`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      expect(anular.status).toBe(200);
+      expect(anular.body.estado).toBe("ANULADA");
+
+      const nueva = await request(app)
+        .post(`/api/comercial/cotizaciones/${cot.body.id}/proforma`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      expect(nueva.status).toBe(201);
     });
 
     it("no permite crear un Pedido desde una Proforma anulada", async () => {
@@ -275,7 +319,7 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
         .post(`/api/comercial/proformas/${crearProforma.body.id}/pedido`)
         .set("Authorization", `Bearer ${token}`)
         .send({});
-      expect(pedido.status).toBe(400);
+      expect(pedido.status).toBe(409);
     });
   });
 
@@ -288,6 +332,10 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
         .send({ clienteRowId: 2003, clienteNombre: "Cliente Pedido Estados", items: [itemBase()] });
       const crearProforma = await request(app)
         .post(`/api/comercial/cotizaciones/${crearCot.body.id}/proforma`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      await request(app)
+        .post(`/api/proformas/${crearProforma.body.id}/aceptar`)
         .set("Authorization", `Bearer ${token}`)
         .send({});
       const crearPedido = await request(app)
@@ -375,7 +423,7 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
         });
       expect(res.status).toBe(201);
       expect(res.body.cotizacionId).toBeNull();
-      expect(res.body.estado).toBe("activa");
+      expect(res.body.estado).toBe("ENVIADA");
     });
   });
 });

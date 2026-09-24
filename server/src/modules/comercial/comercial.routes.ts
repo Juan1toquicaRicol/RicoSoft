@@ -26,6 +26,7 @@ import {
   listarPedidos,
   obtenerPedido,
   obtenerCompromisoInventarioPedido,
+  obtenerEstadoPedidoUnoeeHandler,
   crearPedidoDesdeProforma,
   confirmarPedido,
   marcarListoParaErpPedido,
@@ -136,6 +137,12 @@ router.get(
   "/pedidos/:id/compromiso-inventario",
   requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
   obtenerCompromisoInventarioPedido,
+);
+// Estado del Pedido UnoEE: cabecera + ítems del PDV vinculado (solo lectura).
+router.get(
+  "/pedidos/:id/estado-unoee",
+  requirePermission(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
+  obtenerEstadoPedidoUnoeeHandler,
 );
 // Confirmar y marcar listo para ERP avanzan el pedido hacia el ERP: son la
 // decisión de autoridad de esta sección (permiso especial).

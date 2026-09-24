@@ -95,6 +95,12 @@ export const listarDocumentosSchema = z.object({
   desde: z.coerce.date().optional(),
   hasta: z.coerce.date().optional(),
   search: z.string().trim().max(100).optional(),
+  // Solo aplica a pedidos: enriquece cada pedido de la página con su estado
+  // en Siesa (UNA consulta en lote). Nunca acepta ciaId/tenantId.
+  incluirCompromiso: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   page: z.coerce.number().int().positive().optional().default(1),
   pageSize: z.coerce.number().int().positive().max(100).optional().default(25),
 });

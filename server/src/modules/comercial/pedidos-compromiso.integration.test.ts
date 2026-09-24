@@ -43,6 +43,49 @@ function crearRequestFake() {
       return req;
     },
     async query(sql: string) {
+      // Consulta de LÍNEAS del PDV (Estado del Pedido UnoEE): 2 líneas por documento.
+      if (/AS lineaRowId/.test(sql)) {
+        llamadas.push({ ciaId: inputs.ciaId, rowIds: [inputs.rowId as number], sql });
+        const docs = TABLA.filter(
+          (d) => d.cia === inputs.ciaId && d.tipo === "PDV" && d.rowId === inputs.rowId,
+        );
+        return {
+          recordset: docs.flatMap((d) => [
+            {
+              lineaRowId: d.rowId * 10 + 1,
+              itemRowId: 500,
+              referencia: "REF-1",
+              descripcion: "Producto uno",
+              cantidadPedida: 6,
+              cantidadComprometida: d.comprometida,
+              cantidadRemisionada: 2,
+              cantidadFacturada: 0,
+              precioUnitario: 1000,
+              descuentoLinea: 100,
+              descuentoGlobal: 0,
+              impuesto: 190,
+              valorNeto: 6000,
+              backorder: 0,
+            },
+            {
+              lineaRowId: d.rowId * 10 + 2,
+              itemRowId: 501,
+              referencia: "REF-2",
+              descripcion: "Producto dos",
+              cantidadPedida: 4,
+              cantidadComprometida: 0,
+              cantidadRemisionada: 4,
+              cantidadFacturada: 0,
+              precioUnitario: 500,
+              descuentoLinea: 0,
+              descuentoGlobal: 0,
+              impuesto: 380,
+              valorNeto: 2000,
+              backorder: 0,
+            },
+          ]),
+        };
+      }
       const rowIds = Object.entries(inputs)
         .filter(([k]) => /^r\d+$/.test(k))
         .map(([, v]) => v as number);
@@ -369,6 +412,139 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
       expect(res.status).toBe(200);
       expect(res.body.compromisoDisponible).toBe(false);
       expect(JSON.stringify(res.body)).not.toMatch(/ECONNREFUSED/);
+    });
+  });
+
+  describe("GET /comercial/pedidos/:id/estado-unoee (Estado del Pedido UnoEE)", () => {
+    const estadoUnoee = (id: string, tok = token, query = "") =>
+      request(app)
+        .get(`/api/comercial/pedidos/${id}/estado-unoee${query}`)
+        .set("Authorization", `Bearer ${tok}`);
+
+    it("Caso B: sin vínculo ERP -> vinculado=false y NO consulta Siesa", async () => {
+      const p = await crearPedido(tenantId);
+      llamadas.length = 0;
+
+      const res = await estadoUnoee(p.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ vinculado: false, cabecera: null, items: [] });
+      expect(llamadas).toHaveLength(0);
+    });
+
+    it("Caso A: cabecera (consecutivo PDV-########, estado, totales) e ítems con pendiente/remisionada", async () => {
+      const doc = nuevoDoc({ comprometida: 6, numero: 55444 });
+      const p = await crearPedido(tenantId, doc.rowId);
+      llamadas.length = 0;
+
+      const res = await estadoUnoee(p.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body.vinculado).toBe(true);
+      expect(res.body.encontradoEnSiesa).toBe(true);
+      expect(res.body.cabecera).toMatchObject({
+        consecutivo: "PDV-00055444",
+        estado: "Comprometido",
+        valorTotal: 8000,
+        descuentos: 100,
+        impuestos: 570,
+      });
+      expect(res.body.items).toHaveLength(2);
+      expect(res.body.items[0]).toMatchObject({
+        referencia: "REF-1",
+        itemRowId: 500,
+        descripcion: "Producto uno",
+        cantidad: 6,
+        precioUnitario: 1000,
+        subtotal: 6000,
+        descuentos: 100,
+        estado: "Parcialmente remisionado",
+        cantidadRemisionada: 2,
+        cantidadPendiente: 4,
+      });
+      // 2 consultas (resumen + líneas), acotadas a la compañía del tenant, unidas por rowid.
+      expect(llamadas).toHaveLength(2);
+      expect(llamadas.every((l) => l.ciaId === CIA_ID)).toBe(true);
+      expect(llamadas.every((l) => l.rowIds.includes(doc.rowId))).toBe(true);
+    });
+
+    it("vinculado pero inexistente en Siesa -> encontradoEnSiesa=false", async () => {
+      const p = await crearPedido(tenantId, 777_777_777);
+      const res = await estadoUnoee(p.id);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ vinculado: true, encontradoEnSiesa: false, items: [] });
+    });
+
+    it("aislamiento: pedido de otro tenant -> 404; ciaId del querystring ignorado; sin token 401; sin permiso 403", async () => {
+      const doc = nuevoDoc({ comprometida: 1 });
+      const p = await crearPedido(tenantId, doc.rowId);
+      llamadas.length = 0;
+
+      const ajeno = await estadoUnoee(p.id, otroToken);
+      expect(ajeno.status).toBe(404);
+      expect(JSON.stringify(ajeno.body)).not.toContain(String(doc.rowId));
+      expect(llamadas).toHaveLength(0);
+
+      const conCia = await estadoUnoee(p.id, token, `?ciaId=${OTRA_CIA_ID}`);
+      expect(conCia.status).toBe(200);
+      expect(llamadas.every((l) => l.ciaId === CIA_ID)).toBe(true);
+
+      const sinToken = await request(app).get(`/api/comercial/pedidos/${p.id}/estado-unoee`);
+      expect(sinToken.status).toBe(401);
+      expect((await estadoUnoee(p.id, tokenSinPermiso)).status).toBe(403);
+      expect((await estadoUnoee(p.id, tokenSoloVer)).status).toBe(200);
+    });
+
+    it("Siesa caído -> 502 con mensaje fijo; tenant sin siesaCiaId -> 400", async () => {
+      const p = await crearPedido(tenantId, nuevoDoc({ comprometida: 1 }).rowId);
+      getSiesaPoolMock.mockRejectedValueOnce(new Error("simulated ECONNREFUSED host-secreto"));
+      const caido = await estadoUnoee(p.id);
+      expect(caido.status).toBe(502);
+      expect(JSON.stringify(caido.body)).not.toMatch(/ECONNREFUSED|host-secreto/);
+
+      const sin = await crearPedido(sinSiesaId, 4321);
+      expect((await estadoUnoee(sin.id, tokenSinSiesa)).status).toBe(400);
+    });
+  });
+
+  describe("GET /comercial/documentos?tipo=pedido&incluirCompromiso=true (bandeja de Pedidos)", () => {
+    const bandeja = (query: string, tok = token) =>
+      request(app).get(`/api/comercial/documentos${query}`).set("Authorization", `Bearer ${tok}`);
+
+    it("enriquece los pedidos de la página con su estado en Siesa en UNA consulta; sin vínculo queda SIN_VINCULO_ERP", async () => {
+      const cliente = 888_001;
+      const comprometido = nuevoDoc({ comprometida: 4 });
+      const sinComprometer = nuevoDoc({ comprometida: 0 });
+      await crearPedido(tenantId, comprometido.rowId, { clienteNombre: `Bandeja ${cliente}` });
+      await crearPedido(tenantId, sinComprometer.rowId, { clienteNombre: `Bandeja ${cliente}` });
+      await crearPedido(tenantId, null, { clienteNombre: `Bandeja ${cliente}` });
+      llamadas.length = 0;
+
+      const res = await bandeja(`?tipo=pedido&incluirCompromiso=true&search=Bandeja%20${cliente}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.items).toHaveLength(3);
+      expect(res.body.compromisoDisponible).toBe(true);
+      expect(llamadas).toHaveLength(1); // un solo lote
+      const etiquetas = res.body.items
+        .map((i: { compromiso: { compromiso: string; siesa: { estadoUnoee: string } | null } }) =>
+          i.compromiso.compromiso === "SIN_VINCULO_ERP" ? "SIN_VINCULO" : i.compromiso.siesa?.estadoUnoee,
+        )
+        .sort();
+      expect(etiquetas).toEqual(["Comprometido", "No comprometido", "SIN_VINCULO"]);
+    });
+
+    it("sin incluirCompromiso no consulta Siesa; con Siesa caído la bandeja responde 200 y compromisoDisponible=false", async () => {
+      await crearPedido(tenantId, nuevoDoc({ comprometida: 1 }).rowId, { clienteNombre: "Bandeja caída" });
+      llamadas.length = 0;
+      const sin = await bandeja("?tipo=pedido&search=Bandeja%20ca%C3%ADda");
+      expect(sin.status).toBe(200);
+      expect(llamadas).toHaveLength(0);
+
+      getSiesaPoolMock.mockRejectedValueOnce(new Error("simulated ECONNREFUSED"));
+      const caido = await bandeja("?tipo=pedido&incluirCompromiso=true&search=Bandeja%20ca%C3%ADda");
+      expect(caido.status).toBe(200);
+      expect(caido.body.compromisoDisponible).toBe(false);
     });
   });
 });

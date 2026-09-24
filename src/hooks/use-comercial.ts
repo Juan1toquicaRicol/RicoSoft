@@ -98,6 +98,8 @@ export interface CompromisoInventarioPedido {
     pdvRowId: number;
     pdvNumero: number;
     estadoOperativo: string;
+    /** Etiqueta visible: Comprometido, Facturado, Retenido... */
+    estadoUnoee: string;
     cantidadPedida: number;
     cantidadComprometida: number;
     cantidadRemisionada: number;
@@ -108,6 +110,8 @@ export interface CompromisoInventarioPedido {
 }
 
 export interface DocumentoBandeja {
+  /** Solo pedidos, con incluirCompromiso=true. */
+  compromiso?: CompromisoInventarioPedido | null;
   tipo: "cotizacion" | "proforma" | "pedido";
   id: string;
   numero: string;
@@ -140,15 +144,18 @@ export function useDocumentosComerciales(params: {
   tipo?: "todos" | "cotizacion" | "proforma" | "pedido";
   search?: string;
   estado?: string;
+  /** Solo pedidos: trae el estado en Siesa de cada pedido (una consulta en lote). */
+  incluirCompromiso?: boolean;
   page?: number;
   pageSize?: number;
 }) {
   const [items, setItems] = useState<DocumentoBandeja[]>([]);
   const [total, setTotal] = useState(0);
+  const [compromisoDisponible, setCompromisoDisponible] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const { tipo, search, estado, page = 1, pageSize = 25 } = params;
+  const { tipo, search, estado, incluirCompromiso, page = 1, pageSize = 25 } = params;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -160,22 +167,24 @@ export function useDocumentosComerciales(params: {
       qs.set("pageSize", String(pageSize));
       if (search) qs.set("search", search);
       if (estado) qs.set("estado", estado);
+      if (incluirCompromiso) qs.set("incluirCompromiso", "true");
       const data = await fetchAuth(`/comercial/documentos?${qs.toString()}`);
       setItems(data.items ?? []);
       setTotal(data.total ?? 0);
+      setCompromisoDisponible(data.compromisoDisponible !== false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "No fue posible cargar la bandeja comercial.");
     } finally {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipo, search, estado, page, pageSize]);
+  }, [tipo, search, estado, incluirCompromiso, page, pageSize]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { items, total, loading, error, refresh };
+  return { items, total, compromisoDisponible, loading, error, refresh };
 }
 
 export function useCotizacion(id: string | null) {
@@ -230,8 +239,43 @@ export function usePedidoComercial(id: string | null) {
   return { pedido, loading, error, refresh };
 }
 
-export function useCompromisoInventarioPedido(id: string | null) {
-  const [compromiso, setCompromiso] = useState<CompromisoInventarioPedido | null>(null);
+export interface ItemEstadoUnoee {
+  lineaRowId: number;
+  itemRowId: number | null;
+  referencia: string | null;
+  descripcion: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+  descuentos: number;
+  estado: string;
+  cantidadRemisionada: number;
+  cantidadPendiente: number;
+}
+
+export interface CabeceraEstadoUnoee {
+  consecutivo: string;
+  estado: string;
+  valorTotal: number;
+  descuentos: number;
+  impuestos: number;
+}
+
+/** "Estado del Pedido UnoEE": PDV de Siesa vinculado (solo lectura). */
+export interface EstadoPedidoUnoee {
+  pedidoId: string;
+  /** false = sin documento ERP: "El pedido no ha sido enviado". */
+  vinculado: boolean;
+  erpRowId: number | null;
+  estadoComercial: string;
+  estadoSincronizacion: string;
+  encontradoEnSiesa: boolean;
+  cabecera: CabeceraEstadoUnoee | null;
+  items: ItemEstadoUnoee[];
+}
+
+export function useEstadoPedidoUnoee(id: string | null) {
+  const [estado, setEstado] = useState<EstadoPedidoUnoee | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -240,9 +284,9 @@ export function useCompromisoInventarioPedido(id: string | null) {
     setLoading(true);
     setError("");
     try {
-      setCompromiso(await fetchAuth(`/comercial/pedidos/${id}/compromiso-inventario`));
+      setEstado(await fetchAuth(`/comercial/pedidos/${id}/estado-unoee`));
     } catch (err: unknown) {
-      setCompromiso(null);
+      setEstado(null);
       setError(err instanceof Error ? err.message : "No fue posible consultar Siesa.");
     } finally {
       setLoading(false);
@@ -253,7 +297,7 @@ export function useCompromisoInventarioPedido(id: string | null) {
     refresh();
   }, [refresh]);
 
-  return { compromiso, loading, error, refresh };
+  return { estado, loading, error, refresh };
 }
 
 export function useCrearCotizacion() {

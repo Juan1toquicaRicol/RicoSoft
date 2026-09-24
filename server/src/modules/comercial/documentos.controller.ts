@@ -4,6 +4,10 @@ import { prisma } from "../../config/prisma";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { listarDocumentosSchema } from "./comercial.schemas";
 import { formatearNumeroCotizacion, formatearNumeroPedido } from "./cotizaciones.controller";
+import {
+  obtenerCompromisoInventarioPedidos,
+  type CompromisoInventarioPedidoDto,
+} from "./pedidos-compromiso.service";
 
 type DocumentoBandeja = {
   tipo: "cotizacion" | "proforma" | "pedido";
@@ -15,6 +19,8 @@ type DocumentoBandeja = {
   valor: number;
   documentoRelacionado: string | null;
   erp: string | null;
+  /** Solo pedidos con incluirCompromiso=true. */
+  compromiso?: CompromisoInventarioPedidoDto | null;
 };
 
 /** GET /comercial/documentos — bandeja agregada de Cotizaciones/Proformas/
@@ -31,8 +37,18 @@ export const listarDocumentosComerciales = async (req: AuthenticatedRequest, res
   if (!parseo.success) {
     return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
   }
-  const { tipo, estado, clienteRowId, vendedorNombre, desde, hasta, search, page, pageSize } =
-    parseo.data;
+  const {
+    tipo,
+    estado,
+    clienteRowId,
+    vendedorNombre,
+    desde,
+    hasta,
+    search,
+    incluirCompromiso,
+    page,
+    pageSize,
+  } = parseo.data;
 
   const filtroFecha =
     desde || hasta
@@ -169,5 +185,30 @@ export const listarDocumentosComerciales = async (req: AuthenticatedRequest, res
   const total = documentos.length;
   const paginados = documentos.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
-  return res.json({ items: paginados, page, pageSize, total });
+  // Estado en Siesa de los PEDIDOS de la página, en UN lote (sin N+1). Si Siesa
+  // falla, la bandeja sigue funcionando: compromisoDisponible=false.
+  let compromisoDisponible = true;
+  if (incluirCompromiso) {
+    const idsPedidos = paginados.filter((d) => d.tipo === "pedido").map((d) => d.id);
+    if (idsPedidos.length > 0) {
+      try {
+        const dtos = await obtenerCompromisoInventarioPedidos(tenantId, idsPedidos);
+        const porId = new Map(dtos.map((d) => [d.pedidoId, d]));
+        for (const d of paginados) {
+          if (d.tipo === "pedido") d.compromiso = porId.get(d.id) ?? null;
+        }
+      } catch (error) {
+        console.error("Error enriqueciendo la bandeja de pedidos con Siesa:", error);
+        compromisoDisponible = false;
+      }
+    }
+  }
+
+  return res.json({
+    items: paginados,
+    page,
+    pageSize,
+    total,
+    ...(incluirCompromiso ? { compromisoDisponible } : {}),
+  });
 };

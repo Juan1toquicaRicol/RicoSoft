@@ -37,6 +37,9 @@ export interface ResumenSiesaPedido {
   pdvNumero: number;
   /** Estado operativo derivado de los flags reales de Siesa. */
   estadoOperativo: EstadoPedidoVentaSiesa;
+  /** Etiqueta para mostrar (bandeja y cabecera UnoEE): Comprometido, Facturado,
+   * Retenido, etc. Ver etiquetaEstadoUnoee. */
+  estadoUnoee: string;
   cantidadPedida: number;
   cantidadComprometida: number;
   cantidadRemisionada: number;
@@ -72,6 +75,23 @@ export class SiesaNoConfiguradoError extends Error {
   constructor() {
     super("Este tenant no tiene una compañía de Siesa (siesaCiaId) configurada.");
   }
+}
+
+/**
+ * Etiqueta operativa visible del pedido (estilo CRM de Siesa). Los estados que
+ * dicen algo distinto de "hay inventario reservado" (pendiente de aprobación,
+ * backorder, retenido, remisionado/facturado) se conservan; para un pedido
+ * simplemente aprobado/en proceso, la etiqueta depende de la cantidad
+ * comprometida: "Comprometido" (> 0) o "No comprometido" (0).
+ */
+export function etiquetaEstadoUnoee(
+  estadoOperativo: EstadoPedidoVentaSiesa,
+  cantidadComprometida: number,
+): string {
+  if (estadoOperativo === "Aprobado" || estadoOperativo === "En proceso") {
+    return cantidadComprometida > 0 ? "Comprometido" : "No comprometido";
+  }
+  return estadoOperativo;
 }
 
 /** Máximo de rowids por consulta (límite de 2100 parámetros de SQL Server). */
@@ -158,10 +178,7 @@ export async function leerCompromisoSiesaPorPdv(
       const cantidadPedida = Number(r.cantidadPedida ?? 0);
       const cantidadRemisionada = Number(r.cantidadRemisionada ?? 0);
       const cantidadFacturada = Number(r.cantidadFacturada ?? 0);
-      resultado.set(r.pdvRowId, {
-        pdvRowId: r.pdvRowId,
-        pdvNumero: r.pdvNumero,
-        estadoOperativo: determinarEstadoPedidoVentaSiesa({
+      const estadoOperativo = determinarEstadoPedidoVentaSiesa({
           indUltEstadoAprobado: aBool(r.indUltEstadoAprobado),
           indBackorderDocto: aBool(r.indBackorderDocto),
           indBackorderLinea: aBool(r.indBackorderLinea),
@@ -175,7 +192,13 @@ export async function leerCompromisoSiesaPorPdv(
           cantPedida: cantidadPedida,
           cantRemisionada: cantidadRemisionada,
           cantFacturada: cantidadFacturada,
-        }),
+        });
+      const comprometida = Number(r.cantidadComprometida ?? 0);
+      resultado.set(r.pdvRowId, {
+        pdvRowId: r.pdvRowId,
+        pdvNumero: r.pdvNumero,
+        estadoOperativo,
+        estadoUnoee: etiquetaEstadoUnoee(estadoOperativo, comprometida),
         cantidadPedida,
         cantidadComprometida: Number(r.cantidadComprometida ?? 0),
         cantidadRemisionada,

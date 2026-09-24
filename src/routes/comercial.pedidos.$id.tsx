@@ -13,7 +13,7 @@ import { requirePermisoGuard } from "@/lib/route-guards";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { usePedidoComercial, useAccionesPedido } from "@/hooks/use-comercial";
-import { PanelCompromisoInventario } from "@/components/panel-compromiso-inventario";
+import { PanelEstadoPedidoUnoee } from "@/components/panel-estado-pedido-unoee";
 
 export const Route = createFileRoute("/comercial/pedidos/$id")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER),
@@ -32,7 +32,6 @@ function DetallePedido() {
   const [procesando, setProcesando] = useState(false);
 
   const puedeConfirmar = hasPermission(user, PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_CONFIRMAR);
-  const puedeVerComprometidoSiesa = hasPermission(user, PERMISOS_SISTEMA.ANALITICA_VER);
 
   const eliminarDefinitivamente = async () => {
     if (!pedido) return;
@@ -77,7 +76,7 @@ function DetallePedido() {
     return (
       <AppShell title="Pedido" description="No encontrado">
         <p className="text-xs text-slate-500">{error || "Pedido no encontrado."}</p>
-        <Link to="/comercial/gestion" className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline">
+        <Link to="/comercial/gestion" className="mt-2 inline-block text-xs font-semibold text-estado-info-fg hover:underline">
           Volver a Gestión Comercial
         </Link>
       </AppShell>
@@ -122,7 +121,7 @@ function DetallePedido() {
               size="sm"
               variant="outline"
               disabled={procesando}
-              className="gap-1.5 text-red-600"
+              className="gap-1.5 text-estado-danger-fg hover:bg-estado-danger-bg"
               onClick={() => ejecutar(() => acciones.anular(pedido.id), "Pedido anulado.")}
             >
               <Ban className="h-3.5 w-3.5" /> Anular
@@ -161,7 +160,7 @@ function DetallePedido() {
                   <Badge variant="outline">COT-{String(pedido.cotizacion.numero).padStart(5, "0")}</Badge>
                 </Link>
               ) : (
-                <span className="text-slate-400">Sin cotización</span>
+                <span className="text-slate-500">Sin cotización</span>
               )}
             </div>
             <div className="flex items-center justify-between">
@@ -171,7 +170,7 @@ function DetallePedido() {
                   <Badge variant="outline">{pedido.proforma.numero}</Badge>
                 </Link>
               ) : (
-                <span className="text-slate-400">Sin proforma</span>
+                <span className="text-slate-500">Sin proforma</span>
               )}
             </div>
             <div className="flex items-center justify-between">
@@ -180,18 +179,20 @@ function DetallePedido() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-500">ERP</span>
-              <span className="text-slate-400">
-                {pedido.erpNumero || "No sincronizado con ERP"}
+              <span className="flex items-center gap-2">
+                {pedido.erpNumero && (
+                  <span className="tabular-nums text-slate-700">{pedido.erpNumero}</span>
+                )}
+                <EstadoBadge
+                  estado={pedido.erpNumero || pedido.erpRowId ? "Vinculado" : "Pendiente de envío a ERP"}
+                />
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <PanelCompromisoInventario
-        pedidoId={pedido.id}
-        puedeVerComprometidoSiesa={puedeVerComprometidoSiesa}
-      />
+      <PanelEstadoPedidoUnoee pedidoId={pedido.id} />
 
       {user?.isSuperadmin && (
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
@@ -199,7 +200,7 @@ function DetallePedido() {
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 gap-1.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+            className="h-7 gap-1.5 text-xs text-estado-danger-fg hover:bg-estado-danger-bg hover:text-estado-danger-fg"
             disabled={procesando}
             onClick={() => void eliminarDefinitivamente()}
           >

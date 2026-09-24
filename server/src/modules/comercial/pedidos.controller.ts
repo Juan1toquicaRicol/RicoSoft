@@ -14,25 +14,19 @@ import { formatearNumeroPedido } from "./cotizaciones.controller";
 import { resolverCiaSiesa } from "../../lib/siesa-tenant";
 import { leerPdvSiesa } from "../integraciones-siesa/siesa-pedidos.service";
 import {
+  siguienteNumeroPedidoComercial,
+  avanzarContadorPedidoComercial,
+} from "./pedidos-consecutivo";
+import {
+  ESTADO_PROFORMA,
+  puedeCrearPedidoDesdeProforma,
+} from "../proformas/proformas-estados";
+import {
   obtenerCompromisoInventarioPedidos,
   SiesaConsultaError,
   SiesaNoConfiguradoError,
 } from "./pedidos-compromiso.service";
-
-const PRIMER_NUMERO_PEDIDO = 1;
-
-function calcularSiguienteNumero(ultimoNumero: number | null, piso: number): number {
-  return Math.max(piso, (ultimoNumero ?? piso - 1) + 1);
-}
-
-async function siguienteNumeroPedido(tx: Prisma.TransactionClient, tenantId: string) {
-  const ultima = await tx.pedidoComercial.findFirst({
-    where: { tenantId },
-    orderBy: { numero: "desc" },
-    select: { numero: true },
-  });
-  return calcularSiguienteNumero(ultima?.numero ?? null, PRIMER_NUMERO_PEDIDO);
-}
+import { obtenerEstadoPedidoUnoee } from "./pedidos-estado-unoee.service";
 
 function esViolacionUnicidad(error: unknown, modelName: string): boolean {
   return (
@@ -218,6 +212,29 @@ export const obtenerPedido = async (req: AuthenticatedRequest, res: Response) =>
   return res.json(serializarPedido(pedido));
 };
 
+/** Nombre real del índice único filtrado (migración
+ * 20260924100000_proforma_maquina_estados_pedido_consecutivo): máximo un
+ * PedidoComercial por Proforma. No existe como @@unique en schema.prisma. */
+const INDICE_UNICO_PROFORMA = "PedidoComercial_tenantId_proformaId_filtered_uq";
+
+function esViolacionIndiceUnicoProforma(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    String(error.meta?.target ?? "").includes(INDICE_UNICO_PROFORMA)
+  );
+}
+
+/** Conflicto de escritura/deadlock transitorio de SQL Server. */
+function esConflictoTransitorio(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+}
+
+/** La proforma dejó de estar ACEPTADA entre la lectura y la transición. */
+class ProformaYaNoAceptadaError extends Error {}
+
+const MAX_INTENTOS_CONSECUTIVO_PEDIDO = 5;
+
 /** POST /comercial/proformas/:id/pedido — crea un PedidoComercial desde una
  * Proforma ACTIVA. Copia snapshot de cliente/items/cantidades/precios/
  * descuentos/impuestos — nunca vuelve a leer la Proforma después de crear el
@@ -241,16 +258,16 @@ export const crearPedidoDesdeProforma = async (req: AuthenticatedRequest, res: R
   if (!proforma) {
     return res.status(404).json({ message: "Proforma no encontrada." });
   }
-  if (proforma.estado !== "activa") {
-    return res
-      .status(400)
-      .json({ message: "Solo se puede crear un pedido desde una proforma activa." });
+  if (!puedeCrearPedidoDesdeProforma(proforma.estado)) {
+    return res.status(409).json({
+      message: `Solo se puede crear un pedido desde una proforma ACEPTADA (estado actual: ${proforma.estado}).`,
+    });
   }
 
-  try {
-    const creado = await prisma.$transaction(async (tx) => {
-      const numero = await siguienteNumeroPedido(tx, tenantId);
-      return tx.pedidoComercial.create({
+  const crearEnTransaccion = () =>
+    prisma.$transaction(async (tx) => {
+      const numero = await siguienteNumeroPedidoComercial(tx, tenantId);
+      const pedido = await tx.pedidoComercial.create({
         data: {
           tenantId,
           numero,
@@ -282,28 +299,105 @@ export const crearPedidoDesdeProforma = async (req: AuthenticatedRequest, res: R
         },
         include: { items: { orderBy: { orden: "asc" } } },
       });
+
+      // Transición CONDICIONAL: solo si la proforma sigue ACEPTADA. Si otra
+      // petición ya la pasó a PEDIDO_CREADO/ANULADA, count = 0 y toda la
+      // transacción (incluido el pedido recién creado) se revierte.
+      const { count } = await tx.proforma.updateMany({
+        where: { id: proforma.id, tenantId, estado: ESTADO_PROFORMA.ACEPTADA },
+        data: { estado: ESTADO_PROFORMA.PEDIDO_CREADO },
+      });
+      if (count === 0) throw new ProformaYaNoAceptadaError();
+
+      await avanzarContadorPedidoComercial(tx, tenantId, numero);
+
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PEDIDO_COMERCIAL_CREADO",
+          detalle: `${req.user!.nombre} creó el pedido ${formatearNumeroPedido(pedido.numero)} desde la proforma ${proforma.numero} (proforma: ${ESTADO_PROFORMA.ACEPTADA} → ${ESTADO_PROFORMA.PEDIDO_CREADO}).`,
+          entidadTipo: "PedidoComercial",
+          entidadId: pedido.id,
+          datosAnteriores: JSON.stringify({ proformaEstado: ESTADO_PROFORMA.ACEPTADA }),
+          datosNuevos: JSON.stringify({ proformaEstado: ESTADO_PROFORMA.PEDIDO_CREADO }),
+        },
+      });
+      return pedido;
     });
 
-    await prisma.auditoria.create({
-      data: {
-        tenantId,
-        usuarioId: req.user!.id,
-        accion: "PEDIDO_COMERCIAL_CREADO",
-        detalle: `${req.user!.nombre} creó el pedido ${formatearNumeroPedido(creado.numero)} desde la proforma ${proforma.numero}.`,
-        entidadTipo: "PedidoComercial",
-        entidadId: creado.id,
-      },
-    });
-
+  try {
+    // Reintentos SOLO ante carreras benignas del consecutivo (P2002 del número
+    // de pedido o de la fila del contador) y conflictos transitorios (P2034);
+    // cada intento es una transacción completa nueva.
+    let creado;
+    for (let intento = 1; ; intento++) {
+      try {
+        creado = await crearEnTransaccion();
+        break;
+      } catch (error) {
+        const reintentable =
+          intento < MAX_INTENTOS_CONSECUTIVO_PEDIDO &&
+          !esViolacionIndiceUnicoProforma(error) &&
+          (esViolacionUnicidad(error, "PedidoComercial") ||
+            esViolacionUnicidad(error, "ConfiguracionComercial") ||
+            esConflictoTransitorio(error));
+        if (!reintentable) throw error;
+      }
+    }
     return res.status(201).json(serializarPedido(creado));
   } catch (error) {
-    if (esViolacionUnicidad(error, "PedidoComercial")) {
+    if (error instanceof ProformaYaNoAceptadaError) {
+      return res.status(409).json({
+        message: "La proforma ya no está ACEPTADA (otro proceso la modificó). Recarga e intenta de nuevo.",
+      });
+    }
+    if (esViolacionIndiceUnicoProforma(error)) {
+      return res.status(409).json({ message: "Esta proforma ya tiene un pedido comercial." });
+    }
+    if (
+      esViolacionUnicidad(error, "PedidoComercial") ||
+      esViolacionUnicidad(error, "ConfiguracionComercial") ||
+      esConflictoTransitorio(error)
+    ) {
       return res
         .status(409)
         .json({ message: "Conflicto generando el consecutivo del pedido, intenta de nuevo." });
     }
     console.error("Error creando el pedido comercial:", error);
     return res.status(500).json({ message: "No fue posible crear el pedido." });
+  }
+};
+
+/** GET /comercial/pedidos/:id/estado-unoee — "Estado del Pedido UnoEE": cabecera
+ * e ítems del PDV de Siesa vinculado (solo lectura). Une SOLO por
+ * PedidoComercial.erpRowId; la compañía sale del tenant autenticado (no acepta
+ * ciaId/tenantId del cliente). Pedido de otro tenant -> 404. Sin vínculo ERP ->
+ * 200 con vinculado=false (sin consultar Siesa). Siesa caído -> 502 fijo. */
+export const obtenerEstadoPedidoUnoeeHandler = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  const tenantId = req.user!.tenantId;
+  const parseo = idParamSchema.safeParse(req.params);
+  if (!parseo.success) {
+    return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+  }
+  try {
+    const dto = await obtenerEstadoPedidoUnoee(tenantId, parseo.data.id);
+    if (!dto) return res.status(404).json({ message: "Pedido no encontrado." });
+    return res.json(dto);
+  } catch (error) {
+    if (error instanceof SiesaNoConfiguradoError) {
+      return res.status(400).json({ message: error.message });
+    }
+    if (error instanceof SiesaConsultaError) {
+      console.error("Error consultando el estado UnoEE del pedido en Siesa:", error.causa);
+      return res.status(502).json({
+        message: "No fue posible conectar con Siesa en este momento. Intenta de nuevo más tarde.",
+      });
+    }
+    throw error;
   }
 };
 

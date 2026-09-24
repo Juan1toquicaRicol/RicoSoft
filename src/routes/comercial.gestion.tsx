@@ -6,12 +6,29 @@ import { AppShell } from "@/components/app-shell";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableMessageRow,
+  TableRow,
+} from "@/components/ui/table";
+import { CLASES_TONO_ESTADO } from "@/lib/estado-tono";
+import { cn } from "@/lib/utils";
 import { money } from "@/lib/data";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requireAnyPermisoGuard } from "@/lib/route-guards";
 import { useDocumentosComerciales, type DocumentoBandeja } from "@/hooks/use-comercial";
 import { NuevoDocumentoMenu } from "@/components/nuevo-documento-menu";
+import {
+  tabDesdeUrl,
+  tabEfectiva,
+  tabsVisibles as calcularTabsVisibles,
+  type TabGestion,
+} from "@/lib/gestion-comercial-tabs";
+import { estadoBandejaPedido } from "@/lib/estado-pedido-bandeja";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
 
@@ -27,6 +44,11 @@ const PERMISOS_SECCION_COMERCIAL = [
 
 export const Route = createFileRoute("/comercial/gestion")({
   beforeLoad: requireAnyPermisoGuard(PERMISOS_SECCION_COMERCIAL),
+  // ?tab=pedidos|cotizaciones|proformas|todos abre esa pestaña (p. ej. el
+  // enlace de la tarjeta "Comprometido en Siesa" de Inventario).
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Gestión Comercial | RicoSoft" },
@@ -38,21 +60,6 @@ export const Route = createFileRoute("/comercial/gestion")({
   }),
   component: GestionComercial,
 });
-
-const TABS: {
-  value: DocumentoBandeja["tipo"] | "todos";
-  label: string;
-  permiso?: string;
-}[] = [
-  { value: "todos", label: "Todos" },
-  { value: "cotizacion", label: "Cotizaciones", permiso: PERMISOS_SISTEMA.COTIZACIONES_VER },
-  { value: "proforma", label: "Proformas", permiso: PERMISOS_SISTEMA.PROFORMAS_VER },
-  {
-    value: "pedido",
-    label: "Pedidos",
-    permiso: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER,
-  },
-];
 
 function rutaDocumento(doc: DocumentoBandeja): string {
   if (doc.tipo === "cotizacion") return `/comercial/cotizaciones/${doc.id}`;
@@ -66,27 +73,29 @@ function etiquetaTipo(tipo: DocumentoBandeja["tipo"]): string {
   return "Proforma";
 }
 
-function GestionComercial() {
-  const { user } = useSession();
-  // Cada pestaña exige su propio VER de sección — un usuario con, por
-  // ejemplo, solo pedidos_comerciales.ver entra a la bandeja (gracias al
-  // beforeLoad con requireAnyPermisoGuard) pero no debe ver ni poder elegir
-  // las pestañas de Cotizaciones o Proformas.
-  const tabsVisibles = TABS.filter((t) => !t.permiso || hasPermission(user, t.permiso));
+/** Estado de una fila, SIEMPRE con el semáforo oficial (EstadoBadge). En la pestaña
+ * Pedidos: estado operativo UnoEE si tiene PDV vinculado, "Pendiente de envío a
+ * ERP" si no, o el estado comercial si Siesa no respondió. En el resto de
+ * pestañas: el estado comercial de siempre. */
+function EstadoDocumento({ doc, conSiesa }: { doc: DocumentoBandeja; conSiesa: boolean }) {
+  if (!conSiesa || doc.tipo !== "pedido") return <EstadoBadge estado={doc.estado} />;
+  return <EstadoBadge estado={estadoBandejaPedido(doc.estado, doc.compromiso).texto} />;
+}
 
-  const [tab, setTab] = useState<DocumentoBandeja["tipo"] | "todos">("todos");
+/** Bandeja de documentos comerciales (Todos/Cotizaciones/Proformas/Pedidos).
+ * Se monta solo en estas pestañas: "Comprometido en Siesa" no dispara esta
+ * consulta. */
+function BandejaDocumentos({ tipo }: { tipo: DocumentoBandeja["tipo"] | "todos" }) {
+  const esBandejaPedidos = tipo === "pedido";
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
-  // Si el tab activo (persistido en estado local) deja de ser válido para
-  // este usuario — p. ej. "todos" nunca se oculta, pero si un día se elige
-  // recordar el último tab por localStorage esto evita quedar atascado en
-  // una pestaña sin permiso — se cae de vuelta a "todos".
-  const tabEfectivo = tabsVisibles.some((t) => t.value === tab) ? tab : "todos";
-
-  const { items, total, loading, error } = useDocumentosComerciales({
-    tipo: tabEfectivo,
+  // Cambiar de pestaña remonta el componente (key), así que la página vuelve a 1.
+  const { items, total, compromisoDisponible, loading, error } = useDocumentosComerciales({
+    tipo,
+    // En la pestaña Pedidos cada fila muestra su estado operativo en Siesa.
+    incluirCompromiso: esBandejaPedidos,
     search: search || undefined,
     page,
     pageSize,
@@ -95,29 +104,19 @@ function GestionComercial() {
   const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <AppShell
-      title="Gestión Comercial"
-      description="Cotizaciones, Proformas y Pedidos comerciales en un solo lugar."
-      actions={<NuevoDocumentoMenu />}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1">
-          {tabsVisibles.map((t) => (
-            <Button
-              key={t.value}
-              size="sm"
-              variant={tabEfectivo === t.value ? "default" : "outline"}
-              onClick={() => {
-                setTab(t.value);
-                setPage(1);
-              }}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </div>
+    <>
+      {esBandejaPedidos && !compromisoDisponible && (
+        <p
+          role="status"
+          className={cn("mt-3 rounded-md border px-3 py-2 text-xs", CLASES_TONO_ESTADO.warning)}
+        >
+          No fue posible consultar Siesa: se muestra el estado comercial de cada pedido.
+        </p>
+      )}
+
+      <div className="mt-3 flex justify-end">
         <div className="relative w-64">
-          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <Input
             placeholder="Número, cliente, documento ERP..."
             className="pl-7"
@@ -132,7 +131,7 @@ function GestionComercial() {
 
       <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="overflow-x-auto">
-          <Table>
+          <Table density="compact">
             <TableHeader>
               <TableRow>
                 <TableHead>Tipo</TableHead>
@@ -140,33 +139,20 @@ function GestionComercial() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead>Documento relacionado</TableHead>
-                <TableHead>ERP</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead numeric>Valor</TableHead>
+                <TableHead numeric>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-xs text-slate-500">
-                    Cargando...
-                  </TableCell>
-                </TableRow>
-              )}
-              {!loading && error && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-xs text-red-600">
-                    {error}
-                  </TableCell>
-                </TableRow>
-              )}
+              {loading && <TableMessageRow colSpan={7} kind="loading" />}
+              {!loading && error && <TableMessageRow colSpan={7} kind="error" title={error} />}
               {!loading && !error && items.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-xs text-slate-500">
-                    Sin documentos comerciales todavía.
-                  </TableCell>
-                </TableRow>
+                <TableMessageRow
+                  colSpan={7}
+                  kind="empty"
+                  icon={FileText}
+                  title="Sin documentos comerciales todavía."
+                />
               )}
               {items.map((doc) => (
                 <TableRow key={`${doc.tipo}-${doc.id}`}>
@@ -179,12 +165,10 @@ function GestionComercial() {
                   <TableCell>{doc.cliente}</TableCell>
                   <TableCell>{new Date(doc.fecha).toLocaleDateString("es-CO")}</TableCell>
                   <TableCell>
-                    <EstadoBadge estado={doc.estado} />
+                    <EstadoDocumento doc={doc} conSiesa={esBandejaPedidos} />
                   </TableCell>
-                  <TableCell className="text-right">{money(doc.valor)}</TableCell>
-                  <TableCell>{doc.documentoRelacionado || "Sin documento relacionado"}</TableCell>
-                  <TableCell>{doc.erp || "No sincronizado con ERP"}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell numeric>{money(doc.valor)}</TableCell>
+                  <TableCell numeric>
                     <Link to={rutaDocumento(doc)}>
                       <Button size="sm" variant="ghost">
                         Ver
@@ -222,6 +206,44 @@ function GestionComercial() {
           </Button>
         </div>
       </div>
+    </>
+  );
+}
+
+function GestionComercial() {
+  const { user } = useSession();
+  const { tab: tabUrl } = Route.useSearch();
+  // Cada pestaña exige sus propios permisos — un usuario con, por ejemplo,
+  // solo pedidos_comerciales.ver entra a la bandeja (gracias al beforeLoad con
+  // requireAnyPermisoGuard) pero no ve las pestañas de Cotizaciones/Proformas
+  const tabsVisibles = calcularTabsVisibles((permiso) => hasPermission(user, permiso));
+
+  const [tab, setTab] = useState<TabGestion>(tabDesdeUrl(tabUrl) ?? "todos");
+
+  // Si el tab activo deja de ser válido para este usuario (p. ej. un enlace
+  // ?tab=pedidos sin pedidos_comerciales.ver) se cae de vuelta a "todos".
+  const tabEfectivo = tabEfectiva(tab, tabsVisibles);
+
+  return (
+    <AppShell
+      title="Gestión Comercial"
+      description="Cotizaciones, Proformas y Pedidos comerciales en un solo lugar."
+      actions={<NuevoDocumentoMenu />}
+    >
+      <div className="flex flex-wrap gap-1">
+        {tabsVisibles.map((t) => (
+          <Button
+            key={t.value}
+            size="sm"
+            variant={tabEfectivo === t.value ? "default" : "outline"}
+            onClick={() => setTab(t.value)}
+          >
+            {t.label}
+          </Button>
+        ))}
+      </div>
+
+      <BandejaDocumentos key={tabEfectivo} tipo={tabEfectivo} />
     </AppShell>
   );
 }
