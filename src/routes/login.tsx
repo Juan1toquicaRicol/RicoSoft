@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ShieldCheck, Loader2, Eye, EyeOff, User, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Loader2,
+  Eye,
+  EyeOff,
+  User,
+  AlertCircle,
+  CheckCircle2,
+  Mail,
+  LockKeyhole,
+  ArrowRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -48,30 +58,99 @@ interface TenantAccesible {
   subdomain: string;
 }
 
-/**
- * Panel derecho compartido entre "Iniciar sesión" y "Selecciona tu empresa"
- * — misma identidad visual en ambas pantallas del flujo de acceso. El fondo
- * oscuro con textura de puntos es puro CSS (sin imagen extra que cargar);
- * 3logos.jpg ya trae su propio fondo blanco, por eso va dentro de una
- * tarjeta blanca en vez de a pantalla completa sobre el degradado.
- */
+/** Panel gráfico compartido por el login, registro y selección de empresa. */
 function PanelMarca() {
   return (
-    <div
-      className="hidden lg:flex flex-1 lg:sticky lg:top-0 lg:h-screen flex-col items-center justify-center overflow-hidden px-12 py-12 text-white"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 0), linear-gradient(135deg, #0b1526 0%, #0f2247 55%, #123067 100%)",
-        backgroundSize: "24px 24px, 100% 100%",
-      }}
+    <aside
+      aria-label="Empresas del Grupo Ricol"
+      className="relative hidden min-h-screen overflow-hidden bg-[#eaf8fc] lg:flex lg:w-[58%] lg:flex-none items-center justify-center"
     >
-      <div className="flex max-w-sm flex-col items-center text-center">
-        <div className="w-full rounded-2xl bg-white p-6 shadow-2xl shadow-black/40">
-          <img src="/3logos.jpg" alt="Ricol, FlexiPack y Green Solutions" className="w-full" />
-        </div>
-        <p className="mt-6 text-sm text-blue-100/60">Un solo sistema para todo el grupo</p>
-      </div>
-    </div>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgba(20,116,190,0.10) 1.5px, transparent 1.7px), radial-gradient(ellipse at 52% 45%, rgba(255,255,255,0.96) 0%, rgba(246,253,255,0.82) 48%, transparent 76%)",
+          backgroundSize: "26px 26px, 100% 100%",
+        }}
+      />
+
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full"
+        viewBox="0 0 900 1000"
+        preserveAspectRatio="xMidYMid slice"
+      >
+        <defs>
+          <linearGradient id="login-blue" x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor="#0879e8" />
+            <stop offset="1" stopColor="#11c6df" />
+          </linearGradient>
+          <linearGradient id="login-green" x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor="#a8df00" />
+            <stop offset="1" stopColor="#08a957" />
+          </linearGradient>
+          <linearGradient id="login-ribbon" x1="0" y1="0" x2="1" y2="0">
+            <stop stopColor="#0876e8" />
+            <stop offset="0.42" stopColor="#00bbd6" />
+            <stop offset="0.72" stopColor="#8dcf16" />
+            <stop offset="1" stopColor="#f2d900" />
+          </linearGradient>
+        </defs>
+        <path d="M0 0h360C270 118 151 143 0 223z" fill="url(#login-blue)" />
+        <path d="M0 0h287C214 91 119 126 0 174z" fill="#0878df" opacity=".9" />
+        <path d="M0 0h372C276 126 156 157 0 242" fill="none" stroke="white" strokeWidth="5" />
+        <circle cx="810" cy="-18" r="145" fill="url(#login-green)" />
+        <circle cx="810" cy="-18" r="178" fill="none" stroke="#70bb18" strokeWidth="5" />
+        <path
+          d="M-38 804c173-11 243 76 379 116 149 44 209-10 324-69 86-45 150-68 235-62v211H-38z"
+          fill="url(#login-ribbon)"
+        />
+        <path
+          d="M-42 855c170-9 248 76 386 116 144 42 226-12 335-69 89-47 149-69 226-66"
+          fill="none"
+          stroke="white"
+          strokeWidth="5"
+        />
+        <path
+          d="M-35 896c152 6 239 90 372 112 144 24 224-41 350-104 85-42 145-57 220-54v150H-35z"
+          fill="#0874d8"
+        />
+        <path d="M310 1000c117-57 184-144 325-186 91-27 168-31 242-17v203z" fill="#13a953" />
+        <path d="M450 1000c117-68 185-136 323-170 37-9 70-14 104-17v187z" fill="#f52e43" />
+        <circle cx="886" cy="589" r="92" fill="#8ed519" opacity=".76" />
+        <circle cx="886" cy="589" r="57" fill="#13a953" opacity=".78" />
+        <circle cx="844" cy="282" r="47" fill="#24c2e7" opacity=".55" />
+      </svg>
+
+      <div
+        aria-hidden="true"
+        className="absolute right-[2%] top-[22%] h-32 w-32 rounded-full border border-white/70 bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-blue-600/10"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute right-[8%] top-[39%] h-5 w-5 rounded-full bg-lime-500"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute left-[13%] top-[48%] h-44 w-44 rounded-full bg-sky-200/30"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute bottom-[24%] left-[13%] h-24 w-24 rounded-full border-[5px] border-white/80"
+      />
+      <svg
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 h-full w-[9%]"
+        viewBox="0 0 90 1000"
+        preserveAspectRatio="none"
+      >
+        <path
+          d="M0 0h16c18 102 48 174 48 295 0 192 16 313-8 477-7 83-26 154-43 228H0z"
+          fill="white"
+        />
+      </svg>
+    </aside>
   );
 }
 
@@ -88,6 +167,15 @@ function Login() {
   const [departamentos, setDepartamentos] = useState<DepartamentoOpcion[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [recordarCorreo, setRecordarCorreo] = useState(false);
+
+  useEffect(() => {
+    const correoGuardado = localStorage.getItem("ricosoft.login.correo");
+    if (correoGuardado) {
+      setEmail(correoGuardado);
+      setRecordarCorreo(true);
+    }
+  }, []);
 
   // Dominio del correo que se está escribiendo (derivado, no un estado
   // propio): solo cambia de valor cuando la PARTE DEL DOMINIO del email
@@ -207,7 +295,9 @@ function Login() {
           body: JSON.stringify({ nombre, email, password, departamentoId }),
         });
 
-        setSuccessMessage("¡Cuenta registrada exitosamente! Ya puedes iniciar sesión.");
+        setSuccessMessage(
+          "Cuenta registrada. Queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
+        );
         setIsRegistering(false);
         setNombre("");
         setPassword("");
@@ -227,6 +317,9 @@ function Login() {
           body: JSON.stringify({ email, password }),
         });
 
+        if (recordarCorreo) localStorage.setItem("ricosoft.login.correo", email.trim());
+        else localStorage.removeItem("ricosoft.login.correo");
+
         if (response.requiresTenantSelection) {
           setTenantSelection({
             selectionToken: response.selectionToken,
@@ -242,13 +335,6 @@ function Login() {
         setIsLoading(false);
       }
     }
-  };
-
-  const handleForgotPassword = () => {
-    toast.info("¿Olvidaste tu contraseña?", {
-      description:
-        "Contacta al Administrador del Sistema de RicoSoft o al área de IT para restablecerla.",
-    });
   };
 
   const toggleMode = () => {
@@ -270,22 +356,17 @@ function Login() {
     });
 
     return (
-      <div className="min-h-screen bg-slate-50 flex">
-        <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 bg-white">
-          <div className="w-full max-w-[360px]">
+      <div className="min-h-screen bg-white flex">
+        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-[42%] lg:flex-none lg:px-14">
+          <div className="w-full max-w-[440px]">
             <div className="mb-8">
-              <img
-                src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
-                alt="Grupo Ricol"
-                className="h-12 w-auto"
-              />
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              <span className="text-[2.25rem] font-extrabold tracking-tight text-blue-950">
                 RicoSoft
-              </p>
+              </span>
             </div>
 
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <div className="mb-7">
+              <h1 className="text-[1.7rem] font-bold tracking-tight text-slate-900">
                 ¿Con cuál empresa entras?
               </h1>
               <p className="mt-1 text-sm text-slate-500">
@@ -300,34 +381,36 @@ function Login() {
               </div>
             )}
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {tenantsOrdenados.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   disabled={tenantSeleccionando !== null}
                   onClick={() => handleSeleccionarTenant(t.id)}
-                  className="w-full flex items-center justify-between h-14 px-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-blue-300 transition-colors text-left disabled:opacity-60"
+                  className="flex min-h-[68px] w-full items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition-colors hover:border-blue-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60"
                 >
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900 truncate">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold leading-5 text-slate-900 break-words">
                         {t.nombre}
                       </span>
                       {t.id === ultimaEmpresaId && (
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">
+                        <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
                           Última vez
                         </span>
                       )}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                    <span className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
                       <span className="h-1.5 w-1.5 rounded-full bg-blue-600" /> Activa
                     </span>
                   </span>
                   {tenantSeleccionando === t.id ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
                   ) : (
-                    <span className="shrink-0 text-xs font-semibold text-blue-700">Entrar →</span>
+                    <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-blue-700">
+                      Entrar <ArrowRight className="h-4 w-4" />
+                    </span>
                   )}
                 </button>
               ))}
@@ -353,29 +436,25 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-white flex">
       {/* ── Columna Izquierda: Formulario ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 bg-white">
-        {/* Logo / Marca */}
-        <div className="w-full max-w-[360px]">
-          <div className="mb-8">
-            <img
-              src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
-              alt="Grupo Ricol"
-              className="h-12 w-auto"
-            />
-            <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-[42%] lg:flex-none lg:px-14">
+        <div className="w-full max-w-[420px]">
+          <div className="mb-10">
+            <span className="text-[2.25rem] font-extrabold tracking-tight text-blue-950">
               RicoSoft
-            </p>
+            </span>
           </div>
 
           {/* Encabezado Dinámico */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              {isRegistering ? "Crear una cuenta" : "Hola de nuevo"}
+          <div className="mb-7">
+            <h1 className="text-2xl font-extrabold tracking-tight text-blue-950 sm:text-3xl">
+              {isRegistering ? "Crear una cuenta" : "Bienvenido a RicoSoft"}
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {isRegistering ? "Con tu correo corporativo." : "Ingresa para continuar."}
+            <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+              {isRegistering
+                ? "Con tu correo corporativo."
+                : "Plataforma interna de gestión para los colaboradores del Grupo Ricol."}
             </p>
           </div>
 
@@ -422,16 +501,22 @@ function Login() {
               <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
                 Correo corporativo
               </Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="usuario@ricol.com.co"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white transition-colors rounded-lg shadow-none"
-              />
+              <div className="relative">
+                <Mail
+                  aria-hidden="true"
+                  className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500"
+                />
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder=""
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-[58px] rounded-xl border-slate-200 bg-white pl-12 text-sm shadow-sm transition-colors focus:bg-white"
+                />
+              </div>
             </div>
 
             {/* Contraseña */}
@@ -440,17 +525,12 @@ function Login() {
                 <Label htmlFor="password" className="text-xs font-semibold text-slate-700">
                   Contraseña
                 </Label>
-                {!isRegistering && (
-                  <button
-                    type="button"
-                    onClick={handleForgotPassword}
-                    className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 hover:underline transition-colors"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                )}
               </div>
               <div className="relative">
+                <LockKeyhole
+                  aria-hidden="true"
+                  className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500"
+                />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -459,7 +539,7 @@ function Login() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white pr-10 transition-colors rounded-lg shadow-none"
+                  className="h-[58px] rounded-xl border-slate-200 bg-white pl-12 pr-12 text-sm shadow-sm transition-colors focus:bg-white"
                 />
                 <button
                   type="button"
@@ -476,6 +556,18 @@ function Login() {
                 </p>
               )}
             </div>
+
+            {!isRegistering && (
+              <label className="flex cursor-pointer items-center gap-3 pt-1 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={recordarCorreo}
+                  onChange={(event) => setRecordarCorreo(event.target.checked)}
+                  className="h-5 w-5 rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
+                />
+                <span>Recordarme en este equipo</span>
+              </label>
+            )}
 
             {/* Campo Departamento (Solo visible en Registro) */}
             {isRegistering && (
@@ -511,7 +603,7 @@ function Login() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-10 text-sm font-bold rounded-lg shadow-md transition-all mt-2 bg-blue-700 hover:bg-blue-800 disabled:bg-slate-400"
+              className="mt-2 h-[62px] w-full rounded-xl bg-gradient-to-r from-blue-700 to-sky-500 text-base font-bold shadow-lg shadow-blue-700/15 transition-all hover:from-blue-800 hover:to-sky-600 disabled:bg-slate-400"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -521,7 +613,9 @@ function Login() {
               ) : isRegistering ? (
                 "Registrar cuenta"
               ) : (
-                "Ingresar a RicoSoft"
+                <span className="flex items-center justify-center gap-4">
+                  Ingresar a RicoSoft <ArrowRight className="h-6 w-6" />
+                </span>
               )}
             </Button>
 
@@ -553,10 +647,6 @@ function Login() {
             </div>
 
             {/* Footer de seguridad */}
-            <p className="flex items-center justify-center gap-1.5 pt-3 text-[11px] text-slate-400">
-              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-              Conexión segura
-            </p>
           </form>
         </div>
       </div>

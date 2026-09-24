@@ -505,6 +505,83 @@ Gestión Comercial → Pedidos gana trazabilidad de SOLO LECTURA vinculando
 Restricciones: no unir por número/cliente; no contar proformas; no consultar Siesa por pedido;
 no aceptar ciaId/tenantId del cliente; RicoSoft nunca escribe hacia Siesa.
 
+### 2026-09-24 — Máquina de estados de Proforma y consecutivo de Pedido Comercial
+Decisión (dictamen Lead Architect):
+- **Proforma.estado** (String VARCHAR(20), default "ENVIADA"): ENVIADA → ACEPTADA →
+  PEDIDO_CREADO; ANULADA desde ENVIADA/ACEPTADA. Sustituye a "activa"/"anulada" (la migración
+  20260924100000 convierte los datos; además pasa a PEDIDO_CREADO las "activa" que ya tenían
+  pedido). PEDIDO_CREADO y ANULADA son INMUTABLES: no admiten edición (PATCH), vincular ERP,
+  aceptar ni anular → 409. Fuente única: modules/proformas/proformas-estados.ts (espejo front:
+  src/lib/proforma-estados.ts). Las reglas "cotización ya tiene proforma activa" ahora son
+  `estado != ANULADA` (una PEDIDO_CREADO sigue bloqueando otra proforma de la misma cotización).
+- **POST /api/proformas/:id/aceptar** (PROFORMAS_GESTIONAR): solo ENVIADA → ACEPTADA; UPDATE
+  condicional + auditoría PROFORMA_ACEPTADA (antes/después) en una $transaction (dos aceptaciones
+  simultáneas: un 200, un 409). anular también es condicional y transaccional.
+- **POST /api/comercial/proformas/:id/pedido**: solo con proforma ACEPTADA (si no, 409). En UNA
+  $transaction: crea el pedido, pasa la proforma a PEDIDO_CREADO con `updateMany WHERE estado =
+  'ACEPTADA'` (count 0 → rollback + 409), avanza el contador y audita. Máximo UN pedido por
+  proforma: índice único FILTRADO `PedidoComercial_tenantId_proformaId_filtered_uq` (WHERE
+  proformaId IS NOT NULL, SQL manual como los de erpRowId; NO @@unique); su P2002 → 409.
+- **Consecutivo de pedido**: `ConfiguracionComercial.siguienteConsecutivoPedidoComercial Int
+  @default(1)`, monotónico por tenant. Siguiente = max(contador, MAX(PedidoComercial.numero)+1)
+  (modules/comercial/pedidos-consecutivo.ts), avance por UPDATE condicional dentro de la
+  transacción de creación; reintenta P2002 de número/fila del contador y P2034 (máx. 5).
+- Handlers con $transaction deben capturar errores (Express 4 no maneja rechazos async: sin
+  try/catch la petición se cuelga). aceptar/anular ya devuelven 500 controlado.
+- Frontend: Gestión Comercial ya no muestra las columnas "Documento relacionado" ni "ERP";
+  detalle de proforma: "Aceptar Proforma" solo en ENVIADA, "Crear Pedido" solo en ACEPTADA, sin
+  acciones en PEDIDO_CREADO/ANULADA; "Nuevo pedido" lista proformas ACEPTADA.
+Restricciones: no reintroducir "activa"/"anulada"; no permitir crear pedido fuera de ACEPTADA; no
+declarar @@unique sobre proformaId (NULLs); la transición a PEDIDO_CREADO siempre condicional.
+
+### 2026-09-24 — Gestión Comercial: pestaña Pedidos con "Estado del Pedido UnoEE"
+Decisión (sustituye la pestaña "Comprometido en Siesa" del mismo día): NO existe pestaña aparte;
+todo vive en la pestaña **Pedidos** de Gestión Comercial (`/comercial/gestion?tab=pedidos`).
+- **Bandeja de Pedidos**: GET /comercial/documentos?tipo=pedido&incluirCompromiso=true enriquece
+  SOLO la página con el estado en Siesa (una consulta en lote; si Siesa falla, 200 con
+  compromisoDisponible=false y se muestra el estado comercial). Por fila: con PDV vinculado →
+  estado operativo UnoEE (Comprometido / No comprometido / Facturado / Retenido...,
+  `etiquetaEstadoUnoee`); sin documento ERP → "Pendiente de envío a ERP"
+  (src/lib/estado-pedido-bandeja.ts).
+- **Detalle de pedido**: GET /comercial/pedidos/:id/estado-unoee (permiso pedidos_comerciales.ver;
+  pedidos-estado-unoee.service.ts). Caso A (vinculado): cabecera {consecutivo PDV-########, estado,
+  valorTotal, descuentos, impuestos} + ítems {referencia, itemRowId, descripción, cantidad, precio
+  unitario, subtotal, descuentos, estado, cantidad remisionada, cantidad pendiente}. Caso B (sin
+  erpRowId): banner rojo "⚠️ El pedido no ha sido enviado", sin consultar Siesa. Misma regla de
+  unión (solo erpRowId = f430_rowid, cia del tenant, tipo 'PDV'). Mapeo de importes (verificar
+  contra un PDV real en UnoEE): valorTotal = Σ f431_vlr_neto; descuentos = Σ (dscto_linea +
+  dscto_global); impuestos = Σ f431_vlr_imp; subtotal de ítem = cantidad × precio unitario base.
+- Inventario: la tarjeta "Comprometido en Siesa" se mantiene y enlaza a la pestaña Pedidos (solo
+  con pedidos_comerciales.ver); `/inventario/comprometidos` solo redirige. Se retiraron la tabla
+  global por ítem/PDV y el panel "Compromiso de Inventario" anterior.
+Restricciones: no volver a crear pestaña independiente; no unir por número visible ni cliente.
+
+### 2026-09-24 — Semáforo OFICIAL de estado operativo (design system)
+Decisión (dictamen de auditoría visual): el flujo comercial y la integración ERP Siesa usan UN
+semáforo de cinco tonos, definido como tokens en src/styles.css (`--estado-<tono>-bg|fg|border`,
+expuestos a Tailwind como `bg-estado-<tono>-bg`, `text-estado-<tono>-fg`, `border-estado-<tono>-border`):
+| Tono | Fondo / Texto | Uso |
+|---|---|---|
+| success | #ECFDF3 / #166534 | Comprometido, Facturado/Remisionado, Aprobado, Aceptada, Pedido creado |
+| warning | #FFFAEB / #92400E | Pendiente de envío a ERP, Retenido, Backorder, Pendiente de aprobación, Enviada |
+| danger  | #FEF3F2 / #B42318 | Error, "El pedido no ha sido enviado", No encontrado en Siesa, Anulada |
+| info    | #EFF6FF / #1D4ED8 | Vinculado, Parcialmente remisionado/facturado |
+| neutral | #F1F5F9 / #475569 | Sin vínculo, No comprometido, estados sin semántica |
+- Fuente única del mapeo estado→tono: src/lib/estado-tono.ts (`tonoDeEstado`); `EstadoBadge`
+  (components/ui/badge.tsx) y las variantes `success|warning|danger|info|neutral` de `Badge` lo usan.
+  Ninguna vista define colores de estado por su cuenta (nada de `bg-amber-50` suelto).
+- Reemplaza la regla anterior "los estados no se codifican por color". Las ACCIONES (botones,
+  `--success/--destructive/--warning`) siguen monocromas: los tokens de estado son adicionales.
+  El color nunca es el único canal: ícono + texto.
+- Accesibilidad: cada par bg/fg cumple WCAG AA (≥ 4.5:1) — lo verifica src/lib/contraste.test.ts
+  leyendo styles.css. Texto secundario: slate-500 (AA) — NO usar slate-400 para texto (2.5:1).
+- Tablas: `<Table density="compact">` (cabecera h-9, celdas px-3 py-1.5 text-xs) para bandejas y
+  detalle de ítems; `numeric` en TableHead/TableCell (text-right + tabular-nums); estados de
+  carga/error/vacío con `TableMessageRow` y `EstadoCarga`/`EmptyState` (ui/empty-state.tsx).
+  Default "normal" = densidad histórica (las tablas existentes no cambian).
+Restricciones: un estado nuevo se registra en estado-tono.ts (no en la vista); no modificar los
+hex del semáforo sin actualizar contraste.test.ts y esta entrada.
+
 ## 17. Cómo mantener esta memoria
 
 Añadir una entrada cuando exista:
