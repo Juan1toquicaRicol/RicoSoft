@@ -236,11 +236,11 @@ export const obtenerResumenAnalitica = async (req: AuthenticatedRequest, res: Re
 
 /**
  * Resumen ejecutivo para la portada (Dashboard). A diferencia de
- * obtenerResumenAnalitica (que exige "analitica.ver" para el módulo de
- * gráficas avanzadas), este endpoint solo exige sesión: cada sección
- * (facturas/solicitudes/créditos) se incluye únicamente si el usuario tiene
- * el permiso de "ver" de ese módulo, para que la portada nunca muestre datos
- * a los que ese usuario no tendría acceso desde su propio módulo.
+ * obtenerResumenAnalitica (gráficas avanzadas), este resumen agrega varios
+ * módulos: la ruta exige "analitica.ver" (auditoría RBAC 2026-09) y, además,
+ * cada sección (facturas/solicitudes/créditos/...) se incluye únicamente si el
+ * usuario tiene el permiso de "ver" de ese módulo, para que nunca se muestren
+ * datos a los que ese usuario no tendría acceso desde su propio módulo.
  */
 export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Response) => {
   try {

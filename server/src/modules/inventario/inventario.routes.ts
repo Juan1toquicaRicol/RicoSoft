@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import {
+  authenticateJWT,
+  requireAnyPermission,
+  requirePermission,
+} from "../../middleware/auth.middleware";
 import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import {
   obtenerInventarioGerencial,
@@ -48,7 +52,13 @@ router.get(
 router.get("/cobertura", requirePermission("analitica.ver"), obtenerCoberturaGerencial);
 router.get("/abastecimiento", requirePermission("analitica.ver"), obtenerAbastecimientoGerencial);
 router.get("/decisiones", requirePermission("analitica.ver"), obtenerDecisionesPlaneacion);
-router.get("/configuracion", requirePermission("analitica.ver"), obtenerConfiguracionInventario);
+// Quien puede EDITAR la configuración (inventario.configurar) debe poder LEERLA: sin esto entraba
+// a la pantalla y recibía 403 al cargar sus propios valores.
+router.get(
+  "/configuracion",
+  requireAnyPermission(["analitica.ver", "inventario.configurar"]),
+  obtenerConfiguracionInventario,
+);
 router.put(
   "/configuracion",
   requirePermission("inventario.configurar"),

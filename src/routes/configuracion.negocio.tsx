@@ -3,7 +3,8 @@ import React, { useEffect, useState } from "react";
 import { SlidersHorizontal, Percent } from "lucide-react";
 import { toast } from "sonner";
 
-import { requirePermisoGuard } from "@/lib/route-guards";
+import { requireAnyPermisoGuard } from "@/lib/route-guards";
+import { accesoConfigNegocio, PERMISOS_ENTRADA_CONFIG_NEGOCIO } from "@/lib/config-negocio-permisos";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
@@ -13,7 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/configuracion/negocio")({
-  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR),
+  // Entra quien pueda EDITAR alguna sección (inventario.configurar o configuracion.editar);
+  // cada sección se muestra y habilita según su propio permiso (lib/config-negocio-permisos.ts).
+  beforeLoad: requireAnyPermisoGuard([...PERMISOS_ENTRADA_CONFIG_NEGOCIO]),
   component: ConfiguracionNegocioPage,
 });
 
@@ -222,7 +225,8 @@ const SECCIONES_PARAMETROS_NEGOCIO: SeccionParametrosNegocio[] = [
   },
 ];
 
-function ConfiguracionNegocioPage() {
+/** Umbrales de inventario (GET analitica.ver|inventario.configurar, PUT inventario.configurar). */
+function SeccionInventario() {
   const { configuracion, loading, error, guardar } = useConfiguracionInventario();
   const [valores, setValores] = useState<Valores>(VALORES_INICIALES);
   const [guardando, setGuardando] = useState(false);
@@ -255,17 +259,11 @@ function ConfiguracionNegocioPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-          <SlidersHorizontal className="h-6 w-6 text-blue-600" />
-          Configuración de negocio
-        </h1>
-        <p className="text-sm text-slate-500 max-w-2xl">
-          Umbrales de negocio usados por Inventario, Producción, Planeación y Gerencia para calcular
-          riesgo, cobertura y alertas. Cambiarlos afecta lo que el sistema clasifica como normal, en
-          riesgo o en exceso para toda la empresa.
-        </p>
-      </div>
+      <p className="text-sm text-slate-500 max-w-2xl">
+        Umbrales de negocio usados por Inventario, Producción, Planeación y Gerencia para calcular
+        riesgo, cobertura y alertas. Cambiarlos afecta lo que el sistema clasifica como normal, en
+        riesgo o en exceso para toda la empresa.
+      </p>
 
       {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}
 
@@ -341,8 +339,27 @@ function ConfiguracionNegocioPage() {
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
 
-      <ConfiguracionComercialSection />
+/**
+ * Pantalla "Config. de negocio". Entra quien pueda EDITAR alguna sección y cada
+ * sección se muestra según su propio permiso (ver lib/config-negocio-permisos.ts):
+ * el guard de entrada, el menú y las acciones de edición usan la misma regla.
+ */
+function ConfiguracionNegocioPage() {
+  const { user: sesion } = useSession();
+  const acceso = accesoConfigNegocio((permiso) => hasPermission(sesion, permiso));
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+        <SlidersHorizontal className="h-6 w-6 text-blue-600" />
+        Configuración de negocio
+      </h1>
+      {acceso.puedeEditarInventario && <SeccionInventario />}
+      {acceso.puedeEditarComercial && <ConfiguracionComercialSection />}
     </div>
   );
 }

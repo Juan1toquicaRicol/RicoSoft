@@ -20,6 +20,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/session-context";
 import { hasPermission } from "@/lib/session";
+import { accesoConfigNegocio } from "@/lib/config-negocio-permisos";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { cn } from "@/lib/utils";
 
@@ -124,7 +125,7 @@ function Configuracion() {
       label: "Config. de negocio",
       icon: SlidersHorizontal,
       exact: false,
-      show: hasPermission(user, PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR),
+      show: accesoConfigNegocio((permiso) => hasPermission(user, permiso)).puedeEntrar,
     },
     {
       to: "/configuracion/integraciones-siesa",

@@ -132,6 +132,7 @@ function ProformaImpresion() {
   // estados inmutables (PEDIDO_CREADO, ANULADA) no muestran acciones de cambio.
   const acciones = accionesProforma(proforma?.estado ?? "", {
     gestionarProformas: puedeManipularProforma,
+    aceptarProformas: hasPermission(user, PERMISOS_SISTEMA.PROFORMAS_ACEPTAR),
     gestionarPedidos: puedeCrearPedido,
   });
 

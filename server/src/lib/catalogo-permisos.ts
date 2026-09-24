@@ -38,6 +38,12 @@ export interface SeccionDef {
   sufijos?: string[];
   /** GESTIONAR y ESPECIALES exigen VER (sección ya migrada al modelo). */
   exigeVer?: boolean;
+  /**
+   * Código VER del que dependen sus permisos cuando NO es `${prefijo}.ver`
+   * (p. ej. la aceptación de proformas vive bajo el prefijo "comercial" pero
+   * exige "proformas.ver").
+   */
+  verDe?: string;
 }
 
 export interface ModuloDef {
@@ -54,6 +60,16 @@ export const CATALOGO_MODULOS: ModuloDef[] = [
       { clave: "ventas", nombre: "Centro Comercial", prefijo: "ventas" },
       { clave: "cotizaciones", nombre: "Cotizaciones", prefijo: "cotizaciones", exigeVer: true },
       { clave: "proformas", nombre: "Proformas", prefijo: "proformas", exigeVer: true },
+      {
+        // Permiso de 3 segmentos (comercial.proformas.aceptar): se resuelve por
+        // su prefijo "comercial" + sufijo "proformas." y depende de proformas.ver.
+        clave: "proformas_aceptacion",
+        nombre: "Aceptación de proformas",
+        prefijo: "comercial",
+        sufijos: ["proformas."],
+        exigeVer: true,
+        verDe: "proformas.ver",
+      },
       {
         clave: "pedidos_comerciales",
         nombre: "Pedidos comerciales",
@@ -223,7 +239,8 @@ function construirIndice(): Map<string, PermisoResuelto> {
       moduloNombre: modulo.nombre,
       seccionClave: seccion.clave,
       seccionNombre: seccion.nombre,
-      dependeDe: seccion.exigeVer && tipo !== "ver" ? `${seccion.prefijo}.ver` : null,
+      dependeDe:
+        seccion.exigeVer && tipo !== "ver" ? (seccion.verDe ?? `${seccion.prefijo}.ver`) : null,
     });
   };
 
@@ -302,6 +319,7 @@ export function nombrePermiso(codigo: string): string {
   const permiso = resolverPermiso(codigo);
   const etiqueta = (accion: string) =>
     accion
+      .replace(/\./g, "_")
       .split("_")
       .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
       .join(" ");

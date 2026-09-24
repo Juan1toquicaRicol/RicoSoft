@@ -582,6 +582,32 @@ expuestos a Tailwind como `bg-estado-<tono>-bg`, `text-estado-<tono>-fg`, `borde
 Restricciones: un estado nuevo se registra en estado-tono.ts (no en la vista); no modificar los
 hex del semáforo sin actualizar contraste.test.ts y esta entrada.
 
+### 2026-09-24 — Auditoría de seguridad y RBAC (P1/P2)
+Decisión:
+- **Autorregistro**: la cuenta nace `activo=false` (pendiente de aprobación de un administrador);
+  no puede iniciar sesión hasta ser activada. Revierte el comportamiento "ACTIVA de una" del commit
+  0f41bc7. Mensaje del registro (backend y login.tsx) alineado.
+- **Errores en rutas de auth**: `AuthError` (auth.service.ts) = error controlado con mensaje para el
+  usuario; cualquier otra excepción (Prisma/infra) → log interno + 500 genérico
+  ("No fue posible procesar la autenticación. Por favor, intente más tarde."). Aplica a registro,
+  login, seleccionar tenant y cambiar de empresa. Todo `throw` nuevo en auth.service debe ser AuthError.
+- **Notificaciones**: `marcarLeida` = un solo `updateMany where { id, usuarioId, tenantId }` (count 0 → 404).
+- **Analítica**: `GET /api/analitica/dashboard` exige `analitica.ver` (antes solo sesión); cada sección
+  del resumen sigue filtrada por el "ver" de su módulo. analitica.test.ts verifica además que ninguna
+  ruta del router quede sin permiso.
+- **Permiso `comercial.proformas.aceptar`** (3 segmentos, PERMISOS_SISTEMA.PROFORMAS_ACEPTAR, backend y
+  frontend): exigido por `POST /proformas/:id/aceptar` (proformas.gestionar ya NO basta). El catálogo lo
+  resuelve en la sección "Aceptación de proformas" del módulo Comercial (`SeccionDef.verDe` permite que
+  dependa de `proformas.ver`). Crear el pedido desde una proforma ACEPTADA conserva sus permisos actuales.
+  DESPLIEGUE: los roles existentes NO lo tienen; un administrador debe otorgarlo a quien acepte proformas.
+- **Config. de negocio**: la pantalla es accesible para quien EDITE alguna sección
+  (`inventario.configurar` o `configuracion.editar`, src/lib/config-negocio-permisos.ts, usado por el guard,
+  el menú y la página) y cada sección se muestra según su permiso. Backend: GET /inventario/configuracion
+  acepta analitica.ver O inventario.configurar; GET /proformas/configuracion-comercial acepta
+  proformas.ver O configuracion.editar (quien edita puede leer).
+Restricciones: no exponer error.message crudo en rutas públicas; permisos nuevos de acción se declaran en
+los dos catálogos (backend/frontend) y en catalogo-permisos.ts.
+
 ## 17. Cómo mantener esta memoria
 
 Añadir una entrada cuando exista:

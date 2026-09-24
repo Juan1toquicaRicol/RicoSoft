@@ -29,7 +29,7 @@ const ORDEN_PESTANAS = [
   { to: "/configuracion/modulos", permiso: PERMISOS_SISTEMA.MODULOS_VER },
   { to: "/configuracion/catalogos", permiso: PERMISOS_SISTEMA.CONFIGURACION_CATALOGOS },
   { to: "/configuracion/clasificacion-items", permiso: PERMISOS_SISTEMA.CONFIGURACION_VER },
-  { to: "/configuracion/negocio", permiso: PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR },
+  { to: "/configuracion/negocio", permiso: PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR, o: PERMISOS_SISTEMA.CONFIGURACION_EDITAR },
   { to: "/configuracion/integraciones-siesa", permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER },
   { to: "/configuracion/auditoria", permiso: PERMISOS_SISTEMA.AUDITORIA_VER },
   { to: "/configuracion/monitoreo", permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER },
@@ -38,7 +38,9 @@ const ORDEN_PESTANAS = [
 export const Route = createFileRoute("/configuracion/")({
   beforeLoad: () => {
     const user = getCachedUser();
-    const primeraDisponible = ORDEN_PESTANAS.find((t) => hasPermission(user, t.permiso));
+    const primeraDisponible = ORDEN_PESTANAS.find(
+      (t) => hasPermission(user, t.permiso) || ("o" in t && hasPermission(user, t.o)),
+    );
     throw redirect({ to: primeraDisponible?.to ?? "/perfil" });
   },
 });

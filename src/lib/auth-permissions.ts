@@ -152,6 +152,8 @@ export const PERMISOS_SISTEMA = {
   PEDIDOS_COMERCIALES_CONFIRMAR: "pedidos_comerciales.confirmar",
   PROFORMAS_VER: "proformas.ver",
   PROFORMAS_GESTIONAR: "proformas.gestionar",
+  /** Aceptar una proforma (ENVIADA -> ACEPTADA): decisión comercial separada de gestionarla. */
+  PROFORMAS_ACEPTAR: "comercial.proformas.aceptar",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
   OBJETIVOS_VER: "objetivos.ver",
@@ -911,6 +913,13 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Proformas · Gestionar",
     descripcion:
       "Permite crear, editar, anular y vincular el documento ERP de proformas. Incluye automáticamente Ver.",
+  },
+  {
+    id: PERMISOS_SISTEMA.PROFORMAS_ACEPTAR,
+    modulo: "Comercial",
+    nombre: "Proformas · Aceptar (especial)",
+    descripcion:
+      "Permiso especial: aceptar una proforma enviada (paso previo a crear el pedido). Es autoridad de decisión — no incluye crear, editar ni anular. Incluye automáticamente Ver proformas.",
   },
   {
     id: PERMISOS_SISTEMA.DESPACHOS_VER,

@@ -341,7 +341,7 @@ export const anularProforma = async (req: AuthenticatedRequest, res: Response) =
 };
 
 /** POST /proformas/:id/aceptar — ENVIADA -> ACEPTADA (permiso
- * proformas.gestionar en la ruta). Cualquier otro estado -> 409 (PEDIDO_CREADO
+ * comercial.proformas.aceptar en la ruta). Cualquier otro estado -> 409 (PEDIDO_CREADO
  * y ANULADA son inmutables). Transición condicional (WHERE estado =
  * 'ENVIADA') + auditoría en la misma $transaction: dos aceptaciones
  * simultáneas producen un solo 200 y un 409, y una sola auditoría. */

@@ -17,11 +17,16 @@ export interface AccionesProforma {
 
 export function accionesProforma(
   estado: string,
-  permisos: { gestionarProformas: boolean; gestionarPedidos: boolean },
+  permisos: {
+    gestionarProformas: boolean;
+    /** comercial.proformas.aceptar */
+    aceptarProformas: boolean;
+    gestionarPedidos: boolean;
+  },
 ): AccionesProforma {
   const esInmutable = estado === "PEDIDO_CREADO" || estado === "ANULADA";
   return {
-    puedeAceptar: permisos.gestionarProformas && estado === "ENVIADA",
+    puedeAceptar: permisos.aceptarProformas && estado === "ENVIADA",
     puedeCrearPedido: permisos.gestionarPedidos && estado === "ACEPTADA",
     puedeEditar: permisos.gestionarProformas && !esInmutable,
     esInmutable,

@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { authenticateJWT, requirePermission, requireSuperadmin } from "../../middleware/auth.middleware";
+import {
+  authenticateJWT,
+  requireAnyPermission,
+  requirePermission,
+  requireSuperadmin,
+} from "../../middleware/auth.middleware";
 import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import {
@@ -48,9 +53,11 @@ router.get(
   requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
   obtenerSiguienteNumeroProforma,
 );
+// Quien puede EDITAR la configuración comercial (configuracion.editar) debe poder LEERLA aunque no
+// tenga proformas.ver (la pantalla Config. de negocio la carga al entrar).
 router.get(
   "/configuracion-comercial",
-  requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
+  requireAnyPermission([PERMISOS_SISTEMA.PROFORMAS_VER, PERMISOS_SISTEMA.CONFIGURACION_EDITAR]),
   obtenerConfiguracionComercial,
 );
 router.put(
@@ -64,7 +71,9 @@ router.get("/:id", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), obtenerPro
 router.post("/", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), crearProforma);
 router.patch("/:id", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), actualizarProforma);
 router.post("/:id/anular", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), anularProforma);
-router.post("/:id/aceptar", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), aceptarProforma);
+// Aceptar exige su permiso propio (comercial.proformas.aceptar, que a su vez exige proformas.ver):
+// aceptar es una decisión comercial distinta de crear/editar la proforma.
+router.post("/:id/aceptar", requirePermission(PERMISOS_SISTEMA.PROFORMAS_ACEPTAR), aceptarProforma);
 // Vincular/corregir a mano el documento Siesa (CDV) de una proforma cuando
 // la búsqueda automática no lo encontró — mismo permiso que editar la
 // proforma, no requiere superadmin.

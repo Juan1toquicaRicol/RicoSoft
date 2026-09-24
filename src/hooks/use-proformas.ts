@@ -318,7 +318,7 @@ export function useCrearProforma() {
   return { crear, loading, error };
 }
 
-/** POST /proformas/:id/aceptar — ENVIADA -> ACEPTADA (permiso proformas.gestionar). */
+/** POST /proformas/:id/aceptar — ENVIADA -> ACEPTADA (permiso comercial.proformas.aceptar). */
 export function useAceptarProforma() {
   const [loading, setLoading] = useState(false);
 

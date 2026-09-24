@@ -126,6 +126,8 @@ export const PERMISOS_SISTEMA = {
   // (/ventas) y para Clientes (comercial.clientes).
   PROFORMAS_VER: "proformas.ver",
   PROFORMAS_GESTIONAR: "proformas.gestionar",
+  /** Aceptar una proforma (ENVIADA -> ACEPTADA): decisión comercial separada de gestionarla. */
+  PROFORMAS_ACEPTAR: "comercial.proformas.aceptar",
   DESPACHOS_VER: "despachos.ver",
   DESPACHOS_GESTIONAR: "despachos.gestionar",
   OBJETIVOS_VER: "objetivos.ver",

@@ -24,7 +24,9 @@ const router = Router();
 router.use(authenticateJWT);
 router.use(attachTenantPrisma);
 
-router.get("/dashboard", obtenerDashboardResumen);
+// Antes solo exigía sesión: ahora también analitica.ver (hallazgo P1 de la auditoría RBAC).
+// Además, cada sección del resumen sigue filtrada por el "ver" de su propio módulo.
+router.get("/dashboard", requirePermission("analitica.ver"), obtenerDashboardResumen);
 router.get("/resumen", requirePermission("analitica.ver"), obtenerResumenAnalitica);
 router.post("/proyeccion", requirePermission("proyeccion.gestionar"), registrarProyeccion);
 router.get("/cuentas-por-pagar", requirePermission("analitica.ver"), obtenerCuentasPorPagar);

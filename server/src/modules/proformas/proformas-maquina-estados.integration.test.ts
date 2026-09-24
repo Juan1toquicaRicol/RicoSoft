@@ -158,6 +158,50 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
       expect(await estadoEnBd(nueva.id)).toBe("ENVIADA");
     });
 
+    it("RBAC: aceptar exige comercial.proformas.aceptar (+ proformas.ver); gestionar NO basta", async () => {
+      // Usuarios NO superadmin del MISMO tenant, cada uno con un rol distinto.
+      const crearUsuario = async (etiqueta: string, permisos: string[]) => {
+        const email = `estados-rbac-${etiqueta}-${sufijo}@test.ricosoft.local`;
+        const rol = await prisma.rol.create({
+          data: { tenantId, nombre: `Rol rbac ${etiqueta} ${sufijo}`, permisos: JSON.stringify(permisos) },
+        });
+        await prisma.user.create({
+          data: {
+            tenantId,
+            email,
+            passwordHash: await bcrypt.hash(PASSWORD, 10),
+            nombre: `U ${etiqueta}`,
+            isSuperadmin: false,
+            activo: true,
+            rolId: rol.id,
+          },
+        });
+        const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
+        return res.body.token as string;
+      };
+      const tokenSoloGestionar = await crearUsuario("gestionar", [
+        PERMISOS_SISTEMA.PROFORMAS_VER,
+        PERMISOS_SISTEMA.PROFORMAS_GESTIONAR,
+      ]);
+      const tokenAceptarSinVer = await crearUsuario("sinver", [PERMISOS_SISTEMA.PROFORMAS_ACEPTAR]);
+      const tokenAceptar = await crearUsuario("aceptar", [
+        PERMISOS_SISTEMA.PROFORMAS_VER,
+        PERMISOS_SISTEMA.PROFORMAS_ACEPTAR,
+      ]);
+
+      const p = await crearProforma();
+      const gestionar = await aceptar(p.id, tokenSoloGestionar);
+      const sinVer = await aceptar(p.id, tokenAceptarSinVer);
+      expect(gestionar.status).toBe(403);
+      expect(sinVer.status).toBe(403); // aceptar exige también proformas.ver
+      expect(await estadoEnBd(p.id)).toBe("ENVIADA");
+      expect(await auditorias("PROFORMA_ACEPTADA", p.id)).toBe(0);
+
+      const ok = await aceptar(p.id, tokenAceptar);
+      expect(ok.status).toBe(200);
+      expect(await estadoEnBd(p.id)).toBe("ACEPTADA");
+    });
+
     it("dos aceptaciones simultáneas -> un 200, un 409 y UNA sola auditoría", async () => {
       const p = await crearProforma();
       const [a, b] = await Promise.all([aceptar(p.id), aceptar(p.id)]);
