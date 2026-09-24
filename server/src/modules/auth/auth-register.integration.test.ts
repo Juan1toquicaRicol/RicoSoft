@@ -81,7 +81,7 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
     expect(noCreado).toBeNull();
   });
 
-  it("2. permite el registro con un departamento normal, y la cuenta queda ACTIVA de una", async () => {
+  it("2. permite el registro con un departamento normal, y la cuenta queda INACTIVA (pendiente de aprobación)", async () => {
     const email = `registro-normal+${sufijo}@${DOMINIO}`;
     const res = await request(app).post("/api/auth/register").send({
       nombre: "Registro Normal",
@@ -90,27 +90,39 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
       departamentoId: departamentoNormalId,
     });
     expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/pendiente de aprobación/i);
 
     const creado = await prisma.user.findUnique({ where: { email } });
     expect(creado).not.toBeNull();
-    expect(creado?.activo).toBe(true);
+    expect(creado?.activo).toBe(false);
     expect(creado?.isSuperadmin).toBe(false);
     expect(creado?.rolId).toBeNull();
   });
 
-  it("3. una cuenta recién autoregistrada puede iniciar sesión de inmediato", async () => {
+  it("3. una cuenta recién autoregistrada NO puede iniciar sesión hasta que un administrador la active", async () => {
     const email = `registro-login+${sufijo}@${DOMINIO}`;
-    await request(app).post("/api/auth/register").send({
-      nombre: "Registro Inmediato",
+    const registro = await request(app).post("/api/auth/register").send({
+      nombre: "Registro Pendiente",
       email,
       password: "ClaveSegura123",
       departamentoId: departamentoNormalId,
     });
+    expect(registro.status).toBe(201);
 
-    const login = await request(app)
+    // Antes de la activación: rechazado, sin token.
+    const antes = await request(app)
       .post("/api/auth/login")
       .send({ email, password: "ClaveSegura123" });
-    expect(login.status).toBe(200);
+    expect(antes.status).toBe(401);
+    expect(antes.body.token).toBeUndefined();
+
+    // Un administrador la activa (mismo efecto que PATCH de usuarios): ahora sí entra.
+    await prisma.user.update({ where: { email }, data: { activo: true } });
+    const despues = await request(app)
+      .post("/api/auth/login")
+      .send({ email, password: "ClaveSegura123" });
+    expect(despues.status).toBe(200);
+    expect(despues.body.token).toBeTruthy();
   });
 });
 

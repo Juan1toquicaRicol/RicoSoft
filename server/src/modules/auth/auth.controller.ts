@@ -4,9 +4,28 @@ import {
   loginUserService,
   selectTenantService,
   switchTenantService,
+  AuthError,
 } from "./auth.service";
 import { listarTenantsAccesibles } from "../../lib/permissions";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+
+/** Mensaje genérico para errores inesperados en rutas de autenticación. */
+export const MENSAJE_AUTH_INESPERADO =
+  "No fue posible procesar la autenticación. Por favor, intente más tarde.";
+
+/**
+ * Respuesta de error de las rutas de autenticación. Un AuthError (controlado)
+ * conserva su mensaje y el `status` propio del endpoint; cualquier otra
+ * excepción (Prisma, infraestructura, bug) se registra SOLO en el log interno y
+ * el cliente recibe un 500 genérico — nunca error.message crudo.
+ */
+function responderErrorAuth(res: Response, error: unknown, statusControlado: number, contexto: string) {
+  if (error instanceof AuthError) {
+    return res.status(statusControlado).json({ message: error.message });
+  }
+  console.error(`Error inesperado en ${contexto}:`, error);
+  return res.status(500).json({ message: MENSAJE_AUTH_INESPERADO });
+}
 
 export const registerController = async (req: Request, res: Response) => {
   try {
@@ -22,9 +41,7 @@ export const registerController = async (req: Request, res: Response) => {
       user: nuevoUsuario,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error instanceof Error ? error.message : "Error al registrar el usuario.",
-    });
+    return responderErrorAuth(res, error, 400, "el registro");
   }
 };
 
@@ -49,9 +66,7 @@ export const loginController = async (req: Request, res: Response) => {
       user: resultado.user,
     });
   } catch (error) {
-    return res
-      .status(401)
-      .json({ message: error instanceof Error ? error.message : "Error al iniciar sesión." });
+    return responderErrorAuth(res, error, 401, "el inicio de sesión");
   }
 };
 
@@ -73,10 +88,7 @@ export const selectTenantController = async (req: Request, res: Response) => {
       user: resultado.user,
     });
   } catch (error) {
-    return res.status(401).json({
-      message:
-        error instanceof Error ? error.message : "No se pudo iniciar sesión con esa empresa.",
-    });
+    return responderErrorAuth(res, error, 401, "la selección de empresa");
   }
 };
 
@@ -112,8 +124,6 @@ export const switchTenantController = async (req: AuthenticatedRequest, res: Res
       user: resultado.user,
     });
   } catch (error) {
-    return res
-      .status(403)
-      .json({ message: error instanceof Error ? error.message : "No se pudo cambiar de empresa." });
+    return responderErrorAuth(res, error, 403, "el cambio de empresa");
   }
 };

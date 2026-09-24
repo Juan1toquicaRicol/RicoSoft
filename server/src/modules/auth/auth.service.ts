@@ -23,6 +23,20 @@ interface SelectionTokenPayload {
 }
 
 // --- 1. REGISTRO DE USUARIO ---
+/**
+ * Error CONTROLADO de autenticación: su mensaje está pensado para el usuario
+ * (credenciales inválidas, cuenta inactiva, dominio no autorizado...) y el
+ * controller puede devolverlo tal cual. Cualquier OTRO error (Prisma, red, base
+ * de datos, bugs) es inesperado: el controller lo registra en el log interno y
+ * responde un mensaje genérico, sin filtrar detalles de infraestructura.
+ */
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
 export const registerUserService = async (data: {
   nombre: string;
   email: string;
@@ -39,18 +53,18 @@ export const registerUserService = async (data: {
   const emailLimpio = email.trim().toLowerCase();
 
   if (!esDominioCorporativoValido(emailLimpio)) {
-    throw new Error(
+    throw new AuthError(
       "Solo se permiten registros con correos autorizados (@ricol.com.co, @flexipackdecolombia.com, @greesolutions.com.co).",
     );
   }
 
   if (!departamentoId || typeof departamentoId !== "string") {
-    throw new Error("Debes indicar a qué departamento perteneces.");
+    throw new AuthError("Debes indicar a qué departamento perteneces.");
   }
 
   const errorPassword = validarPasswordSegura(password);
   if (errorPassword) {
-    throw new Error(errorPassword);
+    throw new AuthError(errorPassword);
   }
 
   // Verificar si el usuario ya existe
@@ -59,7 +73,7 @@ export const registerUserService = async (data: {
   });
 
   if (usuarioExistente) {
-    throw new Error("El correo electrónico ya se encuentra registrado.");
+    throw new AuthError("El correo electrónico ya se encuentra registrado.");
   }
 
   // Encriptar la contraseña
@@ -72,12 +86,12 @@ export const registerUserService = async (data: {
   // se cae a "el primer tenant que exista" ni a un tenant por defecto.
   const tenant = await obtenerTenantPorCorreo(emailLimpio);
   if (!tenant) {
-    throw new Error(
+    throw new AuthError(
       "Tu dominio de correo no tiene una empresa asociada en el sistema todavía. Contacta al administrador.",
     );
   }
   if (!tenant.activo) {
-    throw new Error(
+    throw new AuthError(
       "La empresa asociada a tu correo no está activa actualmente. Contacta al administrador.",
     );
   }
@@ -93,7 +107,7 @@ export const registerUserService = async (data: {
     where: { id: departamentoId, ...whereAlcance(tenant.id), activo: true, esSistemas: false },
   });
   if (!departamento) {
-    throw new Error("El departamento seleccionado no es válido.");
+    throw new AuthError("El departamento seleccionado no es válido.");
   }
 
   // Crear el usuario en SQL Server. rol/isSuperadmin/rolId NUNCA se toman del
@@ -108,7 +122,10 @@ export const registerUserService = async (data: {
       tenantId: tenant.id,
       departamentoId: departamento.id,
       rol: "USER",
-      activo: true,
+      // La cuenta nace INACTIVA: queda pendiente de aprobación explícita de un
+      // administrador (no hay verificación de correo). Alineado con el mensaje
+      // del registro y con loginUserService, que rechaza cuentas inactivas.
+      activo: false,
     },
     select: {
       id: true,
@@ -149,7 +166,7 @@ async function emitirSesion(
 ): Promise<LoginResult> {
   const sessionUser = await loadSessionUser(userId, tenantId);
   if (!sessionUser) {
-    throw new Error("No se pudo cargar la sesión para el tenant seleccionado.");
+    throw new AuthError("No se pudo cargar la sesión para el tenant seleccionado.");
   }
 
   await prisma.auditoria.create({
@@ -183,7 +200,7 @@ export const loginUserService = async (data: {
   const MENSAJE_CREDENCIALES_INVALIDAS = "Credenciales inválidas. Correo o contraseña incorrectos.";
 
   if (!usuario) {
-    throw new Error(MENSAJE_CREDENCIALES_INVALIDAS);
+    throw new AuthError(MENSAJE_CREDENCIALES_INVALIDAS);
   }
 
   // Comparar contraseñas ANTES de revelar el estado de la cuenta: si el
@@ -209,13 +226,13 @@ export const loginUserService = async (data: {
         detalle: `Intento de inicio de sesión con contraseña incorrecta para ${usuario.email}.`,
       },
     });
-    throw new Error(MENSAJE_CREDENCIALES_INVALIDAS);
+    throw new AuthError(MENSAJE_CREDENCIALES_INVALIDAS);
   }
 
   // Recién aquí, con la contraseña ya confirmada, es seguro revelar el
   // estado de la cuenta.
   if (!usuario.activo) {
-    throw new Error("La cuenta se encuentra inactiva.");
+    throw new AuthError("La cuenta se encuentra inactiva.");
   }
 
   await prisma.user.update({
@@ -252,15 +269,15 @@ export const selectTenantService = async (data: {
   try {
     payload = jwt.verify(selectionToken, JWT_SECRET) as SelectionTokenPayload;
   } catch {
-    throw new Error("La selección de empresa expiró. Vuelve a iniciar sesión.");
+    throw new AuthError("La selección de empresa expiró. Vuelve a iniciar sesión.");
   }
   if (payload.purpose !== "select-tenant") {
-    throw new Error("Token de selección inválido.");
+    throw new AuthError("Token de selección inválido.");
   }
 
   const usuario = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!usuario || !usuario.activo) {
-    throw new Error("Cuenta inválida o inactiva.");
+    throw new AuthError("Cuenta inválida o inactiva.");
   }
 
   // Nunca confiar en la lista de tenants que mandó el cliente: se recalcula
@@ -268,7 +285,7 @@ export const selectTenantService = async (data: {
   // nadie pueda "elegir" un tenant al que no tiene membresía.
   const tenantsAccesibles = await listarTenantsAccesibles(usuario.id);
   if (!tenantsAccesibles.some((t) => t.id === tenantId)) {
-    throw new Error("No tienes acceso a esa empresa.");
+    throw new AuthError("No tienes acceso a esa empresa.");
   }
 
   return emitirSesion(usuario.id, usuario.tokenVersion, tenantId);
@@ -290,13 +307,13 @@ export const switchTenantService = async (data: {
 
   const usuario = await prisma.user.findUnique({ where: { id: userId } });
   if (!usuario || !usuario.activo) {
-    throw new Error("Cuenta inválida o inactiva.");
+    throw new AuthError("Cuenta inválida o inactiva.");
   }
 
   const tenantsAccesibles = await listarTenantsAccesibles(userId);
   const tenantDestino = tenantsAccesibles.find((t) => t.id === tenantId);
   if (!tenantDestino) {
-    throw new Error("No tienes acceso a esa empresa.");
+    throw new AuthError("No tienes acceso a esa empresa.");
   }
 
   return emitirSesion(
