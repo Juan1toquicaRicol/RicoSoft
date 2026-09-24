@@ -207,7 +207,7 @@ describe.skipIf(!RUN)("Proformas — vinculación con cotización de origen", ()
     expect(res.body.cotizacionIdExterno).toBe("501");
     expect(res.body.cotizacionNumero).toBe("COT-34147");
     expect(res.body.erpDocumentoNumero).toBe("PDV-55365");
-    expect(res.body.estado).toBe("activa");
+    expect(res.body.estado).toBe("ENVIADA");
   });
 
   it("crear proforma manual (sin cotización) sigue funcionando con esos campos en null", async () => {
@@ -264,29 +264,29 @@ describe.skipIf(!RUN)("Proformas — vinculación con cotización de origen", ()
         cotizacionIdExterno: "501",
         items: [itemBase()],
       });
-    // Si ya existe una activa de un test previo, la anulamos primero.
-    if (primera.status === 409) {
-      const activas = await prisma.proforma.findMany({
-        where: { tenantId, cotizacionIdExterno: "501", estado: "activa" },
-      });
-      for (const p of activas) {
-        await request(app)
-          .post(`/api/proformas/${p.id}/anular`)
-          .set("Authorization", `Bearer ${token}`);
-      }
-    }
-
-    const anuladaExistente = await prisma.proforma.findFirst({
-      where: { tenantId, cotizacionIdExterno: "501" },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(anuladaExistente).not.toBeNull();
+    // La proforma vigente (recién creada, o la NO anulada de un test previo) es la que se anula.
+    const vigenteId =
+      primera.status === 201
+        ? primera.body.id
+        : (
+            await prisma.proforma.findFirst({
+              where: { tenantId, cotizacionIdExterno: "501", estado: { not: "ANULADA" } },
+              orderBy: { createdAt: "desc" },
+            })
+          )?.id;
+    expect(vigenteId).toBeTruthy();
 
     const anular = await request(app)
-      .post(`/api/proformas/${anuladaExistente!.id}/anular`)
+      .post(`/api/proformas/${vigenteId}/anular`)
       .set("Authorization", `Bearer ${token}`);
     expect(anular.status).toBe(200);
-    expect(anular.body.estado).toBe("anulada");
+    expect(anular.body.estado).toBe("ANULADA");
+
+    // Una proforma ANULADA es inmutable: no se puede anular otra vez.
+    const otraVez = await request(app)
+      .post(`/api/proformas/${vigenteId}/anular`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(otraVez.status).toBe(409);
 
     const nueva = await request(app)
       .post("/api/proformas")
@@ -298,7 +298,7 @@ describe.skipIf(!RUN)("Proformas — vinculación con cotización de origen", ()
         items: [itemBase()],
       });
     expect(nueva.status).toBe(201);
-    expect(nueva.body.estado).toBe("activa");
+    expect(nueva.body.estado).toBe("ENVIADA");
   });
 
   it("snapshot: la proforma ya creada no cambia si la cotización cambiara después en Siesa", async () => {
@@ -319,7 +319,7 @@ describe.skipIf(!RUN)("Proformas — vinculación con cotización de origen", ()
         ? creada.body.id
         : (
             await prisma.proforma.findFirst({
-              where: { tenantId, cotizacionIdExterno: "502", estado: "activa" },
+              where: { tenantId, cotizacionIdExterno: "502", estado: "ENVIADA" },
             })
           )?.id;
     expect(proformaId).toBeTruthy();

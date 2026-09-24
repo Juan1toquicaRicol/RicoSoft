@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, FileDown, PackagePlus, Printer, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileDown, PackagePlus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { Badge } from "@/components/ui/badge";
+import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +18,7 @@ import {
   useProforma,
   useEliminarProforma,
   useAsignarDocumentoErpProforma,
+  useAceptarProforma,
 } from "@/hooks/use-proformas";
 import { useAccionesPedido } from "@/hooks/use-comercial";
 import { money } from "@/lib/data";
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { accionesProforma } from "@/lib/proforma-estados";
 import { requirePermisoGuard } from "@/lib/route-guards";
 import { abreviarNombreTenant, empresaIdDeTenant, LogoEmpresa } from "@/lib/tenant-context";
 import {
@@ -123,8 +125,26 @@ function ProformaImpresion() {
   const accionesPedido = useAccionesPedido();
   const { eliminar, loading: eliminando } = useEliminarProforma();
   const [creandoPedido, setCreandoPedido] = useState(false);
+  const { aceptar, loading: aceptando } = useAceptarProforma();
   const puedeCrearPedido = hasPermission(user, PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR);
   const puedeManipularProforma = hasPermission(user, PERMISOS_SISTEMA.PROFORMAS_GESTIONAR);
+  // Máquina de estados: ENVIADA -> ACEPTADA -> PEDIDO_CREADO (o ANULADA). Los
+  // estados inmutables (PEDIDO_CREADO, ANULADA) no muestran acciones de cambio.
+  const acciones = accionesProforma(proforma?.estado ?? "", {
+    gestionarProformas: puedeManipularProforma,
+    gestionarPedidos: puedeCrearPedido,
+  });
+
+  const aceptarProforma = async () => {
+    if (!proforma) return;
+    try {
+      await aceptar(proforma.id);
+      toast.success(`Proforma ${proforma.numero} aceptada.`);
+      await refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible aceptar la proforma.");
+    }
+  };
 
   const eliminarProformaDefinitivamente = async () => {
     if (!proforma) return;
@@ -172,7 +192,7 @@ function ProformaImpresion() {
         <p className="text-xs text-slate-500">{error || "Proforma no encontrada."}</p>
         <Link
           to="/comercial/gestion"
-          className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline"
+          className="mt-2 inline-block text-xs font-semibold text-estado-info-fg hover:underline"
         >
           Volver a Gestión Comercial
         </Link>
@@ -425,7 +445,17 @@ function ProformaImpresion() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {puedeCrearPedido && proforma.estado === "activa" && (
+          {acciones.puedeAceptar && (
+            <Button
+              size="sm"
+              className="gap-1.5 print:hidden"
+              disabled={aceptando}
+              onClick={() => void aceptarProforma()}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Aceptar Proforma
+            </Button>
+          )}
+          {acciones.puedeCrearPedido && (
             <Button
               size="sm"
               variant="outline"
@@ -451,12 +481,13 @@ function ProformaImpresion() {
                 <Badge variant="outline">COT-{String(proforma.cotizacion.numero).padStart(5, "0")}</Badge>
               </Link>
             ) : (
-              <span className="text-slate-400">Sin cotización</span>
+              <span className="text-slate-500">Sin cotización</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-slate-500">Proforma:</span>
             <Badge variant="outline">{proforma.numero}</Badge>
+            <EstadoBadge estado={proforma.estado} />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-slate-500">Pedido(s):</span>
@@ -469,17 +500,20 @@ function ProformaImpresion() {
                 ))}
               </div>
             ) : (
-              <span className="text-slate-400">Sin pedido</span>
+              <span className="text-slate-500">Sin pedido</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-slate-500">ERP:</span>
             {proforma.erpDocumentoNumero ? (
-              <span className="text-slate-400">{proforma.erpDocumentoNumero}</span>
-            ) : puedeManipularProforma ? (
+              <span className="flex items-center gap-2">
+                <span className="tabular-nums text-slate-700">{proforma.erpDocumentoNumero}</span>
+                <EstadoBadge estado="Vinculado" />
+              </span>
+            ) : acciones.puedeEditar ? (
               <AsignarErpProforma proformaId={proforma.id} onAsignado={refresh} />
             ) : (
-              <span className="text-slate-400">No sincronizado con ERP</span>
+              <EstadoBadge estado="Sin vínculo" />
             )}
           </div>
         </div>
@@ -489,7 +523,7 @@ function ProformaImpresion() {
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 gap-1.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+              className="h-7 gap-1.5 text-xs text-estado-danger-fg hover:bg-estado-danger-bg hover:text-estado-danger-fg"
               disabled={eliminando}
               onClick={() => void eliminarProformaDefinitivamente()}
             >
@@ -1052,7 +1086,7 @@ function AsignarErpProforma({
     return (
       <button
         type="button"
-        className="text-xs text-emerald-700 underline hover:text-emerald-800"
+        className="text-xs text-estado-success-fg underline hover:no-underline"
         onClick={() => setEditando(true)}
       >
         Sin documento ERP · vincular a mano

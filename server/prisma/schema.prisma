@@ -958,6 +958,11 @@ model ConfiguracionComercial {
   /// modules/proformas/proformas-consecutivo.ts. Se sube al crear una
   /// proforma (auto o manual mayor) y por PUT solo hacia arriba.
   siguienteConsecutivoProforma Int @default(3890)
+  /// Contador MONOTÓNICO del consecutivo de PedidoComercial del tenant (primer
+  /// pedido = 1). Siguiente efectivo = max(este valor, MAX(PedidoComercial.numero)+1);
+  /// se avanza dentro de la transacción que crea el pedido. Ver
+  /// modules/comercial/pedidos-consecutivo.ts.
+  siguienteConsecutivoPedidoComercial Int @default(1)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
@@ -2553,11 +2558,15 @@ model Proforma {
   retencionIvaPct     Decimal           @default(15) @db.Decimal(5, 2)
   aplicaIca           Boolean           @default(false)
   icaPct              Decimal           @default(0.7) @db.Decimal(5, 2)
-  /// Estado de la proforma. "activa" (default) o "anulada". Solo se usa hoy
-  /// para la regla anti-duplicados de cotización (ver crearProforma):
-  /// una proforma anulada nunca bloquea una nueva proforma sobre la misma
-  /// cotización de origen. No existían más estados antes de este campo.
-  estado              String            @default("activa") @db.VarChar(20)
+  /// Máquina de estados: ENVIADA (default) -> ACEPTADA -> PEDIDO_CREADO;
+  /// ANULADA desde ENVIADA/ACEPTADA. PEDIDO_CREADO y ANULADA son INMUTABLES
+  /// (no admiten edición, aceptación ni anulación). Una proforma NO anulada
+  /// bloquea una nueva proforma sobre la misma cotización de origen (ver
+  /// crearProforma). Solo se puede crear un Pedido Comercial desde una
+  /// ACEPTADA, y el paso a PEDIDO_CREADO es condicional (WHERE estado =
+  /// 'ACEPTADA') dentro de la misma transacción que crea el pedido.
+  /// (Antes de 2026-09-24 los valores eran "activa"/"anulada".)
+  estado              String            @default("ENVIADA") @db.VarChar(20)
   /// Vinculación con la cotización de origen (CRM/Siesa) que dio pie a esta
   /// proforma — opcional: una proforma puede seguir creándose manualmente,
   /// sin cotización. Es solo una REFERENCIA + snapshot: los datos propios de
@@ -2787,6 +2796,12 @@ model PedidoComercial {
   @@index([tenantId, fecha])
   @@index([cotizacionId])
   @@index([proformaId])
+  // Máximo UN PedidoComercial por Proforma: lo impone el índice único FILTRADO
+  // PedidoComercial_tenantId_proformaId_filtered_uq (WHERE proformaId IS NOT
+  // NULL), creado por SQL manual en la migración
+  // 20260924100000_proforma_maquina_estados_pedido_consecutivo — no se declara
+  // como @@unique (Prisma no expresa índices filtrados en SQL Server y un
+  // @@unique plano rompería con los pedidos sin proforma, NULL = NULL).
 }
 
 /// Línea de un PedidoComercial — mismo shape que ProformaItem/CotizacionItem.

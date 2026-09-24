@@ -30,6 +30,12 @@ import {
   avanzarContadorProforma,
   PRIMER_NUMERO_PROFORMA,
 } from "./proformas-consecutivo";
+import {
+  ESTADO_PROFORMA,
+  esProformaInmutable,
+  mensajeProformaInmutable,
+  puedeAceptarProforma,
+} from "./proformas-estados";
 
 /** Defaults de ConfiguracionComercial cuando el tenant todavía no configuró
  * nada — mismos valores que el default de la columna en Prisma, mismo
@@ -272,10 +278,12 @@ export const obtenerCotizacion = async (req: AuthenticatedRequest, res: Response
   }
 };
 
-/** POST /proformas/:id/anular — marca la proforma como anulada. Una
- * proforma anulada deja de contar para la regla anti-duplicados de
- * cotización (ver crearProforma): permite volver a generar una proforma
- * nueva sobre la misma cotización de origen. */
+/** POST /proformas/:id/anular — ENVIADA | ACEPTADA -> ANULADA. PEDIDO_CREADO y
+ * ANULADA son inmutables (409). Una proforma anulada deja de contar para la
+ * regla anti-duplicados de cotización (ver crearProforma): permite volver a
+ * generar una proforma nueva sobre la misma cotización de origen. La
+ * transición es condicional (WHERE estado IN (ENVIADA, ACEPTADA)) y se audita
+ * en la misma transacción. */
 export const anularProforma = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
   const parseo = obtenerProformaSchema.safeParse(req.params);
@@ -285,27 +293,112 @@ export const anularProforma = async (req: AuthenticatedRequest, res: Response) =
 
   const existente = await prisma.proforma.findFirst({
     where: { id: parseo.data.id, tenantId },
-    select: { id: true },
+    select: { id: true, numero: true, estado: true },
   });
   if (!existente) {
     return res.status(404).json({ message: "Proforma no encontrada." });
   }
+  if (esProformaInmutable(existente.estado)) {
+    return res.status(409).json({ message: mensajeProformaInmutable(existente.estado) });
+  }
 
-  const actualizada = await prisma.proforma.update({
-    where: { id: existente.id },
-    data: { estado: "anulada" },
+  let resultado;
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.proforma.updateMany({
+        where: {
+          id: existente.id,
+          tenantId,
+          estado: { in: [ESTADO_PROFORMA.ENVIADA, ESTADO_PROFORMA.ACEPTADA] },
+        },
+        data: { estado: ESTADO_PROFORMA.ANULADA },
+      });
+      if (count === 0) return null; // otra petición la cambió a un estado inmutable
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PROFORMA_ANULADA",
+          detalle: `${req.user!.nombre} anuló la proforma ${existente.numero}.`,
+          entidadTipo: "Proforma",
+          entidadId: existente.id,
+          datosAnteriores: JSON.stringify({ estado: existente.estado }),
+          datosNuevos: JSON.stringify({ estado: ESTADO_PROFORMA.ANULADA }),
+        },
+      });
+      return { id: existente.id, estado: ESTADO_PROFORMA.ANULADA };
+    });
+  } catch (error) {
+    console.error("Error al anular la proforma:", error);
+    return res.status(500).json({ message: "No fue posible anular la proforma." });
+  }
+  if (!resultado) {
+    return res
+      .status(409)
+      .json({ message: "La proforma cambió de estado y ya no admite anulación. Recarga e intenta de nuevo." });
+  }
+  return res.json(resultado);
+};
+
+/** POST /proformas/:id/aceptar — ENVIADA -> ACEPTADA (permiso
+ * proformas.gestionar en la ruta). Cualquier otro estado -> 409 (PEDIDO_CREADO
+ * y ANULADA son inmutables). Transición condicional (WHERE estado =
+ * 'ENVIADA') + auditoría en la misma $transaction: dos aceptaciones
+ * simultáneas producen un solo 200 y un 409, y una sola auditoría. */
+export const aceptarProforma = async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.user!.tenantId;
+  const parseo = obtenerProformaSchema.safeParse(req.params);
+  if (!parseo.success) {
+    return res.status(400).json({ message: parseo.error.errors[0]?.message ?? "Datos inválidos." });
+  }
+
+  const existente = await prisma.proforma.findFirst({
+    where: { id: parseo.data.id, tenantId },
+    select: { id: true, numero: true, estado: true },
   });
-  await prisma.auditoria.create({
-    data: {
-      tenantId,
-      usuarioId: req.user!.id,
-      accion: "PROFORMA_ANULADA",
-      detalle: `${req.user!.nombre} anuló la proforma ${actualizada.numero}.`,
-      entidadTipo: "Proforma",
-      entidadId: actualizada.id,
-    },
-  });
-  return res.json({ id: actualizada.id, estado: actualizada.estado });
+  if (!existente) {
+    return res.status(404).json({ message: "Proforma no encontrada." });
+  }
+  if (!puedeAceptarProforma(existente.estado)) {
+    return res.status(409).json({
+      message: esProformaInmutable(existente.estado)
+        ? mensajeProformaInmutable(existente.estado)
+        : `Solo se puede aceptar una proforma ENVIADA (estado actual: ${existente.estado}).`,
+    });
+  }
+
+  let resultado;
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.proforma.updateMany({
+        where: { id: existente.id, tenantId, estado: ESTADO_PROFORMA.ENVIADA },
+        data: { estado: ESTADO_PROFORMA.ACEPTADA },
+      });
+      if (count === 0) return null;
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "PROFORMA_ACEPTADA",
+          detalle: `${req.user!.nombre} aceptó la proforma ${existente.numero}.`,
+          entidadTipo: "Proforma",
+          entidadId: existente.id,
+          datosAnteriores: JSON.stringify({ estado: ESTADO_PROFORMA.ENVIADA }),
+          datosNuevos: JSON.stringify({ estado: ESTADO_PROFORMA.ACEPTADA }),
+        },
+      });
+      return { id: existente.id, estado: ESTADO_PROFORMA.ACEPTADA };
+    });
+  } catch (error) {
+    console.error("Error al aceptar la proforma:", error);
+    return res.status(500).json({ message: "No fue posible aceptar la proforma." });
+  }
+  if (!resultado) {
+    return res
+      .status(409)
+      .json({ message: "La proforma cambió de estado y ya no puede aceptarse. Recarga e intenta de nuevo." });
+  }
+  return res.json(resultado);
 };
 
 /** PATCH /proformas/:id/documento-erp — vincula o corrige a mano el
@@ -331,10 +424,13 @@ export const asignarDocumentoErpProforma = async (req: AuthenticatedRequest, res
 
   const existente = await prisma.proforma.findFirst({
     where: { id: parseoParams.data.id, tenantId },
-    select: { id: true, numero: true },
+    select: { id: true, numero: true, estado: true },
   });
   if (!existente) {
     return res.status(404).json({ message: "Proforma no encontrada." });
+  }
+  if (esProformaInmutable(existente.estado)) {
+    return res.status(409).json({ message: mensajeProformaInmutable(existente.estado) });
   }
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
@@ -358,7 +454,7 @@ export const asignarDocumentoErpProforma = async (req: AuthenticatedRequest, res
     where: {
       tenantId,
       cotizacionIdExterno,
-      estado: "activa",
+      estado: { not: ESTADO_PROFORMA.ANULADA },
       id: { not: existente.id },
     },
     select: { numero: true },
@@ -697,7 +793,7 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
     cotizacionInterna = { id: cot.id, numero: cot.numero };
 
     const duplicadaInterna = await prisma.proforma.findFirst({
-      where: { tenantId, cotizacionId, estado: "activa" },
+      where: { tenantId, cotizacionId, estado: { not: ESTADO_PROFORMA.ANULADA } },
       select: { numero: true },
     });
     if (duplicadaInterna) {
@@ -733,7 +829,7 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
     // Anti-duplicados: no permitir una segunda proforma ACTIVA sobre la
     // misma cotización, del mismo tenant. Una proforma anulada no bloquea.
     const duplicada = await prisma.proforma.findFirst({
-      where: { tenantId, cotizacionIdExterno, estado: "activa" },
+      where: { tenantId, cotizacionIdExterno, estado: { not: ESTADO_PROFORMA.ANULADA } },
       select: { numero: true },
     });
     if (duplicada) {
@@ -755,7 +851,7 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
         // la ventana de carrera entre la validación de arriba y el commit.
         if (cotizacionIdExterno) {
           const duplicada = await tx.proforma.findFirst({
-            where: { tenantId, cotizacionIdExterno, estado: "activa" },
+            where: { tenantId, cotizacionIdExterno, estado: { not: ESTADO_PROFORMA.ANULADA } },
             select: { numero: true },
           });
           if (duplicada) {
@@ -766,7 +862,7 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
         }
         if (cotizacionInterna) {
           const duplicadaInterna = await tx.proforma.findFirst({
-            where: { tenantId, cotizacionId: cotizacionInterna.id, estado: "activa" },
+            where: { tenantId, cotizacionId: cotizacionInterna.id, estado: { not: ESTADO_PROFORMA.ANULADA } },
             select: { numero: true },
           });
           if (duplicadaInterna) {
@@ -901,10 +997,13 @@ export const actualizarProforma = async (req: AuthenticatedRequest, res: Respons
 
   const existente = await prisma.proforma.findFirst({
     where: { id: parseoParams.data.id, tenantId },
-    select: { id: true },
+    select: { id: true, estado: true },
   });
   if (!existente) {
     return res.status(404).json({ message: "Proforma no encontrada." });
+  }
+  if (esProformaInmutable(existente.estado)) {
+    return res.status(409).json({ message: mensajeProformaInmutable(existente.estado) });
   }
 
   const { items, numero, ...encabezado } = parseoBody.data;

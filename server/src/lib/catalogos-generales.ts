@@ -266,7 +266,19 @@ export const CATALOGOS_GENERALES: SemillaCatalogo[] = [
     tipo: "ESTADO_COMERCIAL",
     clave: "ENVIADA",
     etiqueta: "Enviada",
-    metadata: { documento: "COTIZACION" },
+    metadata: { documento: "PROFORMA, COTIZACION" },
+  },
+  {
+    tipo: "ESTADO_COMERCIAL",
+    clave: "ACEPTADA",
+    etiqueta: "Aceptada",
+    metadata: { documento: "PROFORMA" },
+  },
+  {
+    tipo: "ESTADO_COMERCIAL",
+    clave: "PEDIDO_CREADO",
+    etiqueta: "Pedido creado",
+    metadata: { documento: "PROFORMA" },
   },
   {
     tipo: "ESTADO_COMERCIAL",

@@ -19,9 +19,10 @@ import { money } from "@/lib/data";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { ESTADO_PROFORMA_PARA_PEDIDO } from "@/lib/proforma-estados";
 
 /** Un Pedido comercial no se crea "en blanco": siempre nace de una Proforma
- * ACTIVA (mismo flujo que el botón "Crear Pedido" del detalle de Proforma,
+ * ACEPTADA (mismo flujo que el botón "Crear Pedido" del detalle de Proforma,
  * ver comercial.proformas.$id.tsx) — esta es la misma operación, solo con
  * un punto de entrada adicional: buscar la proforma primero en vez de tener
  * que navegar a su detalle. */
@@ -38,7 +39,7 @@ function PedidoDesdeProformaDialog({
   const accionesPedido = useAccionesPedido();
   const { items, loading } = useDocumentosComerciales({
     tipo: "proforma",
-    estado: "activa",
+    estado: ESTADO_PROFORMA_PARA_PEDIDO,
     search: search.trim() || undefined,
     pageSize: 20,
   });
@@ -66,7 +67,7 @@ function PedidoDesdeProformaDialog({
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-xs text-slate-500">
-            Un pedido siempre se crea a partir de una proforma activa. Busca la proforma y
+            Un pedido siempre se crea a partir de una proforma ACEPTADA. Busca la proforma y
             selecciónala para generar el pedido.
           </p>
           <div className="relative">

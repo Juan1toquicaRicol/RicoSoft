@@ -318,6 +318,25 @@ export function useCrearProforma() {
   return { crear, loading, error };
 }
 
+/** POST /proformas/:id/aceptar — ENVIADA -> ACEPTADA (permiso proformas.gestionar). */
+export function useAceptarProforma() {
+  const [loading, setLoading] = useState(false);
+
+  const aceptar = useCallback(async (id: string) => {
+    setLoading(true);
+    try {
+      return (await fetchAuth(`/proformas/${id}/aceptar`, { method: "POST", body: "{}" })) as {
+        id: string;
+        estado: string;
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { aceptar, loading };
+}
+
 /** Borrado PERMANENTE (DELETE /proformas/:id) — solo superadmin, distinto
  * de anular (que conserva el histórico). Ver requireSuperadmin en el backend. */
 export function useEliminarProforma() {

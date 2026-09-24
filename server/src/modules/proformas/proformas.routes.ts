@@ -16,6 +16,7 @@ import {
   buscarCotizaciones,
   obtenerCotizacion,
   anularProforma,
+  aceptarProforma,
   eliminarProforma,
   asignarDocumentoErpProforma,
 } from "./proformas.controller";
@@ -63,6 +64,7 @@ router.get("/:id", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), obtenerPro
 router.post("/", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), crearProforma);
 router.patch("/:id", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), actualizarProforma);
 router.post("/:id/anular", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), anularProforma);
+router.post("/:id/aceptar", requirePermission(PERMISOS_SISTEMA.PROFORMAS_GESTIONAR), aceptarProforma);
 // Vincular/corregir a mano el documento Siesa (CDV) de una proforma cuando
 // la búsqueda automática no lo encontró — mismo permiso que editar la
 // proforma, no requiere superadmin.
