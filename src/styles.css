@@ -32,6 +32,23 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  /* Semáforo de estado operativo (comercial + integración ERP Siesa). Ver el
+     bloque "Estado" de :root: fondo / texto / borde por tono. */
+  --color-estado-success-bg: var(--estado-success-bg);
+  --color-estado-success-fg: var(--estado-success-fg);
+  --color-estado-success-border: var(--estado-success-border);
+  --color-estado-warning-bg: var(--estado-warning-bg);
+  --color-estado-warning-fg: var(--estado-warning-fg);
+  --color-estado-warning-border: var(--estado-warning-border);
+  --color-estado-danger-bg: var(--estado-danger-bg);
+  --color-estado-danger-fg: var(--estado-danger-fg);
+  --color-estado-danger-border: var(--estado-danger-border);
+  --color-estado-info-bg: var(--estado-info-bg);
+  --color-estado-info-fg: var(--estado-info-fg);
+  --color-estado-info-border: var(--estado-info-border);
+  --color-estado-neutral-bg: var(--estado-neutral-bg);
+  --color-estado-neutral-fg: var(--estado-neutral-fg);
+  --color-estado-neutral-border: var(--estado-neutral-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -49,10 +66,16 @@
 }
 
 /*
- * Identidad visual: negro + blanco + grises neutros, con azul únicamente
- * como color de acento (acción primaria, foco, selección, información).
- * Los estados (aprobado/rechazado/pendiente) NO se codifican por color:
- * se distinguen por peso visual (relleno vs. contorno), ícono y texto.
+ * Identidad visual: negro + blanco + grises neutros, con azul como color de
+ * acento (acción primaria, foco, selección, información). Las ACCIONES
+ * (botones, --success/--destructive/--warning de abajo) siguen siendo
+ * monocromas.
+ *
+ * ESTADO OPERATIVO (semáforo oficial de Ricol S.A.S. para el flujo comercial y
+ * la integración ERP Siesa): cada estado usa SIEMPRE un tono de los cinco
+ * definidos en el bloque "Estado" — nunca colores sueltos por módulo — y se
+ * acompaña de ícono + texto (el color no es el único canal). Pares fondo/texto
+ * verificados en WCAG AA (≥ 4.5:1) por src/lib/contraste.test.ts.
  */
 :root, .dark {
   --radius: 0.5rem;
@@ -78,6 +101,22 @@
   --warning-foreground: #ffffff;
   --info: #1e40af;           /* Azul acento - estado informativo */
   --info-foreground: #ffffff;
+  /* ── Estado (semáforo) ─ tono: bg / fg / border ── */
+  --estado-success-bg: #ecfdf3;      /* Success · Comprometido */
+  --estado-success-fg: #166534;
+  --estado-success-border: #abefc6;
+  --estado-warning-bg: #fffaeb;      /* Warning · Pendiente ERP */
+  --estado-warning-fg: #92400e;
+  --estado-warning-border: #fedf89;
+  --estado-danger-bg: #fef3f2;       /* Danger · Error o No enviado */
+  --estado-danger-fg: #b42318;
+  --estado-danger-border: #fecdca;
+  --estado-info-bg: #eff6ff;         /* Info · Vinculado */
+  --estado-info-fg: #1d4ed8;
+  --estado-info-border: #bfdbfe;
+  --estado-neutral-bg: #f1f5f9;      /* Neutral · Sin vínculo */
+  --estado-neutral-fg: #475569;
+  --estado-neutral-border: #cbd5e1;
   --border: #e2e8f0;     /* Slate 200 */
   --input: #e2e8f0;
   --ring: #2563eb;

@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
+import { Loader2, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -25,12 +25,35 @@ export function EmptyState({ icon: Icon, title, description, action, className }
         className,
       )}
     >
-      <div className="rounded-full border border-slate-200 bg-slate-50 p-3 text-slate-400">
-        <Icon className="h-5 w-5" />
+      <div className="rounded-full border border-estado-neutral-border bg-estado-neutral-bg p-3 text-estado-neutral-fg">
+        <Icon className="h-5 w-5" aria-hidden="true" />
       </div>
       <p className="text-sm font-semibold text-slate-700">{title}</p>
       {description && <p className="max-w-sm text-xs text-slate-500">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
+  );
+}
+
+/**
+ * Estado de carga estándar (fuera de tablas; dentro de una tabla usar
+ * TableMessageRow kind="loading"): spinner + texto, con role="status" para
+ * lectores de pantalla.
+ */
+export function EstadoCarga({
+  texto = "Cargando...",
+  className,
+}: {
+  texto?: string;
+  className?: string;
+}) {
+  return (
+    <p
+      role="status"
+      className={cn("flex items-center gap-2 py-6 text-xs text-slate-500", className)}
+    >
+      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      {texto}
+    </p>
   );
 }
