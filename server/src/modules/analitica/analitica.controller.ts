@@ -166,55 +166,74 @@ const MESES_CORTOS = [
 export const obtenerResumenAnalitica = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const facturas = await req.tenantPrisma!.factura.findMany({
-      where: { tenantId, eliminado: false },
-      select: { fecha: true, total: true, estado: true, proveedor: true, nit: true, area: true },
-    });
+    const baseWhere = { tenantId, eliminado: false };
 
-    // Serie mensual: últimos 7 meses calendario, calculada desde facturas reales.
+    // Serie mensual: últimos 7 meses calendario, agregada en BD por estado.
     const ahora = new Date();
     const meses = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(ahora.getFullYear(), ahora.getMonth() - (6 - i), 1);
       return { year: d.getFullYear(), month: d.getMonth(), label: MESES_CORTOS[d.getMonth()] };
     });
 
-    const serieMensual = meses.map((m) => {
-      const delMes = facturas.filter((f) => {
-        const fd = new Date(f.fecha);
-        return fd.getFullYear() === m.year && fd.getMonth() === m.month;
-      });
-      const recibido = delMes.reduce((acc, f) => acc + Number(f.total), 0);
-      const aprobado = delMes
-        .filter((f) => f.estado === "Aprobada" || f.estado === "Pagada")
-        .reduce((acc, f) => acc + Number(f.total), 0);
-      const pagado = delMes
-        .filter((f) => f.estado === "Pagada")
-        .reduce((acc, f) => acc + Number(f.total), 0);
-      return { mes: m.label, recibido, aprobado, pagado };
-    });
+    const serieMensual = await Promise.all(
+      meses.map(async (m) => {
+        const grupos = await req.tenantPrisma!.factura.groupBy({
+          by: ["estado"],
+          where: {
+            ...baseWhere,
+            fecha: { gte: new Date(m.year, m.month, 1), lt: new Date(m.year, m.month + 1, 1) },
+          },
+          _sum: { total: true },
+        });
+        const suma = (estados?: string[]) =>
+          grupos
+            .filter((g) => !estados || estados.includes(g.estado))
+            .reduce((acc, g) => acc + Number(g._sum.total ?? 0), 0);
+        return {
+          mes: m.label,
+          recibido: suma(),
+          aprobado: suma(["Aprobada", "Pagada"]),
+          pagado: suma(["Pagada"]),
+        };
+      }),
+    );
 
-    // Top proveedores por valor total facturado.
-    const porProveedor = new Map<string, { nit: string; valor: number; facturas: number }>();
-    facturas.forEach((f) => {
-      const cur = porProveedor.get(f.proveedor) ?? { nit: f.nit, valor: 0, facturas: 0 };
-      cur.valor += Number(f.total);
-      cur.facturas += 1;
-      porProveedor.set(f.proveedor, cur);
+    // Top proveedores por valor total facturado (agregado y ordenado en BD).
+    const gruposProveedor = await req.tenantPrisma!.factura.groupBy({
+      by: ["proveedor"],
+      where: baseWhere,
+      _sum: { total: true },
+      _count: { _all: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
     });
-    const topProveedores = [...porProveedor.entries()]
-      .map(([nombre, v]) => ({ nombre, ...v }))
-      .sort((a, b) => b.valor - a.valor)
-      .slice(0, 5);
+    const nitsProveedor = gruposProveedor.length
+      ? await req.tenantPrisma!.factura.findMany({
+          where: { ...baseWhere, proveedor: { in: gruposProveedor.map((g) => g.proveedor) } },
+          select: { proveedor: true, nit: true },
+          distinct: ["proveedor"],
+        })
+      : [];
+    const nitPorProveedor = new Map(nitsProveedor.map((f) => [f.proveedor, f.nit]));
+    const topProveedores = gruposProveedor.map((g) => ({
+      nombre: g.proveedor,
+      nit: nitPorProveedor.get(g.proveedor) ?? "",
+      valor: Number(g._sum.total ?? 0),
+      facturas: g._count._all,
+    }));
 
     // Comparativo por área (en millones COP, para mostrar compacto).
-    const porAreaMap = new Map<string, number>();
-    facturas.forEach((f) => {
-      porAreaMap.set(f.area, (porAreaMap.get(f.area) ?? 0) + Number(f.total));
+    const gruposArea = await req.tenantPrisma!.factura.groupBy({
+      by: ["area"],
+      where: baseWhere,
+      _sum: { total: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
     });
-    const porArea = [...porAreaMap.entries()]
-      .map(([nombre, valor]) => ({ nombre, valor: Math.round(valor / 1_000_000) }))
-      .sort((a, b) => b.valor - a.valor)
-      .slice(0, 5);
+    const porArea = gruposArea.map((g) => ({
+      nombre: g.area,
+      valor: Math.round(Number(g._sum.total ?? 0) / 1_000_000),
+    }));
 
     // Proyección: valores futuros ingresados manualmente por Finanzas.
     const proyecciones = await req.tenantPrisma!.proyeccionMensual.findMany({
@@ -259,10 +278,25 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
     } = {};
 
     if (puede("facturas.ver")) {
-      const facturas = await req.tenantPrisma!.factura.findMany({
-        where: { tenantId, eliminado: false },
-        select: { total: true, estado: true, vence: true, proveedor: true },
-      });
+      const where = { tenantId, eliminado: false };
+      const [porEstadoGrupos, vencidas, gruposProveedor] = await Promise.all([
+        req.tenantPrisma!.factura.groupBy({
+          by: ["estado"],
+          where,
+          _count: { _all: true },
+          _sum: { total: true },
+        }),
+        req.tenantPrisma!.factura.count({
+          where: { ...where, estado: { in: ["Pendiente", "Aprobada"] }, vence: { lt: ahora } },
+        }),
+        req.tenantPrisma!.factura.groupBy({
+          by: ["proveedor"],
+          where,
+          _sum: { total: true },
+          orderBy: { _sum: { total: "desc" } },
+          take: 5,
+        }),
+      ]);
 
       const porEstado: Record<string, number> = {
         Pendiente: 0,
@@ -270,39 +304,25 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
         Rechazada: 0,
         Pagada: 0,
       };
-      let valorPendiente = 0;
-      let valorAprobado = 0;
-      let valorPagado = 0;
-      let vencidas = 0;
-
-      for (const f of facturas) {
-        const total = Number(f.total);
-        porEstado[f.estado] = (porEstado[f.estado] ?? 0) + 1;
-        if (f.estado === "Pendiente") valorPendiente += total;
-        if (f.estado === "Aprobada") valorAprobado += total;
-        if (f.estado === "Pagada") valorPagado += total;
-        if ((f.estado === "Pendiente" || f.estado === "Aprobada") && f.vence < ahora) {
-          vencidas += 1;
-        }
+      const valorPorEstado: Record<string, number> = {};
+      let totalFacturas = 0;
+      for (const g of porEstadoGrupos) {
+        porEstado[g.estado] = (porEstado[g.estado] ?? 0) + g._count._all;
+        valorPorEstado[g.estado] = Number(g._sum.total ?? 0);
+        totalFacturas += g._count._all;
       }
 
-      const porProveedor = new Map<string, number>();
-      facturas.forEach((f) => {
-        porProveedor.set(f.proveedor, (porProveedor.get(f.proveedor) ?? 0) + Number(f.total));
-      });
-      const topProveedores = [...porProveedor.entries()]
-        .map(([nombre, valor]) => ({ nombre, valor }))
-        .sort((a, b) => b.valor - a.valor)
-        .slice(0, 5);
-
       resultado.facturas = {
-        total: facturas.length,
+        total: totalFacturas,
         porEstado,
-        valorPendiente,
-        valorAprobado,
-        valorPagado,
+        valorPendiente: valorPorEstado.Pendiente ?? 0,
+        valorAprobado: valorPorEstado.Aprobada ?? 0,
+        valorPagado: valorPorEstado.Pagada ?? 0,
         vencidas,
-        topProveedores,
+        topProveedores: gruposProveedor.map((g) => ({
+          nombre: g.proveedor,
+          valor: Number(g._sum.total ?? 0),
+        })),
       };
     }
 
@@ -322,10 +342,11 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
     }
 
     if (puede("importaciones.ver")) {
-      const [lotes, expedientesSinDim] = await Promise.all([
-        req.tenantPrisma!.loteImportacion.findMany({
+      const [lotesPorEstado, expedientesSinDim] = await Promise.all([
+        req.tenantPrisma!.loteImportacion.groupBy({
+          by: ["estado"],
           where: { tenantId },
-          select: { estado: true },
+          _count: { _all: true },
         }),
         req.tenantPrisma!.expedienteAduanero.count({ where: { tenantId, numeroDIM: null } }),
       ]);
@@ -335,65 +356,88 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
         "En inspección",
         "Liberado pre-compra",
       ];
+      const contar = (pred: (estado: string) => boolean) =>
+        lotesPorEstado.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
       resultado.importaciones = {
-        totalLotes: lotes.length,
-        enTransito: lotes.filter((l) => ESTADOS_EN_TRANSITO.includes(l.estado)).length,
-        nacionalizados: lotes.filter((l) => l.estado === "Nacionalizado").length,
+        totalLotes: contar(() => true),
+        enTransito: contar((e) => ESTADOS_EN_TRANSITO.includes(e)),
+        nacionalizados: contar((e) => e === "Nacionalizado"),
         pendientesDocumentacion: expedientesSinDim,
       };
     }
 
     if (puede("servicios.ver")) {
-      const servicios = await req.tenantPrisma!.servicioSuscripcion.findMany({
-        where: { tenantId, eliminado: false, estado: "Activo" },
-        select: { costo: true, periodicidad: true, fechaRenovacion: true },
-      });
-
-      const costoRecurrenteMensual = servicios.reduce((acc, s) => {
-        const costo = Number(s.costo);
-        if (s.periodicidad === "Anual") return acc + costo / 12;
-        if (s.periodicidad === "Trimestral") return acc + costo / 3;
-        return acc + costo; // Mensual
-      }, 0);
-
+      const whereServicios = { tenantId, eliminado: false, estado: "Activo" };
       const en30Dias = new Date(ahora.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const proximosVencimientos = servicios.filter(
-        (s) => s.fechaRenovacion >= ahora && s.fechaRenovacion <= en30Dias,
-      ).length;
+      const [gruposServicio, proximosVencimientos] = await Promise.all([
+        req.tenantPrisma!.servicioSuscripcion.groupBy({
+          by: ["periodicidad"],
+          where: whereServicios,
+          _count: { _all: true },
+          _sum: { costo: true },
+        }),
+        req.tenantPrisma!.servicioSuscripcion.count({
+          where: { ...whereServicios, fechaRenovacion: { gte: ahora, lte: en30Dias } },
+        }),
+      ]);
 
-      resultado.servicios = {
-        activos: servicios.length,
-        costoRecurrenteMensual,
-        proximosVencimientos,
-      };
+      let activos = 0;
+      let costoRecurrenteMensual = 0;
+      for (const g of gruposServicio) {
+        const costo = Number(g._sum.costo ?? 0);
+        activos += g._count._all;
+        if (g.periodicidad === "Anual") costoRecurrenteMensual += costo / 12;
+        else if (g.periodicidad === "Trimestral") costoRecurrenteMensual += costo / 3;
+        else costoRecurrenteMensual += costo; // Mensual
+      }
+
+      resultado.servicios = { activos, costoRecurrenteMensual, proximosVencimientos };
     }
 
     if (puede("creditos.ver")) {
-      const creditos = await req.tenantPrisma!.creditoCliente.findMany({
-        where: { tenantId, eliminado: false },
-        select: { cliente: true, saldo: true, estado: true },
-      });
-      const totalSaldo = creditos.reduce((acc, c) => acc + Number(c.saldo), 0);
-      const pendientes = creditos.filter((c) => c.estado !== "Al día").length;
-      const topDeudores = [...creditos]
-        .sort((a, b) => Number(b.saldo) - Number(a.saldo))
-        .slice(0, 5)
-        .map((c) => ({ cliente: c.cliente, saldo: Number(c.saldo) }));
-      resultado.creditos = { total: creditos.length, totalSaldo, pendientes, topDeudores };
+      const whereCreditos = { tenantId, eliminado: false };
+      const [agregado, pendientes, topDeudoresFilas] = await Promise.all([
+        req.tenantPrisma!.creditoCliente.aggregate({
+          where: whereCreditos,
+          _count: { _all: true },
+          _sum: { saldo: true },
+        }),
+        req.tenantPrisma!.creditoCliente.count({
+          where: { ...whereCreditos, estado: { not: "Al día" } },
+        }),
+        req.tenantPrisma!.creditoCliente.findMany({
+          where: whereCreditos,
+          select: { cliente: true, saldo: true },
+          orderBy: { saldo: "desc" },
+          take: 5,
+        }),
+      ]);
+      resultado.creditos = {
+        total: agregado._count._all,
+        totalSaldo: Number(agregado._sum.saldo ?? 0),
+        pendientes,
+        topDeudores: topDeudoresFilas.map((c) => ({ cliente: c.cliente, saldo: Number(c.saldo) })),
+      };
     }
 
     if (puede("despachos.ver")) {
       const ESTADOS_CERRADOS = ["ENTREGADO", "CANCELADO", "DEVUELTO"];
-      const [despachos, novedadesAbiertas] = await Promise.all([
-        req.tenantPrisma!.despacho.findMany({ where: { tenantId }, select: { estado: true } }),
+      const [gruposDespacho, novedadesAbiertas] = await Promise.all([
+        req.tenantPrisma!.despacho.groupBy({
+          by: ["estado"],
+          where: { tenantId },
+          _count: { _all: true },
+        }),
         req.tenantPrisma!.despachoNovedad.count({
           where: { estado: "ABIERTA", despacho: { tenantId } },
         }),
       ]);
+      const contarDespachos = (pred: (estado: string) => boolean) =>
+        gruposDespacho.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
       resultado.despachos = {
-        total: despachos.length,
-        enProceso: despachos.filter((d) => !ESTADOS_CERRADOS.includes(d.estado)).length,
-        entregados: despachos.filter((d) => d.estado === "ENTREGADO").length,
+        total: contarDespachos(() => true),
+        enProceso: contarDespachos((e) => !ESTADOS_CERRADOS.includes(e)),
+        entregados: contarDespachos((e) => e === "ENTREGADO"),
         novedadesAbiertas,
       };
     }

@@ -767,28 +767,28 @@ export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) 
         prisma.analisisGuardado.deleteMany({ where: { usuarioId: id } }),
         prisma.usuarioPerfilFuncional.deleteMany({ where: { userId: id } }),
         prisma.user.delete({ where: { id } }),
+        // Auditoría DENTRO de la transacción: si falla, se revierte el borrado.
+        prisma.auditoria.create({
+          data: {
+            tenantId,
+            usuarioId: req.user!.id,
+            usuarioAfectado: usuario.email,
+            accion: "USUARIO_ELIMINADO",
+            detalle: `${req.user!.nombre} eliminó la cuenta de ${usuario.email}`,
+            entidadTipo: "User",
+            entidadId: id,
+            datosAnteriores: JSON.stringify({
+              nombre: usuario.nombre,
+              email: usuario.email,
+              activo: usuario.activo,
+            }),
+          },
+        }),
       ]);
     } catch (errorBorrado) {
       console.error("Error al eliminar el usuario (borrado forzado):", errorBorrado);
       return res.status(500).json({ message: "Error al eliminar el usuario." });
     }
-
-    await prisma.auditoria.create({
-      data: {
-        tenantId,
-        usuarioId: req.user!.id,
-        usuarioAfectado: usuario.email,
-        accion: "USUARIO_ELIMINADO",
-        detalle: `${req.user!.nombre} eliminó la cuenta de ${usuario.email}`,
-        entidadTipo: "User",
-        entidadId: id,
-        datosAnteriores: JSON.stringify({
-          nombre: usuario.nombre,
-          email: usuario.email,
-          activo: usuario.activo,
-        }),
-      },
-    });
 
     return res.json({ message: "Usuario eliminado correctamente." });
   } catch (error) {

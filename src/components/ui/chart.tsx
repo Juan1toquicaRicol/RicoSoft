@@ -61,33 +61,39 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+// Allowlist estricta: evita inyección de CSS/HTML vía ChartConfig (OWASP).
+const COLOR_SEGURO =
+  /^(?:#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|(?:hsla?|rgba?)\([0-9a-zA-Z\s.,%/-]{1,60}\)|(?:hsla?|rgba?)\(var\(--[a-zA-Z0-9-]{1,40}\)(?:\s*\/\s*[0-9.]+%?)?\)|var\(--[a-zA-Z0-9-]{1,40}\)|[a-zA-Z]{3,30})$/;
+const CLAVE_SEGURA = /^[a-zA-Z0-9_-]{1,64}$/;
+const ID_SEGURO = /^[a-zA-Z0-9_-]{1,80}$/;
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([, config]) => config.theme || config.color);
 
-  if (!colorConfig.length) {
+  if (!colorConfig.length || !ID_SEGURO.test(id)) {
     return null;
   }
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join("\n")}
-}
-`,
-          )
-          .join("\n"),
-      }}
-    />
-  );
+  // Se emite como hijo de texto (no como HTML): el navegador lo trata como
+  // contenido CSS y nunca lo interpreta como marcado. Además, clave y color
+  // se descartan si no pasan la allowlist.
+  const css = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const declaraciones = colorConfig
+        .map(([key, itemConfig]) => {
+          const color =
+            itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+          return color && CLAVE_SEGURA.test(key) && COLOR_SEGURO.test(color.trim())
+            ? `  --color-${key}: ${color.trim()};`
+            : null;
+        })
+        .filter(Boolean)
+        .join("\n");
+      return `${prefix} [data-chart=${id}] {\n${declaraciones}\n}`;
+    })
+    .join("\n");
+
+  return <style>{css}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
