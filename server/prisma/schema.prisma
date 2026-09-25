@@ -101,7 +101,6 @@ model User {
   /// contraseña para invalidar de inmediato cualquier token emitido antes
   /// (robado o de otra sesión), sin esperar a que expire por tiempo.
   tokenVersion                     Int                        @default(0)
-  auditoriasHechas                 Auditoria[]                @relation("UsuarioOrigen")
   permisosDirectos                 PermisoUsuario[]
   membresias                       Membresia[]
   solicitudesResueltas             SolicitudCompra[]          @relation("SolicitudResueltaPor")
@@ -215,10 +214,10 @@ model Membresia {
 model Auditoria {
   id              String   @id @default(uuid()) @db.UniqueIdentifier
   tenantId        String   @db.UniqueIdentifier
-  /// Nullable a propósito: si el usuario actor se borra (ver eliminarUsuario
-  /// con forzado), el registro de auditoría se conserva — solo se
-  /// desvincula la FK — porque `detalle` ya incluye el nombre en texto libre
-  /// y la trazabilidad del EVENTO importa más que mantener viva la FK.
+  /// Sin FK ni relación a propósito (inmutabilidad del historial, ISO 27001
+  /// A.12.4): al borrar al usuario la fila NO se modifica; el actor se resuelve
+  /// con lib/auditoria-usuarios.ts (usuario vigente o snapshot del evento
+  /// USUARIO_ELIMINADO).
   usuarioId       String?  @db.UniqueIdentifier
   usuarioAfectado String?  @db.VarChar(255)
   accion          String   @db.VarChar(100)
@@ -234,9 +233,9 @@ model Auditoria {
   datosNuevos     String?  @db.Text
   createdAt       DateTime @default(now())
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
-  usuario         User?    @relation("UsuarioOrigen", fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId])
+  @@index([usuarioId])
 }
 
 /// Notificación in-app dirigida a un usuario concreto (p. ej. "tienes una

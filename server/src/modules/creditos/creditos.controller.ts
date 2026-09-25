@@ -1,10 +1,14 @@
 import { Response } from "express";
 import { prisma } from "../../config/prisma";
-import { CreditoCliente } from "@prisma/client";
+import { CreditoCliente, Prisma } from "@prisma/client";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { leerSaldosAbiertosSiesa } from "../integraciones-siesa/siesa-financiero.service";
 import { leerIndicadorCreditoSiesa } from "../integraciones-siesa/siesa-credito.service";
-import { clasificarMonto, calcularResumenCartera } from "../../domain/creditos/clasificacion";
+import {
+  clasificarMonto,
+  calcularResumenCartera,
+  DIAS_ALERTA_POR_VENCER,
+} from "../../domain/creditos/clasificacion";
 
 const ESTADOS_VALIDOS = ["Al día", "Por vencer", "Vencido", "Paz y Salvo"];
 const ESTADOS_FILTRO_VALIDOS = [...ESTADOS_VALIDOS, "Todos"];
@@ -76,21 +80,49 @@ export const listarCreditos = async (req: AuthenticatedRequest, res: Response) =
 export const obtenerResumenCreditos = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const creditos = await prisma.creditoCliente.findMany({
-      where: { tenantId, eliminado: false },
-      select: { cliente: true, saldo: true, vence: true, estado: true, cupo: true },
-    });
-
-    const resumen = calcularResumenCartera(
-      creditos.map((c) => ({
-        clave: c.cliente,
-        saldo: Number(c.saldo),
-        vence: c.vence,
-        estadoGuardado: c.estado,
-      })),
+    // Agregaciones nativas en BD. Reglas idénticas a clasificarMonto: se excluye
+    // "Paz y Salvo" y saldo <= 0; vencido = vence < ahora; por vencer = hasta
+    // DIAS_ALERTA_POR_VENCER días; al día = más allá de esa ventana.
+    const ahora = new Date();
+    const limitePorVencer = new Date(
+      ahora.getTime() + DIAS_ALERTA_POR_VENCER * 24 * 60 * 60 * 1000,
     );
+    const pendientes = {
+      tenantId,
+      eliminado: false,
+      estado: { not: "Paz y Salvo" },
+      saldo: { gt: 0 },
+    };
+    const sumaSaldo = (vence?: Prisma.DateTimeFilter) =>
+      prisma.creditoCliente.aggregate({
+        where: { ...pendientes, ...(vence ? { vence } : {}) },
+        _sum: { saldo: true },
+      });
 
-    const cupoTotal = creditos.reduce((acc, c) => acc + Number(c.cupo), 0);
+    const [porRecaudarAgg, vencidoAgg, porVencerAgg, alDiaAgg, clientesMora, cupoAgg] =
+      await Promise.all([
+        sumaSaldo(),
+        sumaSaldo({ lt: ahora }),
+        sumaSaldo({ gte: ahora, lte: limitePorVencer }),
+        sumaSaldo({ gt: limitePorVencer }),
+        prisma.creditoCliente.groupBy({
+          by: ["cliente"],
+          where: { ...pendientes, vence: { lt: ahora } },
+        }),
+        prisma.creditoCliente.aggregate({
+          where: { tenantId, eliminado: false },
+          _sum: { cupo: true },
+        }),
+      ]);
+
+    const resumen = {
+      porRecaudar: Number(porRecaudarAgg._sum.saldo ?? 0),
+      vencido: Number(vencidoAgg._sum.saldo ?? 0),
+      porVencer: Number(porVencerAgg._sum.saldo ?? 0),
+      alDia: Number(alDiaAgg._sum.saldo ?? 0),
+      clientesEnMora: clientesMora.length,
+    };
+    const cupoTotal = Number(cupoAgg._sum.cupo ?? 0);
     const utilizacionPct = cupoTotal > 0 ? Math.round((resumen.porRecaudar / cupoTotal) * 100) : 0;
 
     return res.json({ ...resumen, cupoTotal, utilizacionPct });
@@ -578,8 +610,7 @@ export const obtenerIndicadorCreditoCliente = async (req: AuthenticatedRequest, 
     if (!indicador) {
       return res.json({
         disponible: false,
-        motivo:
-          "Siesa no tiene análisis crediticio (t9896) registrado para este cliente todavía.",
+        motivo: "Siesa no tiene análisis crediticio (t9896) registrado para este cliente todavía.",
       });
     }
 

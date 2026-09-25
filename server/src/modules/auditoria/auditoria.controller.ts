@@ -1,6 +1,7 @@
 import { Response } from "express";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
+import { adjuntarActores } from "../../lib/auditoria-usuarios";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import {
   MODULOS_AUDITORIA,
@@ -83,16 +84,17 @@ export const listarAuditoria = async (req: AuthenticatedRequest, res: Response) 
     if (errorFiltro) return res.status(400).json({ message: errorFiltro });
     const where = construirFiltro(req);
 
-    const [data, total] = await Promise.all([
+    const [filas, total] = await Promise.all([
       prisma.auditoria.findMany({
         where,
-        include: { usuario: { select: { nombre: true, email: true } } },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       prisma.auditoria.count({ where }),
     ]);
+
+    const data = await adjuntarActores(req.user!.tenantId, filas);
 
     return res.json({ data: data.map(conClasificacion), total, page, pageSize });
   } catch (error) {
@@ -127,12 +129,13 @@ export const exportarAuditoria = async (req: AuthenticatedRequest, res: Response
     if (errorFiltro) return res.status(400).json({ message: errorFiltro });
     const where = construirFiltro(req);
 
-    const eventos = await prisma.auditoria.findMany({
+    const filasEventos = await prisma.auditoria.findMany({
       where,
-      include: { usuario: { select: { nombre: true, email: true } } },
       orderBy: { createdAt: "desc" },
       take: MAX_FILAS_EXPORTACION,
     });
+
+    const eventos = await adjuntarActores(req.user!.tenantId, filasEventos);
 
     const encabezado = [
       "Fecha",

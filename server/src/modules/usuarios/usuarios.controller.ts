@@ -716,7 +716,6 @@ export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) 
     // el schema.
     try {
       await prisma.$transaction([
-        prisma.auditoria.updateMany({ where: { usuarioId: id }, data: { usuarioId: null } }),
         prisma.sincronizacionSiesaLog.updateMany({
           where: { iniciadoPorId: id },
           data: { iniciadoPorId: null },

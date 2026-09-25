@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Prisma, ServicioSuscripcion } from "@prisma/client";
 import { prisma } from "../../config/prisma";
+import { adjuntarActores } from "../../lib/auditoria-usuarios";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 const PERIODICIDADES_VALIDAS = ["Mensual", "Anual", "Trimestral"];
@@ -89,11 +90,11 @@ export const obtenerServicio = async (req: AuthenticatedRequest, res: Response) 
     // que ya registra estos eventos (ver crearServicio/actualizarServicio/
     // toggleEstadoServicio). Esto es lo que responde "cuándo se activó" y
     // qué se hizo con el servicio, sin necesitar una tabla nueva.
-    const eventos = await req.tenantPrisma!.auditoria.findMany({
+    const filasEventos = await req.tenantPrisma!.auditoria.findMany({
       where: { tenantId, entidadTipo: "ServicioSuscripcion", entidadId: id },
       orderBy: { createdAt: "asc" },
-      include: { usuario: { select: { nombre: true } } },
     });
+    const eventos = await adjuntarActores(tenantId, filasEventos);
 
     return res.json({
       ...serializar(servicio),
