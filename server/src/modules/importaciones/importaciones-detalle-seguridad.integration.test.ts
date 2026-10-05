@@ -121,7 +121,9 @@ describe.skipIf(!RUN)("GET /importaciones/:id — detalle (BD real)", () => {
       .set("Authorization", `Bearer ${tokenAConPermiso}`);
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(ordenAId);
-    expect(res.body.numeroOrden).toBe(`DET-${sufijo}`);
+    // El número lo asigna el servidor: codigo y numeroOrden son el mismo IMP-<año>-<n>.
+    expect(res.body.numeroOrden).toMatch(/^IMP-\d{4}-\d{3,}$/);
+    expect(res.body.codigo).toBe(res.body.numeroOrden);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.proveedorExtranjero).toBe("Proveedor Detalle Test");
     expect(res.body.paisOrigen).toBe("China");

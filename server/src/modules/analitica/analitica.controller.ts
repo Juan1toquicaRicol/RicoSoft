@@ -275,172 +275,243 @@ export const obtenerDashboardResumen = async (req: AuthenticatedRequest, res: Re
       servicios?: unknown;
       importaciones?: unknown;
       despachos?: unknown;
+      pedidos?: unknown;
+      proformas?: unknown;
     } = {};
+    const tareas: Promise<void>[] = [];
 
     if (puede("facturas.ver")) {
-      const where = { tenantId, eliminado: false };
-      const [porEstadoGrupos, vencidas, gruposProveedor] = await Promise.all([
-        req.tenantPrisma!.factura.groupBy({
-          by: ["estado"],
-          where,
-          _count: { _all: true },
-          _sum: { total: true },
-        }),
-        req.tenantPrisma!.factura.count({
-          where: { ...where, estado: { in: ["Pendiente", "Aprobada"] }, vence: { lt: ahora } },
-        }),
-        req.tenantPrisma!.factura.groupBy({
-          by: ["proveedor"],
-          where,
-          _sum: { total: true },
-          orderBy: { _sum: { total: "desc" } },
-          take: 5,
-        }),
-      ]);
+      tareas.push(
+        (async () => {
+          const where = { tenantId, eliminado: false };
+          const [porEstadoGrupos, vencidas, gruposProveedor] = await Promise.all([
+            req.tenantPrisma!.factura.groupBy({
+              by: ["estado"],
+              where,
+              _count: { _all: true },
+              _sum: { total: true },
+            }),
+            req.tenantPrisma!.factura.count({
+              where: { ...where, estado: { in: ["Pendiente", "Aprobada"] }, vence: { lt: ahora } },
+            }),
+            req.tenantPrisma!.factura.groupBy({
+              by: ["proveedor"],
+              where,
+              _sum: { total: true },
+              orderBy: { _sum: { total: "desc" } },
+              take: 5,
+            }),
+          ]);
 
-      const porEstado: Record<string, number> = {
-        Pendiente: 0,
-        Aprobada: 0,
-        Rechazada: 0,
-        Pagada: 0,
-      };
-      const valorPorEstado: Record<string, number> = {};
-      let totalFacturas = 0;
-      for (const g of porEstadoGrupos) {
-        porEstado[g.estado] = (porEstado[g.estado] ?? 0) + g._count._all;
-        valorPorEstado[g.estado] = Number(g._sum.total ?? 0);
-        totalFacturas += g._count._all;
-      }
+          const porEstado: Record<string, number> = {
+            Pendiente: 0,
+            Aprobada: 0,
+            Rechazada: 0,
+            Pagada: 0,
+          };
+          const valorPorEstado: Record<string, number> = {};
+          let totalFacturas = 0;
+          for (const g of porEstadoGrupos) {
+            porEstado[g.estado] = (porEstado[g.estado] ?? 0) + g._count._all;
+            valorPorEstado[g.estado] = Number(g._sum.total ?? 0);
+            totalFacturas += g._count._all;
+          }
 
-      resultado.facturas = {
-        total: totalFacturas,
-        porEstado,
-        valorPendiente: valorPorEstado.Pendiente ?? 0,
-        valorAprobado: valorPorEstado.Aprobada ?? 0,
-        valorPagado: valorPorEstado.Pagada ?? 0,
-        vencidas,
-        topProveedores: gruposProveedor.map((g) => ({
-          nombre: g.proveedor,
-          valor: Number(g._sum.total ?? 0),
-        })),
-      };
+          resultado.facturas = {
+            total: totalFacturas,
+            porEstado,
+            valorPendiente: valorPorEstado.Pendiente ?? 0,
+            valorAprobado: valorPorEstado.Aprobada ?? 0,
+            valorPagado: valorPorEstado.Pagada ?? 0,
+            vencidas,
+            topProveedores: gruposProveedor.map((g) => ({
+              nombre: g.proveedor,
+              valor: Number(g._sum.total ?? 0),
+            })),
+          };
+        })(),
+      );
     }
 
     if (puede("solicitudes.ver")) {
-      const grupos = await req.tenantPrisma!.solicitudCompra.groupBy({
-        by: ["estado"],
-        where: { tenantId, eliminado: false },
-        _count: { _all: true },
-      });
-      const porEstado: Record<string, number> = {};
-      let total = 0;
-      grupos.forEach((g) => {
-        porEstado[g.estado] = g._count._all;
-        total += g._count._all;
-      });
-      resultado.solicitudes = { total, porEstado };
+      tareas.push(
+        (async () => {
+          const grupos = await req.tenantPrisma!.solicitudCompra.groupBy({
+            by: ["estado"],
+            where: { tenantId, eliminado: false },
+            _count: { _all: true },
+          });
+          const porEstado: Record<string, number> = {};
+          let total = 0;
+          grupos.forEach((g) => {
+            porEstado[g.estado] = g._count._all;
+            total += g._count._all;
+          });
+          resultado.solicitudes = { total, porEstado };
+        })(),
+      );
     }
 
     if (puede("importaciones.ver")) {
-      const [lotesPorEstado, expedientesSinDim] = await Promise.all([
-        req.tenantPrisma!.loteImportacion.groupBy({
-          by: ["estado"],
-          where: { tenantId },
-          _count: { _all: true },
-        }),
-        req.tenantPrisma!.expedienteAduanero.count({ where: { tenantId, numeroDIM: null } }),
-      ]);
-      const ESTADOS_EN_TRANSITO = [
-        "En tránsito",
-        "En puerto",
-        "En inspección",
-        "Liberado pre-compra",
-      ];
-      const contar = (pred: (estado: string) => boolean) =>
-        lotesPorEstado.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
-      resultado.importaciones = {
-        totalLotes: contar(() => true),
-        enTransito: contar((e) => ESTADOS_EN_TRANSITO.includes(e)),
-        nacionalizados: contar((e) => e === "Nacionalizado"),
-        pendientesDocumentacion: expedientesSinDim,
-      };
+      tareas.push(
+        (async () => {
+          const [lotesPorEstado, expedientesSinDim] = await Promise.all([
+            req.tenantPrisma!.loteImportacion.groupBy({
+              by: ["estado"],
+              where: { tenantId },
+              _count: { _all: true },
+            }),
+            req.tenantPrisma!.expedienteAduanero.count({ where: { tenantId, numeroDIM: null } }),
+          ]);
+          const ESTADOS_EN_TRANSITO = [
+            "En tránsito",
+            "En puerto",
+            "En inspección",
+            "Liberado pre-compra",
+          ];
+          const contar = (pred: (estado: string) => boolean) =>
+            lotesPorEstado.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
+          resultado.importaciones = {
+            totalLotes: contar(() => true),
+            enTransito: contar((e) => ESTADOS_EN_TRANSITO.includes(e)),
+            nacionalizados: contar((e) => e === "Nacionalizado"),
+            pendientesDocumentacion: expedientesSinDim,
+          };
+        })(),
+      );
     }
 
     if (puede("servicios.ver")) {
-      const whereServicios = { tenantId, eliminado: false, estado: "Activo" };
-      const en30Dias = new Date(ahora.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const [gruposServicio, proximosVencimientos] = await Promise.all([
-        req.tenantPrisma!.servicioSuscripcion.groupBy({
-          by: ["periodicidad"],
-          where: whereServicios,
-          _count: { _all: true },
-          _sum: { costo: true },
-        }),
-        req.tenantPrisma!.servicioSuscripcion.count({
-          where: { ...whereServicios, fechaRenovacion: { gte: ahora, lte: en30Dias } },
-        }),
-      ]);
+      tareas.push(
+        (async () => {
+          const whereServicios = { tenantId, eliminado: false, estado: "Activo" };
+          const en30Dias = new Date(ahora.getTime() + 30 * 24 * 60 * 60 * 1000);
+          const [gruposServicio, proximosVencimientos] = await Promise.all([
+            req.tenantPrisma!.servicioSuscripcion.groupBy({
+              by: ["periodicidad"],
+              where: whereServicios,
+              _count: { _all: true },
+              _sum: { costo: true },
+            }),
+            req.tenantPrisma!.servicioSuscripcion.count({
+              where: { ...whereServicios, fechaRenovacion: { gte: ahora, lte: en30Dias } },
+            }),
+          ]);
 
-      let activos = 0;
-      let costoRecurrenteMensual = 0;
-      for (const g of gruposServicio) {
-        const costo = Number(g._sum.costo ?? 0);
-        activos += g._count._all;
-        if (g.periodicidad === "Anual") costoRecurrenteMensual += costo / 12;
-        else if (g.periodicidad === "Trimestral") costoRecurrenteMensual += costo / 3;
-        else costoRecurrenteMensual += costo; // Mensual
-      }
+          let activos = 0;
+          let costoRecurrenteMensual = 0;
+          for (const g of gruposServicio) {
+            const costo = Number(g._sum.costo ?? 0);
+            activos += g._count._all;
+            if (g.periodicidad === "Anual") costoRecurrenteMensual += costo / 12;
+            else if (g.periodicidad === "Trimestral") costoRecurrenteMensual += costo / 3;
+            else costoRecurrenteMensual += costo; // Mensual
+          }
 
-      resultado.servicios = { activos, costoRecurrenteMensual, proximosVencimientos };
+          resultado.servicios = { activos, costoRecurrenteMensual, proximosVencimientos };
+        })(),
+      );
     }
 
     if (puede("creditos.ver")) {
-      const whereCreditos = { tenantId, eliminado: false };
-      const [agregado, pendientes, topDeudoresFilas] = await Promise.all([
-        req.tenantPrisma!.creditoCliente.aggregate({
-          where: whereCreditos,
-          _count: { _all: true },
-          _sum: { saldo: true },
-        }),
-        req.tenantPrisma!.creditoCliente.count({
-          where: { ...whereCreditos, estado: { not: "Al día" } },
-        }),
-        req.tenantPrisma!.creditoCliente.findMany({
-          where: whereCreditos,
-          select: { cliente: true, saldo: true },
-          orderBy: { saldo: "desc" },
-          take: 5,
-        }),
-      ]);
-      resultado.creditos = {
-        total: agregado._count._all,
-        totalSaldo: Number(agregado._sum.saldo ?? 0),
-        pendientes,
-        topDeudores: topDeudoresFilas.map((c) => ({ cliente: c.cliente, saldo: Number(c.saldo) })),
-      };
+      tareas.push(
+        (async () => {
+          const whereCreditos = { tenantId, eliminado: false };
+          const [agregado, pendientes, topDeudoresFilas] = await Promise.all([
+            req.tenantPrisma!.creditoCliente.aggregate({
+              where: whereCreditos,
+              _count: { _all: true },
+              _sum: { saldo: true },
+            }),
+            req.tenantPrisma!.creditoCliente.count({
+              where: { ...whereCreditos, estado: { not: "Al día" } },
+            }),
+            req.tenantPrisma!.creditoCliente.findMany({
+              where: whereCreditos,
+              select: { cliente: true, saldo: true },
+              orderBy: { saldo: "desc" },
+              take: 5,
+            }),
+          ]);
+          resultado.creditos = {
+            total: agregado._count._all,
+            totalSaldo: Number(agregado._sum.saldo ?? 0),
+            pendientes,
+            topDeudores: topDeudoresFilas.map((c) => ({
+              cliente: c.cliente,
+              saldo: Number(c.saldo),
+            })),
+          };
+        })(),
+      );
     }
 
     if (puede("despachos.ver")) {
-      const ESTADOS_CERRADOS = ["ENTREGADO", "CANCELADO", "DEVUELTO"];
-      const [gruposDespacho, novedadesAbiertas] = await Promise.all([
-        req.tenantPrisma!.despacho.groupBy({
-          by: ["estado"],
-          where: { tenantId },
-          _count: { _all: true },
-        }),
-        req.tenantPrisma!.despachoNovedad.count({
-          where: { estado: "ABIERTA", despacho: { tenantId } },
-        }),
-      ]);
-      const contarDespachos = (pred: (estado: string) => boolean) =>
-        gruposDespacho.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
-      resultado.despachos = {
-        total: contarDespachos(() => true),
-        enProceso: contarDespachos((e) => !ESTADOS_CERRADOS.includes(e)),
-        entregados: contarDespachos((e) => e === "ENTREGADO"),
-        novedadesAbiertas,
-      };
+      tareas.push(
+        (async () => {
+          const ESTADOS_CERRADOS = ["ENTREGADO", "CANCELADO", "DEVUELTO"];
+          const [gruposDespacho, novedadesAbiertas] = await Promise.all([
+            req.tenantPrisma!.despacho.groupBy({
+              by: ["estado"],
+              where: { tenantId },
+              _count: { _all: true },
+            }),
+            req.tenantPrisma!.despachoNovedad.count({
+              where: { estado: "ABIERTA", despacho: { tenantId } },
+            }),
+          ]);
+          const contarDespachos = (pred: (estado: string) => boolean) =>
+            gruposDespacho.filter((g) => pred(g.estado)).reduce((acc, g) => acc + g._count._all, 0);
+          resultado.despachos = {
+            total: contarDespachos(() => true),
+            enProceso: contarDespachos((e) => !ESTADOS_CERRADOS.includes(e)),
+            entregados: contarDespachos((e) => e === "ENTREGADO"),
+            novedadesAbiertas,
+          };
+        })(),
+      );
     }
+
+    if (puede("pedidos_comerciales.ver")) {
+      tareas.push(
+        (async () => {
+          const grupos = await prisma.pedidoComercial.groupBy({
+            by: ["estado"],
+            where: { tenantId },
+            _count: { _all: true },
+          });
+          const porEstado: Record<string, number> = {};
+          let total = 0;
+          for (const g of grupos) {
+            porEstado[g.estado] = g._count._all;
+            total += g._count._all;
+          }
+          resultado.pedidos = { total, porEstado };
+        })(),
+      );
+    }
+
+    if (puede("proformas.ver")) {
+      tareas.push(
+        (async () => {
+          const grupos = await prisma.proforma.groupBy({
+            by: ["estado"],
+            where: { tenantId },
+            _count: { _all: true },
+          });
+          const porEstado: Record<string, number> = {};
+          let total = 0;
+          for (const g of grupos) {
+            porEstado[g.estado] = g._count._all;
+            total += g._count._all;
+          }
+          resultado.proformas = { total, porEstado };
+        })(),
+      );
+    }
+
+    // Secciones independientes: se calculan en paralelo (solo agregaciones SQL).
+    await Promise.all(tareas);
 
     return res.json(resultado);
   } catch (error) {

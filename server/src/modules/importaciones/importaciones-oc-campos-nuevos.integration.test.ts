@@ -99,6 +99,10 @@ describe.skipIf(!RUN)("Importaciones — campos nuevos de la OC + TRM oficial (B
   });
 
   it("2. rechaza una unidad de medida inválida (400), no crea la orden", async () => {
+    const antes = await prisma.ordenCompraIntl.count({ where: { tenantId } });
+    const consecutivosAntes = (
+      await prisma.consecutivoImportacion.findMany({ where: { tenantId } })
+    ).map((f) => f.siguienteConsecutivo);
     const res = await request(app)
       .post("/api/importaciones")
       .set("Authorization", `Bearer ${token}`)
@@ -109,13 +113,18 @@ describe.skipIf(!RUN)("Importaciones — campos nuevos de la OC + TRM oficial (B
       });
     expect(res.status).toBe(400);
 
-    const noCreada = await prisma.ordenCompraIntl.findFirst({
-      where: { tenantId, numeroOrden: `OC-NUEVOS-2-${sufijo}` },
-    });
-    expect(noCreada).toBeNull();
+    // El número lo asigna el servidor: no se puede buscar por numeroOrden.
+    // Una orden rechazada no crea nada y tampoco consume consecutivo.
+    expect(await prisma.ordenCompraIntl.count({ where: { tenantId } })).toBe(antes);
+    const estadoDespues = await prisma.consecutivoImportacion.findMany({ where: { tenantId } });
+    expect(estadoDespues.map((f) => f.siguienteConsecutivo)).toEqual(consecutivosAntes);
   });
 
   it("3. rechaza una forma de pago inválida (400), no crea la orden", async () => {
+    const antes = await prisma.ordenCompraIntl.count({ where: { tenantId } });
+    const consecutivosAntes = (
+      await prisma.consecutivoImportacion.findMany({ where: { tenantId } })
+    ).map((f) => f.siguienteConsecutivo);
     const res = await request(app)
       .post("/api/importaciones")
       .set("Authorization", `Bearer ${token}`)
@@ -127,10 +136,11 @@ describe.skipIf(!RUN)("Importaciones — campos nuevos de la OC + TRM oficial (B
       });
     expect(res.status).toBe(400);
 
-    const noCreada = await prisma.ordenCompraIntl.findFirst({
-      where: { tenantId, numeroOrden: `OC-NUEVOS-3-${sufijo}` },
-    });
-    expect(noCreada).toBeNull();
+    // El número lo asigna el servidor: no se puede buscar por numeroOrden.
+    // Una orden rechazada no crea nada y tampoco consume consecutivo.
+    expect(await prisma.ordenCompraIntl.count({ where: { tenantId } })).toBe(antes);
+    const estadoDespues = await prisma.consecutivoImportacion.findMany({ where: { tenantId } });
+    expect(estadoDespues.map((f) => f.siguienteConsecutivo)).toEqual(consecutivosAntes);
   });
 
   it("4. crea una orden SIN los campos nuevos (compatibilidad hacia atrás) — quedan null", async () => {

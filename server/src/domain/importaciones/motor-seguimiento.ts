@@ -6,10 +6,10 @@
  * cuál es la "situación actual" del expediente en lenguaje de negocio.
  *
  * Principio explícito del encargo: NUNCA se asume responsabilidad
- * ("culpa") sin evidencia suficiente — si una actividad vencida no tiene
- * responsableTipo asignado, o el tipo no permite inferir con certeza si es
- * interno o externo, el origen de la novedad generada es "PorDeterminar",
- * nunca "Externo" por defecto.
+ * ("culpa") sin evidencia suficiente. Toda novedad automática nace con origen
+ * "PorDeterminar": que una actividad esté vencida o bloqueada, y quién tenga
+ * asignada la actividad (responsableTipo/responsableNombre), solo es contexto
+ * operativo para gestionarla; la causa la determina y valida una persona.
  */
 
 export interface ActividadSeguimiento {
@@ -32,12 +32,6 @@ export interface NovedadExistente {
 }
 
 const ESTADOS_PENDIENTES = new Set(["Pendiente", "EnCurso"]);
-
-/** responsableTipo != Interno se interpreta como origen externo — la única inferencia que el sistema SÍ puede hacer con certeza a partir del dato ya capturado. */
-function origenPorResponsable(responsableTipo: string): "Interno" | "Externo" | "PorDeterminar" {
-  if (!responsableTipo) return "PorDeterminar";
-  return responsableTipo === "Interno" ? "Interno" : "Externo";
-}
 
 /**
  * Actividades vencidas: fechaLimite ya pasó y la actividad sigue
@@ -117,7 +111,9 @@ export function generarNovedadesSugeridas(
     sugeridas.push({
       tipo: "Retraso",
       descripcion: `"${a.nombre}" (${a.etapa}) lleva ${diasRetraso} día(s) vencida.`,
-      origen: origenPorResponsable(a.responsableTipo),
+      // Una alerta no atribuye causa: el responsable de la actividad es
+      // contexto operativo, no la parte que causó el retraso.
+      origen: "PorDeterminar",
       responsable: a.responsableNombre ?? a.responsableTipo,
       prioridad: diasRetraso >= 5 ? "Alta" : "Media",
       fechaLimite: a.fechaLimite,
@@ -130,7 +126,7 @@ export function generarNovedadesSugeridas(
     sugeridas.push({
       tipo: "Bloqueo",
       descripcion: `"${actividad.nombre}" no puede avanzar: depende de "${bloqueadaPor.nombre}", que todavía no está completada.`,
-      origen: origenPorResponsable(bloqueadaPor.responsableTipo),
+      origen: "PorDeterminar",
       responsable: bloqueadaPor.responsableNombre ?? bloqueadaPor.responsableTipo,
       prioridad: "Media",
       fechaLimite: null,

@@ -25,6 +25,7 @@ model Tenant {
   colaboradores                  Colaborador[]
   configuracionInventario        ConfiguracionInventario?
   configuracionComercial         ConfiguracionComercial?
+  consecutivosImportacion        ConsecutivoImportacion[]
   creditos                       CreditoCliente[]
   departamentos                  Departamento[]
   tomasFisicas                   TomaFisica[]
@@ -566,6 +567,7 @@ model Factura {
   @@index([tenantId])
   @@index([tenantId, servicioId])
   @@index([tenantId, estado])
+  @@index([tenantId, eliminado, estado])
 }
 
 model FacturaHistorial {
@@ -659,6 +661,7 @@ model SolicitudCompra {
 
   @@index([tenantId])
   @@index([tenantId, estado])
+  @@index([tenantId, eliminado, estado])
 }
 
 /// Una de las (exactamente 3) cotizaciones de proveedor recogidas para una
@@ -729,6 +732,7 @@ model ServicioSuscripcion {
   facturas           Factura[]
 
   @@index([tenantId])
+  @@index([tenantId, eliminado, estado])
 }
 
 model ReglaEnrutamiento {
@@ -806,6 +810,7 @@ model CreditoCliente {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
+  @@index([tenantId, eliminado, estado])
 }
 
 /// Snapshot cacheado de t9896_pdv_clientes_analisis (Siesa) para UN cliente
@@ -1684,6 +1689,27 @@ model ClasificacionArancelariaMatriz {
   items                 ItemOrdenCompraIntl[]
 
   @@index([activo])
+}
+
+/// Contador MONOTÓNICO del consecutivo de órdenes internacionales por tenant y
+/// AÑO (serie anual: IMP-<anio>-<n>). El siguiente número efectivo es
+/// max(siguienteConsecutivo, MAX(consecutivo de los códigos existentes del año
+/// — incluidas órdenes anuladas/eliminadas — ) + 1): un número ya usado nunca
+/// se reutiliza. Se avanza dentro de la MISMA transacción que crea la orden
+/// (compare-and-set sobre esta fila; la unicidad (tenantId, anio) cubre la
+/// primera creación concurrente). Ver modules/importaciones/importaciones-consecutivo.ts.
+/// Cambiar de año no requiere nada: la serie nueva nace en 1 (o en el valor
+/// que Configuración de negocio fije). Cascade: es metadata derivada del tenant.
+model ConsecutivoImportacion {
+  id                   String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId             String   @db.UniqueIdentifier
+  anio                 Int
+  siguienteConsecutivo Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, anio])
 }
 
 /// Orden de compra internacional. El costeo de aduana/tránsito vive en
@@ -2602,6 +2628,7 @@ model Proforma {
   @@index([tenantId, clienteRowId])
   @@index([tenantId, cotizacionIdExterno])
   @@index([tenantId, cotizacionId])
+  @@index([tenantId, estado])
 }
 
 /// Línea de producto de una Proforma. itemRowId referencia el maestro de

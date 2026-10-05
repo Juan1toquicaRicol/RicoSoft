@@ -148,6 +148,8 @@ export const obtenerAdjuntoBandeja = async (req: AuthenticatedRequest, res: Resp
  * pipeline, que es 100% automático y nunca usa Auditoria, ver §15 de la
  * especificación).
  */
+const ACCIONES_EXCEPCION_VALIDAS = ["SELECCIONAR_PROVEEDOR", "SELECCIONAR_ORDEN", "DESCARTAR"];
+
 export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -166,22 +168,51 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
       return res.status(409).json({ message: "Esta excepción ya fue resuelta o descartada." });
     }
 
+    if (!ACCIONES_EXCEPCION_VALIDAS.includes(accion)) {
+      return res.status(400).json({ message: "Acción de resolución no válida." });
+    }
+
     const dataCorreo: { proveedorId?: string; ordenCompraId?: string } = {};
 
     if (accion === "SELECCIONAR_PROVEEDOR") {
-      if (!proveedorId) return res.status(400).json({ message: "Falta proveedorId." });
+      if (excepcion.tipo !== "PROVEEDOR_NO_IDENTIFICADO") {
+        return res.status(400).json({
+          message: "Esta acción solo aplica a excepciones de proveedor no identificado.",
+        });
+      }
+      if (typeof proveedorId !== "string" || !proveedorId) {
+        return res.status(400).json({ message: "Falta proveedorId." });
+      }
       const proveedor = await prisma.proveedor.findFirst({ where: { id: proveedorId, tenantId } });
       if (!proveedor) return res.status(404).json({ message: "Proveedor no encontrado." });
       dataCorreo.proveedorId = proveedorId;
     } else if (accion === "SELECCIONAR_ORDEN") {
-      if (!ordenCompraId) return res.status(400).json({ message: "Falta ordenCompraId." });
+      if (excepcion.tipo !== "ORDEN_NO_IDENTIFICADA") {
+        return res.status(400).json({
+          message: "Esta acción solo aplica a excepciones de orden no identificada.",
+        });
+      }
+      if (typeof ordenCompraId !== "string" || !ordenCompraId) {
+        return res.status(400).json({ message: "Falta ordenCompraId." });
+      }
+      if (!correo.proveedorId) {
+        return res
+          .status(409)
+          .json({ message: "El correo no tiene un proveedor asociado; asígnalo primero." });
+      }
       const orden = await prisma.ordenCompraIntl.findFirst({
         where: { id: ordenCompraId, tenantId, eliminado: false },
       });
       if (!orden) return res.status(404).json({ message: "Orden no encontrada." });
+      if (orden.proveedorId !== correo.proveedorId) {
+        return res
+          .status(409)
+          .json({ message: "La orden seleccionada no pertenece al proveedor de este correo." });
+      }
       dataCorreo.ordenCompraId = ordenCompraId;
     }
     // DESCARTAR no toca el correo, solo cierra la excepción.
+    const reanudaProcesamiento = Object.keys(dataCorreo).length > 0;
 
     await prisma.$transaction([
       prisma.importacionExcepcion.update({
@@ -192,8 +223,15 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
           resueltoEn: new Date(),
         },
       }),
-      ...(Object.keys(dataCorreo).length > 0
-        ? [prisma.importacionCorreo.update({ where: { id: correo.id }, data: dataCorreo })]
+      // Elegir proveedor u orden no cierra el correo: lo reencola para que el
+      // pipeline continúe (orden, requisitos) respetando la elección humana.
+      ...(reanudaProcesamiento
+        ? [
+            prisma.importacionCorreo.update({
+              where: { id: correo.id },
+              data: { ...dataCorreo, estadoProcesamiento: "PENDIENTE", ultimoError: null },
+            }),
+          ]
         : []),
       prisma.auditoria.create({
         data: {
@@ -218,7 +256,7 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
     const abiertasRestantes = await prisma.importacionExcepcion.count({
       where: { correoId: correo.id, estado: "ABIERTA" },
     });
-    if (abiertasRestantes === 0) {
+    if (abiertasRestantes === 0 && !reanudaProcesamiento) {
       const tenantPrisma = getTenantPrisma(tenantId);
       await resolverItemDeTrabajo(tenantPrisma, {
         tenantId,
@@ -281,6 +319,11 @@ export const reprocesarCorreoBandeja = async (req: AuthenticatedRequest, res: Re
       where: { id: req.params.id, tenantId },
     });
     if (!correo) return res.status(404).json({ message: "Correo no encontrado." });
+    if (!["ERROR", "REQUIERE_REVISION"].includes(correo.estadoProcesamiento)) {
+      return res.status(409).json({
+        message: `Solo se pueden reprocesar correos en ERROR o REQUIERE_REVISION (estado actual: ${correo.estadoProcesamiento}).`,
+      });
+    }
 
     await prisma.importacionCorreo.update({
       where: { id: correo.id },
@@ -306,80 +349,17 @@ export const reprocesarCorreoBandeja = async (req: AuthenticatedRequest, res: Re
 };
 
 // --- Triage de correos SIN tenant resuelto (PROVEEDOR_NO_IDENTIFICADO) ---
-// Solo un superadmin puede verlos/asignarlos — nunca un usuario de tenant,
-// porque por definición todavía no se sabe a qué tenant pertenecen. Ver
-// requireSuperadmin en importaciones-bandeja.routes.ts.
-
-export const listarCorreosSinAsignar = async (_req: AuthenticatedRequest, res: Response) => {
-  try {
-    const correos = await prisma.importacionCorreo.findMany({
-      where: { tenantId: null },
-      select: {
-        id: true,
-        remitente: true,
-        asunto: true,
-        fechaRecibido: true,
-        estadoProcesamiento: true,
-        excepciones: {
-          where: { estado: "ABIERTA" },
-          select: { id: true, tipo: true, descripcion: true, candidatos: true },
-        },
-      },
-      orderBy: { fechaRecibido: "desc" },
-    });
-    return res.json(correos);
-  } catch (error) {
-    console.error("Error al listar correos sin asignar:", error);
-    return res.status(500).json({ message: "Error al obtener los correos sin asignar." });
-  }
-};
-
-export const asignarProveedorACorreoSinTenant = async (
-  req: AuthenticatedRequest,
-  res: Response,
-) => {
-  try {
-    const { id } = req.params;
-    const { proveedorId } = req.body;
-
-    const correo = await prisma.importacionCorreo.findFirst({ where: { id, tenantId: null } });
-    if (!correo) {
-      return res
-        .status(404)
-        .json({ message: "Correo no encontrado o ya tiene un tenant asignado." });
-    }
-
-    const proveedor = await prisma.proveedor.findUnique({ where: { id: proveedorId } });
-    if (!proveedor) return res.status(404).json({ message: "Proveedor no encontrado." });
-
-    await prisma.$transaction([
-      prisma.importacionCorreo.update({
-        where: { id: correo.id },
-        data: {
-          tenantId: proveedor.tenantId,
-          proveedorId: proveedor.id,
-          estadoProcesamiento: "MATCHEADO",
-        },
-      }),
-      prisma.importacionExcepcion.updateMany({
-        where: { correoId: correo.id, tipo: "PROVEEDOR_NO_IDENTIFICADO", estado: "ABIERTA" },
-        data: { estado: "RESUELTA", resueltoPorId: req.user!.id, resueltoEn: new Date() },
-      }),
-      prisma.auditoria.create({
-        data: {
-          tenantId: proveedor.tenantId,
-          usuarioId: req.user!.id,
-          accion: "IMPORTACION_CORREO_ASIGNADO_MANUALMENTE",
-          detalle: `${req.user!.nombre} (superadmin) asignó el correo "${correo.asunto}" al proveedor "${proveedor.nombre}".`,
-          entidadTipo: "ImportacionCorreo",
-          entidadId: correo.id,
-        },
-      }),
-    ]);
-
-    return res.status(200).json({ message: "Correo asignado correctamente." });
-  } catch (error) {
-    console.error("Error al asignar proveedor a correo sin tenant:", error);
-    return res.status(500).json({ message: "Error al asignar el correo." });
-  }
+// DENEGADO a propósito. Estos correos no tienen tenant, así que listarlos o
+// asignarlos cruza el límite entre empresas. `isSuperadmin` de la sesión es
+// un flag POR TENANT (usuario hogar o Membresia), no una identidad de
+// plataforma: usarlo aquí permitiría que el superadmin de una empresa leyera
+// correos de todas y los reasignara a un proveedor de cualquiera. Hasta que
+// el responsable del proyecto apruebe una identidad de plataforma, ninguna
+// ruta lista ni asigna estos correos (quedan en REQUIERE_REVISION con
+// tenantId null). Ver MEMORY.md (2026-09-28, pendientes).
+export const denegarTriageSinTenant = (_req: AuthenticatedRequest, res: Response) => {
+  return res.status(403).json({
+    message:
+      "El triage de correos sin empresa asignada está deshabilitado: requiere una identidad de plataforma aún no aprobada.",
+  });
 };

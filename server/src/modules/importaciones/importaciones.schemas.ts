@@ -22,11 +22,16 @@ export const itemOrdenSchema = z.object({
   cantidad: numero,
   pesoKg: numero.nullish(),
   volumenM3: numero.nullish(),
-  valorUnitarioFob: numero,
+  valorUnitarioFob: numero.refine(
+    (valor) => valor !== "" && Number.isFinite(Number(valor)) && Number(valor) >= 0,
+    "El valor unitario FOB debe ser un número válido mayor o igual a cero.",
+  ),
 });
 
 export const crearOrdenCompraIntlSchema = z.object({
-  numeroOrden: z.string(textoObligatorio("El número de orden es obligatorio.")),
+  // Ignorado: el servidor asigna el número (codigo = numeroOrden = IMP-<año>-<n>).
+  // Se acepta por compatibilidad con clientes anteriores, sin usarlo.
+  numeroOrden: z.string().nullish(),
   // Fecha explícita de la orden (default "hoy" en el frontend) — distinta
   // de createdAt, que sigue siendo el timestamp de auditoría del registro.
   fechaOrden: z.string().nullish(),
@@ -184,4 +189,13 @@ export const actualizarEstadoPagoImportacionSchema = z.object({
 export const cerrarOrdenCompraIntlSchema = z.object({
   forzar: z.boolean().nullish(),
   justificacion: z.string().nullish(),
+});
+
+/** Fija el siguiente consecutivo del año actual (solo hacia arriba). */
+export const fijarConsecutivoImportacionSchema = z.object({
+  siguiente: z.coerce
+    .number({ invalid_type_error: "El consecutivo debe ser un número entero." })
+    .int("El consecutivo debe ser un número entero.")
+    .min(1, "El consecutivo debe ser al menos 1.")
+    .max(999999, "El consecutivo es demasiado grande."),
 });

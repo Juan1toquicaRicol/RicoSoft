@@ -42,7 +42,9 @@ export function ImportacionHeader({ orden }: { orden: OrdenCompraIntl }) {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Orden</p>
             <p className="text-lg font-extrabold text-slate-900">{orden.codigo}</p>
-            <p className="text-[11px] text-slate-500">{orden.numeroOrden}</p>
+            {orden.numeroOrden !== orden.codigo && (
+              <p className="text-[11px] text-slate-500">{orden.numeroOrden}</p>
+            )}
           </div>
           <div className="h-10 w-px bg-slate-200 hidden sm:block" />
           <Dato label="Proveedor" value={orden.proveedorExtranjero} sub={orden.paisOrigen} />

@@ -20,6 +20,7 @@ import {
   agregarComentarioFactura,
   eliminarFactura,
 } from "./facturas.controller";
+import { listarFacturasSiesaController } from "./facturas-siesa.controller";
 import {
   listarPagosFactura,
   registrarPago,
@@ -37,6 +38,9 @@ router.use(authenticateJWT);
 router.use(attachTenantPrisma);
 
 router.get("/", requirePermission("facturas.ver"), listarFacturas);
+// Antes de "/:id": consulta de solo lectura a Siesa (t455_cm_factura_docto),
+// separada del CRUD nativo de abajo — ver facturas-siesa.controller.ts.
+router.get("/siesa", requirePermission("facturas.ver"), listarFacturasSiesaController);
 router.get("/:id", requirePermission("facturas.ver"), obtenerFactura);
 router.post("/", requirePermission("facturas.crear"), crearFactura);
 // El permiso específico (aprobar/rechazar/pagar) se valida dentro del controlador

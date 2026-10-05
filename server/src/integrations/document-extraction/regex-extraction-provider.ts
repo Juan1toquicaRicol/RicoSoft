@@ -15,6 +15,36 @@ interface ReglaExtraccion {
   formatear?: (match: RegExpMatchArray) => string;
 }
 
+// El texto de un PDF llega en una sola línea (pdf-text.ts une los fragmentos
+// con espacios), así que un valor libre como "China" o "Shanghai" no tiene un
+// delimitador propio: sin un tope, la captura absorbe la etiqueta siguiente
+// ("China Currency", "Shanghai Port of Discharge"). VALOR_TEXTO captura lo
+// mínimo posible y FIN_VALOR lo corta en la siguiente etiqueta conocida, en
+// puntuación de cierre o al final del texto.
+const ETIQUETAS_SIGUIENTES = [
+  String.raw`Container`,
+  String.raw`Carrier`,
+  String.raw`Currency`,
+  String.raw`Country\s+of\s+Origin`,
+  String.raw`Pa[ií]s\s+de\s+Origen`,
+  String.raw`Port\s+of\s+(?:Loading|Discharge)`,
+  String.raw`POL`,
+  String.raw`POD`,
+  String.raw`Shipping\s+Line`,
+  String.raw`Naviera`,
+  String.raw`ETA`,
+  String.raw`ETD`,
+  String.raw`Incoterm`,
+  String.raw`B\/?L`,
+  String.raw`AWB`,
+  String.raw`Referencia`,
+  String.raw`Condici[oó]n`,
+  String.raw`Notes?`,
+  String.raw`Notas`,
+].join("|");
+const VALOR_TEXTO = "[A-Za-z][A-Za-z ,]{1,58}?";
+const FIN_VALOR = String.raw`(?=\s+(?:${ETIQUETAS_SIGUIENTES})\b|\s*[.;|\n]|\s*$)`;
+
 // Reglas determinísticas (ver §6/§25 de la especificación) — cada una
 // intenta un campo concreto y declina en silencio si no encuentra nada.
 // Deliberadamente NO exhaustivo en V1: cubre lo que la especificación pide
@@ -36,7 +66,10 @@ const REGLAS: ReglaExtraccion[] = [
   { campo: "awb", patron: /\bAWB(?:\s*(?:No\.?|Number|#))?[\s:#-]*(\d{3}-?\d{8})\b/i },
   {
     campo: "naviera",
-    patron: /\b(?:Carrier|Shipping\s*Line|Naviera)[\s:]*([A-Z][A-Za-z\s]{2,40})/i,
+    patron: new RegExp(
+      String.raw`\b(?:Carrier|Shipping\s*Line|Naviera)[\s:]*(${VALOR_TEXTO})${FIN_VALOR}`,
+      "i",
+    ),
   },
   {
     campo: "moneda",
@@ -44,10 +77,25 @@ const REGLAS: ReglaExtraccion[] = [
   },
   {
     campo: "paisOrigen",
-    patron: /\b(?:Country\s*of\s*Origin|Pa[ií]s\s*de\s*Origen)[\s:]*([A-Za-z\s]{3,40})/i,
+    patron: new RegExp(
+      String.raw`\b(?:Country\s*of\s*Origin|Pa[ií]s\s*de\s*Origen)[\s:]*(${VALOR_TEXTO})${FIN_VALOR}`,
+      "i",
+    ),
   },
-  { campo: "puertoOrigen", patron: /\b(?:Port\s*of\s*Loading|POL)[\s:]*([A-Za-z\s,]{3,60})/i },
-  { campo: "puertoDestino", patron: /\b(?:Port\s*of\s*Discharge|POD)[\s:]*([A-Za-z\s,]{3,60})/i },
+  {
+    campo: "puertoOrigen",
+    patron: new RegExp(
+      String.raw`\b(?:Port\s*of\s*Loading|POL)[\s:]*(${VALOR_TEXTO})${FIN_VALOR}`,
+      "i",
+    ),
+  },
+  {
+    campo: "puertoDestino",
+    patron: new RegExp(
+      String.raw`\b(?:Port\s*of\s*Discharge|POD)[\s:]*(${VALOR_TEXTO})${FIN_VALOR}`,
+      "i",
+    ),
+  },
 ];
 
 /**

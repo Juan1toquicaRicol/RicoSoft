@@ -449,7 +449,7 @@ function Login() {
           {/* Encabezado Dinámico */}
           <div className="mb-7">
             <h1 className="text-2xl font-extrabold tracking-tight text-blue-950 sm:text-3xl">
-              {isRegistering ? "Crear una cuenta" : "Bienvenido a RicoSoft"}
+              {isRegistering ? "Crear una cuenta" : "Bienvenido de nuevo"}
             </h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
               {isRegistering

@@ -1,15 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
-import { SlidersHorizontal, Percent } from "lucide-react";
+import { SlidersHorizontal, Percent, Ship } from "lucide-react";
 import { toast } from "sonner";
 
 import { requireAnyPermisoGuard } from "@/lib/route-guards";
-import { accesoConfigNegocio, PERMISOS_ENTRADA_CONFIG_NEGOCIO } from "@/lib/config-negocio-permisos";
+import {
+  accesoConfigNegocio,
+  PERMISOS_ENTRADA_CONFIG_NEGOCIO,
+} from "@/lib/config-negocio-permisos";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { hasPermission } from "@/lib/session";
 import { useSession } from "@/lib/session-context";
 import { useConfiguracionInventario, type ConfiguracionInventario } from "@/hooks/use-inventario";
 import { useConfiguracionComercial, type ConfiguracionComercial } from "@/hooks/use-proformas";
+import {
+  useConsecutivoImportaciones,
+  fijarConsecutivoImportaciones,
+} from "@/hooks/use-importaciones";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -360,6 +367,7 @@ function ConfiguracionNegocioPage() {
       </h1>
       {acceso.puedeEditarInventario && <SeccionInventario />}
       {acceso.puedeEditarComercial && <ConfiguracionComercialSection />}
+      {acceso.puedeEditarComercial && <ConsecutivoImportacionesSection />}
     </div>
   );
 }
@@ -480,6 +488,114 @@ function ConfiguracionComercialSection() {
       <div className="flex justify-end pt-2">
         <Button type="submit" variant="success" disabled={guardando || loading || !puedeEditar}>
           {guardando ? "Guardando..." : "Guardar configuración"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Consecutivo de órdenes internacionales (IMP-<año>-<n>) del AÑO ACTUAL y el
+ * tenant activo. Solo se puede subir: el mínimo ya incluye los códigos
+ * existentes y los números de órdenes anuladas. Al cambiar de año empieza una
+ * serie nueva. Se edita con configuracion.editar (el backend lo exige igual). */
+function ConsecutivoImportacionesSection() {
+  const { data, loading, error, recargar } = useConsecutivoImportaciones();
+  const [valor, setValor] = useState<number | "">("");
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState("");
+  const { user: sesion } = useSession();
+  const puedeEditar = hasPermission(sesion, PERMISOS_SISTEMA.CONFIGURACION_EDITAR);
+
+  useEffect(() => {
+    if (data) setValor(data.siguiente);
+  }, [data]);
+
+  const codigoResultante =
+    data && valor !== "" && Number.isInteger(valor) && valor >= 1
+      ? `IMP-${data.anio}-${String(valor).padStart(3, "0")}`
+      : null;
+
+  const handleGuardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!puedeEditar || valor === "") return;
+    setGuardando(true);
+    setErrorGuardar("");
+    try {
+      const actualizado = await fijarConsecutivoImportaciones(valor);
+      toast.success(`Siguiente consecutivo de importaciones: ${actualizado.codigoSiguiente}.`);
+      await recargar();
+    } catch (err: unknown) {
+      const mensaje = err instanceof Error ? err.message : "Error al guardar el consecutivo.";
+      setErrorGuardar(mensaje);
+      toast.error(mensaje);
+      await recargar();
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleGuardar}
+      className="space-y-4 bg-white p-6 rounded-lg border border-slate-200 shadow-2xs"
+    >
+      <div>
+        <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <Ship className="h-4 w-4 text-blue-600" />
+          Consecutivo de importaciones{data ? ` — ${data.anio}` : ""}
+        </h2>
+        <p className="text-xs text-slate-500 max-w-2xl mt-1">
+          Las órdenes internacionales se numeran IMP-año-consecutivo. El número se asigna al guardar
+          la orden. No se puede bajar ni reutilizar el número de una orden anulada. Al cambiar de
+          año comienza una serie nueva.
+        </p>
+      </div>
+      <div className="space-y-1 max-w-xs">
+        <label className="text-sm font-medium text-slate-700" htmlFor="consecutivo-importaciones">
+          Siguiente consecutivo
+        </label>
+        <Input
+          id="consecutivo-importaciones"
+          type="number"
+          required
+          min={data?.minimo ?? 1}
+          step={1}
+          value={valor}
+          disabled={loading || !data || !puedeEditar}
+          onChange={(e) => {
+            setErrorGuardar("");
+            setValor(e.target.value === "" ? "" : Number(e.target.value));
+          }}
+        />
+        {data && (
+          <p className="text-xs text-slate-500">
+            Vigente: <strong>{data.codigoSiguiente}</strong>. Debe ser igual o superior.
+            {codigoResultante && codigoResultante !== data.codigoSiguiente && (
+              <>
+                {" "}
+                La próxima orden será <strong>{codigoResultante}</strong>.
+              </>
+            )}
+          </p>
+        )}
+        {(errorGuardar || error) && (
+          <p role="alert" className="text-xs text-red-600">
+            {errorGuardar || error}
+          </p>
+        )}
+      </div>
+      {!puedeEditar && (
+        <p className="text-xs text-amber-700">
+          Necesitas el permiso configuracion.editar para modificar esta configuración.
+        </p>
+      )}
+      <div className="flex justify-end pt-2">
+        <Button
+          type="submit"
+          variant="success"
+          disabled={guardando || loading || !data || !puedeEditar || valor === ""}
+        >
+          {guardando ? "Guardando..." : "Guardar consecutivo"}
         </Button>
       </div>
     </form>

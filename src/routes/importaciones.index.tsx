@@ -339,7 +339,8 @@ function ImportacionesPage() {
                         {o.codigo}
                       </Link>
                       <p className="text-[10px] text-slate-400 font-normal">
-                        {o.numeroOrden} · {o.lotes.length} lote(s)
+                        {o.numeroOrden !== o.codigo ? `${o.numeroOrden} · ` : ""}
+                        {o.lotes.length} lote(s)
                       </p>
                     </TableCell>
                     <TableCell className="px-4 py-3">

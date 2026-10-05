@@ -74,22 +74,38 @@ describe("calcularActividadesBloqueadas", () => {
 });
 
 describe("generarNovedadesSugeridas", () => {
-  it("genera novedad de tipo Retraso para una actividad vencida, con origen Externo cuando el responsable no es Interno", () => {
+  it("genera novedad de tipo Retraso para una actividad vencida, con origen PorDeterminar aunque el responsable sea externo", () => {
     const r = generarNovedadesSugeridas([actividad({ responsableTipo: "Proveedor" })], ahora);
     expect(r).toHaveLength(1);
     expect(r[0].tipo).toBe("Retraso");
-    expect(r[0].origen).toBe("Externo");
+    expect(r[0].origen).toBe("PorDeterminar");
     expect(r[0].reglaOrigen).toBe("actividad-vencida:a1");
+    // El responsable de la actividad se conserva solo como contexto operativo.
+    expect(r[0].responsable).toBe("Proveedor");
   });
 
-  it("usa origen Interno cuando responsableTipo es Interno", () => {
+  it("origen PorDeterminar también cuando el responsable es Interno (no se atribuye causa a Ricol)", () => {
     const r = generarNovedadesSugeridas([actividad({ responsableTipo: "Interno" })], ahora);
-    expect(r[0].origen).toBe("Interno");
+    expect(r[0].origen).toBe("PorDeterminar");
   });
 
-  it("nunca asume origen Externo por defecto sin responsableTipo asignado", () => {
+  it("origen PorDeterminar sin responsableTipo asignado", () => {
     const r = generarNovedadesSugeridas([actividad({ responsableTipo: "" })], ahora);
     expect(r[0].origen).toBe("PorDeterminar");
+  });
+
+  it("una novedad por dependencia bloqueada tampoco atribuye causa a quien tiene la actividad previa", () => {
+    const a = actividad({
+      id: "a",
+      estado: "Pendiente",
+      responsableTipo: "Naviera",
+      fechaLimite: null,
+    });
+    const b = actividad({ id: "b", dependeDeId: "a", estado: "Pendiente", fechaLimite: null });
+    const r = generarNovedadesSugeridas([a, b], ahora);
+    const bloqueo = r.find((n) => n.reglaOrigen === "dependencia-bloqueada:b");
+    expect(bloqueo?.origen).toBe("PorDeterminar");
+    expect(bloqueo?.responsable).toBe("Naviera");
   });
 
   it("marca prioridad Alta cuando el retraso es de 5 días o más", () => {

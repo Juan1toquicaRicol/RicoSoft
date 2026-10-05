@@ -1,10 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { MockMaritimeTrackingProvider } from "./mock-maritime-tracking-provider";
 
 describe("MockMaritimeTrackingProvider", () => {
   const provider = new MockMaritimeTrackingProvider();
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("buscarBuque es determinístico: el mismo IMO siempre da la misma posición", async () => {
+    // Reloj congelado: el mock deriva ETA/ultimaActualizacion de Date.now(), y dos
+    // llamadas consecutivas pueden caer en milisegundos distintos (flaky).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
     const primero = await provider.buscarBuque({ imo: "9321483" });
     const segundo = await provider.buscarBuque({ imo: "9321483" });
     expect(primero).not.toBeNull();

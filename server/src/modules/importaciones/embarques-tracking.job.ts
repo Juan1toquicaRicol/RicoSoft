@@ -9,6 +9,7 @@ import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import { leerConfigTrackingMaritimo } from "../../integrations/maritime-tracking/config";
 import { MockMaritimeTrackingProvider } from "../../integrations/maritime-tracking/mock-maritime-tracking-provider";
 import type { MaritimeTrackingProvider } from "../../integrations/maritime-tracking/maritime-tracking-provider";
+import { aplicarNovedadAutomatica } from "./importaciones-novedades-automaticas";
 
 /**
  * Tracking Marítimo V1 — job de sincronización periódica (§8 de la
@@ -35,6 +36,32 @@ export function _establecerProviderParaTests(p: MaritimeTrackingProvider): void 
   provider = p;
 }
 
+/** El adapter simulado inventa posición/ETA/eventos: sin opt-in explícito
+ * (TRACKING_MARITIMO_PERMITIR_SIMULADO=true) no se permite sincronizar, ni
+ * periódica ni manualmente, para que nunca se registren como reales. */
+export class TrackingSimuladoNoPermitidoError extends Error {
+  constructor() {
+    super(
+      "El proveedor de tracking marítimo activo es simulado (mock) y no está permitido sincronizar embarques con datos simulados. Configure un proveedor real o habilite TRACKING_MARITIMO_PERMITIR_SIMULADO solo para pruebas.",
+    );
+    this.name = "TrackingSimuladoNoPermitidoError";
+  }
+}
+
+export function trackingSimuladoBloqueado(): boolean {
+  return provider.nombre === "mock" && !leerConfigTrackingMaritimo().permitirSimulado;
+}
+
+/** Marca de todo lo que produzca el proveedor simulado (solo alcanzable con
+ * TRACKING_MARITIMO_PERMITIR_SIMULADO=true, ver trackingSimuladoBloqueado): una
+ * novedad, un historial o una notificación derivados de datos inventados nunca
+ * deben leerse como hechos reales. */
+export const ETIQUETA_SIMULADO = "[SIMULADO]";
+
+function etiquetarSiSimulado(texto: string): string {
+  return provider.nombre === "mock" ? `${ETIQUETA_SIMULADO} ${texto}` : texto;
+}
+
 function diferenciaEnDias(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
 }
@@ -47,9 +74,11 @@ async function notificarAlertaEmbarque(
   tenantId: string,
   loteId: string,
   ordenCompraId: string,
-  titulo: string,
-  mensaje: string,
+  tituloOriginal: string,
+  mensajeOriginal: string,
 ): Promise<void> {
+  const titulo = etiquetarSiSimulado(tituloOriginal);
+  const mensaje = etiquetarSiSimulado(mensajeOriginal);
   const tenantPrisma = getTenantPrisma(tenantId);
   await crearItemDeTrabajo(tenantPrisma, {
     tenantId,
@@ -97,8 +126,8 @@ async function registrarHistorial(
     data: {
       ordenCompraId,
       actor: "Sistema",
-      accion,
-      detalle,
+      accion: etiquetarSiSimulado(accion),
+      detalle: etiquetarSiSimulado(detalle),
       origen: "Sistema",
       responsable: "Tracking Marítimo",
       etapa: "Tránsito",
@@ -107,9 +136,13 @@ async function registrarHistorial(
   void tenantId;
 }
 
-/** Crea (si no existe) o resuelve (si la condición ya no aplica) una novedad
- * automática — MISMO patrón idempotente que sincronizarNovedadesAutomaticas
- * en importaciones.controller.ts (índice único ordenCompraId+reglaOrigen). */
+/** Crea, reabre o resuelve la novedad automática de una regla de tracking —
+ * misma lógica compartida que el motor de seguimiento (idempotente, tolera
+ * concurrencia y novedades ya resueltas; ver
+ * importaciones-novedades-automaticas.ts). La novedad nace con origen
+ * PorDeterminar: una variación de ETA o la falta de actualización es un dato
+ * observado, no la causa; el proveedor de datos (naviera/AIS) NO se asigna
+ * como responsable. */
 async function sincronizarNovedadAutomatica(
   tenantId: string,
   ordenCompraId: string,
@@ -117,51 +150,17 @@ async function sincronizarNovedadAutomatica(
   condicionVigente: boolean,
   datos: { tipo: string; descripcion: string; prioridad?: string },
 ): Promise<void> {
-  const existente = await prisma.importacionNovedad.findUnique({
-    where: { ordenCompraId_reglaOrigen: { ordenCompraId, reglaOrigen } },
+  await aplicarNovedadAutomatica({
+    tenantId,
+    ordenCompraId,
+    reglaOrigen,
+    condicionVigente,
+    datos: {
+      tipo: datos.tipo,
+      descripcion: etiquetarSiSimulado(datos.descripcion),
+      prioridad: datos.prioridad || "Media",
+    },
   });
-
-  if (condicionVigente) {
-    if (existente) {
-      if (existente.estado === "Resuelta") {
-        await prisma.importacionNovedad.update({
-          where: { id: existente.id },
-          data: {
-            estado: "Abierta",
-            descripcion: datos.descripcion,
-            fechaResolucion: null,
-            responsableResolucionNombre: null,
-          },
-        });
-      }
-      // Ya abierta: no se duplica, la descripción original queda como está
-      // (el detalle actualizado vive en el historial/notificación puntual).
-      return;
-    }
-    await prisma.importacionNovedad.create({
-      data: {
-        tenantId,
-        ordenCompraId,
-        tipo: datos.tipo,
-        descripcion: datos.descripcion,
-        origen: "Externo",
-        responsable: "Naviera",
-        prioridad: datos.prioridad || "Media",
-        automatica: true,
-        reglaOrigen,
-        creadoPorNombre: "Sistema",
-      },
-    });
-  } else if (existente && existente.estado !== "Resuelta") {
-    await prisma.importacionNovedad.update({
-      where: { id: existente.id },
-      data: {
-        estado: "Resuelta",
-        fechaResolucion: new Date(),
-        responsableResolucionNombre: "Sistema (condición resuelta)",
-      },
-    });
-  }
 }
 
 async function sincronizarBuqueDelLote(lote: {
@@ -172,6 +171,7 @@ async function sincronizarBuqueDelLote(lote: {
   buqueImo: string | null;
   buqueMmsi: string | null;
   fechaLlegadaEstimada: Date | null;
+  ultimaSincronizacionTracking: Date | null;
 }): Promise<void> {
   if (!lote.buqueImo && !lote.buqueMmsi && !lote.buqueNombre) return;
 
@@ -188,7 +188,10 @@ async function sincronizarBuqueDelLote(lote: {
         data: {
           estadoTracking: "SIN_DATOS",
           proveedorTracking: provider.nombre,
-          ultimaSincronizacionTracking: new Date(),
+          // Sin datos NO es una sincronización exitosa: no se renueva la
+          // fecha (solo se inicia el reloj la primera vez), para que la
+          // alerta "sin actualización" pueda dispararse tras N días.
+          ultimaSincronizacionTracking: lote.ultimaSincronizacionTracking ?? new Date(),
           ultimoErrorTracking: null,
         },
       });
@@ -352,6 +355,7 @@ async function verificarAusenciaDeActualizacion(lote: {
  * solo apaga el CICLO PERIÓDICO, nunca una acción puntual que el usuario
  * pidió explícitamente. */
 export async function sincronizarUnLote(loteId: string): Promise<void> {
+  if (trackingSimuladoBloqueado()) throw new TrackingSimuladoNoPermitidoError();
   const lote = await prisma.loteImportacion.findUnique({ where: { id: loteId } });
   if (!lote) return;
 
@@ -364,6 +368,12 @@ export async function sincronizarUnLote(loteId: string): Promise<void> {
 export async function ejecutarCicloSincronizacionEmbarques(): Promise<void> {
   const config = leerConfigTrackingMaritimo();
   if (!config.habilitado) return;
+  if (trackingSimuladoBloqueado()) {
+    console.warn(
+      "[tracking-maritimo] Ciclo omitido: el proveedor activo es simulado (mock) y TRACKING_MARITIMO_PERMITIR_SIMULADO no está habilitado.",
+    );
+    return;
+  }
 
   const lotes = await prisma.loteImportacion.findMany({
     where: {

@@ -37,6 +37,8 @@ import { leerConfigEmailImportaciones } from "./config";
  * un cambio interno a este archivo, no al resto de la Bandeja (por eso
  * existe la interfaz EmailProvider).
  */
+const MAX_PAGINAS_LISTADO = 200;
+
 export class GoogleWorkspaceEmailProvider implements EmailProvider {
   private gmail: gmail_v1.Gmail | null = null;
 
@@ -82,22 +84,44 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
     // así que el filtrado fino real (evitar reprocesar el mismo correo del
     // borde) lo hace el caller comparando internalDate exacto — ver
     // ingesta.job.ts.
-    const despuesDeSegundos = cursor ? Math.floor(Number(cursor) / 1000) : null;
-    const query = despuesDeSegundos ? `after:${despuesDeSegundos}` : undefined;
+    // Un segundo de margen: Gmail trabaja en segundos y el cursor está en ms,
+    // así que un mensaje del mismo segundo que el último ingerido podría
+    // quedar fuera; la idempotencia por messageId absorbe el solape.
+    const despuesDeSegundos = cursor ? Math.floor(Number(cursor) / 1000) - 1 : null;
+    const query =
+      despuesDeSegundos && despuesDeSegundos > 0 ? `after:${despuesDeSegundos}` : undefined;
 
-    let listado: gmail_v1.Schema$ListMessagesResponse;
+    // Gmail devuelve del más nuevo al más antiguo y por páginas. Se recorren
+    // TODAS las páginas (con tope) y se toman los `maxResults` más ANTIGUOS:
+    // así el cursor (fecha máxima ingerida) nunca salta por encima de
+    // mensajes que quedaron sin traer cuando hay más mensajes que el límite.
+    const idsTodos: string[] = [];
+    let pageToken: string | undefined;
+    let paginas = 0;
     try {
-      const respuesta = await gmail.users.messages.list({
-        userId: "me",
-        maxResults,
-        q: query,
-      });
-      listado = respuesta.data;
+      do {
+        const respuesta = await gmail.users.messages.list({
+          userId: "me",
+          maxResults: 100,
+          q: query,
+          pageToken,
+        });
+        for (const m of respuesta.data.messages ?? []) {
+          if (m.id) idsTodos.push(m.id);
+        }
+        pageToken = respuesta.data.nextPageToken ?? undefined;
+        paginas++;
+      } while (pageToken && paginas < MAX_PAGINAS_LISTADO);
     } catch (error) {
       throw new EmailProviderError("Error al listar mensajes de Gmail.", error);
     }
+    if (pageToken) {
+      throw new EmailProviderError(
+        "El buzón tiene más mensajes nuevos que el máximo listable en una corrida; se reintenta en la próxima sin saltar mensajes.",
+      );
+    }
 
-    const ids = (listado.messages ?? []).map((m) => m.id).filter((id): id is string => !!id);
+    const ids = idsTodos.reverse().slice(0, maxResults);
     const mensajes: EmailMessage[] = [];
     let cursorMasReciente = cursor ? Number(cursor) : 0;
 
@@ -116,6 +140,8 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
         if (internalDate > cursorMasReciente) cursorMasReciente = internalDate;
       }
     }
+
+    mensajes.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     return {
       messages: mensajes,

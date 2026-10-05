@@ -48,12 +48,10 @@ describe.skipIf(!RUN)(
       token: string,
       opts?: { responsableId?: string },
     ): Promise<{ ordenId: string; loteId: string; numeroOrden: string }> => {
-      const numeroOrden = `ORD-CV-${randomUUID().slice(0, 8)}`;
       const ordenRes = await request(app)
         .post("/api/importaciones")
         .set("Authorization", `Bearer ${token}`)
         .send({
-          numeroOrden,
           incoterm: "FOB",
           proveedorExtranjero: "Proveedor Ciclo de Vida",
           paisOrigen: "China",
@@ -68,6 +66,8 @@ describe.skipIf(!RUN)(
         );
       }
       const ordenId = ordenRes.body.id;
+      // El número lo asigna el servidor (IMP-<año>-<n>).
+      const numeroOrden = ordenRes.body.numeroOrden as string;
 
       const loteRes = await request(app)
         .post(`/api/importaciones/${ordenId}/lotes`)
@@ -146,12 +146,21 @@ describe.skipIf(!RUN)(
           activo: true,
         },
       });
+      // Solo puede ser responsable quien pueda crear o gestionar importaciones.
+      const rolResponsable = await prisma.rol.create({
+        data: {
+          tenantId: tenantAId,
+          nombre: `Responsable Importaciones ${sufijo}`,
+          permisos: JSON.stringify(["importaciones.ver", "importaciones.gestionar_transito"]),
+        },
+      });
       const responsableA = await prisma.user.create({
         data: {
           tenantId: tenantAId,
           email: `cv-responsable-a-${sufijo}@test.ricosoft.local`,
           passwordHash,
           nombre: "Responsable A",
+          rolId: rolResponsable.id,
           isSuperadmin: false,
           activo: true,
         },
@@ -188,6 +197,7 @@ describe.skipIf(!RUN)(
       await prisma.ordenCompraIntl.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
       await prisma.$disconnect();
     });

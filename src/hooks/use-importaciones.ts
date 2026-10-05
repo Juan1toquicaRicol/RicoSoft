@@ -343,7 +343,7 @@ export interface ItemOrdenInput {
 }
 
 export interface CrearOrdenInput {
-  numeroOrden: string;
+  // El número (codigo = numeroOrden, IMP-<año>-<n>) lo asigna el servidor al guardar.
   fechaOrden?: string;
   incoterm: string;
   lugarPactado?: string | null;
@@ -603,6 +603,51 @@ export function useResponsablesImportacion() {
   }, []);
 
   return { opciones, loading };
+}
+
+/** Consecutivo de órdenes del año actual y el tenant activo (IMP-<año>-<n>).
+ * `siguiente` es un ESTIMADO: no reserva nada, el número real se asigna al guardar. */
+export interface ConsecutivoImportaciones {
+  anio: number;
+  siguiente: number;
+  codigoSiguiente: string;
+  /** Mínimo aceptado al fijarlo (nunca se puede bajar). */
+  minimo: number;
+}
+
+export function useConsecutivoImportaciones() {
+  const [data, setData] = useState<ConsecutivoImportaciones | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const recargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData((await fetchAuth("/importaciones/consecutivo")) as ConsecutivoImportaciones);
+      setError(null);
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "No fue posible consultar el consecutivo.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void recargar();
+  }, [recargar]);
+
+  return { data, loading, error, recargar };
+}
+
+/** Fija el siguiente consecutivo del año actual (solo hacia arriba). */
+export async function fijarConsecutivoImportaciones(
+  siguiente: number,
+): Promise<ConsecutivoImportaciones> {
+  return (await fetchAuth("/importaciones/consecutivo", {
+    method: "PUT",
+    body: JSON.stringify({ siguiente }),
+  })) as ConsecutivoImportaciones;
 }
 
 export interface NuevoRequisitoProveedor {

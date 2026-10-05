@@ -98,8 +98,8 @@ describe("mapeo de campos canónicos", () => {
     const [c] = await leerCotizacionesSiesa(7);
 
     expect(c.erpRowId).toBe(100);
-    expect(c.consecutivo).toBe("COT-34147");
-    expect(formatearConsecutivoCotizacionSiesa(34147)).toBe("COT-34147");
+    expect(c.consecutivo).toBe("COT-CDV-34147");
+    expect(formatearConsecutivoCotizacionSiesa(34147)).toBe("COT-CDV-34147");
     expect(c.cliente).toEqual({ rowId: 2001, nombre: "Cliente Uno", nit: "900123456-1" });
     expect(c.vendedor).toEqual({ rowId: 77, nombre: "Vendedora X" });
     expect(c.fecha).toEqual(new Date("2026-09-01"));
@@ -283,7 +283,7 @@ describe("persistencia (guardar=true)", () => {
     await expect(sincronizarCotizacionesSiesa("t", { guardar: true })).rejects.toThrow(/usuario/);
   });
 
-  it("NUEVA: crea BORRADOR con erpRowId, erpNumero COT-, ítems y auditoría en UNA transacción", async () => {
+  it("NUEVA: crea BORRADOR con erpRowId, erpNumero COT-CDV-, ítems y auditoría en UNA transacción", async () => {
     mocks.query.mockResolvedValueOnce(siesa(100, 34147)[0]).mockResolvedValueOnce(siesa(100, 34147)[1]);
 
     const r = await sincronizarCotizacionesSiesa("tenant-1", { guardar: true }, actor);
@@ -295,7 +295,7 @@ describe("persistencia (guardar=true)", () => {
       estado: "BORRADOR",
       erpRowId: 100,
       erpTipoDocumento: "CDV",
-      erpNumero: "COT-34147",
+      erpNumero: "COT-CDV-34147",
       erpEstadoSincronizacion: "VINCULADO",
       moneda: "COP",
       clienteRowId: 2001,

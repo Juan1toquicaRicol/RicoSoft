@@ -83,6 +83,34 @@ describe("RegexDocumentExtractionProvider", () => {
     expect(porCampo.pesoTotalKg).toBe("12.500");
   });
 
+  it("texto de PDF en una sola línea: país, puertos y naviera no arrastran la etiqueta siguiente", async () => {
+    // Texto tal como lo entrega pdf-text.ts (fragmentos unidos por espacios).
+    const texto =
+      "Incoterm: FOB Country of Origin: China Currency: USD Condicion de pago propuesta: 50% anticipo. " +
+      "ETD: 04/10/2026 ETA: 18/10/2026 Port of Loading: Shanghai Port of Discharge: Cartagena " +
+      "Carrier: Blue Horizon Lines Container: ABCD1234567 BL: BL987654321 Referencia interna de control: IT-TEST-764.";
+    const resultado = await provider.extraer(Buffer.from(texto, "utf-8"), "text/plain");
+    const porCampo = Object.fromEntries(resultado.campos.map((c) => [c.campo, c.valor]));
+
+    expect(porCampo.paisOrigen).toBe("China");
+    expect(porCampo.puertoOrigen).toBe("Shanghai");
+    expect(porCampo.puertoDestino).toBe("Cartagena");
+    expect(porCampo.naviera).toBe("Blue Horizon Lines");
+    expect(porCampo.moneda).toBe("USD");
+    expect(porCampo.contenedor).toBe("ABCD1234567");
+  });
+
+  it("valores en líneas separadas y al final del texto siguen extrayéndose completos", async () => {
+    const texto =
+      "País de Origen: Estados Unidos\nPort of Loading: New York, USA\nNaviera: Hapag Lloyd";
+    const resultado = await provider.extraer(Buffer.from(texto, "utf-8"), "text/plain");
+    const porCampo = Object.fromEntries(resultado.campos.map((c) => [c.campo, c.valor]));
+
+    expect(porCampo.paisOrigen).toBe("Estados Unidos");
+    expect(porCampo.puertoOrigen).toBe("New York, USA");
+    expect(porCampo.naviera).toBe("Hapag Lloyd");
+  });
+
   it("un documento sin ningún campo reconocible no lanza, solo devuelve una lista vacía", async () => {
     const resultado = await provider.extraer(
       Buffer.from("Este documento no tiene ningún dato reconocible.", "utf-8"),

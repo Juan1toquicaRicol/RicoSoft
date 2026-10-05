@@ -124,9 +124,32 @@ describe("GoogleWorkspaceEmailProvider", () => {
     expect(usersMessagesList).toHaveBeenCalledWith(expect.objectContaining({ q: undefined }));
 
     await provider.listNewMessages("1700000000000", 10);
+    // Un segundo de margen: la idempotencia por messageId absorbe el solape.
     expect(usersMessagesList).toHaveBeenCalledWith(
-      expect.objectContaining({ q: "after:1700000000" }),
+      expect.objectContaining({ q: "after:1699999999" }),
     );
+  });
+
+  it("paginación: recorre todas las páginas y trae los mensajes más ANTIGUOS primero", async () => {
+    // Gmail lista del más nuevo al más antiguo: g3 (nuevo) ... g1 (antiguo).
+    usersMessagesList
+      .mockResolvedValueOnce({ data: { messages: [{ id: "g3" }], nextPageToken: "p2" } })
+      .mockResolvedValueOnce({ data: { messages: [{ id: "g2" }, { id: "g1" }] } });
+    usersMessagesGet.mockImplementation(async ({ id }: { id: string }) => ({
+      data: mensajeGmailFalso({
+        id,
+        messageId: `<${id}@example.com>`,
+        internalDate: String({ g1: 1000, g2: 2000, g3: 3000 }[id]),
+      }),
+    }));
+    const provider = new GoogleWorkspaceEmailProvider();
+
+    const resultado = await provider.listNewMessages(null, 2);
+
+    expect(usersMessagesList).toHaveBeenCalledTimes(2);
+    expect(resultado.messages.map((m) => m.providerMessageId)).toEqual(["g1", "g2"]);
+    // El cursor queda en el más reciente TRAÍDO (g2), nunca salta sobre g3.
+    expect(resultado.nextCursor).toBe("2000");
   });
 
   it("Message-ID: mapea el header RFC 5322 (idempotencia), no el id interno de Gmail", async () => {

@@ -175,7 +175,8 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
     );
     expect(novedadAutomatica).toBeTruthy();
     expect(novedadAutomatica.tipo).toBe("Retraso");
-    expect(novedadAutomatica.origen).toBe("Externo"); // responsableTipo = Proveedor
+    // Una alerta no atribuye causa: responsableTipo = Proveedor es solo contexto.
+    expect(novedadAutomatica.origen).toBe("PorDeterminar");
     expect(detalle.body.situacionActual.atencion).toContain("Actividad de prueba vencida");
   });
 
@@ -215,6 +216,112 @@ describe.skipIf(!RUN)("Importaciones — Expediente Vivo (multi-tenant real)", (
       n.descripcion.includes("Actividad de prueba vencida"),
     );
     expect(novedad.estado).toBe("Resuelta");
+  });
+
+  it("una novedad automática no se puede resolver a mano (409); sigue Abierta mientras la condición esté vigente", async () => {
+    const crear = await request(app)
+      .post(`/api/importaciones/${ordenAId}/actividades`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`)
+      .send({
+        nombre: "Actividad vencida no resoluble",
+        etapa: "Documentación",
+        responsableTipo: "Proveedor",
+        fechaLimite: "2020-01-01T00:00:00.000Z",
+      });
+    expect(crear.status).toBe(201);
+
+    const antes = await request(app)
+      .get(`/api/importaciones/${ordenAId}`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`);
+    const automatica = antes.body.novedades.find((n: { descripcion: string }) =>
+      n.descripcion.includes("Actividad vencida no resoluble"),
+    );
+    expect(automatica).toBeTruthy();
+
+    const resolver = await request(app)
+      .patch(`/api/importaciones/novedades/${automatica.id}/resolver`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`)
+      .send({ comentario: "intento manual" });
+    expect(resolver.status).toBe(409);
+
+    const despues = await request(app)
+      .get(`/api/importaciones/${ordenAId}`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`);
+    expect(despues.status).toBe(200);
+    const fila = despues.body.novedades.find((n: { id: string }) => n.id === automatica.id);
+    expect(fila.estado).toBe("Abierta");
+  });
+
+  it("fila automática heredada, resuelta a mano con la condición vigente: reaparece (200, sin duplicar) y el historial conserva quién y cuándo (sin copiar el comentario)", async () => {
+    const crear = await request(app)
+      .post(`/api/importaciones/${ordenAId}/actividades`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`)
+      .send({
+        nombre: "Actividad vencida heredada",
+        etapa: "Documentación",
+        responsableTipo: "Proveedor",
+        fechaLimite: "2020-01-01T00:00:00.000Z",
+      });
+    expect(crear.status).toBe(201);
+    const antes = await request(app)
+      .get(`/api/importaciones/${ordenAId}`)
+      .set("Authorization", `Bearer ${tokenAAdmin}`);
+    const automatica = antes.body.novedades.find((n: { descripcion: string }) =>
+      n.descripcion.includes("Actividad vencida heredada"),
+    );
+
+    // Simula el estado histórico: resuelta manualmente (con su evento) antes de este cambio.
+    const resueltaEn = new Date();
+    await prisma.importacionNovedad.update({
+      where: { id: automatica.id },
+      data: {
+        estado: "Resuelta",
+        fechaResolucion: resueltaEn,
+        responsableResolucionId: randomUUID(),
+        responsableResolucionNombre: "Ana Histórica",
+      },
+    });
+    await prisma.importacionHistorial.create({
+      data: {
+        ordenCompraId: ordenAId,
+        actor: "Ana Histórica",
+        accion: "Novedad resuelta: Retraso",
+        detalle: "Gestionado por teléfono",
+        origen: "Manual",
+      },
+    });
+
+    const [a, b] = await Promise.all([
+      request(app)
+        .get(`/api/importaciones/${ordenAId}`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`),
+      request(app)
+        .get(`/api/importaciones/${ordenAId}`)
+        .set("Authorization", `Bearer ${tokenAAdmin}`),
+    ]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    const filas = a.body.novedades.filter((n: { descripcion: string }) =>
+      n.descripcion.includes("Actividad vencida heredada"),
+    );
+    expect(filas).toHaveLength(1);
+    expect(filas[0].estado).toBe("Abierta");
+
+    const reapertura = a.body.historial.filter((h: { accion: string }) =>
+      h.accion.startsWith("Novedad automática reabierta"),
+    );
+    expect(reapertura).toHaveLength(1); // la concurrencia no duplica el evento
+    expect(reapertura[0].detalle).toContain("Ana Histórica");
+    expect(reapertura[0].detalle).toContain(automatica.id);
+    expect(reapertura[0].detalle).toContain("permanece en el historial de la orden");
+    expect(reapertura[0].detalle).not.toContain("Gestionado por teléfono"); // no se copia por proximidad
+    // El evento original de la resolución manual sigue intacto.
+    expect(
+      a.body.historial.some(
+        (h: { accion: string; detalle: string }) =>
+          h.accion === "Novedad resuelta: Retraso" && h.detalle === "Gestionado por teléfono",
+      ),
+    ).toBe(true);
   });
 
   it("registra una novedad manual y permite resolverla", async () => {

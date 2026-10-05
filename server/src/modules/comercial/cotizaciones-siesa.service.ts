@@ -60,7 +60,7 @@ export interface ItemCotizacionSiesa {
 export interface CotizacionSiesaCanonica {
   /** f430_rowid — identidad técnica (única clave de unión). */
   erpRowId: number;
-  /** Consecutivo visible, ej. "COT-34147" (convención existente: COT-<f430_consec_docto>). */
+  /** Consecutivo visible, ej. "COT-CDV-34147" (COT-CDV-<f430_consec_docto, 5 dígitos mínimo>). */
   consecutivo: string;
   cliente: { rowId: number; nombre: string | null; nit: string | null };
   vendedor: { rowId: number | null; nombre: string | null };
@@ -132,7 +132,7 @@ interface FilaLinea {
   valorNeto: number | null;
 }
 
-export const formatearConsecutivoCotizacionSiesa = (consec: number) => `COT-${consec}`;
+export const formatearConsecutivoCotizacionSiesa = (consec: number) => `COT-CDV-${String(consec).padStart(5, "0")}`;
 
 const redondear2 = (n: number) => Math.round(n * 100) / 100;
 

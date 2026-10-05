@@ -435,7 +435,9 @@ function DetalleOrdenIntl() {
   return (
     <AppShell
       title={orden.codigo}
-      description={`${orden.proveedorExtranjero} · ${orden.paisOrigen} · Incoterm ${orden.incoterm} · Orden ${orden.numeroOrden}`}
+      description={`${orden.proveedorExtranjero} · ${orden.paisOrigen} · Incoterm ${orden.incoterm}${
+        orden.numeroOrden !== orden.codigo ? ` · Orden ${orden.numeroOrden}` : ""
+      }`}
       actions={
         <>
           <Link to="/importaciones">
@@ -999,7 +1001,7 @@ function DetalleOrdenIntl() {
                         </p>
                         <div className="flex items-center gap-2">
                           <EstadoBadge estado={n.estado} />
-                          {puedeGestionarTransito && n.estado !== "Resuelta" && (
+                          {puedeGestionarTransito && !n.automatica && n.estado !== "Resuelta" && (
                             <Button
                               size="xs"
                               variant="outline"
@@ -1013,6 +1015,11 @@ function DetalleOrdenIntl() {
                         </div>
                       </div>
                       <p className="mt-1 text-slate-600">{n.descripcion}</p>
+                      {n.automatica && n.estado !== "Resuelta" && (
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          Se resuelve sola cuando la condición deja de cumplirse.
+                        </p>
+                      )}
                       <p className="mt-1 text-[11px] text-slate-500">
                         Origen: {n.origen === "PorDeterminar" ? "Por determinar" : n.origen}
                         {n.responsable ? ` · ${n.responsable}` : ""} · Prioridad {n.prioridad}

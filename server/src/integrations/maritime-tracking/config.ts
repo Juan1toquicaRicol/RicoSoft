@@ -16,6 +16,10 @@ export interface ConfigTrackingMaritimo {
    * genera la notificación de retraso/adelanto — evita alertar por
    * fluctuaciones de horas sin relevancia operativa. */
   umbralVariacionEtaDias: number;
+  /** El adapter "mock" fabrica posición, ETA y eventos a partir del
+   * identificador: NUNCA debe persistirse sobre embarques reales. Solo se usa
+   * si este flag es "true" (desarrollo/demos con datos de prueba). */
+  permitirSimulado: boolean;
 }
 
 export function leerConfigTrackingMaritimo(): ConfigTrackingMaritimo {
@@ -25,5 +29,6 @@ export function leerConfigTrackingMaritimo(): ConfigTrackingMaritimo {
     cronSincronizacion: process.env.TRACKING_MARITIMO_SYNC_CRON || "*/30 * * * *",
     diasSinActualizacionAlerta: Number(process.env.TRACKING_MARITIMO_DIAS_SIN_ACTUALIZACION) || 3,
     umbralVariacionEtaDias: Number(process.env.TRACKING_MARITIMO_UMBRAL_VARIACION_ETA_DIAS) || 1,
+    permitirSimulado: process.env.TRACKING_MARITIMO_PERMITIR_SIMULADO === "true",
   };
 }

@@ -436,6 +436,42 @@ export async function listarUsuariosConPermiso(
 }
 
 /**
+ * Usuarios ACTIVOS del tenant cuyo permiso efectivo cubre AL MENOS UNO de los
+ * `conjuntos` (cada conjunto = todos sus permisos a la vez, p. ej. un permiso
+ * de acción más sus prerrequisitos "ver"). Usa exactamente el mismo cálculo
+ * que la sesión (rol heredado, permisos directos con revocación, rol inactivo,
+ * isSuperadmin, membresías con su propio rol): sirve para elegir "quién puede
+ * hacer X" (p. ej. responsable de una importación) sin reimplementar permisos.
+ */
+export async function listarUsuariosConAlgunConjuntoDePermisos(
+  tenantId: string,
+  conjuntos: string[][],
+): Promise<{ id: string; nombre: string }[]> {
+  const [nativos, membresias] = await Promise.all([
+    prisma.user.findMany({
+      where: { tenantId, activo: true },
+      include: { rolRel: true, permisosDirectos: true, departamento: true },
+    }),
+    prisma.membresia.findMany({
+      where: { tenantId, activo: true, user: { activo: true } },
+      include: { rolRel: true, departamento: true, user: { select: { id: true, nombre: true } } },
+    }),
+  ]);
+  const cubre = (permisos: Set<string>) => conjuntos.some((c) => c.every((p) => permisos.has(p)));
+
+  const porId = new Map<string, string>();
+  for (const u of nativos) {
+    if (cubre(calcularPermisosEfectivos(u))) porId.set(u.id, u.nombre);
+  }
+  for (const m of membresias) {
+    if (cubre(calcularPermisosEfectivosMembresia(m))) porId.set(m.user.id, m.user.nombre);
+  }
+  return Array.from(porId, ([id, nombre]) => ({ id, nombre })).sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es"),
+  );
+}
+
+/**
  * Compara la versión de sesión (`tv`) que trae el JWT contra la almacenada en
  * la base de datos. Cambiar la contraseña incrementa `tokenVersion`, así que
  * cualquier token emitido antes deja de ser válido de inmediato, sin esperar

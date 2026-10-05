@@ -21,7 +21,12 @@ export interface TextoPdf {
  */
 export async function extraerTextoPdf(buffer: Buffer): Promise<TextoPdf> {
   const paginas: string[] = [];
-  await pdfParse(buffer, {
+  // pdf.js lee `data.buffer` ignorando `byteOffset`: un Buffer de Node que
+  // es una vista dentro de un ArrayBuffer compartido (pool de Node, o
+  // fs.readFileSync bajo tsx/Vitest) se interpreta con bytes ajenos y falla
+  // con errores erráticos ("bad XRef entry", "Illegal character"). Copiar a
+  // un Uint8Array propio garantiza byteOffset 0.
+  await pdfParse(new Uint8Array(buffer) as unknown as Buffer, {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pagerender: async (pageData: any) => {
       const contenido = await pageData.getTextContent();

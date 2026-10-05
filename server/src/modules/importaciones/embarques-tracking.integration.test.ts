@@ -31,6 +31,7 @@ describe.skipIf(!RUN)("Tracking Marítimo V1 — Embarque/Buque/Contenedor (BD r
 
   beforeAll(async () => {
     process.env.TRACKING_MARITIMO_SYNC_ENABLED = "true";
+    process.env.TRACKING_MARITIMO_PERMITIR_SIMULADO = "true";
 
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
 
@@ -107,6 +108,7 @@ describe.skipIf(!RUN)("Tracking Marítimo V1 — Embarque/Buque/Contenedor (BD r
 
   afterAll(async () => {
     delete process.env.TRACKING_MARITIMO_SYNC_ENABLED;
+    delete process.env.TRACKING_MARITIMO_PERMITIR_SIMULADO;
 
     const tenantIds = [tenantAId, tenantBId];
     await prisma.contenedorLote.deleteMany({ where: { lote: { tenantId: { in: tenantIds } } } });
@@ -218,10 +220,15 @@ describe.skipIf(!RUN)("Tracking Marítimo V1 — Embarque/Buque/Contenedor (BD r
     });
     expect(novedad).not.toBeNull();
     expect(novedad?.estado).toBe("Abierta");
+    // Una alerta no atribuye causa (ni "Naviera"); y el mock va etiquetado.
+    expect(novedad?.origen).toBe("PorDeterminar");
+    expect(novedad?.responsable).toBeNull();
+    expect(novedad?.descripcion.startsWith("[SIMULADO]")).toBe(true);
 
     const historial = await prisma.importacionHistorial.findFirst({
-      where: { ordenCompraId: ordenAId, accion: "ETA actualizada por tracking" },
+      where: { ordenCompraId: ordenAId, accion: { contains: "ETA actualizada por tracking" } },
     });
+    expect(historial?.accion.startsWith("[SIMULADO]")).toBe(true);
     expect(historial).not.toBeNull();
 
     const itemInbox = await prisma.inboxItem.findFirst({

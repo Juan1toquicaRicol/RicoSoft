@@ -326,7 +326,7 @@ describe.skipIf(!RUN)(
       expect(filas).toHaveLength(1);
     });
 
-    it("3. proveedor no identificado: crea excepción CON tenantId null, visible solo por superadmin", async () => {
+    it("3. proveedor no identificado: crea excepción CON tenantId null y el triage cross-tenant está denegado", async () => {
       fakeProvider.mensajes.push(
         crearMensajeFalso({
           messageId: `<msg-desconocido-${sufijo}@nadie.com>`,
@@ -358,31 +358,30 @@ describe.skipIf(!RUN)(
         .set("Authorization", `Bearer ${tokenA}`);
       expect(comoUsuarioNormal.status).toBe(404);
 
-      // Un superadmin SÍ puede verlo en el triage cross-tenant.
-      const triage = await request(app)
-        .get("/api/importaciones/bandeja/sin-asignar")
-        .set("Authorization", `Bearer ${tokenSuperadminA}`);
-      expect(triage.status).toBe(200);
-      expect(triage.body.some((c: { id: string }) => c.id === correo.id)).toBe(true);
+      // El triage cross-tenant está DENEGADO para todos: isSuperadmin es un
+      // flag por tenant, no una identidad de plataforma. Ni un usuario normal
+      // ni el superadmin de un tenant pueden listar ni asignar estos correos.
+      for (const token of [tokenA, tokenSuperadminA]) {
+        const triage = await request(app)
+          .get("/api/importaciones/bandeja/sin-asignar")
+          .set("Authorization", `Bearer ${token}`);
+        expect(triage.status).toBe(403);
+        expect(JSON.stringify(triage.body)).not.toContain(correo.id);
 
-      // Un usuario NO superadmin recibe 403 en el triage, aunque sea de un tenant real.
-      const triageSinSuperadmin = await request(app)
-        .get("/api/importaciones/bandeja/sin-asignar")
-        .set("Authorization", `Bearer ${tokenA}`);
-      expect(triageSinSuperadmin.status).toBe(403);
+        const asignar = await request(app)
+          .post(`/api/importaciones/bandeja/sin-asignar/${correo.id}/asignar-proveedor`)
+          .set("Authorization", `Bearer ${token}`)
+          .send({ proveedorId: proveedorAId });
+        expect(asignar.status).toBe(403);
+      }
 
-      // El superadmin asigna manualmente el proveedor correcto (§18: resolución humana).
-      const asignar = await request(app)
-        .post(`/api/importaciones/bandeja/sin-asignar/${correo.id}/asignar-proveedor`)
-        .set("Authorization", `Bearer ${tokenSuperadminA}`)
-        .send({ proveedorId: proveedorAId });
-      expect(asignar.status).toBe(200);
-
-      const correoActualizado = await prisma.importacionCorreo.findUniqueOrThrow({
+      // El correo sigue sin tenant ni proveedor: nada se reasignó.
+      const correoIntacto = await prisma.importacionCorreo.findUniqueOrThrow({
         where: { id: correo.id },
       });
-      expect(correoActualizado.tenantId).toBe(tenantAId);
-      expect(correoActualizado.proveedorId).toBe(proveedorAId);
+      expect(correoIntacto.tenantId).toBeNull();
+      expect(correoIntacto.proveedorId).toBeNull();
+      expect(correoIntacto.estadoProcesamiento).toBe("REQUIERE_REVISION");
     });
 
     it("4. requisito obligatorio faltante genera excepción + InboxItem, y desaparece al resolverla", async () => {

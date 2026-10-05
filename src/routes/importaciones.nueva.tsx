@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Info,
   Loader2,
   Plus,
   RefreshCw,
@@ -50,6 +49,7 @@ import {
   subirDocumentoOrdenCompraIntlStandalone,
   useBuscarItemsSiesa,
   useResponsablesImportacion,
+  useConsecutivoImportaciones,
   TIPOS_DOCUMENTO_ORDEN_INTL,
   type ItemOrdenInput,
   type TrmOficial,
@@ -223,6 +223,9 @@ function NuevaOrdenIntlPage() {
   } = useProveedorBusqueda();
   const { opciones: responsableOpciones, loading: cargandoResponsables } =
     useResponsablesImportacion();
+  // Número ESTIMADO (no editable): el servidor lo asigna al guardar.
+  const { data: consecutivo, loading: cargandoConsecutivo } = useConsecutivoImportaciones();
+  const numeroEstimado = consecutivo?.codigoSiguiente ?? "";
   const {
     data: incoterms,
     isLoading: cargandoIncoterms,
@@ -262,7 +265,6 @@ function NuevaOrdenIntlPage() {
   // simplemente no se buscó todavía.
   const [proveedorNoCatalogado, setProveedorNoCatalogado] = useState(false);
   const [form, setForm] = useState({
-    numeroOrden: "",
     fechaOrden: hoyISO(),
     incoterm: "FOB",
     lugarPactado: "",
@@ -328,15 +330,15 @@ function NuevaOrdenIntlPage() {
     }
   };
 
-  // --- Panel de preparación: errores (bloquean), advertencias (no
-  // bloquean) y recomendaciones (sugerencias). Se recalcula en cada render,
-  // es puramente derivado del estado — nunca se persiste.
+  // --- Verificación: errores (bloquean), advertencias (no bloquean) y
+  // recomendaciones (sugerencias). Se muestran en el diálogo de verificación
+  // final. Se recalcula en cada render, es puramente derivado del estado —
+  // nunca se persiste.
   const { errores, advertencias, recomendaciones } = useMemo(() => {
     const err: Verificacion[] = [];
     const adv: Verificacion[] = [];
     const rec: Verificacion[] = [];
 
-    if (!form.numeroOrden.trim()) err.push({ texto: "Falta el número de orden." });
     if (!form.fechaOrden) err.push({ texto: "Falta la fecha de la orden." });
     if (!form.proveedorId && !proveedorNoCatalogado) {
       err.push({
@@ -399,15 +401,6 @@ function NuevaOrdenIntlPage() {
     return { errores: err, advertencias: adv, recomendaciones: rec };
   }, [form, items, proveedorNoCatalogado, trmDifiereMucho, diferenciaTrm]);
 
-  // Completitud simple: proporción de "chequeos" (obligatorios + deseables)
-  // que ya están satisfechos — errores y advertencias cuentan,
-  // recomendaciones no (son opcionales por diseño).
-  const totalChequeos = errores.length + advertencias.length + 8; // 8 = campos ya satisfechos que no generan aviso
-  const completitudPct = Math.max(
-    0,
-    Math.min(100, Math.round((8 / Math.max(totalChequeos, 8)) * 100)),
-  );
-
   const handleAbrirPreflight = (e: React.FormEvent) => {
     e.preventDefault();
     setIntentoGuardar(true);
@@ -419,7 +412,6 @@ function NuevaOrdenIntlPage() {
     setGuardando(true);
     try {
       const creada = await addOrden({
-        numeroOrden: form.numeroOrden,
         fechaOrden: form.fechaOrden,
         incoterm: form.incoterm,
         lugarPactado: form.lugarPactado || null,
@@ -440,7 +432,14 @@ function NuevaOrdenIntlPage() {
         observaciones: form.observaciones,
         items: items.map(({ _origen, ...resto }) => resto),
       });
-      toast.success(`Orden ${form.numeroOrden} registrada.`);
+      // Número definitivo devuelto por la API (puede diferir del estimado si
+      // otra persona registró una orden entretanto).
+      const numeroFinal = creada.codigo ?? creada.numeroOrden;
+      toast.success(
+        numeroEstimado && numeroFinal !== numeroEstimado
+          ? `Orden ${numeroFinal} registrada (el número estimado era ${numeroEstimado}).`
+          : `Orden ${numeroFinal} registrada.`,
+      );
 
       // La orden ya existe (tiene id): recién ahora se suben los documentos
       // iniciales que quedaron en memoria. Un documento que falle no revierte
@@ -493,7 +492,7 @@ function NuevaOrdenIntlPage() {
         </Link>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
+      <div>
         <form
           onSubmit={handleAbrirPreflight}
           className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs space-y-6"
@@ -505,22 +504,20 @@ function NuevaOrdenIntlPage() {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Número de Orden *</Label>
+                <Label className="text-xs font-semibold text-slate-700">Número de Orden</Label>
                 <Input
-                  required
-                  placeholder="Ej: OCI-2026-001"
-                  value={form.numeroOrden}
-                  onChange={(e) => setForm({ ...form, numeroOrden: e.target.value })}
-                  className={cn(
-                    "h-9 text-xs border-slate-300",
-                    intentoGuardar &&
-                      !form.numeroOrden &&
-                      "border-red-400 focus-visible:ring-red-300",
-                  )}
+                  readOnly
+                  disabled
+                  aria-describedby="numero-orden-ayuda"
+                  value={
+                    cargandoConsecutivo ? "Calculando…" : numeroEstimado || "Se asigna al guardar"
+                  }
+                  className="h-9 text-xs border-slate-300 bg-slate-50 font-semibold"
                 />
-                {intentoGuardar && !form.numeroOrden && (
-                  <p className="text-[11px] text-red-600">El número de orden es obligatorio.</p>
-                )}
+                <p id="numero-orden-ayuda" className="text-[11px] text-slate-500">
+                  Número estimado. Se confirma al guardar: si otra persona registra una orden antes,
+                  el número final puede ser distinto.
+                </p>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Fecha de Orden *</Label>
@@ -1296,74 +1293,6 @@ function NuevaOrdenIntlPage() {
             </Button>
           </div>
         </form>
-
-        {/* Panel de preparación de la orden */}
-        <aside className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs space-y-3 lg:sticky lg:top-4">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Preparación de la orden
-          </h3>
-          <div className="space-y-1">
-            <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all"
-                style={{ width: `${completitudPct}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-slate-500">{completitudPct}% completo</p>
-          </div>
-
-          {errores.length > 0 && (
-            <div className="space-y-1">
-              <p className="flex items-center gap-1 text-[11px] font-bold text-red-700">
-                <AlertTriangle className="h-3 w-3" /> Errores ({errores.length}) — bloquean el
-                registro
-              </p>
-              <ul className="space-y-0.5">
-                {errores.map((e, i) => (
-                  <li key={i} className="text-[11px] text-red-600">
-                    • {e.texto}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {advertencias.length > 0 && (
-            <div className="space-y-1">
-              <p className="flex items-center gap-1 text-[11px] font-bold text-amber-700">
-                <Info className="h-3 w-3" /> Advertencias ({advertencias.length}) — no bloquean
-              </p>
-              <ul className="space-y-0.5">
-                {advertencias.map((a, i) => (
-                  <li key={i} className="text-[11px] text-amber-700">
-                    • {a.texto}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {recomendaciones.length > 0 && (
-            <div className="space-y-1">
-              <p className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
-                Recomendaciones
-              </p>
-              <ul className="space-y-0.5">
-                {recomendaciones.map((r, i) => (
-                  <li key={i} className="text-[11px] text-slate-500">
-                    • {r.texto}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {errores.length === 0 && advertencias.length === 0 && (
-            <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
-              <CheckCircle2 className="h-3 w-3" /> Todo listo para registrar.
-            </p>
-          )}
-        </aside>
       </div>
 
       {/* Pre-flight check */}
@@ -1372,8 +1301,11 @@ function NuevaOrdenIntlPage() {
           <DialogHeader>
             <DialogTitle>Verificación final antes de registrar</DialogTitle>
             <DialogDescription>
-              Orden {form.numeroOrden || "(sin número)"} ·{" "}
-              {nombreProveedorEfectivo || "(sin proveedor)"}
+              Orden{" "}
+              {numeroEstimado
+                ? `${numeroEstimado} (estimado, se confirma al guardar)`
+                : "(número por asignar)"}{" "}
+              · {nombreProveedorEfectivo || "(sin proveedor)"}
             </DialogDescription>
           </DialogHeader>
 
@@ -1406,6 +1338,19 @@ function NuevaOrdenIntlPage() {
                   {advertencias.map((a, i) => (
                     <li key={i} className="text-xs text-amber-800">
                       • {a.texto}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {recomendaciones.length > 0 && (
+              <div className="space-y-1 rounded-md border border-slate-200 p-3">
+                <p className="text-xs font-bold text-slate-500">Recomendaciones</p>
+                <ul className="space-y-0.5">
+                  {recomendaciones.map((r, i) => (
+                    <li key={i} className="text-xs text-slate-500">
+                      • {r.texto}
                     </li>
                   ))}
                 </ul>

@@ -54,6 +54,10 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
     return;
   }
 
+  // Los mensajes llegan del más antiguo al más nuevo (ver el proveedor): si
+  // la corrida se corta, el cursor (fecha máxima persistida) nunca queda por
+  // encima de un mensaje que no se llegó a guardar.
+  let adjuntosDeLaCorrida = 0;
   for (const mensaje of resultado.messages) {
     try {
       const yaExiste = await prisma.importacionCorreo.findUnique({
@@ -61,6 +65,14 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
         select: { id: true },
       });
       if (yaExiste) continue; // idempotencia real — nunca duplica
+
+      // maxAttachmentsPerRun es un tope POR CORRIDA: un correo nunca se
+      // trunca (se perderían adjuntos); si no cabe, queda para la próxima.
+      const cantidad = mensaje.attachments.length;
+      if (adjuntosDeLaCorrida > 0 && adjuntosDeLaCorrida + cantidad > config.maxAttachmentsPerRun) {
+        break;
+      }
+      adjuntosDeLaCorrida += cantidad;
 
       const correo = await prisma.importacionCorreo.create({
         data: {
@@ -74,8 +86,8 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
         },
       });
 
-      const adjuntosAProcesar = mensaje.attachments.slice(0, config.maxAttachmentsPerRun);
-      for (const adjunto of adjuntosAProcesar) {
+      const adjuntosFallidos: string[] = [];
+      for (const adjunto of mensaje.attachments) {
         try {
           const contenido = await provider.getAttachmentContent(
             mensaje.providerMessageId,
@@ -101,17 +113,36 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
             },
           });
         } catch (error) {
-          // Un adjunto que falla no debe perder el correo entero — el
-          // correo queda con los adjuntos que sí se pudieron traer, y el
-          // job de procesamiento sigue con lo que hay.
           console.error(
             `[bandeja-ingesta] Error al descargar adjunto "${adjunto.filename}" del correo ${mensaje.messageId}:`,
             error,
           );
+          adjuntosFallidos.push(adjunto.filename);
         }
       }
+
+      if (adjuntosFallidos.length > 0) {
+        // El correo queda guardado pero NO se procesa como si estuviera
+        // completo: pasa a ERROR con la lista de adjuntos que faltan, visible
+        // para una persona, en vez de omitirse en silencio en la siguiente
+        // corrida (el correo ya existe y se saltaría por idempotencia).
+        await prisma.importacionCorreo.update({
+          where: { id: correo.id },
+          data: {
+            estadoProcesamiento: "ERROR",
+            ultimoError:
+              `No se pudieron descargar ${adjuntosFallidos.length} adjunto(s): ${adjuntosFallidos.join(", ")}. Revisar el correo original en el buzón.`.slice(
+                0,
+                2000,
+              ),
+          },
+        });
+      }
     } catch (error) {
+      // Fallo al persistir el correo mismo: se corta la corrida. Continuar
+      // con mensajes más nuevos dejaría el cursor por encima de este.
       console.error(`[bandeja-ingesta] Error al persistir el correo ${mensaje.messageId}:`, error);
+      break;
     }
   }
 

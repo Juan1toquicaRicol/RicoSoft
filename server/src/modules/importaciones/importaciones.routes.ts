@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import {
+  authenticateJWT,
+  requireAnyPermission,
+  requirePermission,
+} from "../../middleware/auth.middleware";
 import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
 import {
@@ -28,6 +32,7 @@ import {
   crearPagoImportacionSchema,
   actualizarEstadoPagoImportacionSchema,
   cerrarOrdenCompraIntlSchema,
+  fijarConsecutivoImportacionSchema,
 } from "./importaciones.schemas";
 import {
   listarOrdenesCompraIntl,
@@ -71,6 +76,10 @@ import {
   actualizarRequisitoProveedor,
   eliminarRequisitoProveedor,
 } from "./importaciones-requisitos-proveedor.controller";
+import {
+  obtenerConsecutivoImportaciones,
+  fijarConsecutivoImportaciones,
+} from "./importaciones-consecutivo.controller";
 import {
   obtenerResumenAnaliticaImportaciones,
   listarOperacionesAnaliticaImportaciones,
@@ -129,6 +138,25 @@ router.get(
   "/analitica/operaciones",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
   listarOperacionesAnaliticaImportaciones,
+);
+
+// Consecutivo de órdenes (IMP-<año>-<n>) del año actual y el tenant de la sesión.
+// Antes de "/:id" (mismo motivo que /trm-oficial). Se lee con importaciones.crear
+// (el formulario muestra el número estimado) O configuracion.editar (la pantalla
+// Config. de negocio); se FIJA solo con configuracion.editar.
+router.get(
+  "/consecutivo",
+  requireAnyPermission([
+    PERMISOS_SISTEMA.IMPORTACIONES_CREAR,
+    PERMISOS_SISTEMA.CONFIGURACION_EDITAR,
+  ]),
+  obtenerConsecutivoImportaciones,
+);
+router.put(
+  "/consecutivo",
+  requirePermission(PERMISOS_SISTEMA.CONFIGURACION_EDITAR),
+  validarBody(fijarConsecutivoImportacionSchema),
+  fijarConsecutivoImportaciones,
 );
 
 router.get("/", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), listarOrdenesCompraIntl);

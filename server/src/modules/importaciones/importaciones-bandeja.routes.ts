@@ -1,15 +1,8 @@
 import { Router } from "express";
-import {
-  authenticateJWT,
-  requirePermission,
-  requireSuperadmin,
-} from "../../middleware/auth.middleware";
+import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
-import {
-  resolverExcepcionSchema,
-  asignarProveedorCorreoSinTenantSchema,
-} from "./importaciones-bandeja.schemas";
+import { resolverExcepcionSchema } from "./importaciones-bandeja.schemas";
 import {
   listarCorreosBandeja,
   obtenerCorreoBandeja,
@@ -17,8 +10,7 @@ import {
   resolverExcepcionBandeja,
   reprocesarCorreoBandeja,
   obtenerConfiguracionBandeja,
-  listarCorreosSinAsignar,
-  asignarProveedorACorreoSinTenant,
+  denegarTriageSinTenant,
 } from "./importaciones-bandeja.controller";
 
 /**
@@ -34,16 +26,10 @@ const router = Router();
 
 router.use(authenticateJWT);
 
-// Triage cross-tenant (correos sin proveedor identificado) — SOLO
-// superadmin, antes de las rutas tenant-scoped para que "sin-asignar" nunca
-// se interprete como un :id.
-router.get("/sin-asignar", requireSuperadmin, listarCorreosSinAsignar);
-router.post(
-  "/sin-asignar/:id/asignar-proveedor",
-  requireSuperadmin,
-  validarBody(asignarProveedorCorreoSinTenantSchema),
-  asignarProveedorACorreoSinTenant,
-);
+// Triage cross-tenant (correos sin proveedor identificado): DENEGADO para
+// todos, incluido isSuperadmin (flag por tenant, no de plataforma). Va antes
+// de las rutas tenant-scoped y cubre cualquier método/subruta.
+router.use("/sin-asignar", denegarTriageSinTenant);
 
 router.get(
   "/correos",

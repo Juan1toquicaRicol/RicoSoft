@@ -61,8 +61,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTenant, siglaEmpresa, empresaIdDeTenant } from "@/lib/tenant-context";
 import { useFacturas } from "@/hooks/use-facturas";
+import { PestanaFacturasSiesa } from "@/components/facturas/pestana-facturas-siesa";
 import { useProveedorBusqueda, type ProveedorOpcion } from "@/hooks/use-proveedores";
 import { useServicios } from "@/hooks/use-servicios";
 import { useSolicitudesDisponiblesParaFactura } from "@/hooks/use-solicitudes";
@@ -380,253 +382,270 @@ function FacturasPage() {
         </Button>
       }
     >
-      <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-        <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 lg:flex lg:items-center lg:justify-between bg-slate-50/80">
-          <div className="flex flex-wrap gap-2">
-            {estadosFilter.map((e) => (
-              <button
-                key={e}
-                onClick={() => setEstadoSel(e)}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer",
-                  estadoSel === e
-                    ? "border-blue-700 bg-blue-800 text-white shadow-2xs"
-                    : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                )}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <SelectorAgrupacion
-              value={agrupacion}
-              onChange={setAgrupacion}
-              opciones={[
-                OPCION_SIN_AGRUPAR,
-                { value: "area", label: "Departamento" },
-                { value: "proveedor", label: "Proveedor" },
-                { value: "estado", label: "Estado" },
-              ]}
-            />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por número, proveedor, NIT..."
-              className="h-9 w-full max-w-xs bg-white text-xs border-slate-300 shadow-2xs"
-            />
-          </div>
-        </div>
+      <Tabs defaultValue="nativas" className="space-y-3">
+        <TabsList className="bg-slate-100 p-1">
+          <TabsTrigger value="nativas" className="text-xs">
+            Facturas RicoSoft
+          </TabsTrigger>
+          <TabsTrigger value="siesa" className="text-xs">
+            Facturas Siesa
+          </TabsTrigger>
+        </TabsList>
 
-        <Table>
-          <TableHeader className="bg-slate-100/80">
-            <TableRow className="hover:bg-slate-100/80">
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Factura
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Empresa
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Proveedor / NIT
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Departamento
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Vencimiento
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Total
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Prioridad
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
-                Estado
-              </TableHead>
-              <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
-                Acciones
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="text-slate-800 font-medium">
-            {gruposFacturas.map((grupo) => (
-              <Fragment key={grupo.clave || "sin-grupo"}>
-                {grupo.clave && (
-                  <FilaGrupo
-                    key={`grupo-${grupo.clave}`}
-                    clave={grupo.clave}
-                    cantidad={grupo.filas.length}
-                    colSpan={9}
-                  />
-                )}
-                {grupo.filas.map((f) => (
-                  <TableRow key={f.id}>
-                    <TableCell className="px-4 py-3 font-bold text-xs">
-                      <Link
-                        to="/facturas/$id"
-                        params={{ id: f.id }}
-                        className="text-blue-800 hover:underline"
-                      >
-                        {f.numero}
-                      </Link>
-                      <p className="text-[10px] text-slate-400 font-normal">{f.origen}</p>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
-                      >
-                        {siglaEmpresa(f.empresaId)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <p className="font-bold text-slate-900 truncate max-w-[200px]">
-                        {f.proveedor}
-                      </p>
-                      <p className="text-[10px] text-slate-500 font-mono">{f.nit}</p>
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">
-                      {f.area}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <p className="text-xs font-mono text-slate-500">
-                        {new Date(f.vence).toLocaleDateString("es-CO")}
-                      </p>
-                      {(f.estado === "Pendiente" || f.estado === "Aprobada") && (
-                        <BarraVencimiento
-                          fecha={f.vence}
-                          etiquetaVencido="Vencida"
-                          className="mt-1"
+        <TabsContent value="siesa">
+          <PestanaFacturasSiesa />
+        </TabsContent>
+
+        <TabsContent value="nativas">
+          <div className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+            <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 lg:flex lg:items-center lg:justify-between bg-slate-50/80">
+              <div className="flex flex-wrap gap-2">
+                {estadosFilter.map((e) => (
+                  <button
+                    key={e}
+                    onClick={() => setEstadoSel(e)}
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer",
+                      estadoSel === e
+                        ? "border-blue-700 bg-blue-800 text-white shadow-2xs"
+                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    )}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <SelectorAgrupacion
+                  value={agrupacion}
+                  onChange={setAgrupacion}
+                  opciones={[
+                    OPCION_SIN_AGRUPAR,
+                    { value: "area", label: "Departamento" },
+                    { value: "proveedor", label: "Proveedor" },
+                    { value: "estado", label: "Estado" },
+                  ]}
+                />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por número, proveedor, NIT..."
+                  className="h-9 w-full max-w-xs bg-white text-xs border-slate-300 shadow-2xs"
+                />
+              </div>
+            </div>
+
+            <Table>
+              <TableHeader className="bg-slate-100/80">
+                <TableRow className="hover:bg-slate-100/80">
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Factura
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Empresa
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Proveedor / NIT
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Departamento
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Vencimiento
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                    Total
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Prioridad
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5">
+                    Estado
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5 text-right">
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="text-slate-800 font-medium">
+                {gruposFacturas.map((grupo) => (
+                  <Fragment key={grupo.clave || "sin-grupo"}>
+                    {grupo.clave && (
+                      <FilaGrupo
+                        key={`grupo-${grupo.clave}`}
+                        clave={grupo.clave}
+                        cantidad={grupo.filas.length}
+                        colSpan={9}
+                      />
+                    )}
+                    {grupo.filas.map((f) => (
+                      <TableRow key={f.id}>
+                        <TableCell className="px-4 py-3 font-bold text-xs">
+                          <Link
+                            to="/facturas/$id"
+                            params={{ id: f.id }}
+                            className="text-blue-800 hover:underline"
+                          >
+                            {f.numero}
+                          </Link>
+                          <p className="text-[10px] text-slate-400 font-normal">{f.origen}</p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className="border-blue-200 bg-blue-50 text-blue-800 font-bold"
+                          >
+                            {siglaEmpresa(f.empresaId)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="font-bold text-slate-900 truncate max-w-[200px]">
+                            {f.proveedor}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono">{f.nit}</p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-600 font-semibold">
+                          {f.area}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="text-xs font-mono text-slate-500">
+                            {new Date(f.vence).toLocaleDateString("es-CO")}
+                          </p>
+                          {(f.estado === "Pendiente" || f.estado === "Aprobada") && (
+                            <BarraVencimiento
+                              fecha={f.vence}
+                              etiquetaVencido="Vencida"
+                              className="mt-1"
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
+                          {money(f.total, f.moneda)}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs text-slate-500">
+                          {f.prioridad}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <EstadoBadge estado={f.estado} />
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            {f.estado === "Pendiente" && (
+                              <>
+                                {puedeAprobar && (
+                                  <Button
+                                    size="xs"
+                                    variant="success"
+                                    onClick={() =>
+                                      setConfirmAccion({
+                                        id: f.id,
+                                        numero: f.numero,
+                                        estado: "Aprobada",
+                                      })
+                                    }
+                                    className="h-7 text-[11px]"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
+                                  </Button>
+                                )}
+                                {puedeRechazar && (
+                                  <Button
+                                    size="xs"
+                                    variant="destructive"
+                                    onClick={() =>
+                                      setConfirmAccion({
+                                        id: f.id,
+                                        numero: f.numero,
+                                        estado: "Rechazada",
+                                      })
+                                    }
+                                    className="h-7 text-[11px]"
+                                  >
+                                    <XCircle className="h-3 w-3 mr-1" /> Rechazar
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            {f.estado === "Aprobada" && puedePagar && (
+                              <Link to="/facturas/$id" params={{ id: f.id }}>
+                                <Button size="xs" variant="outline" className="h-7 text-[11px]">
+                                  Registrar Pago
+                                </Button>
+                              </Link>
+                            )}
+                            {puedeEliminar && (
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => setFacturaAEliminar({ id: f.id, numero: f.numero })}
+                                className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                ))}
+                {facturas.length === 0 && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={9} className="p-0">
+                      {loading ? (
+                        <div className="py-12 text-center text-xs text-slate-500">
+                          Cargando facturas...
+                        </div>
+                      ) : error ? (
+                        <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                      ) : (
+                        <EmptyState
+                          icon={Upload}
+                          title="No hay facturas para el filtro seleccionado"
+                          description='Cambia los filtros de arriba, o haz clic en "Recepcionar Factura" para registrar una nueva.'
+                          action={
+                            <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
+                              <Upload className="h-4 w-4" /> Recepcionar Factura
+                            </Button>
+                          }
                         />
                       )}
                     </TableCell>
-                    <TableCell className="num px-4 py-3 text-right font-bold text-slate-900 text-xs">
-                      {money(f.total, f.moneda)}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-xs text-slate-500">
-                      {f.prioridad}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <EstadoBadge estado={f.estado} />
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {f.estado === "Pendiente" && (
-                          <>
-                            {puedeAprobar && (
-                              <Button
-                                size="xs"
-                                variant="success"
-                                onClick={() =>
-                                  setConfirmAccion({
-                                    id: f.id,
-                                    numero: f.numero,
-                                    estado: "Aprobada",
-                                  })
-                                }
-                                className="h-7 text-[11px]"
-                              >
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Aprobar
-                              </Button>
-                            )}
-                            {puedeRechazar && (
-                              <Button
-                                size="xs"
-                                variant="destructive"
-                                onClick={() =>
-                                  setConfirmAccion({
-                                    id: f.id,
-                                    numero: f.numero,
-                                    estado: "Rechazada",
-                                  })
-                                }
-                                className="h-7 text-[11px]"
-                              >
-                                <XCircle className="h-3 w-3 mr-1" /> Rechazar
-                              </Button>
-                            )}
-                          </>
-                        )}
-                        {f.estado === "Aprobada" && puedePagar && (
-                          <Link to="/facturas/$id" params={{ id: f.id }}>
-                            <Button size="xs" variant="outline" className="h-7 text-[11px]">
-                              Registrar Pago
-                            </Button>
-                          </Link>
-                        )}
-                        {puedeEliminar && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => setFacturaAEliminar({ id: f.id, numero: f.numero })}
-                            className="h-7 text-[11px] text-slate-500 hover:text-slate-900"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
                   </TableRow>
-                ))}
-              </Fragment>
-            ))}
-            {facturas.length === 0 && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={9} className="p-0">
-                  {loading ? (
-                    <div className="py-12 text-center text-xs text-slate-500">
-                      Cargando facturas...
-                    </div>
-                  ) : error ? (
-                    <div className="py-12 text-center text-xs text-slate-500">{error}</div>
-                  ) : (
-                    <EmptyState
-                      icon={Upload}
-                      title="No hay facturas para el filtro seleccionado"
-                      description='Cambia los filtros de arriba, o haz clic en "Recepcionar Factura" para registrar una nueva.'
-                      action={
-                        <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2">
-                          <Upload className="h-4 w-4" /> Recepcionar Factura
-                        </Button>
-                      }
-                    />
-                  )}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                )}
+              </TableBody>
+            </Table>
 
-        {total > 0 && (
-          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-500">
-            <p>
-              {facturas.length} de {total} facturas — página {page} de {totalPages}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="gap-1"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="gap-1"
-              >
-                Siguiente <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            {total > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-500">
+                <p>
+                  {facturas.length} de {total} facturas — página {page} de {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="gap-1"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="gap-1"
+                  >
+                    Siguiente <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {/* MODAL REGISTRAR FACTURA */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

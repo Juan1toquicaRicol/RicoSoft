@@ -228,7 +228,7 @@ describe.skipIf(!RUN)("POST /comercial/cotizaciones/siesa/sincronizar — persis
       tenantId: tenantA,
       estado: "BORRADOR",
       erpTipoDocumento: "CDV",
-      erpNumero: `COT-${doc.consec}`,
+      erpNumero: `COT-CDV-${String(doc.consec).padStart(5, "0")}`,
       erpEstadoSincronizacion: "VINCULADO",
       moneda: "COP",
       clienteRowId: 3001,

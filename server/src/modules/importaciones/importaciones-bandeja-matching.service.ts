@@ -1,8 +1,4 @@
 import { prisma } from "../../config/prisma";
-import {
-  buscarItemsSiesa,
-  type ItemBusquedaSiesa,
-} from "../integraciones-siesa/siesa-inventario.service";
 
 /**
  * Matching de la Bandeja Inteligente (§8/§9/§10 de la especificación).
@@ -16,6 +12,14 @@ import {
 
 export type ResultadoMatching<T> =
   { tipo: "UNICO"; valor: T } | { tipo: "AMBIGUO"; candidatos: T[] } | { tipo: "NINGUNO" };
+
+/** El encabezado From de Gmail suele venir como `Nombre <correo@dominio>`:
+ * para comparar contra Proveedor.email exacto hay que quedarse solo con la
+ * dirección. */
+export function extraerEmail(remitente: string): string {
+  const conAngulares = remitente.match(/<([^<>\s]+@[^<>\s]+)>/);
+  return (conAngulares ? conAngulares[1] : remitente).trim().toLowerCase();
+}
 
 function extraerDominio(email: string): string | null {
   const match = email.match(/@([^\s>]+)/);
@@ -78,7 +82,7 @@ export async function identificarProveedor(
     if (porNit.length > 0) return resolverCandidatos(porNit);
   }
 
-  const remitenteLimpio = datos.remitenteEmail.trim().toLowerCase();
+  const remitenteLimpio = extraerEmail(datos.remitenteEmail);
   if (remitenteLimpio) {
     const porEmail = await prisma.proveedor.findMany({
       where: { ...whereBase(tenantId), email: remitenteLimpio },
@@ -160,18 +164,4 @@ export async function identificarOrden(
   if (abiertas.length > 0) return resolverCandidatos(abiertas);
 
   return { tipo: "NINGUNO" };
-}
-
-/**
- * Matching de producto (§10) — reutiliza buscarItemsSiesa TAL CUAL, sin
- * duplicar el mecanismo de similitud (LIKE sobre descripción/referencia).
- * A diferencia de proveedor/orden, no se fuerza "único o excepción": el
- * resultado es informativo (candidatos posibles), la excepción
- * PRODUCTO_NO_IDENTIFICADO solo se levanta si la búsqueda no devuelve nada.
- */
-export async function buscarProductoCandidatos(
-  siesaCiaId: number,
-  referenciaODescripcion: string,
-): Promise<ItemBusquedaSiesa[]> {
-  return buscarItemsSiesa(siesaCiaId, referenciaODescripcion, 5);
 }

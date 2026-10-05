@@ -11,11 +11,7 @@ import { leerConfigProcesamientoImportaciones } from "../../integrations/email/c
 import { RegexDocumentExtractionProvider } from "../../integrations/document-extraction/regex-extraction-provider";
 import type { DocumentExtractionProvider } from "../../integrations/document-extraction/extraction-provider";
 import { clasificarCorreo } from "./importaciones-bandeja-clasificacion.service";
-import {
-  identificarProveedor,
-  identificarOrden,
-  buscarProductoCandidatos,
-} from "./importaciones-bandeja-matching.service";
+import { identificarProveedor, identificarOrden } from "./importaciones-bandeja-matching.service";
 import {
   evaluarRequisitosDeOrden,
   requisitosFaltantes,
@@ -70,10 +66,28 @@ interface CorreoConAdjuntos {
   id: string;
   remitente: string;
   asunto: string;
+  tenantId: string | null;
+  proveedorId: string | null;
+  ordenCompraId: string | null;
   adjuntos: { id: string; nombreOriginal: string; mimeType: string; ruta: string }[];
 }
 
 async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
+  // 0. Reprocesar es idempotente: lo derivado en una corrida anterior
+  // (extracciones y excepciones aún abiertas) se reemplaza por el resultado
+  // de esta. Las excepciones ya resueltas/descartadas por una persona se
+  // conservan como historial; el proveedor u orden fijados (a mano o por una
+  // corrida previa) se respetan más abajo.
+  await prisma.importacionExtraccion.deleteMany({ where: { adjunto: { correoId: correo.id } } });
+  await prisma.importacionCorreoAdjunto.updateMany({
+    where: { correoId: correo.id },
+    data: { estadoExtraccion: "PENDIENTE" },
+  });
+  await prisma.importacionExcepcion.updateMany({
+    where: { correoId: correo.id, estado: "ABIERTA" },
+    data: { estado: "DESCARTADA", resueltoEn: new Date() },
+  });
+
   // 1. Clasificación (§4) — determinística, siempre disponible.
   const clasificacion = clasificarCorreo({
     asunto: correo.asunto,
@@ -91,6 +105,7 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
   // estadoExtraccion=PENDIENTE (visible en el detalle como "sin procesar",
   // nunca oculto).
   const camposExtraidosPorCampo = new Map<string, { valor: string; pagina?: number }>();
+  const adjuntosConErrorDeExtraccion: string[] = [];
   for (const adjunto of correo.adjuntos) {
     if (!extractionProvider.puedeProcesar(adjunto.mimeType)) continue;
     try {
@@ -135,6 +150,7 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
         where: { id: adjunto.id },
         data: { estadoExtraccion: "ERROR" },
       });
+      adjuntosConErrorDeExtraccion.push(adjunto.nombreOriginal);
     }
   }
   await prisma.importacionCorreo.update({
@@ -145,16 +161,27 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
   // 3. Identificar proveedor (§8) — búsqueda GLOBAL (tenantId=null a
   // propósito, ver matching.service.ts): el remitente puede ser de
   // cualquier tenant, todavía no lo sabemos.
-  const resultadoProveedor = await identificarProveedor(null, {
-    remitenteEmail: correo.remitente,
-  });
+  // Si una persona ya asignó el proveedor (triage o resolución de excepción),
+  // se respeta: nunca se vuelve a inferir por encima de esa decisión.
+  let proveedor: { id: string; tenantId: string; nombre: string; nit: string } | null = null;
+  if (correo.proveedorId && correo.tenantId) {
+    proveedor = await prisma.proveedor.findFirst({
+      where: { id: correo.proveedorId, tenantId: correo.tenantId },
+      select: { id: true, tenantId: true, nombre: true, nit: true },
+    });
+  }
+  if (!proveedor) {
+    const resultadoProveedor = await identificarProveedor(null, {
+      remitenteEmail: correo.remitente,
+    });
 
-  if (resultadoProveedor.tipo !== "UNICO") {
-    await crearExcepcionProveedorNoIdentificado(correo.id, resultadoProveedor);
-    return;
+    if (resultadoProveedor.tipo !== "UNICO") {
+      await crearExcepcionProveedorNoIdentificado(correo.id, resultadoProveedor);
+      return;
+    }
+    proveedor = resultadoProveedor.valor;
   }
 
-  const proveedor = resultadoProveedor.valor;
   const tenantId = proveedor.tenantId;
   const tenantPrisma = getTenantPrisma(tenantId);
 
@@ -163,9 +190,32 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
     data: { tenantId, proveedorId: proveedor.id },
   });
 
-  // 4. Identificar orden (§9).
+  // Un adjunto que no se pudo leer nunca queda oculto: se reporta como
+  // excepción para que una persona revise ese documento.
+  if (adjuntosConErrorDeExtraccion.length > 0) {
+    await crearExcepcion(tenantId, correo.id, {
+      tipo: "OTRO",
+      descripcion: `No se pudo extraer el contenido de ${adjuntosConErrorDeExtraccion.length} adjunto(s): ${adjuntosConErrorDeExtraccion.join(", ")}. Revisar manualmente.`,
+    });
+  }
+
+  // 4. Identificar orden (§9). Una orden ya fijada por una persona se respeta,
+  // siempre que siga siendo del mismo tenant y proveedor.
   const numeroOrdenExtraido = camposExtraidosPorCampo.get("numeroOrdenProveedor")?.valor;
-  const resultadoOrden = await identificarOrden(tenantId, proveedor.id, numeroOrdenExtraido);
+  const ordenFijada = correo.ordenCompraId
+    ? await prisma.ordenCompraIntl.findFirst({
+        where: {
+          id: correo.ordenCompraId,
+          tenantId,
+          proveedorId: proveedor.id,
+          eliminado: false,
+        },
+        select: { id: true, numeroOrden: true, estado: true },
+      })
+    : null;
+  const resultadoOrden = ordenFijada
+    ? ({ tipo: "UNICO", valor: ordenFijada } as const)
+    : await identificarOrden(tenantId, proveedor.id, numeroOrdenExtraido);
 
   if (resultadoOrden.tipo !== "UNICO") {
     await crearExcepcion(tenantId, correo.id, {
@@ -185,28 +235,10 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
     data: { ordenCompraId: resultadoOrden.valor.id, estadoProcesamiento: "MATCHEADO" },
   });
 
-  // 5. Producto (§10) — informativo, solo si el tenant tiene Siesa
-  // configurado; nunca bloquea el flujo si no hay coincidencia.
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { siesaCiaId: true },
-  });
-  if (tenant?.siesaCiaId && numeroOrdenExtraido) {
-    try {
-      const candidatosProducto = await buscarProductoCandidatos(
-        tenant.siesaCiaId,
-        numeroOrdenExtraido,
-      );
-      if (candidatosProducto.length === 0) {
-        await crearExcepcion(tenantId, correo.id, {
-          tipo: "PRODUCTO_NO_IDENTIFICADO",
-          descripcion: `No se encontró ningún ítem de Siesa que coincida con "${numeroOrdenExtraido}".`,
-        });
-      }
-    } catch (error) {
-      console.error("[bandeja-procesamiento] Error buscando producto en Siesa:", error);
-    }
-  }
+  // 5. Producto (§10): sin matching. Antes se buscaba en Siesa con el número de
+  // orden del proveedor como si fuera referencia/descripción de producto, lo
+  // que generaba PRODUCTO_NO_IDENTIFICADO espurias. No hay en los datos
+  // extraídos un campo de producto que lo respalde, así que no se consulta Siesa.
 
   // 6. Requisitos del proveedor (§11) — reutiliza RequisitoProveedorImportacion tal cual.
   const estadosRequisitos = await evaluarRequisitosDeOrden(
