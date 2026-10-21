@@ -60,15 +60,14 @@ describe("crosschex.queries", () => {
     }
   });
 
-  it("obtenerMarcacionesDesde filtra por Logid > ? usando parámetros, nunca interpolando el cursor en el SQL", async () => {
+  it("obtenerMarcacionesDesde interpola el cursor solo después de normalizarlo a entero", async () => {
     const { obtenerMarcacionesDesde } = await import("./crosschex.queries");
     await obtenerMarcacionesDesde(239176, 500);
 
-    const [sqlEjecutado, params] = ejecutarConsultaMock.mock.calls[0];
-    expect(sqlEjecutado).toContain("WHERE Logid > ?");
+    const [sqlEjecutado, ...args] = ejecutarConsultaMock.mock.calls[0];
+    expect(sqlEjecutado).toContain("WHERE Logid > 239176");
     expect(sqlEjecutado).toContain("ORDER BY Logid ASC");
-    expect(sqlEjecutado).not.toContain("239176");
-    expect(params).toEqual([239176]);
+    expect(args).toHaveLength(0);
   });
 
   it("obtenerMarcacionesDesde acota el lote a 2000 y usa 0 si el cursor es inválido", async () => {
@@ -78,7 +77,8 @@ describe("crosschex.queries", () => {
     expect(ejecutarConsultaMock.mock.calls[0][0]).toContain("TOP 2000");
 
     await obtenerMarcacionesDesde(Number.NaN, 500);
-    expect(ejecutarConsultaMock.mock.calls[1][1]).toEqual([0]);
+    expect(ejecutarConsultaMock.mock.calls[1][0]).toContain("WHERE Logid > 0");
+    expect(ejecutarConsultaMock.mock.calls[1]).toHaveLength(1);
   });
 
   it("el TOP se acota a un rango razonable (1-1000) y nunca inyecta valores no numéricos", async () => {

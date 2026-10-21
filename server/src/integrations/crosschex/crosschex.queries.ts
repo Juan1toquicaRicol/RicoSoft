@@ -24,18 +24,19 @@ export async function obtenerUltimasMarcaciones(top = 10): Promise<CrossChexChec
  * ordenadas ascendentemente. Es la consulta base de la importación
  * histórica (Fase 4) y de la sincronización incremental (Fase 5): nunca se
  * usa `Exported` como cursor (rule explícita de la auditoría), siempre
- * `Logid`. `logIdDesde` va parametrizado (no interpolado) porque viene de
- * datos que persistimos nosotros (FuenteBiometrica.lastProcessedLogId), no
- * de input de usuario, pero se parametriza de todas formas por higiene.
+ * `Logid`. El driver ODBC de Access instalado en producción falla al
+ * inspeccionar parámetros (`Error getting information about parameters`).
+ * El cursor se normaliza a entero finito antes de interpolarlo; nunca
+ * contiene texto libre.
  */
 export async function obtenerMarcacionesDesde(
   logIdDesde: number,
   limite: number,
 ): Promise<CrossChexCheckinoutRow[]> {
   const tope = Math.min(Math.max(Math.trunc(limite) || 500, 1), 2000);
+  const cursor = Number.isFinite(logIdDesde) ? Math.trunc(logIdDesde) : 0;
   return ejecutarConsulta<CrossChexCheckinoutRow>(
-    `SELECT TOP ${tope} Logid, userid, CheckTime, CheckType, Sensorid, WorkType, AttFlag, Checked, Exported, OpenDoorFlag, temperature, whynoopen, mask FROM Checkinout WHERE Logid > ? ORDER BY Logid ASC`,
-    [Math.trunc(logIdDesde) || 0],
+    `SELECT TOP ${tope} Logid, userid, CheckTime, CheckType, Sensorid, WorkType, AttFlag, Checked, Exported, OpenDoorFlag, temperature, whynoopen, mask FROM Checkinout WHERE Logid > ${cursor} ORDER BY Logid ASC`,
   );
 }
 
