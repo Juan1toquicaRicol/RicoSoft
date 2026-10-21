@@ -119,6 +119,13 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
         </form>
       )}
 
+      {!puedeGestionar && (
+        <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+          Puedes consultar el catálogo, pero para crear o editar cargos solicita el permiso
+          cargos.gestionar al administrador.
+        </p>
+      )}
+
       {error && <p className="px-4 py-3 text-xs text-slate-900 font-semibold">{error}</p>}
 
       <Table>

@@ -1,28 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuth } from "@/lib/session";
 import type { Empleado, Permiso, FaltaStrike } from "@/lib/data";
+import { cargarSeccionesGestionHumana } from "@/lib/gestion-humana-carga";
 
 export function useGestionHumana() {
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [permisos, setPermisos] = useState<Permiso[]>([]);
   const [faltas, setFaltas] = useState<FaltaStrike[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [errorEmpleados, setErrorEmpleados] = useState("");
+  const [errorPermisos, setErrorPermisos] = useState("");
+  const [errorFaltas, setErrorFaltas] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setErrorEmpleados("");
+    setErrorPermisos("");
+    setErrorFaltas("");
     try {
-      const [emp, perm, flt] = await Promise.all([
-        fetchAuth("/gestion-humana/empleados"),
-        fetchAuth("/gestion-humana/permisos"),
-        fetchAuth("/gestion-humana/faltas"),
-      ]);
-      setEmpleados(emp);
-      setPermisos(perm);
-      setFaltas(flt);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error cargando datos de Gestión Humana.");
+      const resultado = await cargarSeccionesGestionHumana({
+        empleados: () => fetchAuth("/gestion-humana/empleados"),
+        permisos: () => fetchAuth("/gestion-humana/permisos"),
+        faltas: () => fetchAuth("/gestion-humana/faltas"),
+      });
+      if (resultado.empleados.datos !== undefined) setEmpleados(resultado.empleados.datos);
+      setErrorEmpleados(resultado.empleados.error);
+      if (resultado.permisos.datos !== undefined) setPermisos(resultado.permisos.datos);
+      setErrorPermisos(resultado.permisos.error);
+      if (resultado.faltas.datos !== undefined) setFaltas(resultado.faltas.datos);
+      setErrorFaltas(resultado.faltas.error);
     } finally {
       setLoading(false);
     }
@@ -136,7 +142,9 @@ export function useGestionHumana() {
     permisos,
     faltas,
     loading,
-    error,
+    error: errorEmpleados,
+    errorPermisos,
+    errorFaltas,
     refresh,
     addEmpleado,
     editarEmpleado,

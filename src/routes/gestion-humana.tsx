@@ -119,10 +119,13 @@ function GestionHumana() {
     addFalta,
     loading,
     error,
+    errorPermisos,
+    errorFaltas,
   } = useGestionHumana();
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
   const puedeEliminarEmpleado = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_ELIMINAR);
+  const puedeCrearEmpleado = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_CREAR);
   const puedeVerCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_VER);
   const puedeGestionarCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_GESTIONAR);
   const puedeVerInformacion = hasPermission(user, PERMISOS_SISTEMA.GESTION_INFORMACION_VER);
@@ -490,10 +493,15 @@ function GestionHumana() {
       description="Expedientes laborales, solicitudes de permisos, comunicados e historial de sanciones por empresa."
       actions={
         <div className="flex gap-2">
-          {activeTab === "expediente" && (
+          {activeTab === "expediente" && puedeCrearEmpleado && (
             <Button onClick={() => setModalEmpleadoOpen(true)} size="sm" className="gap-2">
               <UserPlus className="h-4 w-4" /> Registrar Colaborador
             </Button>
+          )}
+          {activeTab === "expediente" && !puedeCrearEmpleado && (
+            <span className="self-center text-xs text-slate-500">
+              Solicita el permiso empleados.crear para registrar colaboradores.
+            </span>
           )}
           {activeTab === "permisos" && (
             <Button onClick={() => setModalPermisoOpen(true)} size="sm" className="gap-2">
@@ -755,15 +763,21 @@ function GestionHumana() {
                       <EmptyState
                         icon={Users}
                         title="No hay colaboradores registrados para esta empresa"
-                        description='Haz clic en "Registrar Colaborador" para crear el primer expediente.'
+                        description={
+                          puedeCrearEmpleado
+                            ? 'Haz clic en "Registrar Colaborador" para crear el primer expediente.'
+                            : "Solicita al administrador el permiso empleados.crear para registrar colaboradores."
+                        }
                         action={
-                          <Button
-                            size="sm"
-                            onClick={() => setModalEmpleadoOpen(true)}
-                            className="gap-2"
-                          >
-                            <UserPlus className="h-4 w-4" /> Registrar Colaborador
-                          </Button>
+                          puedeCrearEmpleado ? (
+                            <Button
+                              size="sm"
+                              onClick={() => setModalEmpleadoOpen(true)}
+                              className="gap-2"
+                            >
+                              <UserPlus className="h-4 w-4" /> Registrar Colaborador
+                            </Button>
+                          ) : undefined
                         }
                       />
                     )}
@@ -908,8 +922,10 @@ function GestionHumana() {
                       <div className="py-12 text-center text-xs text-slate-500">
                         Cargando permisos...
                       </div>
-                    ) : error ? (
-                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : errorPermisos ? (
+                      <div className="py-12 text-center text-xs text-slate-500">
+                        {errorPermisos}
+                      </div>
                     ) : (
                       <EmptyState
                         icon={Calendar}
@@ -1021,8 +1037,8 @@ function GestionHumana() {
                   <TableCell colSpan={6} className="p-0">
                     {loading ? (
                       <div className="py-12 text-center text-xs text-slate-500">Cargando...</div>
-                    ) : error ? (
-                      <div className="py-12 text-center text-xs text-slate-500">{error}</div>
+                    ) : errorFaltas ? (
+                      <div className="py-12 text-center text-xs text-slate-500">{errorFaltas}</div>
                     ) : (
                       <EmptyState
                         icon={AlertTriangle}
