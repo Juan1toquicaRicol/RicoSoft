@@ -6,6 +6,7 @@ import {
   Briefcase,
   DollarSign,
   FileText,
+  Fingerprint,
   Paperclip,
   Plus,
   ShieldAlert,
@@ -65,6 +66,7 @@ import { useGestionHumana } from "@/hooks/use-gestion-humana";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useCargosOpciones } from "@/hooks/use-cargos";
 import { GestionInformacionPanel } from "@/components/gestion-humana/gestion-informacion-panel";
+import { BiometricoFuentesPanel } from "@/components/gestion-humana/biometrico-fuentes-panel";
 import { SelectorArchivo } from "@/components/gestion-humana/selector-archivo";
 import { validarArchivoAdjunto } from "@/lib/archivo-adjunto";
 import { DetallePersonalCampos } from "@/components/gestion-humana/detalle-personal-campos";
@@ -124,6 +126,8 @@ function GestionHumana() {
   const puedeVerCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_VER);
   const puedeGestionarCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_GESTIONAR);
   const puedeVerInformacion = hasPermission(user, PERMISOS_SISTEMA.GESTION_INFORMACION_VER);
+  const puedeVerBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER);
+  const puedeConfigurarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR);
   const puedeGestionarInformacion = hasPermission(
     user,
     PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR,
@@ -153,7 +157,7 @@ function GestionHumana() {
   );
 
   const [activeTab, setActiveTab] = useState<
-    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos"
+    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos" | "biometrico"
   >("expediente");
   const [detallesEmpleadoId, setDetallesEmpleadoId] = useState<string | null>(null);
 
@@ -553,6 +557,18 @@ function GestionHumana() {
             <Briefcase className="h-4 w-4" /> Gestión de información
           </button>
         )}
+        {puedeVerBiometrico && (
+          <button
+            onClick={() => setActiveTab("biometrico")}
+            className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === "biometrico"
+                ? "border-blue-800 text-blue-800"
+                : "border-transparent text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Fingerprint className="h-4 w-4" /> Biométrico
+          </button>
+        )}
         <button
           onClick={() => setActiveTab("comunicados")}
           className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
@@ -573,6 +589,10 @@ function GestionHumana() {
           puedeVerInformacion={puedeVerInformacion}
           puedeGestionarInformacion={puedeGestionarInformacion}
         />
+      )}
+
+      {activeTab === "biometrico" && puedeVerBiometrico && (
+        <BiometricoFuentesPanel puedeConfigurar={puedeConfigurarBiometrico} />
       )}
 
       {/* TAB 1: EXPEDIENTES */}
