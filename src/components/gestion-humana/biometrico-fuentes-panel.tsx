@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Fingerprint, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -90,6 +90,7 @@ export function BiometricoFuentesPanel({
   const [empleadoId, setEmpleadoId] = useState("");
   const [creandoAsociacion, setCreandoAsociacion] = useState(false);
   const [asociacionOcupadaId, setAsociacionOcupadaId] = useState<string | null>(null);
+  const asociacionesPanelRef = useRef<HTMLElement | null>(null);
 
   const fuenteSeleccionada = useMemo(
     () => fuentes.find((fuente) => fuente.id === fuenteSeleccionadaId) ?? null,
@@ -240,6 +241,14 @@ export function BiometricoFuentesPanel({
     }
   };
 
+  const administrarFuente = (fuenteId: string) => {
+    setFuenteSeleccionadaId(fuenteId);
+    setPaginaAsociaciones(1);
+    requestAnimationFrame(() => {
+      asociacionesPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   return (
     <section className="panel bg-white border-slate-200 rounded-lg overflow-hidden shadow-2xs">
       <header className="p-4 border-b border-slate-200 bg-slate-50/80 flex flex-wrap items-start justify-between gap-3">
@@ -378,10 +387,9 @@ export function BiometricoFuentesPanel({
                       size="xs"
                       variant={fuenteSeleccionadaId === fuente.id ? "default" : "outline"}
                       className="h-7 text-[11px]"
-                      onClick={() => {
-                        setFuenteSeleccionadaId(fuente.id);
-                        setPaginaAsociaciones(1);
-                      }}
+                      aria-controls="biometrico-asociaciones"
+                      aria-pressed={fuenteSeleccionadaId === fuente.id}
+                      onClick={() => administrarFuente(fuente.id)}
                     >
                       Administrar
                     </Button>
@@ -403,7 +411,11 @@ export function BiometricoFuentesPanel({
         )}
 
         {fuenteSeleccionada && !cargando && (
-          <section className="rounded-lg border border-slate-200 bg-white">
+          <section
+            id="biometrico-asociaciones"
+            ref={asociacionesPanelRef}
+            className="scroll-mt-4 rounded-lg border border-slate-200 bg-white"
+          >
             <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
               <div>
                 <h4 className="text-sm font-bold text-slate-900">
@@ -513,6 +525,11 @@ export function BiometricoFuentesPanel({
               {cargandoAsociaciones ? (
                 <p role="status" className="flex items-center gap-2 py-6 text-xs text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin" /> Cargando asociaciones...
+                </p>
+              ) : errorAsociaciones ? (
+                <p className="py-6 text-center text-xs text-red-700" role="alert">
+                  No fue posible mostrar las asociaciones. Revisa el error anterior y pulsa
+                  Actualizar para reintentar.
                 </p>
               ) : asociaciones.length === 0 ? (
                 <EmptyState
