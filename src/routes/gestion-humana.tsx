@@ -128,6 +128,7 @@ function GestionHumana() {
   const puedeVerInformacion = hasPermission(user, PERMISOS_SISTEMA.GESTION_INFORMACION_VER);
   const puedeVerBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER);
   const puedeConfigurarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR);
+  const puedeAsociarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR);
   const puedeGestionarInformacion = hasPermission(
     user,
     PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR,
@@ -592,7 +593,11 @@ function GestionHumana() {
       )}
 
       {activeTab === "biometrico" && puedeVerBiometrico && (
-        <BiometricoFuentesPanel puedeConfigurar={puedeConfigurarBiometrico} />
+        <BiometricoFuentesPanel
+          puedeConfigurar={puedeConfigurarBiometrico}
+          puedeAsociar={puedeAsociarBiometrico}
+          empleados={empleados}
+        />
       )}
 
       {/* TAB 1: EXPEDIENTES */}
