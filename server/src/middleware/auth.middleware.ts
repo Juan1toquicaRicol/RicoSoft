@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { Prisma } from "@prisma/client";
 import { loadSessionUser, verificarTokenVersion, SessionUser } from "../lib/permissions";
 import { permisosRequeridos } from "../lib/catalogo-permisos";
 import type { TenantPrisma } from "../lib/tenant-prisma";
@@ -36,9 +37,14 @@ export const authenticateJWT = async (
 
   const token = authHeader.slice("Bearer ".length);
 
+  let decoded: AccessTokenPayload;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET as string) as AccessTokenPayload;
+    decoded = jwt.verify(token, JWT_SECRET as string) as AccessTokenPayload;
+  } catch {
+    return res.status(403).json({ message: "Token inválido o expirado." });
+  }
 
+  try {
     const versionVigente = await verificarTokenVersion(decoded.sub, decoded.tv);
     if (!versionVigente) {
       return res.status(403).json({ message: "Token inválido o expirado." });
@@ -51,10 +57,32 @@ export const authenticateJWT = async (
 
     req.user = sessionUser;
     next();
-  } catch {
-    return res.status(403).json({ message: "Token inválido o expirado." });
+  } catch (err) {
+    // El JWT ya es criptográficamente válido: un fallo aquí NO es "token
+    // inválido". Si la BD no está disponible se responde 503 genérico (sin
+    // detalles internos); cualquier otro error inesperado va al manejador
+    // global como error de servidor.
+    if (esErrorDeDisponibilidadDeBD(err)) {
+      return res.status(503).json({
+        message: "Servicio temporalmente no disponible. Intente de nuevo en unos momentos.",
+      });
+    }
+    return next(err);
   }
 };
+
+// Códigos Prisma de conectividad/disponibilidad: P1001 (servidor
+// inalcanzable), P1002 (timeout del servidor), P1008 (timeout de operación),
+// P1017 (conexión cerrada), P2024 (timeout esperando conexión del pool).
+const CODIGOS_PRISMA_BD_NO_DISPONIBLE = new Set(["P1001", "P1002", "P1008", "P1017", "P2024"]);
+
+function esErrorDeDisponibilidadDeBD(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientInitializationError) return true;
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    CODIGOS_PRISMA_BD_NO_DISPONIBLE.has(err.code)
+  );
+}
 
 /**
  * Para acciones que cruzan el límite de un tenant (dar de alta membresías a

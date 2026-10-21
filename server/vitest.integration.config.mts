@@ -13,6 +13,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.integration.test.ts"],
+    // Rechaza bases no aprobadas (saas_dev, UnoEE_Ricol_Real, ...) antes de correr.
+    globalSetup: ["./vitest.integration.global-setup.mts"],
     testTimeout: 30000,
     // H-02 (2026-09-20): con paralelismo de archivo por defecto (uno por
     // CPU lógico — en la práctica hasta 16+ archivos de integración

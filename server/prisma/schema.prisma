@@ -33,6 +33,12 @@ model Tenant {
   gestionesLiquidacion           GestionLiquidacion[]
   despachos                      Despacho[]
   empleados                      Empleado[]
+  cargosColaborador              CargoColaborador[]
+  catalogosSeguridadSocial       CatalogoSeguridadSocial[]
+  empleadosDetalle               EmpleadoDetalle[]
+  empleadosFamiliares            EmpleadoFamiliar[]
+  empleadosEstudios              EmpleadoEstudio[]
+  empleadosDocumentos            EmpleadoDocumento[]
   facturas                       Factura[]
   faltas                         FaltaStrike[]
   modulos                        Modulo[]
@@ -1439,8 +1445,18 @@ model Empleado {
   documento              String                @db.VarChar(50)
   nombres                String                @db.VarChar(255)
   apellidos              String                @db.VarChar(255)
-  correo                 String                @db.VarChar(255)
+  /// NULL cuando el cargo asignado no exige correo corporativo
+  /// (CargoColaborador.correoCorporativoRequerido = false) y no se diligenció.
+  correo                 String?               @db.VarChar(255)
+  /// Nombre del cargo como texto (snapshot): se conserva aunque el cargo del
+  /// catálogo se desactive o cambie, y es lo que ya leen las vistas actuales.
   cargo                  String                @db.VarChar(255)
+  /// Cargo del catálogo por tenant. NULL en colaboradores históricos (anteriores
+  /// al catálogo) o registrados sin cargo del catálogo.
+  cargoId                String?               @db.UniqueIdentifier
+  /// Tipo de contrato (nombre elegido del catálogo CatalogoSeguridadSocial,
+  /// tipo TIPO_CONTRATO; snapshot en texto). NULL en colaboradores históricos.
+  tipoContrato           String?               @db.VarChar(150)
   area                   String                @db.VarChar(100)
   fechaContratacion      DateTime
   fechaLiquidacion       DateTime?
@@ -1449,13 +1465,145 @@ model Empleado {
   eliminado              Boolean               @default(false)
   createdAt              DateTime              @default(now())
   tenant                 Tenant                @relation(fields: [tenantId], references: [id])
+  cargoCatalogo          CargoColaborador?     @relation(fields: [cargoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   faltas                 FaltaStrike[]
   historicoSalario       HistorialSalario[]
   permisos               PermisoLaboral[]
   vinculosBiometricos    EmpleadoBiometrico[]
   marcacionesBiometricas MarcacionBiometrica[]
+  detalle                EmpleadoDetalle?
+  familiares             EmpleadoFamiliar[]
+  estudios               EmpleadoEstudio[]
+  documentos             EmpleadoDocumento[]
 
   @@index([tenantId])
+  @@index([cargoId])
+}
+
+/// Catálogo de cargos por tenant (Gestión Humana). tenantId NOT NULL: no hay
+/// cargos GENERALES (a diferencia de Departamento). Nunca se elimina
+/// físicamente un cargo: se desactiva (activo=false) y los colaboradores ya
+/// asignados conservan el vínculo y el nombre.
+model CargoColaborador {
+  id                         String     @id @default(uuid()) @db.UniqueIdentifier
+  tenantId                   String     @db.UniqueIdentifier
+  nombre                     String     @db.VarChar(255)
+  /// nombre sin tildes, en minúsculas y con espacios colapsados; respalda la
+  /// unicidad por tenant (también frente a creaciones concurrentes).
+  nombreNormalizado          String     @db.VarChar(255)
+  activo                     Boolean    @default(true)
+  correoCorporativoRequerido Boolean    @default(true)
+  createdAt                  DateTime   @default(now())
+  updatedAt                  DateTime   @updatedAt
+  tenant                     Tenant     @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleados                  Empleado[]
+
+  @@unique([tenantId, nombreNormalizado])
+  @@index([tenantId])
+}
+
+/// Catálogo por tenant de EPS, ARL y fondos de pensiones (Gestión de
+/// información de Gestión Humana). EmpleadoDetalle guarda el NOMBRE elegido
+/// como texto (snapshot): desactivar o renombrar una entrada no altera lo ya
+/// registrado en los colaboradores.
+model CatalogoSeguridadSocial {
+  id                String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId          String   @db.UniqueIdentifier
+  /// EPS | ARL | FONDO_PENSIONES | TIPO_CONTRATO
+  tipo              String   @db.VarChar(20)
+  nombre            String   @db.VarChar(150)
+  nombreNormalizado String   @db.VarChar(150)
+  activo            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+
+  @@unique([tenantId, tipo, nombreNormalizado])
+  @@index([tenantId, tipo])
+}
+
+/// Detalles personales opcionales del colaborador (1:1). Contiene datos
+/// sensibles (afiliaciones de salud/riesgos y datos de contacto): solo se
+/// exponen con empleados.detalles_ver.
+model EmpleadoDetalle {
+  id                 String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId           String   @db.UniqueIdentifier
+  empleadoId         String   @unique @db.UniqueIdentifier
+  eps                String?  @db.VarChar(150)
+  arl                String?  @db.VarChar(150)
+  fondoPensiones     String?  @db.VarChar(150)
+  /// Fechas "solo día" guardadas como medianoche UTC.
+  fechaNacimiento    DateTime? @db.Date
+  lugarNacimiento    String?  @db.VarChar(150)
+  fechaExpedicionDocumento DateTime? @db.Date
+  correoPersonal     String?  @db.VarChar(255)
+  ciudadResidencia   String?  @db.VarChar(100)
+  departamentoResidencia String? @db.VarChar(100)
+  direccion          String?  @db.VarChar(255)
+  telefonoPrincipal  String?  @db.VarChar(30)
+  telefonoSecundario String?  @db.VarChar(30)
+  updatedAt          DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleado           Empleado @relation(fields: [empleadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId])
+}
+
+/// Núcleo familiar: solo nombre y parentesco (minimización de datos de
+/// terceros; cualquier otro atributo requiere aprobación previa).
+model EmpleadoFamiliar {
+  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  tenantId   String   @db.UniqueIdentifier
+  empleadoId String   @db.UniqueIdentifier
+  nombre     String   @db.VarChar(255)
+  parentesco String   @db.VarChar(50)
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleado   Empleado @relation(fields: [empleadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@index([empleadoId])
+}
+
+model EmpleadoEstudio {
+  id          String              @id @default(uuid()) @db.UniqueIdentifier
+  tenantId    String              @db.UniqueIdentifier
+  empleadoId  String              @db.UniqueIdentifier
+  titulo      String              @db.VarChar(255)
+  institucion String?             @db.VarChar(255)
+  createdAt   DateTime            @default(now())
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleado    Empleado            @relation(fields: [empleadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documentos  EmpleadoDocumento[]
+
+  @@index([tenantId])
+  @@index([empleadoId])
+}
+
+/// Soporte privado de un colaborador (certificado bancario o soporte de un
+/// estudio). El archivo vive en server/uploads/empleados-documentos/<empleadoId>/
+/// con nombre aleatorio y solo se sirve por el endpoint autenticado con
+/// permiso; `archivoRuta` nunca se devuelve al cliente.
+model EmpleadoDocumento {
+  id            String           @id @default(uuid()) @db.UniqueIdentifier
+  tenantId      String           @db.UniqueIdentifier
+  empleadoId    String           @db.UniqueIdentifier
+  /// CERTIFICADO_BANCARIO | SOPORTE_ESTUDIO
+  tipo          String           @db.VarChar(30)
+  estudioId     String?          @db.UniqueIdentifier
+  archivoNombre String           @db.VarChar(255)
+  archivoRuta   String           @db.VarChar(500)
+  archivoMime   String           @db.VarChar(100)
+  archivoTamano Int
+  subidoPorId   String?          @db.UniqueIdentifier
+  createdAt     DateTime         @default(now())
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  empleado      Empleado         @relation(fields: [empleadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudio       EmpleadoEstudio? @relation(fields: [estudioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@index([empleadoId])
+  @@index([estudioId])
 }
 
 model HistorialSalario {

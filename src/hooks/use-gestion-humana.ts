@@ -39,12 +39,29 @@ export function useGestionHumana() {
       nombres: string;
       apellidos: string;
       correo: string;
-      cargo: string;
+      cargo?: string;
+      cargoId?: string;
+      tipoContrato?: string;
       area: string;
       fechaContratacion: string;
       salarioActual: number;
     }) => {
-      await fetchAuth("/gestion-humana/empleados", { method: "POST", body: JSON.stringify(data) });
+      const creado: { id: string } = await fetchAuth("/gestion-humana/empleados", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      await refresh();
+      return creado;
+    },
+    [refresh],
+  );
+
+  const editarEmpleado = useCallback(
+    async (id: string, data: { cargoId?: string; correo?: string; tipoContrato?: string }) => {
+      await fetchAuth(`/gestion-humana/empleados/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
       await refresh();
     },
     [refresh],
@@ -122,6 +139,7 @@ export function useGestionHumana() {
     error,
     refresh,
     addEmpleado,
+    editarEmpleado,
     updateSalarioEmpleado,
     liquidarEmpleado,
     eliminarEmpleado,

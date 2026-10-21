@@ -582,6 +582,25 @@ export const resetPasswordUsuario = async (req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ message: "Usuario no encontrado." });
     }
 
+    // Anti-escalación: restablecer la contraseña equivale a poder iniciar
+    // sesión como ese usuario. Quien solo tiene "usuarios.reset_password" no
+    // puede tomar la cuenta de un superadministrador (propio de este tenant o
+    // por membresía en otro): solo otro superadministrador puede hacerlo, el
+    // mismo criterio que cambiarSuperadminUsuario.
+    if (!req.user!.isSuperadmin) {
+      const objetivoEsSuperadmin = usuario.isSuperadmin
+        ? true
+        : !!(await prisma.membresia.findFirst({
+            where: { userId: id, isSuperadmin: true, activo: true },
+            select: { id: true },
+          }));
+      if (objetivoEsSuperadmin) {
+        return res.status(403).json({
+          message: "Solo un superadministrador puede restablecer la contraseña de otro superadministrador.",
+        });
+      }
+    }
+
     // Incrementar tokenVersion cierra cualquier sesión activa de ESE usuario:
     // un reset de contraseña administrativo debe forzarlo a volver a iniciar
     // sesión con la nueva clave, en cualquier dispositivo donde estuviera conectado.

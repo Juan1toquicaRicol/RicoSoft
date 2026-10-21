@@ -8,7 +8,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Mail,
-  LockKeyhole,
   ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,97 +61,55 @@ interface TenantAccesible {
 function PanelMarca() {
   return (
     <aside
-      aria-label="Empresas del Grupo Ricol"
-      className="relative hidden min-h-screen overflow-hidden bg-[#eaf8fc] lg:flex lg:w-[58%] lg:flex-none items-center justify-center"
+      aria-label="Grupo Ricol"
+      className="relative hidden min-h-screen overflow-hidden bg-[#f3f8fb] lg:flex lg:w-1/2 lg:flex-none items-center justify-center"
     >
       <div
         aria-hidden="true"
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(20,116,190,0.10) 1.5px, transparent 1.7px), radial-gradient(ellipse at 52% 45%, rgba(255,255,255,0.96) 0%, rgba(246,253,255,0.82) 48%, transparent 76%)",
+            "radial-gradient(circle at 1px 1px, rgba(20,116,190,0.10) 1.5px, transparent 1.7px), radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.95) 0%, rgba(243,248,251,0.6) 55%, transparent 80%)",
           backgroundSize: "26px 26px, 100% 100%",
         }}
       />
-
-      <svg
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full"
-        viewBox="0 0 900 1000"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <defs>
-          <linearGradient id="login-blue" x1="0" y1="0" x2="1" y2="1">
-            <stop stopColor="#0879e8" />
-            <stop offset="1" stopColor="#11c6df" />
-          </linearGradient>
-          <linearGradient id="login-green" x1="0" y1="0" x2="1" y2="1">
-            <stop stopColor="#a8df00" />
-            <stop offset="1" stopColor="#08a957" />
-          </linearGradient>
-          <linearGradient id="login-ribbon" x1="0" y1="0" x2="1" y2="0">
-            <stop stopColor="#0876e8" />
-            <stop offset="0.42" stopColor="#00bbd6" />
-            <stop offset="0.72" stopColor="#8dcf16" />
-            <stop offset="1" stopColor="#f2d900" />
-          </linearGradient>
-        </defs>
-        <path d="M0 0h360C270 118 151 143 0 223z" fill="url(#login-blue)" />
-        <path d="M0 0h287C214 91 119 126 0 174z" fill="#0878df" opacity=".9" />
-        <path d="M0 0h372C276 126 156 157 0 242" fill="none" stroke="white" strokeWidth="5" />
-        <circle cx="810" cy="-18" r="145" fill="url(#login-green)" />
-        <circle cx="810" cy="-18" r="178" fill="none" stroke="#70bb18" strokeWidth="5" />
-        <path
-          d="M-38 804c173-11 243 76 379 116 149 44 209-10 324-69 86-45 150-68 235-62v211H-38z"
-          fill="url(#login-ribbon)"
-        />
-        <path
-          d="M-42 855c170-9 248 76 386 116 144 42 226-12 335-69 89-47 149-69 226-66"
-          fill="none"
-          stroke="white"
-          strokeWidth="5"
-        />
-        <path
-          d="M-35 896c152 6 239 90 372 112 144 24 224-41 350-104 85-42 145-57 220-54v150H-35z"
-          fill="#0874d8"
-        />
-        <path d="M310 1000c117-57 184-144 325-186 91-27 168-31 242-17v203z" fill="#13a953" />
-        <path d="M450 1000c117-68 185-136 323-170 37-9 70-14 104-17v187z" fill="#f52e43" />
-        <circle cx="886" cy="589" r="92" fill="#8ed519" opacity=".76" />
-        <circle cx="886" cy="589" r="57" fill="#13a953" opacity=".78" />
-        <circle cx="844" cy="282" r="47" fill="#24c2e7" opacity=".55" />
-      </svg>
-
-      <div
-        aria-hidden="true"
-        className="absolute right-[2%] top-[22%] h-32 w-32 rounded-full border border-white/70 bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-blue-600/10"
+      <img
+        src="/GRUPORICOL_LogoPrincipal-Photoroom.png"
+        alt="Grupo Ricol"
+        className="relative w-[55%] max-w-[520px] object-contain"
       />
-      <div
-        aria-hidden="true"
-        className="absolute right-[8%] top-[39%] h-5 w-5 rounded-full bg-lime-500"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute left-[13%] top-[48%] h-44 w-44 rounded-full bg-sky-200/30"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute bottom-[24%] left-[13%] h-24 w-24 rounded-full border-[5px] border-white/80"
-      />
-      <svg
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 h-full w-[9%]"
-        viewBox="0 0 90 1000"
-        preserveAspectRatio="none"
-      >
-        <path
-          d="M0 0h16c18 102 48 174 48 295 0 192 16 313-8 477-7 83-26 154-43 228H0z"
-          fill="white"
-        />
-      </svg>
     </aside>
   );
 }
+
+/** Campo con etiqueta flotando sobre el borde y un adorno opcional a la derecha. */
+function CampoContorno({
+  id,
+  label,
+  adorno,
+  children,
+}: {
+  id: string;
+  label: string;
+  adorno?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <Label
+        htmlFor={id}
+        className="absolute -top-2.5 left-3 z-10 bg-white px-1.5 text-xs font-medium text-blue-600"
+      >
+        {label}
+      </Label>
+      {children}
+      {adorno}
+    </div>
+  );
+}
+
+const CLASE_CONTROL =
+  "h-[60px] rounded-md border-slate-300 bg-white px-4 text-sm shadow-none transition-colors focus-visible:border-blue-500 focus-visible:ring-0";
 
 function Login() {
   const navigate = useNavigate();
@@ -269,7 +226,7 @@ function Login() {
       // 🛑 Validación del dominio en el Frontend
       if (!esDominioCorporativoValido(email)) {
         setError(
-          "Solo se permiten correos de @ricol.com.co, @flexipackdecolombia.com o @greesolutions.com.co",
+          "Solo se permiten correos de @ricol.com.co, @flexipackdecolombia.com o @greensolutions.com.co",
         );
         setIsLoading(false);
         return;
@@ -357,7 +314,7 @@ function Login() {
 
     return (
       <div className="min-h-screen bg-white flex">
-        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-[42%] lg:flex-none lg:px-14">
+        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-1/2 lg:flex-none lg:px-14">
           <div className="w-full max-w-[440px]">
             <div className="mb-8">
               <span className="text-[2.25rem] font-extrabold tracking-tight text-blue-950">
@@ -438,24 +395,22 @@ function Login() {
   return (
     <div className="min-h-screen bg-white flex">
       {/* ── Columna Izquierda: Formulario ── */}
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-[42%] lg:flex-none lg:px-14">
-        <div className="w-full max-w-[420px]">
-          <div className="mb-10">
-            <span className="text-[2.25rem] font-extrabold tracking-tight text-blue-950">
-              RicoSoft
-            </span>
-          </div>
+      <div className="flex min-h-screen w-full flex-col justify-between bg-white px-6 py-10 sm:px-12 lg:w-1/2 lg:flex-none">
+        <div>
+          <span className="text-[1.75rem] font-extrabold tracking-tight text-blue-950">
+            RicoSoft
+          </span>
+        </div>
 
+        <div className="mx-auto w-full max-w-[400px] py-8">
           {/* Encabezado Dinámico */}
-          <div className="mb-7">
-            <h1 className="text-2xl font-extrabold tracking-tight text-blue-950 sm:text-3xl">
-              {isRegistering ? "Crear una cuenta" : "Bienvenido de nuevo"}
-            </h1>
-            <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-              {isRegistering
-                ? "Con tu correo corporativo."
-                : "Plataforma interna de gestión para los colaboradores del Grupo Ricol."}
+          <div className="mb-9">
+            <p className="text-sm text-slate-600">
+              {isRegistering ? "Únete a la plataforma" : "Plataforma interna del Grupo Ricol"}
             </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+              {isRegistering ? "Crear una cuenta" : "Inicia sesión"}
+            </h1>
           </div>
 
           {/* Alertas de Error o Éxito */}
@@ -474,63 +429,67 @@ function Login() {
           )}
 
           {/* Formulario */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Campo Nombre (Solo visible en Registro) */}
             {isRegistering && (
-              <div className="space-y-1.5">
-                <Label htmlFor="nombre" className="text-xs font-semibold text-slate-700">
-                  Nombre completo
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="nombre"
-                    type="text"
-                    required={isRegistering}
-                    placeholder="Ej. Juan Pérez"
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white transition-colors rounded-lg shadow-none pr-10"
-                  />
-                  <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
+              <CampoContorno
+                id="nombre"
+                label="Nombre completo"
+                adorno={
+                  <User className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                }
+              >
+                <Input
+                  id="nombre"
+                  type="text"
+                  required={isRegistering}
+                  placeholder="Ej. Juan Pérez"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className={`${CLASE_CONTROL} pr-12`}
+                />
+              </CampoContorno>
             )}
 
             {/* Email */}
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
-                Correo corporativo
-              </Label>
-              <div className="relative">
+            <CampoContorno
+              id="email"
+              label="Correo corporativo"
+              adorno={
                 <Mail
                   aria-hidden="true"
-                  className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500"
+                  className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
                 />
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder=""
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-[58px] rounded-xl border-slate-200 bg-white pl-12 text-sm shadow-sm transition-colors focus:bg-white"
-                />
-              </div>
-            </div>
+              }
+            >
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder=""
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${CLASE_CONTROL} pr-12`}
+              />
+            </CampoContorno>
 
             {/* Contraseña */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-semibold text-slate-700">
-                  Contraseña
-                </Label>
-              </div>
-              <div className="relative">
-                <LockKeyhole
-                  aria-hidden="true"
-                  className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500"
-                />
+            <div>
+              <CampoContorno
+                id="password"
+                label="Contraseña"
+                adorno={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                }
+              >
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -539,31 +498,23 @@ function Login() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-[58px] rounded-xl border-slate-200 bg-white pl-12 pr-12 text-sm shadow-sm transition-colors focus:bg-white"
+                  className={`${CLASE_CONTROL} pr-12`}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              </CampoContorno>
               {isRegistering && (
-                <p className="text-[11px] text-slate-400">
+                <p className="mt-2 text-[11px] text-slate-400">
                   Mínimo 8 caracteres, con mayúscula, minúscula y número.
                 </p>
               )}
             </div>
 
             {!isRegistering && (
-              <label className="flex cursor-pointer items-center gap-3 pt-1 text-sm text-slate-600">
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-600">
                 <input
                   type="checkbox"
                   checked={recordarCorreo}
                   onChange={(event) => setRecordarCorreo(event.target.checked)}
-                  className="h-5 w-5 rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
                 />
                 <span>Recordarme en este equipo</span>
               </label>
@@ -571,15 +522,9 @@ function Login() {
 
             {/* Campo Departamento (Solo visible en Registro) */}
             {isRegistering && (
-              <div className="space-y-1.5">
-                <Label htmlFor="departamento" className="text-xs font-semibold text-slate-700">
-                  Departamento
-                </Label>
+              <CampoContorno id="departamento" label="Departamento">
                 <Select value={departamentoId} onValueChange={setDepartamentoId}>
-                  <SelectTrigger
-                    id="departamento"
-                    className="h-10 text-sm border-slate-200 bg-slate-50 focus:bg-white transition-colors rounded-lg shadow-none"
-                  >
+                  <SelectTrigger id="departamento" className={CLASE_CONTROL}>
                     <SelectValue placeholder="Selecciona tu departamento" />
                   </SelectTrigger>
                   <SelectContent>
@@ -596,14 +541,14 @@ function Login() {
                     )}
                   </SelectContent>
                 </Select>
-              </div>
+              </CampoContorno>
             )}
 
             {/* Botón Principal */}
             <Button
               type="submit"
               disabled={isLoading}
-              className="mt-2 h-[62px] w-full rounded-xl bg-gradient-to-r from-blue-700 to-sky-500 text-base font-bold shadow-lg shadow-blue-700/15 transition-all hover:from-blue-800 hover:to-sky-600 disabled:bg-slate-400"
+              className="h-14 w-full rounded-md bg-blue-500 text-base font-semibold text-white shadow-none transition-colors hover:bg-blue-600 disabled:bg-slate-400"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -613,41 +558,37 @@ function Login() {
               ) : isRegistering ? (
                 "Registrar cuenta"
               ) : (
-                <span className="flex items-center justify-center gap-4">
-                  Ingresar a RicoSoft <ArrowRight className="h-6 w-6" />
-                </span>
+                "Ingresar"
               )}
             </Button>
-
-            {/* Opción para alternar entre Login y Registro */}
-            <div className="pt-2 text-center text-xs text-slate-600">
-              {isRegistering ? (
-                <p>
-                  ¿Ya tienes una cuenta?{" "}
-                  <button
-                    type="button"
-                    onClick={toggleMode}
-                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline"
-                  >
-                    Inicia sesión aquí
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  ¿Primera vez ingresando a RicoSoft?{" "}
-                  <button
-                    type="button"
-                    onClick={toggleMode}
-                    className="font-bold text-blue-700 hover:text-blue-900 hover:underline"
-                  >
-                    Regístrate aquí
-                  </button>
-                </p>
-              )}
-            </div>
-
-            {/* Footer de seguridad */}
           </form>
+        </div>
+
+        {/* Opción para alternar entre Login y Registro */}
+        <div className="text-sm text-slate-600">
+          {isRegistering ? (
+            <p>
+              ¿Ya tienes una cuenta?{" "}
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                Inicia sesión aquí
+              </button>
+            </p>
+          ) : (
+            <p>
+              ¿Primera vez ingresando a RicoSoft?{" "}
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                Regístrate aquí
+              </button>
+            </p>
+          )}
         </div>
       </div>
 

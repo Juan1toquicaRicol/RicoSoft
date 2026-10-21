@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma";
 import {
@@ -54,7 +55,7 @@ export const registerUserService = async (data: {
 
   if (!esDominioCorporativoValido(emailLimpio)) {
     throw new AuthError(
-      "Solo se permiten registros con correos autorizados (@ricol.com.co, @flexipackdecolombia.com, @greesolutions.com.co).",
+      "Solo se permiten registros con correos autorizados (@ricol.com.co, @flexipackdecolombia.com, @greensolutions.com.co).",
     );
   }
 
@@ -184,6 +185,14 @@ async function emitirSesion(
   return { requiresTenantSelection: false, token, user: sessionUser };
 }
 
+// Hash bcrypt (mismo costo que los reales) de un valor aleatorio descartado,
+// solo para igualar el tiempo de respuesta cuando el correo no existe.
+let hashFalso: Promise<string> | undefined;
+function obtenerHashFalso(): Promise<string> {
+  hashFalso ??= bcrypt.hash(crypto.randomUUID(), 10);
+  return hashFalso;
+}
+
 // --- 2. LOGIN DE USUARIO (paso 1: identidad) ---
 export const loginUserService = async (data: {
   email: string;
@@ -200,6 +209,10 @@ export const loginUserService = async (data: {
   const MENSAJE_CREDENCIALES_INVALIDAS = "Credenciales inválidas. Correo o contraseña incorrectos.";
 
   if (!usuario) {
+    // Mismo costo de bcrypt que un correo existente: sin esto, la respuesta
+    // inmediata de un correo inexistente (vs. ~decenas de ms de un existente)
+    // permitiría enumerar cuentas midiendo el tiempo de respuesta.
+    await bcrypt.compare(password, await obtenerHashFalso());
     throw new AuthError(MENSAJE_CREDENCIALES_INVALIDAS);
   }
 

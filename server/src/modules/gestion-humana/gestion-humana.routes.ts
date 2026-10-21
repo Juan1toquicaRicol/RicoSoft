@@ -1,8 +1,18 @@
 import { Router } from "express";
-import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
+import {
+  authenticateJWT,
+  requireAllPermissions,
+  requireAnyPermission,
+  requirePermission,
+} from "../../middleware/auth.middleware";
+import {
+  uploadDocumentoEmpleado,
+  validarEmpleadoIdParaArchivo,
+} from "../../middleware/upload.middleware";
 import {
   listarEmpleados,
   crearEmpleado,
+  editarEmpleado,
   actualizarSalario,
   liquidarEmpleado,
   eliminarEmpleado,
@@ -13,6 +23,29 @@ import {
   actualizarEstadoPermisoLaboral,
 } from "./permisos-laborales.controller";
 import { listarFaltas, crearFalta } from "./faltas.controller";
+import {
+  listarCargos,
+  listarCargosOpciones,
+  crearCargo,
+  actualizarCargo,
+} from "./cargos.controller";
+import {
+  listarCatalogoSeguridadSocial,
+  listarOpcionesSeguridadSocial,
+  crearItemSeguridadSocial,
+  actualizarItemSeguridadSocial,
+} from "./catalogo-seguridad-social.controller";
+import {
+  obtenerDetallesEmpleado,
+  guardarDetallesEmpleado,
+  agregarFamiliar,
+  eliminarFamiliar,
+  agregarEstudio,
+  eliminarEstudio,
+  subirDocumentoEmpleado,
+  descargarDocumentoEmpleado,
+  eliminarDocumentoEmpleado,
+} from "./empleado-detalles.controller";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import {
   listarFuentesBiometricas,
@@ -42,12 +75,106 @@ router.use(authenticateJWT);
 router.get("/empleados", requirePermission("empleados.ver"), listarEmpleados);
 router.post("/empleados", requirePermission("empleados.crear"), crearEmpleado);
 router.patch(
+  "/empleados/:id",
+  requirePermission(PERMISOS_SISTEMA.EMPLEADOS_EDITAR),
+  editarEmpleado,
+);
+router.patch(
   "/empleados/:id/salario",
   requirePermission("empleados.editar_salario"),
   actualizarSalario,
 );
 router.patch("/empleados/:id/liquidar", requirePermission("empleados.liquidar"), liquidarEmpleado);
 router.delete("/empleados/:id", requirePermission("empleados.eliminar"), eliminarEmpleado);
+
+// Cargos (catálogo por tenant). /cargos/opciones solo expone los ACTIVOS para
+// el selector del formulario de colaborador, sin exigir administrar el catálogo.
+router.get(
+  "/cargos/opciones",
+  requireAnyPermission([
+    PERMISOS_SISTEMA.EMPLEADOS_CREAR,
+    PERMISOS_SISTEMA.EMPLEADOS_EDITAR,
+    PERMISOS_SISTEMA.CARGOS_VER,
+  ]),
+  listarCargosOpciones,
+);
+router.get("/cargos", requirePermission(PERMISOS_SISTEMA.CARGOS_VER), listarCargos);
+router.post("/cargos", requirePermission(PERMISOS_SISTEMA.CARGOS_GESTIONAR), crearCargo);
+router.patch("/cargos/:id", requirePermission(PERMISOS_SISTEMA.CARGOS_GESTIONAR), actualizarCargo);
+
+// Gestión de información: catálogo por tenant de EPS, ARL y fondos de pensiones.
+// /opciones (solo activos) lo usa el formulario de colaborador.
+router.get(
+  "/catalogo-seguridad-social/opciones",
+  requireAnyPermission([
+    PERMISOS_SISTEMA.EMPLEADOS_CREAR,
+    PERMISOS_SISTEMA.EMPLEADOS_EDITAR,
+    PERMISOS_SISTEMA.EMPLEADOS_DETALLES_EDITAR,
+    PERMISOS_SISTEMA.GESTION_INFORMACION_VER,
+  ]),
+  listarOpcionesSeguridadSocial,
+);
+router.get(
+  "/catalogo-seguridad-social",
+  requirePermission(PERMISOS_SISTEMA.GESTION_INFORMACION_VER),
+  listarCatalogoSeguridadSocial,
+);
+router.post(
+  "/catalogo-seguridad-social",
+  requirePermission(PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR),
+  crearItemSeguridadSocial,
+);
+router.patch(
+  "/catalogo-seguridad-social/:id",
+  requirePermission(PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR),
+  actualizarItemSeguridadSocial,
+);
+
+// Detalles sensibles del colaborador y soportes privados. Cada ruta exige ver
+// el expediente (empleados.ver) más el permiso específico del dato.
+const verDetalles = requireAllPermissions([
+  PERMISOS_SISTEMA.EMPLEADOS_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DETALLES_VER,
+]);
+const editarDetalles = requireAllPermissions([
+  PERMISOS_SISTEMA.EMPLEADOS_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DETALLES_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DETALLES_EDITAR,
+]);
+const verDocumentos = requireAllPermissions([
+  PERMISOS_SISTEMA.EMPLEADOS_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DETALLES_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_VER,
+]);
+const gestionarDocumentos = requireAllPermissions([
+  PERMISOS_SISTEMA.EMPLEADOS_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DETALLES_VER,
+  PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_GESTIONAR,
+]);
+router.get("/empleados/:id/detalles", verDetalles, obtenerDetallesEmpleado);
+router.put("/empleados/:id/detalles", editarDetalles, guardarDetallesEmpleado);
+router.post("/empleados/:id/familiares", editarDetalles, agregarFamiliar);
+router.delete("/empleados/:id/familiares/:familiarId", editarDetalles, eliminarFamiliar);
+router.post("/empleados/:id/estudios", editarDetalles, agregarEstudio);
+router.delete("/empleados/:id/estudios/:estudioId", editarDetalles, eliminarEstudio);
+// El permiso se evalúa ANTES de multer: sin permiso no se escribe nada en disco.
+router.post(
+  "/empleados/:id/documentos",
+  gestionarDocumentos,
+  validarEmpleadoIdParaArchivo,
+  uploadDocumentoEmpleado,
+  subirDocumentoEmpleado,
+);
+router.get(
+  "/empleados/:id/documentos/:documentoId/archivo",
+  verDocumentos,
+  descargarDocumentoEmpleado,
+);
+router.delete(
+  "/empleados/:id/documentos/:documentoId",
+  gestionarDocumentos,
+  eliminarDocumentoEmpleado,
+);
 
 // Permisos laborales
 router.get("/permisos", requirePermission("permisos_laborales.ver"), listarPermisosLaborales);

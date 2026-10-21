@@ -84,8 +84,13 @@ export interface Empleado {
   documento: string;
   nombres: string;
   apellidos: string;
-  correo: string;
+  /** null cuando el cargo no exige correo corporativo y no se diligenció. */
+  correo: string | null;
   cargo: string;
+  /** Cargo del catálogo; null en colaboradores anteriores al catálogo. */
+  cargoId?: string | null;
+  /** Tipo de contrato (catálogo de Gestión de información); null en históricos. */
+  tipoContrato?: string | null;
   area: string;
   fechaContratacion: string;
   fechaLiquidacion?: string;

@@ -89,12 +89,24 @@ export const crearRol = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const permisosValidos = await obtenerCodigosPermisosAsignables(tenantId);
+    const permisosSaneados = sanearPermisos(permisos, permisosValidos);
+    // Mismo criterio que actualizarRol: definir los permisos de un rol exige
+    // "asignar_permisos", no basta "roles.crear" (que solo permite crear el rol).
+    if (
+      permisosSaneados.length > 0 &&
+      !req.user!.isSuperadmin &&
+      !req.user!.permisos.includes(PERMISOS_SISTEMA.ROLES_ASIGNAR_PERMISOS)
+    ) {
+      return res.status(403).json({
+        message: "No tienes permiso para definir los permisos de un rol.",
+      });
+    }
     const rol = await prisma.rol.create({
       data: {
         tenantId: alcance === "GENERAL" ? null : tenantId,
         nombre,
         descripcion: typeof descripcion === "string" ? descripcion : null,
-        permisos: JSON.stringify(sanearPermisos(permisos, permisosValidos)),
+        permisos: JSON.stringify(permisosSaneados),
         esSistema: false,
       },
     });

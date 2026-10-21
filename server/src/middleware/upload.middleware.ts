@@ -227,6 +227,15 @@ export const UPLOADS_DIR_ORDENES_COMPRA_INTL = documentoOrdenCompraIntl.UPLOADS_
 export const validarOrdenIdParaArchivo = documentoOrdenCompraIntl.validarIdParaArchivo;
 export const uploadDocumentoOrdenCompraIntl = documentoOrdenCompraIntl.uploadArchivo;
 
+// Soportes privados del colaborador (Gestión Humana: certificado bancario y
+// soportes de estudios): :id en la URL es el id del Empleado. Misma política
+// que el resto (PDF/PNG/JPG/WEBP, 10MB, validación por magic bytes, carpeta
+// temporal y movimiento definitivo solo tras validar el tenant).
+const documentoEmpleado = crearUploadArchivo("empleados-documentos");
+export const UPLOADS_DIR_EMPLEADOS_DOCUMENTOS = documentoEmpleado.UPLOADS_DIR;
+export const validarEmpleadoIdParaArchivo = documentoEmpleado.validarIdParaArchivo;
+export const uploadDocumentoEmpleado = documentoEmpleado.uploadArchivo;
+
 // ---------------------------------------------------------------------------
 // Adjuntos de Publicaciones (Home): fotos, videos y documentos, varios por
 // solicitud. Se mantiene aparte de crearUploadArchivo() porque allí el

@@ -139,6 +139,15 @@ export const PERMISOS_SISTEMA = {
   BIOMETRICO_SINCRONIZAR: "biometrico.sincronizar",
   BIOMETRICO_ASOCIAR: "biometrico.asociar",
   BIOMETRICO_CONFIGURAR: "biometrico.configurar",
+  CARGOS_VER: "cargos.ver",
+  CARGOS_GESTIONAR: "cargos.gestionar",
+  EMPLEADOS_EDITAR: "empleados.editar",
+  EMPLEADOS_DETALLES_VER: "empleados.detalles_ver",
+  EMPLEADOS_DETALLES_EDITAR: "empleados.detalles_editar",
+  EMPLEADOS_DOCUMENTOS_VER: "empleados.documentos_ver",
+  EMPLEADOS_DOCUMENTOS_GESTIONAR: "empleados.documentos_gestionar",
+  GESTION_INFORMACION_VER: "gestion_informacion.ver",
+  GESTION_INFORMACION_GESTIONAR: "gestion_informacion.gestionar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];

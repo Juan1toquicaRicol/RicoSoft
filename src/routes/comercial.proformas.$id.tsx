@@ -55,7 +55,7 @@ export const Route = createFileRoute("/comercial/proformas/$id")({
 });
 
 // Ancho de las 11 columnas (A-K) de la plantilla Excel original
-// (public/Factura Proforma 3889...xlsx), en las mismas unidades de ancho de
+// (Reportes/referencias/Factura Proforma 3889...xlsx), en las mismas unidades de ancho de
 // columna de Excel — se usan tal cual como fracciones del grid para que las
 // cajas queden con las mismas proporciones que la hoja original. Ricol y
 // Flexipack SIEMPRE usan este grid, sin cambios.
@@ -112,7 +112,7 @@ function Campo({
 
 /**
  * Reproduce la distribución exacta de la plantilla "Factura Proforma"
- * (public/Factura Proforma 3889...xlsx: 11 columnas A-K, cajas con borde
+ * (Reportes/referencias/Factura Proforma 3889...xlsx: 11 columnas A-K, cajas con borde
  * para cada sección) usando un grid CSS con las mismas proporciones de
  * columna que el Excel — "Descargar PDF" genera el archivo en el navegador
  * (html2canvas-pro + jsPDF) e "Imprimir directamente" usa window.print().

@@ -165,6 +165,15 @@ export const PERMISOS_SISTEMA = {
   BIOMETRICO_SINCRONIZAR: "biometrico.sincronizar",
   BIOMETRICO_ASOCIAR: "biometrico.asociar",
   BIOMETRICO_CONFIGURAR: "biometrico.configurar",
+  CARGOS_VER: "cargos.ver",
+  CARGOS_GESTIONAR: "cargos.gestionar",
+  EMPLEADOS_EDITAR: "empleados.editar",
+  EMPLEADOS_DETALLES_VER: "empleados.detalles_ver",
+  EMPLEADOS_DETALLES_EDITAR: "empleados.detalles_editar",
+  EMPLEADOS_DOCUMENTOS_VER: "empleados.documentos_ver",
+  EMPLEADOS_DOCUMENTOS_GESTIONAR: "empleados.documentos_gestionar",
+  GESTION_INFORMACION_VER: "gestion_informacion.ver",
+  GESTION_INFORMACION_GESTIONAR: "gestion_informacion.gestionar",
 } as const;
 
 export type PermisoKey = (typeof PERMISOS_SISTEMA)[keyof typeof PERMISOS_SISTEMA];
@@ -994,5 +1003,62 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     nombre: "Asociar empleados",
     descripcion:
       "Permite crear, editar y eliminar la asociación entre un empleado y su usuario CrossChex.",
+  },
+  {
+    id: PERMISOS_SISTEMA.CARGOS_VER,
+    modulo: "Gestión Humana",
+    nombre: "Ver cargos",
+    descripcion: "Permite consultar el catálogo de cargos de la empresa.",
+  },
+  {
+    id: PERMISOS_SISTEMA.CARGOS_GESTIONAR,
+    modulo: "Gestión Humana",
+    nombre: "Gestionar cargos",
+    descripcion:
+      "Permite crear, renombrar, activar/desactivar cargos y definir si exigen correo corporativo.",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_EDITAR,
+    modulo: "Gestión Humana",
+    nombre: "Editar cargo y correo del colaborador",
+    descripcion: "Permite cambiar el cargo y el correo corporativo de un colaborador.",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_DETALLES_VER,
+    modulo: "Gestión Humana",
+    nombre: "Ver detalles del colaborador",
+    descripcion:
+      "Permite consultar datos personales sensibles del colaborador (EPS, ARL, dirección, teléfonos, núcleo familiar y estudios).",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_DETALLES_EDITAR,
+    modulo: "Gestión Humana",
+    nombre: "Editar detalles del colaborador",
+    descripcion:
+      "Permite registrar y modificar los datos personales sensibles del colaborador.",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_VER,
+    modulo: "Gestión Humana",
+    nombre: "Descargar soportes del colaborador",
+    descripcion: "Permite ver y descargar los soportes privados (estudios y certificado bancario).",
+  },
+  {
+    id: PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_GESTIONAR,
+    modulo: "Gestión Humana",
+    nombre: "Gestionar soportes del colaborador",
+    descripcion: "Permite adjuntar y eliminar los soportes privados del colaborador.",
+  },
+  {
+    id: PERMISOS_SISTEMA.GESTION_INFORMACION_VER,
+    modulo: "Gestión Humana",
+    nombre: "Ver gestión de información",
+    descripcion: "Permite consultar los catálogos de EPS, ARL y fondos de pensiones.",
+  },
+  {
+    id: PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR,
+    modulo: "Gestión Humana",
+    nombre: "Gestionar información (EPS, ARL, fondos)",
+    descripcion: "Permite agregar, renombrar y activar/desactivar EPS, ARL y fondos de pensiones.",
   },
 ];

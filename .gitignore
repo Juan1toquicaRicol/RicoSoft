@@ -29,6 +29,7 @@ server/.env.*
 # ...pero los ejemplos SÍ deben versionarse (documentan qué variables existen, sin valores reales).
 !.env.example
 !server/.env.example
+!server/.env.integration.qa.example
 
 # Uploaded files (local disk storage, not versioned)
 server/uploads/

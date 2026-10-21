@@ -114,6 +114,13 @@ export const CATALOGO_MODULOS: ModuloDef[] = [
     nombre: "Gestión Humana",
     secciones: [
       { clave: "empleados", nombre: "Empleados", prefijo: "empleados" },
+      { clave: "cargos", nombre: "Cargos", prefijo: "cargos", exigeVer: true },
+      {
+        clave: "gestion_informacion",
+        nombre: "Gestión de información",
+        prefijo: "gestion_informacion",
+        exigeVer: true,
+      },
       { clave: "permisos_laborales", nombre: "Permisos laborales", prefijo: "permisos_laborales" },
       { clave: "faltas", nombre: "Faltas y llamados de atención", prefijo: "faltas" },
       { clave: "biometrico", nombre: "Biométrico", prefijo: "biometrico" },

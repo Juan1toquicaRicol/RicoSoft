@@ -27,6 +27,9 @@ interface ComboboxProps {
   emptyText?: string;
   disabled?: boolean;
   className?: string;
+  /** id del botón disparador, para asociarlo a un <Label htmlFor>. */
+  id?: string;
+  "aria-label"?: string;
   /** Si es false (campos obligatorios), volver a hacer clic en la opción ya
    * elegida no la deselecciona — se comporta como un <Select> normal.
    * Por defecto true (permite volver a "sin selección" con un clic). */
@@ -61,6 +64,8 @@ export function Combobox({
   emptyText = "Sin resultados.",
   disabled,
   className,
+  id,
+  "aria-label": ariaLabel,
   clearable = true,
   onSearchChange,
   loadingOptions,
@@ -88,7 +93,9 @@ export function Combobox({
         <Button
           type="button"
           variant="outline"
+          id={id}
           role="combobox"
+          aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled}
           className={cn(
