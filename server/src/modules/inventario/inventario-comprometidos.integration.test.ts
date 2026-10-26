@@ -134,10 +134,17 @@ describe.skipIf(!RUN)(
       const usuarioIds = usuariosPrueba.map((u) => u.id);
       await prisma.auditoria.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
       await prisma.user.deleteMany({ where: { id: { in: usuarioIds } } });
-      await prisma.rol.deleteMany({
-        where: { tenantId: tenantRealId, nombre: { contains: sufijo } },
-      });
-      await prisma.tenant.deleteMany({ where: { id: tenantFakeId } });
+      // Un `where` con valor `undefined` NO filtra en Prisma: si beforeAll falló
+      // antes de asignar estos ids, un deleteMany({ id: undefined }) apuntaría a
+      // TODOS los tenants. Solo se borra lo que este archivo creó, si existe.
+      if (tenantRealId) {
+        await prisma.rol.deleteMany({
+          where: { tenantId: tenantRealId, nombre: { contains: sufijo } },
+        });
+      }
+      if (tenantFakeId) {
+        await prisma.tenant.deleteMany({ where: { id: tenantFakeId } });
+      }
     });
 
     it("responde 400 si itemRowId no es un entero positivo", async () => {

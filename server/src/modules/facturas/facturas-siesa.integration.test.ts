@@ -150,6 +150,9 @@ describe.skipIf(!RUN)(
       app = createApp();
 
       const passwordHash = await bcrypt.hash(PASSWORD, 10);
+      // Cada id se registra en cuanto el tenant existe: si una creación posterior
+      // falla, el afterAll igualmente limpia los que ya se crearon (antes quedaban
+      // huérfanos porque los ids se asignaban recién tras crear los tres).
       const tenantA = await prisma.tenant.create({
         data: {
           nombre: `Fact Siesa A ${sufijo}`,
@@ -157,6 +160,7 @@ describe.skipIf(!RUN)(
           siesaCiaId: CIA_A,
         },
       });
+      tenantAId = tenantA.id;
       const tenantB = await prisma.tenant.create({
         data: {
           nombre: `Fact Siesa B ${sufijo}`,
@@ -164,11 +168,10 @@ describe.skipIf(!RUN)(
           siesaCiaId: CIA_B,
         },
       });
+      tenantBId = tenantB.id;
       const tenantSinSiesa = await prisma.tenant.create({
         data: { nombre: `Fact Siesa Sin Cia ${sufijo}`, subdomain: `test-fact-siesa-sc-${sufijo}` },
       });
-      tenantAId = tenantA.id;
-      tenantBId = tenantB.id;
       tenantSinSiesaId = tenantSinSiesa.id;
 
       const rolVer = await prisma.rol.create({
@@ -213,7 +216,11 @@ describe.skipIf(!RUN)(
 
     afterAll(async () => {
       const { prisma } = await import("../../config/prisma");
-      const tenantIds = [tenantAId, tenantBId, tenantSinSiesaId];
+      // Solo los tenants que este archivo creó (ids definidos).
+      const tenantIds = [tenantAId, tenantBId, tenantSinSiesaId].filter(
+        (id): id is string => typeof id === "string",
+      );
+      if (tenantIds.length === 0) return;
       await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });

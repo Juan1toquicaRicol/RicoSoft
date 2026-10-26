@@ -215,6 +215,7 @@ Para automatizar arancel/IVA harían falta: fuente oficial y fecha de vigencia p
 
 Copia fiel (ID, decisión y dueño propuesto) del registro canónico `IMPORTACIONES_REGISTRO_DECISIONES_2026-10-26.md`; opciones, impacto,
 dependencias y trabajo bloqueado están allí. **Ninguna está aprobada.** La numeración anterior de esta sección (D-1…D-9) queda sustituida.
+Para resolverlas con los responsables existe el paquete `IMPORTACIONES_PAQUETE_DECISIONES_2026-10-26.md` (material de preparación aprobado por el director; **no** aprueba ninguna decisión).
 
 | ID | Decisión | Dueño propuesto |
 |---|---|---|
@@ -401,3 +402,30 @@ No se hizo commit, push, merge, reset, migración, limpieza ni deploy, y no se t
 escritura en producción, `saas_dev` ni Siesa. En la ronda anterior, las únicas escrituras en QA fueron las corridas de la suite de
 integración con los fixtures propios de cada prueba. No se imprimieron credenciales ni contenido de `.env`. `MEMORY.md` no se
 actualizó (no hay decisión aprobada). El árbol de trabajo se preservó íntegro.
+
+### I.10 Tercera ronda: paquete de decisiones y arreglos de setup/teardown de pruebas
+
+**Paquete de decisiones.** `IMPORTACIONES_PAQUETE_DECISIONES_2026-10-26.md`: fichas D-1…D-11. Pregunta, responsable (rol), opciones, impacto,
+dependencias y trabajo bloqueado están copiados del registro; los "datos requeridos", los "criterios de aceptación" y el orden de resolución
+sugerido son propuestas de Claude. El director lo aprobó como **material de preparación**, no como aprobación de las decisiones.
+
+**Arreglos de setup/teardown (4 archivos de integración).** No se cambió ninguna expectativa ni se tocó código de producto; la limpieza se
+limita a lo que crea cada archivo. En todos: el ID se registra en cuanto el recurso se crea, se filtran los `undefined` y `$disconnect` va en `finally`.
+
+| Archivo | Defecto | Corrección |
+|---|---|---|
+| `server/src/modules/auth/auth-register.integration.test.ts` | El `afterAll` pasaba `undefined` dentro de `in` si `beforeAll` fallaba (el `PrismaClientValidationError` del log) | Filtra IDs no definidos; borra solo si hay departamentos propios |
+| `server/src/modules/inventario/inventario-comprometidos.integration.test.ts` | `tenant.deleteMany({ id: undefined })` equivale a un `deleteMany` sin filtro (Prisma ignora `undefined`); el borrado de roles también perdía el filtro de tenant. Lo frenaron las FK, no el código | Cada borrado se condiciona a que su ID exista |
+| `server/src/modules/facturas/facturas-siesa.integration.test.ts` | Los IDs se asignaban tras crear los tres tenants: una creación posterior fallida dejaba huérfanos a los anteriores | ID asignado al crear cada tenant; sin IDs propios no se borra nada |
+| `server/src/modules/comercial/pedidos-compromiso.integration.test.ts` | Mismo problema de IDs asignados tarde | Lista `tenantsCreados`; sin tenants propios no se borra nada |
+
+**Estado de verificación de estos arreglos: implementados y verificados estáticamente** (`tsc`, ESLint y Prettier limpios). **No están probados en integración.**
+
+Aclaraciones obligatorias:
+- **La integración no se volvió a ejecutar** después de estos cambios.
+- **El estado del gate global sigue sin verificar tras los cambios.** El resultado de I.4 (8 pruebas fallidas, 8 errores de hook, 40 omitidas) corresponde a la corrida **anterior** a estos arreglos; el resultado posterior se desconoce. Los arreglos no corrigen las causas de datos de QA (D-11), de modo que no se espera un gate verde por sí solos.
+- **La hipótesis de que los tenants residuales "Fact Siesa" provienen de `facturas-siesa` NO está comprobada.** Es compatible con el defecto (IDs asignados tarde) pero no se reprodujo; el origen real queda **NO VERIFICADO**.
+- **No se tocó QA** (ningún dato modificado, ninguna limpieza) y **no se aprobó ninguna de las decisiones D-1…D-11**.
+- La validación de estos cambios deberá hacerse más adelante en una **base desechable**, no en la QA compartida.
+
+**Siguiente paso:** el director revisa el paquete y se resuelven las decisiones con sus responsables. La captura de volumen en la UI sigue diferida hasta resolver D-3.

@@ -1025,19 +1025,6 @@ function NuevaOrdenIntlPage() {
                               }}
                             />
                           </div>
-                          {item._origen && (
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "mt-1 text-[9px] px-1.5 py-0",
-                                item._origen === "siesa"
-                                  ? "border-blue-200 bg-blue-50 text-blue-700"
-                                  : "border-slate-300 bg-slate-50 text-slate-500",
-                              )}
-                            >
-                              {item._origen === "siesa" ? "Siesa" : "Manual"}
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell className="px-2 py-1.5">
                           <Input

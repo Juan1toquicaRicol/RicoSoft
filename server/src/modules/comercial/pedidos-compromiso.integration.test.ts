@@ -145,6 +145,9 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
   let tenantId: string;
   let otroTenantId: string;
   let sinSiesaId: string;
+  // Ids de los tenants que ESTE archivo llegó a crear (se registran uno a uno,
+  // para que el afterAll limpie también si beforeAll falla a mitad de camino).
+  const tenantsCreados: string[] = [];
   let token: string;
   let otroToken: string;
   let tokenSinSiesa: string;
@@ -181,14 +184,17 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
 
   beforeAll(async () => {
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
-    const mk = (etiqueta: string, siesaCiaId?: number) =>
-      prisma.tenant.create({
+    const mk = async (etiqueta: string, siesaCiaId?: number) => {
+      const tenant = await prisma.tenant.create({
         data: {
           nombre: `Test Compromiso ${etiqueta} ${sufijo}`,
           subdomain: `test-compromiso-${etiqueta}-${sufijo}`,
           ...(siesaCiaId ? { siesaCiaId } : {}),
         },
       });
+      tenantsCreados.push(tenant.id);
+      return tenant;
+    };
     const [a, b, c] = [await mk("a", CIA_ID), await mk("b", OTRA_CIA_ID), await mk("nosiesa")];
     tenantId = a.id;
     otroTenantId = b.id;
@@ -235,14 +241,22 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
   });
 
   afterAll(async () => {
-    const ids = [tenantId, otroTenantId, sinSiesaId];
-    await prisma.pedidoComercialItem.deleteMany({ where: { pedido: { tenantId: { in: ids } } } });
-    await prisma.pedidoComercial.deleteMany({ where: { tenantId: { in: ids } } });
-    await prisma.auditoria.deleteMany({ where: { tenantId: { in: ids } } });
-    await prisma.user.deleteMany({ where: { tenantId: { in: ids } } });
-    await prisma.rol.deleteMany({ where: { tenantId: { in: ids } } });
-    await prisma.tenant.deleteMany({ where: { id: { in: ids } } });
-    await prisma.$disconnect();
+    const ids = [...tenantsCreados];
+    try {
+      // Sin tenants propios no se borra nada (un filtro vacío/undefined no debe ampliar el alcance).
+      if (ids.length > 0) {
+        await prisma.pedidoComercialItem.deleteMany({
+          where: { pedido: { tenantId: { in: ids } } },
+        });
+        await prisma.pedidoComercial.deleteMany({ where: { tenantId: { in: ids } } });
+        await prisma.auditoria.deleteMany({ where: { tenantId: { in: ids } } });
+        await prisma.user.deleteMany({ where: { tenantId: { in: ids } } });
+        await prisma.rol.deleteMany({ where: { tenantId: { in: ids } } });
+        await prisma.tenant.deleteMany({ where: { id: { in: ids } } });
+      }
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it("sin vínculo ERP -> 200 SIN_VINCULO_ERP y NO consulta Siesa", async () => {

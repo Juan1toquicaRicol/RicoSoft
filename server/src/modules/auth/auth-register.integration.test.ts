@@ -59,12 +59,20 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
       select: { id: true },
     });
     const userIds = usuariosDePrueba.map((u) => u.id);
-    await prisma.auditoria.deleteMany({ where: { usuarioId: { in: userIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-    await prisma.departamento.deleteMany({
-      where: { id: { in: [departamentoSistemasId, departamentoNormalId] } },
-    });
-    await prisma.$disconnect();
+    // Si beforeAll falló antes de crear los departamentos, sus ids son undefined
+    // (Prisma rechaza `undefined` dentro de `in`): solo se borra lo creado aquí.
+    const departamentoIds = [departamentoSistemasId, departamentoNormalId].filter(
+      (id): id is string => typeof id === "string",
+    );
+    try {
+      await prisma.auditoria.deleteMany({ where: { usuarioId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      if (departamentoIds.length > 0) {
+        await prisma.departamento.deleteMany({ where: { id: { in: departamentoIds } } });
+      }
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it("1. rechaza el registro si el departamento elegido tiene esSistemas=true (no crea el usuario)", async () => {

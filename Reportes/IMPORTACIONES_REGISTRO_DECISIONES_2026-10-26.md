@@ -4,6 +4,11 @@
 `IMPORTACIONES_AUDITORIA_EVOLUCION_2026-10-26.md`). Este registro es la **fuente canónica de la numeración D-1 a D-11**; el informe
 la copia sin cambios en su sección E.
 
+**Paquete de decisiones:** `IMPORTACIONES_PAQUETE_DECISIONES_2026-10-26.md` presenta cada D-1…D-11 en fichas para resolverlas con sus
+responsables. El director lo aprobó **solo como material de preparación**: no aprueba ninguna decisión. Sus "datos requeridos", sus
+"criterios de aceptación" y el orden de resolución sugerido son propuestas de Claude hasta que el director los revise y confirme.
+Los responsables siguen siendo roles hasta que el director confirme personas.
+
 Estado: **ninguna decisión de esta lista está aprobada**. Este registro no las toma; identifica quién debe tomarlas,
 qué opciones hay, qué impacto tienen y qué trabajo queda bloqueado hasta que se resuelvan. Hasta entonces el sistema
 **no** calcula, alerta ni exporta con valores supuestos.
@@ -65,9 +70,9 @@ Tenants residuales (requieren autorización del administrador antes de eliminars
 
 | ID | Nombre | Creado | Origen |
 |---|---|---|---|
-| `541ece5e-38cd-4b42-addc-86889b6fc53e` | Fact Siesa A 90c6cbcc | 2026-10-09 | Corrida anterior de `facturas-siesa` (previa a este trabajo) |
-| `f69ebdc7-50dc-464e-9241-b91fc2613e59` | Fact Siesa B 90c6cbcc | 2026-10-09 | ídem |
-| `4b0bb84e-7809-4712-babe-b207c1a6cb3c` | Fact Siesa Sin Cia 90c6cbcc | 2026-10-09 | ídem |
+| `541ece5e-38cd-4b42-addc-86889b6fc53e` | Fact Siesa A 90c6cbcc | 2026-10-09 | Origen NO VERIFICADO: el nombre coincide con `facturas-siesa` (hipótesis no comprobada); fecha previa a este trabajo |
+| `f69ebdc7-50dc-464e-9241-b91fc2613e59` | Fact Siesa B 90c6cbcc | 2026-10-09 | ídem (hipótesis no comprobada) |
+| `4b0bb84e-7809-4712-babe-b207c1a6cb3c` | Fact Siesa Sin Cia 90c6cbcc | 2026-10-09 | ídem (hipótesis no comprobada) |
 | `bd9da495-ca3c-40a4-9284-36ea2f5884ba` | Lote Hitos A 62349322 | 2026-10-26 | Primera corrida de mis pruebas (limpieza defectuosa, ya corregida) |
 | `ec2ee3a9-6c6f-42a2-8356-7fa151d0ba5c` | Lote Hitos B 62349322 | 2026-10-26 | ídem |
 
