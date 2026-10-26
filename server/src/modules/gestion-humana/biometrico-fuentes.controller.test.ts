@@ -13,6 +13,8 @@ import type { Response } from "express";
 const findManyMock = vi.fn();
 const findFirstMock = vi.fn();
 const createMock = vi.fn();
+const countMock = vi.fn();
+const logCountMock = vi.fn();
 const updateMock = vi.fn();
 const auditoriaCreateMock = vi.fn();
 
@@ -34,9 +36,11 @@ vi.mock("../../config/prisma", () => ({
       findMany: (...args: unknown[]) => findManyMock(...args),
       findFirst: (...args: unknown[]) => findFirstMock(...args),
       create: (...args: unknown[]) => createMock(...args),
+      count: (...args: unknown[]) => countMock(...args),
       update: (...args: unknown[]) => updateMock(...args),
     },
     auditoria: { create: (...args: unknown[]) => auditoriaCreateMock(...args) },
+    sincronizacionBiometricoLog: { count: (...args: unknown[]) => logCountMock(...args) },
   },
 }));
 
@@ -78,6 +82,10 @@ const FUENTE_TENANT_A = {
 
 describe("biometrico-fuentes.controller", () => {
   beforeEach(() => {
+    countMock.mockReset();
+    countMock.mockResolvedValue(0);
+    logCountMock.mockReset();
+    logCountMock.mockResolvedValue(0);
     findManyMock.mockReset();
     findFirstMock.mockReset();
     createMock.mockReset();
@@ -196,6 +204,92 @@ describe("biometrico-fuentes.controller", () => {
       const dataEnviada = createMock.mock.calls[0][0].data;
       expect(dataEnviada).not.toHaveProperty("mdbPath");
       expect(Object.keys(dataEnviada).sort()).toEqual(["nombre", "proveedor", "tenantId"]);
+    });
+  });
+
+  describe("una sola fuente activa por instalación", () => {
+    it("crear: si ya hay una fuente activa (de cualquier tenant) responde 409 sin crear y sin revelar de quién es", async () => {
+      countMock.mockResolvedValue(1);
+      const { crearFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await crearFuenteBiometrica(fakeReq({ body: { nombre: "crosschex-otra" } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(createMock).not.toHaveBeenCalled();
+      expect(countMock).toHaveBeenCalledWith({ where: { activa: true } });
+      const mensaje = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0].message as string;
+      expect(mensaje).toContain("Ya hay una fuente biométrica activa");
+      expect(mensaje).not.toContain("tenant");
+    });
+
+    it("activar una fuente inactiva con otra activa responde 409 y no actualiza", async () => {
+      findFirstMock.mockResolvedValue({ ...FUENTE_TENANT_A, activa: false });
+      countMock.mockResolvedValue(1);
+      const { actualizarFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await actualizarFuenteBiometrica(
+        fakeReq({ params: { id: "fuente-1" }, body: { activa: true } }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(countMock).toHaveBeenCalledWith({
+        where: { activa: true, id: { not: "fuente-1" } },
+      });
+    });
+
+    it("crear: con una sincronización EN_CURSO responde 409 y no crea", async () => {
+      logCountMock.mockResolvedValue(1);
+      const { crearFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await crearFuenteBiometrica(fakeReq({ body: { nombre: "crosschex-otra" } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(createMock).not.toHaveBeenCalled();
+      expect(logCountMock).toHaveBeenCalledWith({ where: { estado: "EN_CURSO" } });
+    });
+
+    it("activar una fuente con una sincronización EN_CURSO (de cualquier fuente) responde 409 y no actualiza", async () => {
+      findFirstMock.mockResolvedValue({ ...FUENTE_TENANT_A, activa: false });
+      countMock.mockResolvedValue(0);
+      logCountMock.mockResolvedValue(1);
+      const { actualizarFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await actualizarFuenteBiometrica(
+        fakeReq({ params: { id: "fuente-1" }, body: { activa: true } }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(updateMock).not.toHaveBeenCalled();
+    });
+
+    it("activar una fuente inactiva sin otras activas sí se permite", async () => {
+      findFirstMock.mockResolvedValue({ ...FUENTE_TENANT_A, activa: false });
+      updateMock.mockResolvedValue({ ...FUENTE_TENANT_A, activa: true });
+      const { actualizarFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await actualizarFuenteBiometrica(
+        fakeReq({ params: { id: "fuente-1" }, body: { activa: true } }),
+        res,
+      );
+
+      expect(updateMock).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(409);
+    });
+
+    it("desactivar o renombrar no consulta el límite", async () => {
+      findFirstMock.mockResolvedValue(FUENTE_TENANT_A);
+      updateMock.mockResolvedValue({ ...FUENTE_TENANT_A, activa: false });
+      const { actualizarFuenteBiometrica } = await import("./biometrico-fuentes.controller");
+      const res = fakeRes();
+      await actualizarFuenteBiometrica(
+        fakeReq({ params: { id: "fuente-1" }, body: { activa: false } }),
+        res,
+      );
+      expect(countMock).not.toHaveBeenCalled();
+      expect(updateMock).toHaveBeenCalled();
     });
   });
 

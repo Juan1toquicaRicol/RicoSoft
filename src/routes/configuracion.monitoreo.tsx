@@ -297,7 +297,7 @@ function FilaJob({ job }: { job: JobMonitoreado }) {
 }
 
 function SeccionJobs() {
-  const { jobs, loading, error, refresh } = useMonitoreoJobs();
+  const { jobs, loading, error, refresh, generadoEn } = useMonitoreoJobs();
 
   return (
     <section className="bg-white rounded-lg border border-slate-200 shadow-2xs p-5 space-y-4">
@@ -306,13 +306,22 @@ function SeccionJobs() {
           <Activity className="h-5 w-5 text-blue-600" />
           <h2 className="text-lg font-bold text-slate-800">Procesos en background</h2>
         </div>
-        <Button variant="outline" size="icon" onClick={() => refresh()} title="Actualizar">
-          <RefreshCw className={loading ? "animate-spin h-4 w-4" : "h-4 w-4"} />
-        </Button>
+        <div className="flex items-center gap-3">
+          {generadoEn && (
+            <span className="text-[11px] text-slate-500">
+              Se actualiza solo cada 30 s · última:{" "}
+              {new Date(generadoEn).toLocaleTimeString("es-CO")}
+            </span>
+          )}
+          <Button variant="outline" size="icon" onClick={() => refresh()} title="Actualizar">
+            <RefreshCw className={loading ? "animate-spin h-4 w-4" : "h-4 w-4"} />
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-slate-500">
-        Los procesos programados reportan su actividad desde el último reinicio de este servidor; la
-        sincronización a demanda persiste su historial entre reinicios.
+        <strong>No configurado</strong> significa que el proceso está apagado en el servidor (no es
+        una falla). Los procesos programados reportan su actividad desde el último reinicio de este
+        servidor; la sincronización a demanda persiste su historial entre reinicios.
       </p>
 
       {error && <p className="text-sm text-slate-900 font-semibold">{error}</p>}

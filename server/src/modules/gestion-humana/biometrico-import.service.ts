@@ -33,6 +33,22 @@ export class SincronizacionEnCursoError extends Error {
   }
 }
 
+/**
+ * Candado global de instalación: hay UN solo CrossChex.mdb, así que mientras
+ * cualquier fuente tenga una corrida EN_CURSO ninguna otra puede empezar (el
+ * candado por fuente no cubre el caso desactivar A / activar B a media corrida).
+ * Hereda de SincronizacionEnCursoError: quien ya la maneja (job, endpoint
+ * manual) la trata igual. El mensaje no revela nombres ni tenants.
+ */
+export class SincronizacionEnInstalacionError extends SincronizacionEnCursoError {
+  constructor() {
+    super("");
+    this.message =
+      "Hay otra sincronización biométrica en curso en esta instalación (un único CrossChex.mdb). Espera a que termine.";
+    this.name = "SincronizacionEnInstalacionError";
+  }
+}
+
 export class FuenteBiometricaNoEncontradaError extends Error {
   constructor(fuenteNombre: string) {
     super(
@@ -94,6 +110,7 @@ export async function dryRunImportacionHistorica(
     const vinculados = await prisma.empleadoBiometrico.findMany({
       where: {
         tenantId: fuente.tenantId,
+        fuenteId: fuente.id,
         proveedor: fuente.proveedor,
         externalUserId: { in: idsUnicos },
       },
@@ -173,6 +190,11 @@ export async function sincronizarFuenteBiometrica(
   const tamanoLote = opciones.tamanoLote ?? TAMANO_LOTE_DEFAULT;
   const fuente = await obtenerFuenteOrThrow(fuenteNombre);
 
+  const enCursoEnOtraFuente = await prisma.sincronizacionBiometricoLog.count({
+    where: { estado: "EN_CURSO", fuenteId: { not: fuente.id } },
+  });
+  if (enCursoEnOtraFuente > 0) throw new SincronizacionEnInstalacionError();
+
   let log;
   try {
     log = await prisma.sincronizacionBiometricoLog.create({
@@ -206,6 +228,9 @@ export async function sincronizarFuenteBiometrica(
       const vinculos = await prisma.empleadoBiometrico.findMany({
         where: {
           tenantId: fuente.tenantId,
+          // El ID del biométrico es propio de UNA instalación (fuente): el vínculo
+          // se busca por fuente, no por todo lo que comparta tenant y proveedor.
+          fuenteId: fuente.id,
           proveedor: fuente.proveedor,
           externalUserId: { in: idsUnicos },
           activo: true,

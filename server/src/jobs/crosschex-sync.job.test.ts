@@ -136,8 +136,8 @@ describe("crosschex-sync.job", () => {
   });
 
   describe("ejecutarCicloSincronizacionCrossChex", () => {
-    it("sincroniza cada fuente activa, una por una", async () => {
-      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }, { nombre: "sede-b" }]);
+    it("sincroniza la fuente activa", async () => {
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
       sincronizarFuenteBiometricaMock.mockResolvedValue(REPORTE_OK());
 
       const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
@@ -147,37 +147,49 @@ describe("crosschex-sync.job", () => {
         where: { activa: true },
         select: { nombre: true },
       });
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(2);
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(1, "sede-a", {
-        tamanoLote: 500,
-      });
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(2, "sede-b", {
-        tamanoLote: 500,
-      });
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(1);
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledWith("sede-a", { tamanoLote: 500 });
     });
 
-    it("una fuente con lock ocupado (SincronizacionEnCursoError) se omite sin detener el ciclo para las demás", async () => {
+    it("con más de una fuente activa NO sincroniza ninguna (un solo .mdb por instalación) y lo deja registrado", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
       fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }, { nombre: "sede-b" }]);
-      sincronizarFuenteBiometricaMock
-        .mockRejectedValueOnce(new SincronizacionEnCursoErrorFake("ya en curso"))
-        .mockResolvedValueOnce(REPORTE_OK({ fuenteNombre: "sede-b" }));
 
       const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
       await expect(ejecutarCicloSincronizacionCrossChex()).resolves.toBeUndefined();
 
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(2);
+      expect(sincronizarFuenteBiometricaMock).not.toHaveBeenCalled();
+      const mensaje = String(error.mock.calls[0]?.[0]);
+      expect(mensaje).toContain("2 fuentes biométricas activas");
+      // El mensaje no revela nombres de fuentes (podrían ser de otro tenant).
+      expect(mensaje).not.toContain("sede-a");
+      expect(mensaje).not.toContain("sede-b");
+      error.mockRestore();
     });
 
-    it("un error inesperado en una fuente no detiene el ciclo para las demás", async () => {
-      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }, { nombre: "sede-b" }]);
-      sincronizarFuenteBiometricaMock
-        .mockRejectedValueOnce(new Error("fallo de red inesperado"))
-        .mockResolvedValueOnce(REPORTE_OK({ fuenteNombre: "sede-b" }));
+    it("una fuente con lock ocupado (SincronizacionEnCursoError) se omite sin lanzar", async () => {
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockRejectedValueOnce(
+        new SincronizacionEnCursoErrorFake("ya en curso"),
+      );
 
       const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
       await expect(ejecutarCicloSincronizacionCrossChex()).resolves.toBeUndefined();
 
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(2);
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("un error inesperado en la fuente no lanza: queda en el log del proceso", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockRejectedValueOnce(new Error("fallo de red inesperado"));
+
+      const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
+      await expect(ejecutarCicloSincronizacionCrossChex()).resolves.toBeUndefined();
+
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalled();
+      error.mockRestore();
     });
 
     it("una corrida que termina en estado FALLIDO no lanza excepción (ya viene resuelta con el reporte)", async () => {

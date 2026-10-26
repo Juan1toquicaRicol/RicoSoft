@@ -6,6 +6,7 @@ const logFindManyMock = vi.fn();
 const logCountMock = vi.fn();
 const logFindFirstMock = vi.fn();
 const fuenteFindFirstMock = vi.fn();
+const fuenteCountMock = vi.fn();
 const auditoriaCreateMock = vi.fn();
 const sincronizarFuenteBiometricaMock = vi.fn();
 const leerConfigSchedulerCrossChexMock = vi.fn();
@@ -20,7 +21,10 @@ vi.mock("../../config/prisma", () => ({
       count: (...args: unknown[]) => logCountMock(...args),
       findFirst: (...args: unknown[]) => logFindFirstMock(...args),
     },
-    fuenteBiometrica: { findFirst: (...args: unknown[]) => fuenteFindFirstMock(...args) },
+    fuenteBiometrica: {
+      findFirst: (...args: unknown[]) => fuenteFindFirstMock(...args),
+      count: (...args: unknown[]) => fuenteCountMock(...args),
+    },
     auditoria: { create: (...args: unknown[]) => auditoriaCreateMock(...args) },
   },
 }));
@@ -88,6 +92,8 @@ describe("biometrico-sincronizaciones.controller", () => {
     logCountMock.mockReset();
     logFindFirstMock.mockReset();
     fuenteFindFirstMock.mockReset();
+    fuenteCountMock.mockReset();
+    fuenteCountMock.mockResolvedValue(1);
     auditoriaCreateMock.mockReset();
     sincronizarFuenteBiometricaMock.mockReset();
     leerConfigSchedulerCrossChexMock.mockReset();
@@ -187,6 +193,23 @@ describe("biometrico-sincronizaciones.controller", () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(sincronizarFuenteBiometricaMock).not.toHaveBeenCalled();
+    });
+
+    it("409 si hay más de una fuente activa en la instalación: no sincroniza y no revela de quién son", async () => {
+      fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
+      fuenteCountMock.mockResolvedValue(2);
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
+      const res = fakeRes();
+      await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(fuenteCountMock).toHaveBeenCalledWith({ where: { activa: true } });
+      expect(sincronizarFuenteBiometricaMock).not.toHaveBeenCalled();
+      expect(auditoriaCreateMock).not.toHaveBeenCalled();
+      const mensaje = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0].message as string;
+      expect(mensaje).toContain("2 fuentes biométricas activas");
+      expect(mensaje).not.toContain(FUENTE_A.nombre);
     });
 
     it("ejecuta el service existente con el nombre de la fuente y el tamaño de lote configurado (mismo que el scheduler)", async () => {

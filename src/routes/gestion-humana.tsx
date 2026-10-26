@@ -66,7 +66,7 @@ import { useGestionHumana } from "@/hooks/use-gestion-humana";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useCargosOpciones } from "@/hooks/use-cargos";
 import { GestionInformacionPanel } from "@/components/gestion-humana/gestion-informacion-panel";
-import { BiometricoFuentesPanel } from "@/components/gestion-humana/biometrico-fuentes-panel";
+import { BiometricoPanel } from "@/components/gestion-humana/biometrico-panel";
 import { SelectorArchivo } from "@/components/gestion-humana/selector-archivo";
 import { validarArchivoAdjunto } from "@/lib/archivo-adjunto";
 import { DetallePersonalCampos } from "@/components/gestion-humana/detalle-personal-campos";
@@ -132,6 +132,7 @@ function GestionHumana() {
   const puedeVerBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER);
   const puedeConfigurarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR);
   const puedeAsociarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR);
+  const puedeSincronizarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_SINCRONIZAR);
   const puedeGestionarInformacion = hasPermission(
     user,
     PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR,
@@ -601,7 +602,8 @@ function GestionHumana() {
       )}
 
       {activeTab === "biometrico" && puedeVerBiometrico && (
-        <BiometricoFuentesPanel
+        <BiometricoPanel
+          puedeSincronizar={puedeSincronizarBiometrico}
           puedeConfigurar={puedeConfigurarBiometrico}
           puedeAsociar={puedeAsociarBiometrico}
           empleados={empleados}

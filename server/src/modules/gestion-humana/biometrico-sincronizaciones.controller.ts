@@ -155,6 +155,17 @@ export async function sincronizarFuenteBiometricaManual(req: AuthenticatedReques
       return res.status(409).json({ message: "La fuente biométrica está desactivada." });
     }
 
+    // Misma regla que el proceso automático: con un solo CrossChex.mdb por
+    // instalación, si hay más de una fuente activa (datos antiguos o activaciones
+    // simultáneas) no se sincroniza ninguna, tampoco a mano. No se revela de quién
+    // son las otras fuentes.
+    const activas = await prisma.fuenteBiometrica.count({ where: { activa: true } });
+    if (activas > 1) {
+      return res.status(409).json({
+        message: `Hay ${activas} fuentes biométricas activas y solo se admite una por instalación (un único CrossChex.mdb). No se sincronizó nada; desactiva las sobrantes.`,
+      });
+    }
+
     const { tamanoLote } = leerConfigSchedulerCrossChex();
     const reporte = await sincronizarFuenteBiometrica(fuente.nombre, { tamanoLote });
 

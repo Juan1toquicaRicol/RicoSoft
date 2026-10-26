@@ -96,6 +96,19 @@ export async function obtenerFuenteBiometrica(req: AuthenticatedRequest, res: Re
  * entre esta fila y el archivo real es `nombre`, resuelto server-side por
  * quien configure el entorno — la API nunca ve ni acepta una ruta.
  */
+/**
+ * Con la configuración actual hay UN solo CrossChex.mdb por instalación
+ * (CROSSCHEX_MDB_PATH es global): todas las fuentes activas leerían el mismo
+ * archivo y sus marcaciones se copiarían a cada tenant. Por eso solo puede
+ * haber una fuente activa en toda la instalación. El mensaje no revela a qué
+ * tenant pertenece la otra fuente.
+ */
+const MENSAJE_FUENTE_ACTIVA_UNICA =
+  "Ya hay una fuente biométrica activa en esta instalación. Con la configuración actual (un solo archivo CrossChex.mdb) solo puede haber una; desactívala antes de activar otra.";
+
+const MENSAJE_SINCRONIZACION_EN_CURSO =
+  "Hay una sincronización biométrica en curso. Espera a que termine antes de crear o activar una fuente.";
+
 export async function crearFuenteBiometrica(req: AuthenticatedRequest, res: Response) {
   try {
     const tenantId = req.user!.tenantId;
@@ -111,6 +124,14 @@ export async function crearFuenteBiometrica(req: AuthenticatedRequest, res: Resp
       return res.status(400).json({
         message: `Proveedor no soportado. Valores permitidos: ${PROVEEDORES_SOPORTADOS.join(", ")}.`,
       });
+    }
+
+    if ((await prisma.fuenteBiometrica.count({ where: { activa: true } })) > 0) {
+      return res.status(409).json({ message: MENSAJE_FUENTE_ACTIVA_UNICA });
+    }
+    // Cambiar de fuente a media corrida dejaría leer el mismo .mdb para otro tenant.
+    if ((await prisma.sincronizacionBiometricoLog.count({ where: { estado: "EN_CURSO" } })) > 0) {
+      return res.status(409).json({ message: MENSAJE_SINCRONIZACION_EN_CURSO });
     }
 
     const fuente = await prisma.fuenteBiometrica.create({
@@ -164,6 +185,16 @@ export async function actualizarFuenteBiometrica(req: AuthenticatedRequest, res:
         return res.status(400).json({ message: "'activa' debe ser booleano." });
       }
       data.activa = activa;
+      if (activa && !fuente.activa) {
+        const otras = await prisma.fuenteBiometrica.count({
+          where: { activa: true, id: { not: id } },
+        });
+        if (otras > 0) return res.status(409).json({ message: MENSAJE_FUENTE_ACTIVA_UNICA });
+        const corridas = await prisma.sincronizacionBiometricoLog.count({
+          where: { estado: "EN_CURSO" },
+        });
+        if (corridas > 0) return res.status(409).json({ message: MENSAJE_SINCRONIZACION_EN_CURSO });
+      }
     }
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ message: "No se envió ningún campo válido para actualizar." });

@@ -59,6 +59,17 @@ export async function ejecutarCicloSincronizacionCrossChex(
     select: { nombre: true },
   });
 
+  // Un solo CrossChex.mdb por instalación (CROSSCHEX_MDB_PATH global): con más de
+  // una fuente activa se copiarían las mismas marcaciones a cada tenant. Se
+  // falla cerrado: no se sincroniza nada y se deja constancia en el monitoreo.
+  // El mensaje no incluye nombres ni tenants.
+  if (fuentes.length > 1) {
+    const mensaje = `Hay ${fuentes.length} fuentes biométricas activas y solo se admite una por instalación (un único CrossChex.mdb). No se sincronizó ninguna; desactiva las sobrantes.`;
+    console.error(`[crosschex-sync] ${mensaje}`);
+    reportarFalloEnCorrida("crosschex-sync", mensaje);
+    return;
+  }
+
   for (const fuente of fuentes) {
     try {
       const reporte = await sincronizarFuenteBiometrica(fuente.nombre, { tamanoLote });

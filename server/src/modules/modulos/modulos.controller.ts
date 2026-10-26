@@ -23,6 +23,14 @@ const PERMISO_CLAVE_HISTORICO: Record<string, string[]> = {
 };
 
 /**
+ * Mismo mecanismo para el `nombre`: si la fila del tenant sigue con un nombre
+ * histórico (nadie lo personalizó) se actualiza al nombre vigente del catálogo.
+ */
+const NOMBRE_HISTORICO: Record<string, string[]> = {
+  importaciones: ["Importaciones y Exportaciones"],
+};
+
+/**
  * Catálogo por defecto de módulos principales de la aplicación. Se usa para
  * poblar la tabla Modulo la primera vez que un tenant la consulta, ya que
  * los módulos existían antes como enlaces fijos del sidebar (sin registro
@@ -269,6 +277,29 @@ async function listarModulosDelTenant(tenantId: string): Promise<ModuloConDepart
           where: { id: m.id },
           data: { permisoClave: defecto.permisoClave },
         });
+      }),
+    );
+    modulos = await prisma.modulo.findMany({
+      where: whereAlcance(tenantId),
+      include: INCLUDE_DEPARTAMENTO,
+      orderBy: { orden: "asc" },
+    });
+  }
+
+  const nombresPorActualizar = propios.filter((m) => {
+    const defecto = CATALOGO_DEFECTO.find((d) => d.clave === m.clave);
+    return (
+      !!defecto &&
+      defecto.nombre !== m.nombre &&
+      (NOMBRE_HISTORICO[m.clave] ?? []).includes(m.nombre)
+    );
+  });
+
+  if (nombresPorActualizar.length > 0) {
+    await Promise.all(
+      nombresPorActualizar.map((m) => {
+        const defecto = CATALOGO_DEFECTO.find((d) => d.clave === m.clave)!;
+        return prisma.modulo.update({ where: { id: m.id }, data: { nombre: defecto.nombre } });
       }),
     );
     modulos = await prisma.modulo.findMany({

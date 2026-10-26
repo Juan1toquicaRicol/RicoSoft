@@ -31,6 +31,7 @@ const empleadoBiometricoFindManyMock = vi.fn();
 const marcacionFindManyMock = vi.fn();
 const marcacionCreateManyMock = vi.fn();
 const logCreateMock = vi.fn();
+const logCountMock = vi.fn();
 const logUpdateMock = vi.fn();
 
 class PrismaClientKnownRequestErrorFake extends Error {
@@ -60,6 +61,7 @@ vi.mock("../../config/prisma", () => ({
     },
     sincronizacionBiometricoLog: {
       create: (...args: unknown[]) => logCreateMock(...args),
+      count: (...args: unknown[]) => logCountMock(...args),
       update: (...args: unknown[]) => logUpdateMock(...args),
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -102,6 +104,8 @@ function filaCheckinout(overrides: Partial<CrossChexCheckinoutRow>): CrossChexCh
 
 describe("biometrico-import.service", () => {
   beforeEach(() => {
+    logCountMock.mockReset();
+    logCountMock.mockResolvedValue(0);
     obtenerMarcacionesDesdeMock.mockReset();
     fuenteFindUniqueMock.mockReset();
     fuenteUpdateMock.mockReset();
@@ -195,6 +199,22 @@ describe("biometrico-import.service", () => {
       await expect(ejecutarImportacionHistorica("crosschex-flexipack")).rejects.toThrow(
         SincronizacionEnCursoError,
       );
+      expect(obtenerMarcacionesDesdeMock).not.toHaveBeenCalled();
+    });
+
+    it("candado global: si otra fuente tiene una corrida EN_CURSO no empieza, sin crear log ni leer el MDB y sin revelar nombres", async () => {
+      logCountMock.mockResolvedValue(1);
+      const { ejecutarImportacionHistorica, SincronizacionEnCursoError } =
+        await import("./biometrico-import.service");
+
+      const promesa = ejecutarImportacionHistorica("crosschex-flexipack");
+      await expect(promesa).rejects.toThrow(SincronizacionEnCursoError);
+      await expect(promesa).rejects.toThrow(/otra sincronización biométrica en curso/);
+      await expect(promesa).rejects.not.toThrow(/crosschex-flexipack/);
+      expect(logCountMock).toHaveBeenCalledWith({
+        where: { estado: "EN_CURSO", fuenteId: { not: FUENTE_FAKE.id } },
+      });
+      expect(logCreateMock).not.toHaveBeenCalled();
       expect(obtenerMarcacionesDesdeMock).not.toHaveBeenCalled();
     });
 
@@ -321,7 +341,11 @@ describe("biometrico-import.service", () => {
 
       expect(empleadoBiometricoFindManyMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ tenantId: "tenant-B", proveedor: "anviz" }),
+          where: expect.objectContaining({
+            tenantId: "tenant-B",
+            fuenteId: "fuente-2",
+            proveedor: "anviz",
+          }),
         }),
       );
       // Nunca se consulta EmpleadoBiometrico sin acotar por tenantId — de lo

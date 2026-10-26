@@ -82,28 +82,36 @@ export interface JobMonitoreado {
 }
 
 /** Estado de los procesos en background (crons in-process + sincronización a demanda). */
+export const REFRESCO_JOBS_MS = 30_000;
+
 export function useMonitoreoJobs() {
   const [jobs, setJobs] = useState<JobMonitoreado[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [generadoEn, setGeneradoEn] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  // `silencioso`: el refresco automático no vacía la tabla ni muestra el spinner;
+  // si falla, conserva lo último que se vio y solo muestra el error.
+  const refresh = useCallback(async (silencioso = false) => {
+    if (!silencioso) setLoading(true);
     setError("");
     try {
       const data = await fetchAuth("/monitoreo/jobs");
       setJobs(Array.isArray(data?.jobs) ? data.jobs : []);
+      setGeneradoEn(typeof data?.generadoEn === "string" ? data.generadoEn : null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al obtener el estado de los procesos.");
-      setJobs([]);
+      if (!silencioso) setJobs([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
+    const id = setInterval(() => void refresh(true), REFRESCO_JOBS_MS);
+    return () => clearInterval(id);
   }, [refresh]);
 
-  return { jobs, loading, error, refresh };
+  return { jobs, loading, error, refresh, generadoEn };
 }
