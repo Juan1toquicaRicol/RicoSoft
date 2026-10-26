@@ -4,7 +4,10 @@ import type { Prisma } from "@prisma/client";
  * ConfiguracionComercial.siguienteConsecutivoPedidoComercial). */
 export const PRIMER_NUMERO_PEDIDO = 1;
 
-type DbConsecutivoPedido = Pick<Prisma.TransactionClient, "pedidoComercial" | "configuracionComercial">;
+type DbConsecutivoPedido = Pick<
+  Prisma.TransactionClient,
+  "pedidoComercial" | "configuracionComercial"
+>;
 
 /**
  * Siguiente número EFECTIVO de PedidoComercial:

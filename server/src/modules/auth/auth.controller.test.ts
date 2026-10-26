@@ -49,7 +49,12 @@ const ERROR_PRISMA = Object.assign(
 const ERROR_INFRA = new Error("connect ECONNREFUSED 10.0.0.5:1433 (user=sa)");
 
 const controladores = [
-  { nombre: "registro", fn: registerController, servicio: mocks.registerUserService, statusControlado: 400 },
+  {
+    nombre: "registro",
+    fn: registerController,
+    servicio: mocks.registerUserService,
+    statusControlado: 400,
+  },
   { nombre: "login", fn: loginController, servicio: mocks.loginUserService, statusControlado: 401 },
   {
     nombre: "seleccionarTenant",
@@ -77,17 +82,25 @@ describe("controladores de autenticación — saneamiento de errores", () => {
     it.each([
       ["Prisma", ERROR_PRISMA],
       ["infraestructura", ERROR_INFRA],
-    ])("error inesperado de %s -> 500 genérico, sin filtrar el mensaje y con log interno", async (_n, error) => {
-      servicio.mockRejectedValue(error);
-      const res = crearRes();
+    ])(
+      "error inesperado de %s -> 500 genérico, sin filtrar el mensaje y con log interno",
+      async (_n, error) => {
+        servicio.mockRejectedValue(error);
+        const res = crearRes();
 
-      await fn(req, res as never);
+        await fn(req, res as never);
 
-      expect(res.statusCode).toBe(500);
-      expect(res.body).toEqual({ message: MENSAJE_AUTH_INESPERADO });
-      expect(JSON.stringify(res.body)).not.toMatch(/prisma|1433|192\.168|ECONNREFUSED|auth\.service|sa\)/i);
-      expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Error inesperado"), error);
-    });
+        expect(res.statusCode).toBe(500);
+        expect(res.body).toEqual({ message: MENSAJE_AUTH_INESPERADO });
+        expect(JSON.stringify(res.body)).not.toMatch(
+          /prisma|1433|192\.168|ECONNREFUSED|auth\.service|sa\)/i,
+        );
+        expect(console.error).toHaveBeenCalledWith(
+          expect.stringContaining("Error inesperado"),
+          error,
+        );
+      },
+    );
 
     it("AuthError (controlado) conserva su mensaje y el status propio del endpoint", async () => {
       servicio.mockRejectedValue(new AuthError("Credenciales inválidas."));

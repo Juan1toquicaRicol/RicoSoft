@@ -51,7 +51,12 @@ describe("ejecutarAnalisis", () => {
 
     const resultado = await ejecutarAnalisis(
       CIA_ID,
-      config({ metrica: "margen", dimensionPrincipal: "cliente", ordenarPor: "margen", orden: "desc" }),
+      config({
+        metrica: "margen",
+        dimensionPrincipal: "cliente",
+        ordenarPor: "margen",
+        orden: "desc",
+      }),
     );
 
     expect(resultado.disponible).toBe(true);
@@ -107,14 +112,37 @@ describe("ejecutarAnalisis", () => {
 
   it("ventas por vendedor: agrega en Node sobre leerVentasDiariasPorVendedorSiesa (suma por vendedor)", async () => {
     vi.mocked(leerVentasDiariasPorVendedorSiesa).mockResolvedValue([
-      { vendedorRowId: 1, vendedorNombre: "V1", dia: new Date("2026-01-05"), neto: 100, documentos: 2 },
-      { vendedorRowId: 1, vendedorNombre: "V1", dia: new Date("2026-01-06"), neto: 50, documentos: 1 },
-      { vendedorRowId: 2, vendedorNombre: "V2", dia: new Date("2026-01-05"), neto: 10, documentos: 1 },
+      {
+        vendedorRowId: 1,
+        vendedorNombre: "V1",
+        dia: new Date("2026-01-05"),
+        neto: 100,
+        documentos: 2,
+      },
+      {
+        vendedorRowId: 1,
+        vendedorNombre: "V1",
+        dia: new Date("2026-01-06"),
+        neto: 50,
+        documentos: 1,
+      },
+      {
+        vendedorRowId: 2,
+        vendedorNombre: "V2",
+        dia: new Date("2026-01-05"),
+        neto: 10,
+        documentos: 1,
+      },
     ]);
 
     const resultado = await ejecutarAnalisis(
       CIA_ID,
-      config({ metrica: "ventas", dimensionPrincipal: "vendedor", ordenarPor: "neto", orden: "desc" }),
+      config({
+        metrica: "ventas",
+        dimensionPrincipal: "vendedor",
+        ordenarPor: "neto",
+        orden: "desc",
+      }),
     );
 
     expect(resultado.filas).toHaveLength(2);
@@ -173,7 +201,13 @@ describe("ejecutarAnalisis", () => {
 
     const resultado = await ejecutarAnalisis(
       CIA_ID,
-      config({ metrica: "margen", dimensionPrincipal: "cliente", limite: 2, orden: "desc", ordenarPor: "margen" }),
+      config({
+        metrica: "margen",
+        dimensionPrincipal: "cliente",
+        limite: 2,
+        orden: "desc",
+        ordenarPor: "margen",
+      }),
     );
 
     expect(resultado.filas).toHaveLength(2);

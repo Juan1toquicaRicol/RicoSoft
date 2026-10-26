@@ -104,7 +104,9 @@ function Campo({
 }) {
   return (
     <div className={className}>
-      <p className="text-[7.3px] font-semibold uppercase tracking-tight text-slate-500">{etiqueta}</p>
+      <p className="text-[7.3px] font-semibold uppercase tracking-tight text-slate-500">
+        {etiqueta}
+      </p>
       <p className="text-[8.8px] text-slate-900">{children}</p>
     </div>
   );
@@ -170,7 +172,9 @@ function ProformaImpresion() {
     setCreandoPedido(true);
     try {
       const pedido = await accionesPedido.crearDesdeProforma(proforma.id);
-      toast.success(`Pedido ${pedido.numeroFormateado ?? pedido.numero} creado desde esta proforma.`);
+      toast.success(
+        `Pedido ${pedido.numeroFormateado ?? pedido.numero} creado desde esta proforma.`,
+      );
       await refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "No fue posible crear el pedido.");
@@ -375,7 +379,10 @@ function ProformaImpresion() {
           const finMm = limites[i + 1];
           const altoTramoMm = Math.min(finMm - inicioMm, ALTO_UTIL_MM);
           const syPx = Math.max(0, Math.round(inicioMm * pxPorMmCanvas));
-          const shPx = Math.max(1, Math.min(canvas.height - syPx, Math.round(altoTramoMm * pxPorMmCanvas)));
+          const shPx = Math.max(
+            1,
+            Math.min(canvas.height - syPx, Math.round(altoTramoMm * pxPorMmCanvas)),
+          );
 
           const lienzo = document.createElement("canvas");
           lienzo.width = canvas.width;
@@ -396,7 +403,14 @@ function ProformaImpresion() {
               MARGEN_MM - 4,
             );
           }
-          pdf.addImage(lienzo.toDataURL("image/png"), "PNG", MARGEN_MM, MARGEN_MM, ANCHO_UTIL_MM, altoTramoMm);
+          pdf.addImage(
+            lienzo.toDataURL("image/png"),
+            "PNG",
+            MARGEN_MM,
+            MARGEN_MM,
+            ANCHO_UTIL_MM,
+            altoTramoMm,
+          );
         }
       }
 
@@ -479,7 +493,9 @@ function ProformaImpresion() {
             <span className="text-slate-500">Cotización:</span>
             {proforma.cotizacion ? (
               <Link to="/comercial/cotizaciones/$id" params={{ id: proforma.cotizacion.id }}>
-                <Badge variant="outline">COT-{String(proforma.cotizacion.numero).padStart(5, "0")}</Badge>
+                <Badge variant="outline">
+                  COT-{String(proforma.cotizacion.numero).padStart(5, "0")}
+                </Badge>
               </Link>
             ) : (
               <span className="text-slate-500">Sin cotización</span>
@@ -740,16 +756,32 @@ function ProformaImpresion() {
             <Celda col="1 / 2" row="1" className={cn(etq, "border-b px-1 py-1 text-center")}>
               Referencia
             </Celda>
-            <Celda col="2 / 5" row="1" className={cn(etq, "border-b border-l px-1 py-1 text-center")}>
+            <Celda
+              col="2 / 5"
+              row="1"
+              className={cn(etq, "border-b border-l px-1 py-1 text-center")}
+            >
               Descripción
             </Celda>
-            <Celda col="5 / 6" row="1" className={cn(etq, "border-b border-l px-1 py-1 text-center")}>
+            <Celda
+              col="5 / 6"
+              row="1"
+              className={cn(etq, "border-b border-l px-1 py-1 text-center")}
+            >
               Bodega
             </Celda>
-            <Celda col="6 / 7" row="1" className={cn(etq, "border-b border-l px-1 py-1 text-center")}>
+            <Celda
+              col="6 / 7"
+              row="1"
+              className={cn(etq, "border-b border-l px-1 py-1 text-center")}
+            >
               U.M.
             </Celda>
-            <Celda col="7 / 8" row="1" className={cn(etq, "border-b border-l px-1 py-1 text-center")}>
+            <Celda
+              col="7 / 8"
+              row="1"
+              className={cn(etq, "border-b border-l px-1 py-1 text-center")}
+            >
               Cantidad
             </Celda>
             {esGreen && (
@@ -1116,7 +1148,13 @@ function AsignarErpProforma({
         placeholder="rowid del CDV en Siesa"
         className="h-7 w-40 text-xs"
       />
-      <Button type="button" size="sm" className="h-7 text-xs" disabled={loading} onClick={() => void confirmar()}>
+      <Button
+        type="button"
+        size="sm"
+        className="h-7 text-xs"
+        disabled={loading}
+        onClick={() => void confirmar()}
+      >
         Guardar
       </Button>
       <Button

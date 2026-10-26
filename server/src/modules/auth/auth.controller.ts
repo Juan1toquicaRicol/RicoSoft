@@ -19,7 +19,12 @@ export const MENSAJE_AUTH_INESPERADO =
  * excepción (Prisma, infraestructura, bug) se registra SOLO en el log interno y
  * el cliente recibe un 500 genérico — nunca error.message crudo.
  */
-function responderErrorAuth(res: Response, error: unknown, statusControlado: number, contexto: string) {
+function responderErrorAuth(
+  res: Response,
+  error: unknown,
+  statusControlado: number,
+  contexto: string,
+) {
   if (error instanceof AuthError) {
     return res.status(statusControlado).json({ message: error.message });
   }

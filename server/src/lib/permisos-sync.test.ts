@@ -41,7 +41,9 @@ describe("permiso comercial.proformas.aceptar (3 segmentos)", () => {
   });
 
   it("tiene descriptor visible para la pantalla de Roles del frontend", () => {
-    const descriptor = LISTA_PERMISOS_DEFINICION.find((p) => p.id === "comercial.proformas.aceptar");
+    const descriptor = LISTA_PERMISOS_DEFINICION.find(
+      (p) => p.id === "comercial.proformas.aceptar",
+    );
     expect(descriptor).toBeDefined();
     expect(descriptor?.modulo).toBe("Comercial");
   });

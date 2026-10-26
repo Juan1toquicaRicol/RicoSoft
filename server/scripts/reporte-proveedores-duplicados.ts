@@ -55,10 +55,7 @@ async function main() {
     console.log(`— "${d.nombre}" (${tenant?.nombre ?? d.tenantId}):`);
     for (const f of filas) {
       const relaciones =
-        f._count.facturas +
-        f._count.servicios +
-        f._count.solicitudesCompra +
-        f._count.cotizaciones;
+        f._count.facturas + f._count.servicios + f._count.solicitudesCompra + f._count.cotizaciones;
       console.log(
         `   id=${f.id} nit="${f.nit}" activo=${f.activo} origen=${f.origen} relaciones=${relaciones} creado=${f.createdAt.toISOString()}`,
       );

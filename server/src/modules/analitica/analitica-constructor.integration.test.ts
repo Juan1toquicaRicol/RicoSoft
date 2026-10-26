@@ -101,7 +101,9 @@ describe.skipIf(!RUN)("Constructor de análisis — /analitica/analisis/*", () =
   });
 
   afterAll(async () => {
-    await prisma.analisisGuardado.deleteMany({ where: { tenantId: { in: [tenantId, tenantId2] } } });
+    await prisma.analisisGuardado.deleteMany({
+      where: { tenantId: { in: [tenantId, tenantId2] } },
+    });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: [tenantId, tenantId2] } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: [tenantId, tenantId2] } } });
     await prisma.tenant.deleteMany({ where: { id: { in: [tenantId, tenantId2] } } });
@@ -202,7 +204,11 @@ describe.skipIf(!RUN)("Constructor de análisis — /analitica/analisis/*", () =
       .set("Authorization", `Bearer ${tokenAdmin}`)
       .send({
         nombre: "Inválido",
-        configuracion: { ...configuracionValida, metrica: "clientes", dimensionPrincipal: "vendedor" },
+        configuracion: {
+          ...configuracionValida,
+          metrica: "clientes",
+          dimensionPrincipal: "vendedor",
+        },
       });
     expect(res.status).toBe(400);
   });

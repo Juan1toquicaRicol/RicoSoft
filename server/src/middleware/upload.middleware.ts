@@ -227,6 +227,15 @@ export const UPLOADS_DIR_ORDENES_COMPRA_INTL = documentoOrdenCompraIntl.UPLOADS_
 export const validarOrdenIdParaArchivo = documentoOrdenCompraIntl.validarIdParaArchivo;
 export const uploadDocumentoOrdenCompraIntl = documentoOrdenCompraIntl.uploadArchivo;
 
+// Documentos de un LoteImportacion que no tienen columna fija en el expediente
+// (B/L-AWB, certificado de análisis, otros): :id en la URL es el id del lote.
+// Varios documentos por tipo → cada subida crea una fila en
+// LoteImportacionDocumento (ver controller).
+const documentoLoteImportacion = crearUploadArchivo("lotes-importacion");
+export const UPLOADS_DIR_LOTES_IMPORTACION = documentoLoteImportacion.UPLOADS_DIR;
+export const validarLoteIdParaArchivo = documentoLoteImportacion.validarIdParaArchivo;
+export const uploadDocumentoLoteImportacion = documentoLoteImportacion.uploadArchivo;
+
 // Soportes privados del colaborador (Gestión Humana: certificado bancario y
 // soportes de estudios): :id en la URL es el id del Empleado. Misma política
 // que el resto (PDF/PNG/JPG/WEBP, 10MB, validación por magic bytes, carpeta

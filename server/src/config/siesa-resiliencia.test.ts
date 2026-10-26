@@ -54,8 +54,7 @@ function errorMssql(name: string, code: string, message = "mensaje interno con h
   return Object.assign(new Error(message), { name, code });
 }
 
-const emitirError = (pool: unknown, error: unknown) =>
-  (pool as EventEmitter).emit("error", error);
+const emitirError = (pool: unknown, error: unknown) => (pool as EventEmitter).emit("error", error);
 
 describe("pool Siesa — resiliencia", () => {
   const envOriginal = { ...process.env };
@@ -162,7 +161,10 @@ describe("pool Siesa — resiliencia", () => {
     const { getSiesaPool } = await import("./siesa");
     const viejo = await getSiesaPool();
     estado.query.push(() => Promise.reject(errorMssql("ConnectionError", "ECONNRESET")));
-    await viejo.request().query("x").catch(() => undefined);
+    await viejo
+      .request()
+      .query("x")
+      .catch(() => undefined);
     const nuevo = await getSiesaPool();
 
     emitirError(viejo, errorMssql("ConnectionError", "ESOCKET"));
@@ -209,14 +211,26 @@ describe("clasificación y respuesta uniforme 502 ante errores de Siesa", () => 
     vi.resetModules();
     const { getSiesaPool } = await import("./siesa");
     const { esErrorSiesa } = await import("../lib/siesa-errores");
-    Object.assign(process.env, { SIESA_DB_HOST: "h", SIESA_DB_NAME: "d", SIESA_DB_USER: "u", SIESA_DB_PASSWORD: "p" });
+    Object.assign(process.env, {
+      SIESA_DB_HOST: "h",
+      SIESA_DB_NAME: "d",
+      SIESA_DB_USER: "u",
+      SIESA_DB_PASSWORD: "p",
+    });
     estado.connect.push(() => Promise.reject(errorMssql("ConnectionError", "ESOCKET")));
     const fallo = await getSiesaPool().catch((e) => e);
     expect(esErrorSiesa(fallo)).toBe(true);
 
     const p = await getSiesaPool();
     estado.query.push(() => Promise.reject(errorMssql("ConnectionError", "ECONNRESET")));
-    expect(esErrorSiesa(await p.request().query("x").catch((e: unknown) => e))).toBe(true);
+    expect(
+      esErrorSiesa(
+        await p
+          .request()
+          .query("x")
+          .catch((e: unknown) => e),
+      ),
+    ).toBe(true);
   });
 
   it("respuestaErrorSiesa -> 502 con mensaje fijo, sin host/usuario/credenciales del driver", async () => {

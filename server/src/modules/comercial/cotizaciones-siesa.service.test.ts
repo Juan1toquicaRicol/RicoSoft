@@ -130,14 +130,23 @@ describe("mapeo de campos canónicos", () => {
 
   it("sin descuento ni impuesto: 0 % y null, sin dividir por cero", () => {
     const item = mapearLineaSiesa(
-      linea(1, 1, { descuentoLinea: 0, descuentoGlobal: 0, impuesto: 0, valorNeto: 0, cantidad: 0, tasaImpuesto: null }),
+      linea(1, 1, {
+        descuentoLinea: 0,
+        descuentoGlobal: 0,
+        impuesto: 0,
+        valorNeto: 0,
+        cantidad: 0,
+        tasaImpuesto: null,
+      }),
     );
     expect(item.descuentoPct).toBe(0);
     expect(item.impuestoPct).toBeNull();
   });
 
   it("sin fila en t433 pero con impuesto en valor: deriva el % de valor/neto (respaldo)", () => {
-    const item = mapearLineaSiesa(linea(1, 1, { tasaImpuesto: null, impuesto: 1710, valorNeto: 9000 }));
+    const item = mapearLineaSiesa(
+      linea(1, 1, { tasaImpuesto: null, impuesto: 1710, valorNeto: 9000 }),
+    );
     expect(item.impuestoPct).toBe(19);
   });
 });
@@ -224,12 +233,12 @@ describe("sincronizarCotizacionesSiesa (simulación)", () => {
       erpRowId: { in: [100, 101] },
     });
     expect(r).toMatchObject({ modo: "SIMULACION", total: 2, nuevas: 1, yaVinculadas: 1 });
-    expect(
-      r.cotizaciones.map((c) => [c.erpRowId, c.estadoSincronizacion, c.cotizacionId]),
-    ).toEqual([
-      [100, "NUEVA", null],
-      [101, "YA_VINCULADA", "cot-uuid"],
-    ]);
+    expect(r.cotizaciones.map((c) => [c.erpRowId, c.estadoSincronizacion, c.cotizacionId])).toEqual(
+      [
+        [100, "NUEVA", null],
+        [101, "YA_VINCULADA", "cot-uuid"],
+      ],
+    );
     expect(r.advertencias.join(" ")).toMatch(/vencimiento/i);
     expect(r.creadas).toBe(0);
     expect(mocks.transaction).not.toHaveBeenCalled(); // simulación: cero escrituras
@@ -276,7 +285,12 @@ describe("persistencia (guardar=true)", () => {
   const actor = { id: "user-1", nombre: "Ana Comercial" };
   const siesa = (rowId: number, consec: number) => [
     { recordset: [encabezado(rowId, consec)] },
-    { recordset: [linea(rowId, 1), linea(rowId, 2, { impuesto: 0, valorNeto: 5000, tasaImpuesto: null })] },
+    {
+      recordset: [
+        linea(rowId, 1),
+        linea(rowId, 2, { impuesto: 0, valorNeto: 5000, tasaImpuesto: null }),
+      ],
+    },
   ];
 
   it("guardar sin actor -> error (no hay quién firme la auditoría)", async () => {
@@ -284,7 +298,9 @@ describe("persistencia (guardar=true)", () => {
   });
 
   it("NUEVA: crea BORRADOR con erpRowId, erpNumero COT-CDV-, ítems y auditoría en UNA transacción", async () => {
-    mocks.query.mockResolvedValueOnce(siesa(100, 34147)[0]).mockResolvedValueOnce(siesa(100, 34147)[1]);
+    mocks.query
+      .mockResolvedValueOnce(siesa(100, 34147)[0])
+      .mockResolvedValueOnce(siesa(100, 34147)[1]);
 
     const r = await sincronizarCotizacionesSiesa("tenant-1", { guardar: true }, actor);
 
@@ -305,7 +321,16 @@ describe("persistencia (guardar=true)", () => {
     });
     expect(data.fechaVencimiento).toEqual(new Date("2026-09-20"));
     expect(data.items.create).toHaveLength(2);
-    expect(data.items.create[0]).toMatchObject({ orden: 0, referencia: "REF-1", cantidad: 10, precioUnitario: 1000, descuentoPct: 10, ivaPct: 19, unidadMedida: "KG", bodegaRowId: 4 });
+    expect(data.items.create[0]).toMatchObject({
+      orden: 0,
+      referencia: "REF-1",
+      cantidad: 10,
+      precioUnitario: 1000,
+      descuentoPct: 10,
+      ivaPct: 19,
+      unidadMedida: "KG",
+      bodegaRowId: 4,
+    });
     expect(data.items.create[1].ivaPct).toBe(0); // sin impuesto en Siesa
     expect(mocks.tx.auditoria.create.mock.calls[0][0].data).toMatchObject({
       tenantId: "tenant-1",
@@ -329,9 +354,13 @@ describe("persistencia (guardar=true)", () => {
       tenantId: "tenant-1",
       estado: "BORRADOR",
     });
-    expect(mocks.tx.cotizacionItem.deleteMany).toHaveBeenCalledWith({ where: { cotizacionId: "cot-1" } });
+    expect(mocks.tx.cotizacionItem.deleteMany).toHaveBeenCalledWith({
+      where: { cotizacionId: "cot-1" },
+    });
     expect(mocks.tx.cotizacionItem.createMany.mock.calls[0][0].data).toHaveLength(2);
-    expect(mocks.tx.auditoria.create.mock.calls[0][0].data.accion).toBe("COTIZACION_SIESA_ACTUALIZADA");
+    expect(mocks.tx.auditoria.create.mock.calls[0][0].data.accion).toBe(
+      "COTIZACION_SIESA_ACTUALIZADA",
+    );
     expect(mocks.tx.cotizacion.create).not.toHaveBeenCalled();
     expect(r).toMatchObject({ creadas: 0, actualizadas: 1, yaVinculadas: 1 });
   });

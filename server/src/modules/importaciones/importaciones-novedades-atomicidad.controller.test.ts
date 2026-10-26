@@ -312,7 +312,10 @@ describe("atomicidad de escrituras relacionadas", () => {
   });
 
   it("cambio de estado del lote: update + historial juntos; el historial conserva 'antes → después'", async () => {
-    m.loteFindFirst.mockResolvedValue(LOTE);
+    m.loteFindFirst.mockResolvedValue({
+      ...LOTE,
+      ordenCompra: { eliminado: false, estado: "Confirmada" },
+    });
     m.loteUpdate.mockResolvedValue({ ...LOTE, estado: "En puerto" });
     m.historialCreate.mockResolvedValue({});
     const res = respuesta();
@@ -322,7 +325,10 @@ describe("atomicidad de escrituras relacionadas", () => {
   });
 
   it("edición de embarque: update + historial juntos, con el BL vigente en el detalle", async () => {
-    m.loteFindFirst.mockResolvedValue(LOTE);
+    m.loteFindFirst.mockResolvedValue({
+      ...LOTE,
+      ordenCompra: { eliminado: false, estado: "Confirmada" },
+    });
     m.loteUpdate.mockResolvedValue({ ...LOTE, blAwb: "BL-NUEVO", contenedores: [] });
     m.historialCreate.mockResolvedValue({});
     const res = respuesta();
@@ -332,7 +338,10 @@ describe("atomicidad de escrituras relacionadas", () => {
   });
 
   it("edición de embarque: si el historial falla responde 500 (no se confirma el cambio)", async () => {
-    m.loteFindFirst.mockResolvedValue(LOTE);
+    m.loteFindFirst.mockResolvedValue({
+      ...LOTE,
+      ordenCompra: { eliminado: false, estado: "Confirmada" },
+    });
     m.loteUpdate.mockResolvedValue({ ...LOTE, contenedores: [] });
     m.historialCreate.mockRejectedValue(new Error("fallo"));
     const res = respuesta();

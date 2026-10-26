@@ -26,7 +26,9 @@ describe("pickErrorVariant", () => {
     // Los módulos siguen mostrando estos errores como mensaje contextual en
     // el formulario (no se enrutan a la pantalla global); esta prueba
     // documenta que la clasificación no los confunde con un 500.
-    expect(pickErrorVariant(new ApiError("Ya existe la proforma N.º 3899", "http", 409))).toBe("UNKNOWN");
+    expect(pickErrorVariant(new ApiError("Ya existe la proforma N.º 3899", "http", 409))).toBe(
+      "UNKNOWN",
+    );
     expect(pickErrorVariant(new ApiError("Datos inválidos", "http", 422))).toBe("UNKNOWN");
   });
 

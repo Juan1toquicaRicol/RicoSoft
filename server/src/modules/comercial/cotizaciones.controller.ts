@@ -221,7 +221,9 @@ export const actualizarCotizacion = async (req: AuthenticatedRequest, res: Respo
       .json({ message: parseoParams.error.errors[0]?.message ?? "Datos inválidos." });
   }
   if (!parseoBody.success) {
-    return res.status(400).json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
+    return res
+      .status(400)
+      .json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
   }
 
   const existente = await prisma.cotizacion.findFirst({
@@ -231,9 +233,7 @@ export const actualizarCotizacion = async (req: AuthenticatedRequest, res: Respo
     return res.status(404).json({ message: "Cotización no encontrada." });
   }
   if (existente.estado !== "BORRADOR") {
-    return res
-      .status(400)
-      .json({ message: "Solo una cotización en BORRADOR puede editarse." });
+    return res.status(400).json({ message: "Solo una cotización en BORRADOR puede editarse." });
   }
 
   const { items, numero, ...encabezado } = parseoBody.data;
@@ -409,7 +409,9 @@ export const asignarErpCotizacion = async (req: AuthenticatedRequest, res: Respo
       .json({ message: parseoParams.error.errors[0]?.message ?? "Datos inválidos." });
   }
   if (!parseoBody.success) {
-    return res.status(400).json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
+    return res
+      .status(400)
+      .json({ message: parseoBody.error.errors[0]?.message ?? "Datos inválidos." });
   }
   const { erpRowId } = parseoBody.data;
 

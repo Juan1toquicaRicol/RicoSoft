@@ -202,7 +202,9 @@ export const completarCompromiso = async (req: AuthenticatedRequest, res: Respon
       return res.status(409).json({ message: "Ese compromiso ya estaba marcado como completado." });
     }
     if (!seguimiento.proximaAccion || !seguimiento.proximoSeguimientoFecha) {
-      return res.status(409).json({ message: "Este seguimiento no tiene un compromiso pendiente." });
+      return res
+        .status(409)
+        .json({ message: "Este seguimiento no tiene un compromiso pendiente." });
     }
 
     const actualizado = await req.tenantPrisma!.oportunidadSeguimiento.update({

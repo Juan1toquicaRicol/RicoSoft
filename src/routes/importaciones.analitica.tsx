@@ -54,6 +54,17 @@ export const Route = createFileRoute("/importaciones/analitica")({
   component: ImportacionesAnaliticaPage,
 });
 
+const MOTIVOS_EXCLUSION: Record<string, string> = {
+  SIN_RECEPCION_PLANTA: "sin recepción en planta registrada",
+  SIN_HITO_LLEGADA_PUERTO: "sin hito de llegada a puerto registrado",
+  SIN_LEVANTE: "sin fecha de levante aduanero",
+  FECHAS_INCONSISTENTES: "fechas inconsistentes (fin anterior al inicio)",
+  SIN_INICIO: "sin fecha de inicio",
+  SIN_FIN: "sin fecha de fin",
+  SIN_COSTEO_DEFINITIVO: "sin costeo definitivo liquidado",
+  FOB_NO_POSITIVO: "valor FOB no positivo",
+};
+
 function formatoDias(valor: number | null): string {
   if (valor === null) return "Datos insuficientes";
   return `${valor.toFixed(1)} días`;
@@ -181,9 +192,12 @@ function FilaOperacion({ op }: { op: OperacionAnalitica }) {
               </span>
             </TooltipTrigger>
             <TooltipContent className="text-xs">
-              Orden: {formatoFecha(op.fechaOrden)} → Disponible en bodega:{" "}
-              {formatoFecha(op.fechaDisponibleBodega)}
-              {op.fechaDisponibleBodegaOrigen ? ` (${op.fechaDisponibleBodegaOrigen})` : ""}
+              Orden: {formatoFecha(op.fechaOrden)} → Recepción en planta:{" "}
+              {formatoFecha(op.fechaRecepcionPlanta)}
+              {op.fechaRecepcionPlantaOrigen ? ` (${op.fechaRecepcionPlantaOrigen})` : ""}
+              {op.motivoExclusionLeadTime
+                ? ` — Excluida: ${MOTIVOS_EXCLUSION[op.motivoExclusionLeadTime] ?? op.motivoExclusionLeadTime}`
+                : ""}
             </TooltipContent>
           </UiTooltip>
         </TooltipProvider>
@@ -197,9 +211,12 @@ function FilaOperacion({ op }: { op: OperacionAnalitica }) {
               </span>
             </TooltipTrigger>
             <TooltipContent className="text-xs">
-              Llegada: {formatoFecha(op.fechaLlegadaPuerto)} → Nacionalizado:{" "}
-              {formatoFecha(op.fechaNacionalizado)}
-              {op.fechaNacionalizadoOrigen ? ` (${op.fechaNacionalizadoOrigen})` : ""}
+              Llegada a puerto: {formatoFecha(op.fechaLlegadaPuerto)} → Levante:{" "}
+              {formatoFecha(op.fechaLevante)}
+              {op.fechaLevanteOrigen ? ` (${op.fechaLevanteOrigen})` : ""}
+              {op.motivoExclusionDesaduanamiento
+                ? ` — Excluida: ${MOTIVOS_EXCLUSION[op.motivoExclusionDesaduanamiento] ?? op.motivoExclusionDesaduanamiento}`
+                : ""}
             </TooltipContent>
           </UiTooltip>
         </TooltipProvider>
@@ -220,6 +237,124 @@ function FilaOperacion({ op }: { op: OperacionAnalitica }) {
         </TooltipProvider>
       </TableCell>
     </TableRow>
+  );
+}
+
+function PanelDefiniciones({
+  resumen,
+}: {
+  resumen: NonNullable<ReturnType<typeof useImportacionesAnalitica>["resumen"]>;
+}) {
+  const { periodo, indicadores } = resumen.metadatos;
+  const lista: Array<[string, (typeof indicadores)[keyof typeof indicadores]]> = [
+    ["Lead Time", indicadores.leadTime],
+    ["Tiempo de desaduanamiento", indicadores.tiempoDesaduanamiento],
+    ["Factor de incremento logístico", indicadores.factorIncrementoLogistico],
+    ["Variación TRM", indicadores.variacionTrm],
+  ];
+  return (
+    <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+      <h2 className="text-sm font-medium text-slate-700 mb-1">
+        Definiciones, periodo y exclusiones
+      </h2>
+      <p className="text-[11px] text-slate-500 mb-3">
+        Periodo: {periodo.desde ? formatoFecha(periodo.desde) : "sin límite inferior"} →{" "}
+        {periodo.hasta ? formatoFecha(periodo.hasta) : "sin límite superior"}, según{" "}
+        {periodo.baseFecha}. Órdenes incluidas: {periodo.estadosIncluidos.join(", ")}. Generado:{" "}
+        {new Date(periodo.generadoEn).toLocaleString("es-CO")}.
+      </p>
+      <dl className="space-y-3">
+        {lista.map(([nombre, ind]) => {
+          const exclusiones = Object.entries(ind.exclusiones);
+          return (
+            <div key={nombre}>
+              <dt className="text-xs font-semibold text-slate-700">
+                {nombre} <span className="font-normal text-slate-400">({ind.unidad})</span>
+              </dt>
+              <dd className="text-[11px] text-slate-600">
+                {ind.definicion}
+                <br />
+                <span className="text-slate-500">
+                  Inicio: {ind.fechaInicio} · Fin: {ind.fechaFin}
+                </span>
+                <br />
+                <span className="text-slate-500">
+                  Excluidos:{" "}
+                  {exclusiones.length === 0
+                    ? "ninguno"
+                    : exclusiones
+                        .map(([motivo, n]) => `${n} ${MOTIVOS_EXCLUSION[motivo] ?? motivo}`)
+                        .join("; ")}
+                </span>
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+function PanelAlertas({
+  alertas,
+}: {
+  alertas: NonNullable<ReturnType<typeof useImportacionesAnalitica>["resumen"]>["alertas"];
+}) {
+  const sinAdjuntar = Object.entries(alertas.documentosAdjuntos.sinAdjuntar);
+  return (
+    <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+      <h2 className="text-sm font-medium text-slate-700 mb-1">Alertas del estado actual</h2>
+      <p className="text-[11px] text-slate-500 mb-3">
+        No dependen del periodo. Los umbrales de días libres en puerto y de desviación de costos no
+        están parametrizados todavía, por eso no se generan esas alertas.
+      </p>
+      <ul className="space-y-3 text-[12px] text-slate-700">
+        <li>
+          <span className="font-semibold">
+            ETA del proveedor vencida: {alertas.etaProveedorVencida.cantidad} lote(s)
+          </span>
+          <p className="text-[11px] text-slate-500">{alertas.etaProveedorVencida.definicion}</p>
+          {alertas.etaProveedorVencida.lotes.length > 0 && (
+            <ul className="mt-1 list-disc pl-5">
+              {alertas.etaProveedorVencida.lotes.map((l) => (
+                <li key={l.loteId}>
+                  <Link
+                    to="/importaciones/$id"
+                    params={{ id: l.ordenCompraId }}
+                    className="text-blue-700 hover:underline"
+                  >
+                    {l.codigo ?? l.numeroOrden}
+                  </Link>{" "}
+                  · {l.blAwb}: ETA proveedor {formatoFecha(l.fechaLlegadaEstimadaProveedor)} (
+                  {l.diasVencida} día(s) de atraso)
+                  {l.etaTrackingActual
+                    ? ` · ETA tracking ${formatoFecha(l.etaTrackingActual)}`
+                    : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+        <li>
+          <span className="font-semibold">
+            Actividades vencidas: {alertas.actividadesVencidas.cantidad}
+          </span>
+          <p className="text-[11px] text-slate-500">{alertas.actividadesVencidas.definicion}</p>
+        </li>
+        <li>
+          <span className="font-semibold">
+            Documentos adjuntos por lote ({alertas.documentosAdjuntos.cantidadLotes} lote(s) sin
+            nacionalizar)
+          </span>
+          <p className="text-[11px] text-slate-500">{alertas.documentosAdjuntos.definicion}</p>
+          {sinAdjuntar.length > 0 && (
+            <p className="mt-1 text-[11px]">
+              Sin adjuntar: {sinAdjuntar.map(([doc, n]) => `${doc} (${n})`).join(" · ")}
+            </p>
+          )}
+        </li>
+      </ul>
+    </div>
   );
 }
 
@@ -291,7 +426,7 @@ function ImportacionesAnaliticaPage() {
   return (
     <AppShell
       title="Analítica de Importaciones"
-      description="Lead Time, tiempo de desaduanamiento y factor de incremento logístico, calculados sobre datos reales de órdenes, embarques y costeo landed."
+      description="Lead Time, tiempo de desaduanamiento, factor de incremento logístico y variación de TRM, calculados sobre hitos reales de lotes y costeo landed. Cada indicador muestra su definición y los registros excluidos."
       actions={
         <Link to="/importaciones" className="text-sm text-blue-700 hover:underline">
           ← Volver a Importaciones
@@ -362,9 +497,9 @@ function ImportacionesAnaliticaPage() {
 
         {resumen && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <TarjetaKpi
-                titulo="Lead Time (orden → bodega)"
+                titulo="Lead Time (orden → recepción en planta)"
                 valor={formatoDias(resumen.leadTime.agregado.promedio)}
                 variacionPorcentual={resumen.leadTime.tendencia.variacionPorcentual}
                 cantidadAnalizada={resumen.leadTime.agregado.cantidadAnalizada}
@@ -386,7 +521,17 @@ function ImportacionesAnaliticaPage() {
                 cantidadAnalizada={resumen.factorIncrementoLogistico.agregado.cantidadAnalizada}
                 cantidadExcluida={resumen.factorIncrementoLogistico.agregado.cantidadExcluida}
               />
+              <TarjetaKpi
+                titulo="Variación TRM (pactada → liquidada)"
+                valor={formatoPct(resumen.variacionTrm.agregado.promedio)}
+                variacionPorcentual={resumen.variacionTrm.tendencia.variacionPorcentual}
+                cantidadAnalizada={resumen.variacionTrm.agregado.cantidadAnalizada}
+                cantidadExcluida={resumen.variacionTrm.agregado.cantidadExcluida}
+              />
             </div>
+
+            <PanelDefiniciones resumen={resumen} />
+            <PanelAlertas alertas={resumen.alertas} />
 
             <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
               <h2 className="text-sm font-medium text-slate-700 mb-2">Insights</h2>

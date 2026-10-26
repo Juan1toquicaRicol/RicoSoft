@@ -28,7 +28,14 @@ const TABLA: DocSiesa[] = [];
 let siguienteRowId = 81_000_000 + Math.floor(Math.random() * 1_000_000) * 10;
 const nuevoDoc = (over: Partial<DocSiesa> = {}): DocSiesa => {
   const rowId = siguienteRowId++;
-  const doc: DocSiesa = { rowId, cia: CIA_ID, tipo: "PDV", numero: rowId, comprometida: 0, ...over };
+  const doc: DocSiesa = {
+    rowId,
+    cia: CIA_ID,
+    tipo: "PDV",
+    numero: rowId,
+    comprometida: 0,
+    ...over,
+  };
   TABLA.push(doc);
   return doc;
 };
@@ -91,8 +98,7 @@ function crearRequestFake() {
         .map(([, v]) => v as number);
       llamadas.push({ ciaId: inputs.ciaId, rowIds, sql });
       const filas = TABLA.filter(
-        (d) =>
-          d.cia === inputs.ciaId && d.tipo === "PDV" && rowIds.includes(d.rowId),
+        (d) => d.cia === inputs.ciaId && d.tipo === "PDV" && rowIds.includes(d.rowId),
       );
       return {
         recordset: filas.map((d) => ({
@@ -331,9 +337,7 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
 
   it("permisos: sin token 401; sin pedidos_comerciales.ver 403; con solo VER 200", async () => {
     const p = await crearPedido(tenantId);
-    const sinToken = await request(app).get(
-      `/api/comercial/pedidos/${p.id}/compromiso-inventario`,
-    );
+    const sinToken = await request(app).get(`/api/comercial/pedidos/${p.id}/compromiso-inventario`);
     expect(sinToken.status).toBe(401);
     expect((await consultar(p.id, tokenSinPermiso)).status).toBe(403);
     expect((await consultar(p.id, tokenSoloVer)).status).toBe(200);
@@ -365,7 +369,11 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
 
     it("enriquece TODA la página con UNA sola consulta a Siesa (sin N+1)", async () => {
       const cliente = 777_001;
-      const docs = [nuevoDoc({ comprometida: 4 }), nuevoDoc({ comprometida: 0 }), nuevoDoc({ comprometida: 9 })];
+      const docs = [
+        nuevoDoc({ comprometida: 4 }),
+        nuevoDoc({ comprometida: 0 }),
+        nuevoDoc({ comprometida: 9 }),
+      ];
       for (const d of docs) await crearPedido(tenantId, d.rowId, { clienteRowId: cliente });
       await crearPedido(tenantId, null, { clienteRowId: cliente });
       llamadas.length = 0;
@@ -377,8 +385,15 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
       expect(res.body.compromisoDisponible).toBe(true);
       expect(llamadas).toHaveLength(1);
       expect(llamadas[0].rowIds.sort()).toEqual(docs.map((d) => d.rowId).sort());
-      const porEstado = res.body.items.map((i: { compromiso: { compromiso: string } }) => i.compromiso.compromiso).sort();
-      expect(porEstado).toEqual(["COMPROMETIDO", "COMPROMETIDO", "NO_COMPROMETIDO", "SIN_VINCULO_ERP"]);
+      const porEstado = res.body.items
+        .map((i: { compromiso: { compromiso: string } }) => i.compromiso.compromiso)
+        .sort();
+      expect(porEstado).toEqual([
+        "COMPROMETIDO",
+        "COMPROMETIDO",
+        "NO_COMPROMETIDO",
+        "SIN_VINCULO_ERP",
+      ]);
     });
 
     it("sin incluirCompromiso el listado no consulta Siesa ni agrega el campo", async () => {
@@ -528,21 +543,27 @@ describe.skipIf(!RUN)("GET /comercial/pedidos/:id/compromiso-inventario", () => 
       expect(llamadas).toHaveLength(1); // un solo lote
       const etiquetas = res.body.items
         .map((i: { compromiso: { compromiso: string; siesa: { estadoUnoee: string } | null } }) =>
-          i.compromiso.compromiso === "SIN_VINCULO_ERP" ? "SIN_VINCULO" : i.compromiso.siesa?.estadoUnoee,
+          i.compromiso.compromiso === "SIN_VINCULO_ERP"
+            ? "SIN_VINCULO"
+            : i.compromiso.siesa?.estadoUnoee,
         )
         .sort();
       expect(etiquetas).toEqual(["Comprometido", "No comprometido", "SIN_VINCULO"]);
     });
 
     it("sin incluirCompromiso no consulta Siesa; con Siesa caído la bandeja responde 200 y compromisoDisponible=false", async () => {
-      await crearPedido(tenantId, nuevoDoc({ comprometida: 1 }).rowId, { clienteNombre: "Bandeja caída" });
+      await crearPedido(tenantId, nuevoDoc({ comprometida: 1 }).rowId, {
+        clienteNombre: "Bandeja caída",
+      });
       llamadas.length = 0;
       const sin = await bandeja("?tipo=pedido&search=Bandeja%20ca%C3%ADda");
       expect(sin.status).toBe(200);
       expect(llamadas).toHaveLength(0);
 
       getSiesaPoolMock.mockRejectedValueOnce(new Error("simulated ECONNREFUSED"));
-      const caido = await bandeja("?tipo=pedido&incluirCompromiso=true&search=Bandeja%20ca%C3%ADda");
+      const caido = await bandeja(
+        "?tipo=pedido&incluirCompromiso=true&search=Bandeja%20ca%C3%ADda",
+      );
       expect(caido.status).toBe(200);
       expect(caido.body.compromisoDisponible).toBe(false);
     });

@@ -39,15 +39,27 @@ router.use(attachTenantPrisma);
 // pantalla Centro Comercial) para TODO, lectura y escritura. Se separa en
 // PROFORMAS_VER/PROFORMAS_GESTIONAR — "ventas.ver" sigue intacto para
 // /ventas y Clientes, que no cambian.
-router.get("/clientes/buscar", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), buscarClientesProforma);
+router.get(
+  "/clientes/buscar",
+  requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
+  buscarClientesProforma,
+);
 router.get(
   "/clientes/:clienteRowId/datos-facturacion",
   requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
   obtenerDatosFacturacionCliente,
 );
 router.get("/bodegas", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), listarBodegasProforma);
-router.get("/cotizaciones/buscar", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), buscarCotizaciones);
-router.get("/cotizaciones/:id", requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER), obtenerCotizacion);
+router.get(
+  "/cotizaciones/buscar",
+  requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
+  buscarCotizaciones,
+);
+router.get(
+  "/cotizaciones/:id",
+  requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),
+  obtenerCotizacion,
+);
 router.get(
   "/siguiente-numero",
   requirePermission(PERMISOS_SISTEMA.PROFORMAS_VER),

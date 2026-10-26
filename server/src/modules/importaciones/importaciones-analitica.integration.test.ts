@@ -130,6 +130,18 @@ describe.skipIf(!RUN)("Analítica de Importaciones — /importaciones/analitica 
       },
     });
 
+    // La llegada a puerto es un HITO REAL registrado aparte: la recepción en
+    // planta (fechaLlegadaReal) ya no se usa como sustituto de la llegada a puerto.
+    await prisma.loteImportacionHito.create({
+      data: {
+        tenantId: tenantAId,
+        loteId: lote.id,
+        tipo: "LLEGADA_PUERTO",
+        fecha: fechaLlegadaReal,
+        origen: "Manual",
+      },
+    });
+
     await prisma.expedienteAduanero.create({
       data: { tenantId: tenantAId, loteId: lote.id, fechaLevante },
     });
@@ -226,7 +238,7 @@ describe.skipIf(!RUN)("Analítica de Importaciones — /importaciones/analitica 
     expect(res.body.leadTime.agregado.cantidadExcluida).toBeGreaterThanOrEqual(1);
   });
 
-  it("2. resumen calcula Tiempo de desaduanamiento real (10 días) usando fechaLlegadaReal y fechaLevante", async () => {
+  it("2. resumen calcula Tiempo de desaduanamiento real (10 días) usando el hito LLEGADA_PUERTO y fechaLevante", async () => {
     const res = await request(app)
       .get(`/api/importaciones/analitica/resumen?${rangoQuery}`)
       .set("Authorization", `Bearer ${tokenA}`);

@@ -31,13 +31,16 @@ describe("loginUserService — igualdad de costo ante correo inexistente", () =>
     db.userFindUnique.mockResolvedValue(null);
     const compare = vi.spyOn(bcrypt, "compare");
 
-    const fallo = await loginUserService({ email: "nadie@ricol.com.co", password: "Clave1234" }).catch(
-      (e) => e,
-    );
+    const fallo = await loginUserService({
+      email: "nadie@ricol.com.co",
+      password: "Clave1234",
+    }).catch((e) => e);
 
     expect(compare).toHaveBeenCalledTimes(1);
     expect(fallo).toBeInstanceOf(AuthError);
-    expect((fallo as AuthError).message).toBe("Credenciales inválidas. Correo o contraseña incorrectos.");
+    expect((fallo as AuthError).message).toBe(
+      "Credenciales inválidas. Correo o contraseña incorrectos.",
+    );
     // No se audita (no hay usuario/tenant reales a quien atribuirlo).
     expect(db.auditoriaCreate).not.toHaveBeenCalled();
   });
@@ -53,11 +56,14 @@ describe("loginUserService — igualdad de costo ante correo inexistente", () =>
       tokenVersion: 0,
     });
 
-    const fallo = await loginUserService({ email: "ana@ricol.com.co", password: "Incorrecta123" }).catch(
-      (e) => e,
-    );
+    const fallo = await loginUserService({
+      email: "ana@ricol.com.co",
+      password: "Incorrecta123",
+    }).catch((e) => e);
 
     expect(fallo).toBeInstanceOf(AuthError);
-    expect((fallo as AuthError).message).toBe("Credenciales inválidas. Correo o contraseña incorrectos.");
+    expect((fallo as AuthError).message).toBe(
+      "Credenciales inválidas. Correo o contraseña incorrectos.",
+    );
   });
 });

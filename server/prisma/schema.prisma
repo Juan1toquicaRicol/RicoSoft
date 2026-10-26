@@ -57,6 +57,8 @@ model Tenant {
   membresias                     Membresia[]
   ordenesCompraIntl              OrdenCompraIntl[]
   lotesImportacion               LoteImportacion[]
+  hitosLoteImportacion           LoteImportacionHito[]
+  documentosLoteImportacion      LoteImportacionDocumento[]
   expedientesAduaneros           ExpedienteAduanero[]
   costeosImportacion             CosteoImportacionDetalle[]
   actividadesImportacion         ImportacionActividad[]
@@ -2295,9 +2297,75 @@ model LoteImportacion {
   costeos                      CosteoImportacionDetalle[]
   actividades                  ImportacionActividad[]
   contenedores                 ContenedorLote[]
+  hitos                        LoteImportacionHito[]
+  documentos                   LoteImportacionDocumento[]
 
   @@index([tenantId, estado])
   @@index([ordenCompraId])
+}
+
+/// Hito REAL del recorrido de un lote (embarque, llegada a puerto, inspección
+/// aduanera, recepción física en planta), registrado con su ORIGEN y su
+/// responsable. Existe para no usar una sola fecha (LoteImportacion.fechaLlegadaReal,
+/// que solo se escribe al recibir en planta) como si fuera varios eventos
+/// distintos, y para que una fecha informada por una persona nunca quede
+/// reemplazada en silencio por una calculada (tracking/AIS), que vive aparte
+/// en LoteImportacion.etaTrackingActual. El levante aduanero NO se repite aquí:
+/// sigue siendo ExpedienteAduanero.fechaLevante (única fuente). La
+/// liberación para inventario disponible NO es un hito de este modelo: no hay
+/// inventario por lote ni regla de Calidad definida (ver informe de importaciones).
+/// tipo se valida en código (TIPOS_HITO_LOTE, importaciones-hitos.ts), mismo
+/// patrón que el resto del módulo. Una fila por (lote, tipo): corregir la
+/// fecha actualiza la fila y deja el valor anterior en ImportacionHistorial
+/// (append-only).
+model LoteImportacionHito {
+  id                  String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId            String          @db.UniqueIdentifier
+  loteId              String          @db.UniqueIdentifier
+  /// EMBARQUE_REAL | LLEGADA_PUERTO | INSPECCION_ADUANERA | RECEPCION_PLANTA
+  tipo                String          @db.VarChar(30)
+  fecha               DateTime
+  /// Manual (lo registró una persona) | Sistema (lo derivó una acción del
+  /// propio flujo, p. ej. recibir en planta). Nunca "Tracking": el tracking
+  /// no escribe hitos, solo informa etaTrackingActual/eventos de contenedor.
+  origen              String          @db.VarChar(20)
+  nota                String?         @db.VarChar(500)
+  registradoPorId     String?         @db.UniqueIdentifier
+  registradoPorNombre String?         @db.VarChar(255)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  lote                LoteImportacion @relation(fields: [loteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([loteId, tipo])
+  @@index([tenantId, tipo])
+}
+
+/// Documento de un lote que NO tiene columna fija en ExpedienteAduanero:
+/// B/L o AWB, certificado de análisis (COA) y otros. Plural por diseño (puede
+/// haber varios del mismo tipo), mismo patrón que OrdenCompraIntlDocumento: el
+/// archivo vive en uploads/lotes-importacion/<loteId>/ y solo se sirve por
+/// endpoint autenticado que valida tenant. tipo se valida en código contra
+/// TIPOS_DOCUMENTO_LOTE. La OBLIGATORIEDAD de cada tipo no está definida (puede
+/// depender de material, proveedor o país): este modelo solo guarda archivos.
+model LoteImportacionDocumento {
+  id              String          @id @default(uuid()) @db.UniqueIdentifier
+  tenantId        String          @db.UniqueIdentifier
+  loteId          String          @db.UniqueIdentifier
+  tipo            String          @db.VarChar(30)
+  nombreOriginal  String          @db.VarChar(255)
+  mime            String          @db.VarChar(100)
+  tamano          Int
+  /// Ruta relativa dentro de uploads/lotes-importacion/<loteId>/, nunca una
+  /// URL absoluta ni pública.
+  ruta            String          @db.VarChar(500)
+  subidoPorId     String?         @db.UniqueIdentifier
+  subidoPorNombre String?         @db.VarChar(255)
+  createdAt       DateTime        @default(now())
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
+  lote            LoteImportacion @relation(fields: [loteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, loteId])
 }
 
 /// Contenedores de un lote/embarque — un lote puede tener varios (antes solo
@@ -2412,6 +2480,12 @@ model CosteoImportacionDetalle {
   costoTotalCop       Decimal             @db.Decimal(18, 2)
   costoUnitarioCop    Decimal             @db.Decimal(18, 4)
   esProvisional       Boolean             @default(true)
+  /// Método con el que se prorratearon fletes nacionales, agenciamiento y
+  /// otros costos entre los ítems: FOB | PESO | VOLUMEN. NULL en filas
+  /// provisionales y en liquidaciones anteriores a este campo (todas se
+  /// prorratearon por participación FOB). Arancel, IVA y valor CIF siguen
+  /// repartiéndose por FOB siempre.
+  metodoProrrateoGastos String?           @db.VarChar(10)
   fechaLiquidacion    DateTime            @default(now())
   liquidadoPorId      String?             @db.UniqueIdentifier
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onUpdate: NoAction)

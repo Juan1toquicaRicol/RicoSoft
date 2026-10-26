@@ -8,7 +8,7 @@ import { prisma } from "../../config/prisma";
 /**
  * Reglas de Destinatarios (Fase 5.3) — CRUD, permisos, multi-tenant e IDOR.
  * La resolución en sí (resolverDestinatarios) ya se prueba a fondo en
- * lib/motor-destinatarios.test.ts; esto cubre la capa HTTP/administrativa.
+ * lib/motor-destinatarios.integration.test.ts; esto cubre la capa HTTP/administrativa.
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 

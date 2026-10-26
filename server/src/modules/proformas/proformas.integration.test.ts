@@ -264,12 +264,20 @@ describe.skipIf(!RUN)("Proformas — consecutivo, configuración comercial y bod
         .set("Authorization", `Bearer ${token}`)
         .send({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
       expect(put.status).toBe(200);
-      expect(put.body).toMatchObject({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
+      expect(put.body).toMatchObject({
+        retencionFuentePct: 3,
+        retencionIvaPct: 20,
+        retencionIcaPct: 1,
+      });
 
       const get = await request(app)
         .get("/api/proformas/configuracion-comercial")
         .set("Authorization", `Bearer ${token}`);
-      expect(get.body).toMatchObject({ retencionFuentePct: 3, retencionIvaPct: 20, retencionIcaPct: 1 });
+      expect(get.body).toMatchObject({
+        retencionFuentePct: 3,
+        retencionIvaPct: 20,
+        retencionIcaPct: 1,
+      });
     });
 
     it("cambiar la configuración NO afecta proformas ya creadas (snapshot conservado)", async () => {

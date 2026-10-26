@@ -16,7 +16,10 @@ import { permisoClaveDeSecciones } from "../../lib/catalogo-permisos";
  * solo se crea una vez), y hacía falta un UPDATE a mano por cada cambio.
  */
 const PERMISO_CLAVE_HISTORICO: Record<string, string[]> = {
-  "gestion-comercial": ["cotizaciones.ver", "cotizaciones.ver,proformas.ver,pedidos_comerciales.ver"],
+  "gestion-comercial": [
+    "cotizaciones.ver",
+    "cotizaciones.ver,proformas.ver,pedidos_comerciales.ver",
+  ],
 };
 
 /**
@@ -109,11 +112,7 @@ const CATALOGO_DEFECTO: Array<{
     // que el módulo aparezca (ver tieneAcceso(), que interpreta la lista
     // separada por comas como "cualquiera de estos"). Los códigos se derivan
     // de la jerarquía, no se escriben a mano.
-    permisoClave: permisoClaveDeSecciones([
-      "cotizaciones",
-      "proformas",
-      "pedidos_comerciales",
-    ]),
+    permisoClave: permisoClaveDeSecciones(["cotizaciones", "proformas", "pedidos_comerciales"]),
   },
   {
     clave: "despachos",
@@ -325,7 +324,10 @@ const serializar = (modulo: {
 function tieneAcceso(req: AuthenticatedRequest, permisoClave: string | null): boolean {
   if (req.user!.isSuperadmin) return true;
   if (!permisoClave) return true;
-  const opciones = permisoClave.split(",").map((p) => p.trim()).filter(Boolean);
+  const opciones = permisoClave
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
   return opciones.some((p) => req.user!.permisos.includes(p));
 }
 

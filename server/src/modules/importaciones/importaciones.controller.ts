@@ -8,6 +8,7 @@ import {
   UPLOADS_DIR_EXPEDIENTES,
   UPLOADS_DIR_VISTOS_BUENOS,
   UPLOADS_DIR_ORDENES_COMPRA_INTL,
+  UPLOADS_DIR_LOTES_IMPORTACION,
   moverArchivoDefinitivo,
 } from "../../middleware/upload.middleware";
 import {
@@ -17,6 +18,22 @@ import {
   type ActividadSeguimiento,
 } from "../../domain/importaciones/motor-seguimiento";
 import { evaluarCondicionesCierre } from "../../domain/importaciones/condiciones-cierre";
+import {
+  calcularParticipaciones,
+  esMetodoAprobado,
+  esMetodoProrrateo,
+  type MetodoProrrateo,
+} from "../../domain/importaciones/prorrateo-gastos";
+import { validarMontosLiquidacion } from "../../domain/importaciones/liquidacion-entrada";
+import { TIPOS_DOCUMENTO_LOTE } from "../../domain/importaciones/documentos-lote";
+import {
+  ETIQUETA_HITO,
+  TIPOS_HITO_LOTE,
+  esTipoHitoManual,
+  validarHito,
+  type HitosExistentes,
+  type TipoHitoLote,
+} from "../../domain/importaciones/hitos-lote";
 import { obtenerTrmOficial } from "../../integrations/trm/trm.service";
 import { buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
 import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller";
@@ -95,6 +112,9 @@ const TIPOS_DOCUMENTO_ORDEN: Record<string, string> = {
   "oferta-comercial": "Oferta comercial",
   otros: "Otros",
 };
+
+// Documentos del LOTE sin columna fija en ExpedienteAduanero: ver
+// domain/importaciones/documentos-lote.ts (TIPOS_DOCUMENTO_LOTE).
 
 // Solo los estados previos a la llegada física se cambian a mano desde
 // actualizarEstadoLote. "Liberado pre-compra" lo asigna recibirPreCompraPlanta
@@ -255,10 +275,14 @@ type ExpedienteConVistosBuenos = Prisma.ExpedienteAduaneroGetPayload<Record<stri
   vistosBuenos?: VistoBueno[];
 };
 type ContenedorLote = Prisma.ContenedorLoteGetPayload<Record<string, never>>;
+type HitoLote = Prisma.LoteImportacionHitoGetPayload<Record<string, never>>;
+type DocumentoLote = Prisma.LoteImportacionDocumentoGetPayload<Record<string, never>>;
 type LoteConDetalle = Prisma.LoteImportacionGetPayload<Record<string, never>> & {
   expediente?: ExpedienteConVistosBuenos | null;
   costeos?: CosteoDetalle[];
   contenedores?: ContenedorLote[];
+  hitos?: HitoLote[];
+  documentos?: DocumentoLote[];
 };
 type HistorialConEvidencia = Prisma.ImportacionHistorialGetPayload<Record<string, never>>;
 type Actividad = Prisma.ImportacionActividadGetPayload<Record<string, never>>;
@@ -386,6 +410,7 @@ const serializarCosteo = (c: CosteoDetalle) => ({
   costoTotalCop: numero(c.costoTotalCop),
   costoUnitarioCop: numero(c.costoUnitarioCop),
   esProvisional: c.esProvisional,
+  metodoProrrateoGastos: c.metodoProrrateoGastos,
   fechaLiquidacion: c.fechaLiquidacion,
 });
 
@@ -443,6 +468,65 @@ const serializarContenedor = (c: ContenedorLote) => ({
   })(),
 });
 
+const serializarDocumentoLote = (d: DocumentoLote) => ({
+  id: d.id,
+  tipo: d.tipo,
+  nombreOriginal: d.nombreOriginal,
+  mime: d.mime,
+  tamano: d.tamano,
+  subidoPorNombre: d.subidoPorNombre,
+  createdAt: d.createdAt,
+});
+
+/**
+ * Hitos del lote en orden cronológico esperado, cada uno con su ORIGEN y su
+ * FUENTE. Un hito sin fecha se devuelve con fecha null (no se completa con una
+ * fecha estimada ni calculada). Solo hay dos derivaciones, ambas de un dato
+ * real ya existente y nunca de una estimación:
+ *  - LEVANTE: ExpedienteAduanero.fechaLevante (única fuente del levante).
+ *  - RECEPCION_PLANTA de lotes recibidos antes de existir esta tabla:
+ *    LoteImportacion.fechaLlegadaReal, que solo escribe recibirPreCompraPlanta.
+ */
+const serializarHitosLote = (l: LoteConDetalle) => {
+  const filas = new Map((l.hitos ?? []).map((h) => [h.tipo, h]));
+  const desdeFila = (tipo: TipoHitoLote) => {
+    const fila = filas.get(tipo);
+    return {
+      tipo,
+      etiqueta: ETIQUETA_HITO[tipo],
+      fecha: fila?.fecha ?? null,
+      origen: fila?.origen ?? null,
+      fuente: fila ? "LoteImportacionHito" : null,
+      registradoPor: fila?.registradoPorNombre ?? null,
+      nota: fila?.nota ?? null,
+    };
+  };
+
+  const recepcion = desdeFila("RECEPCION_PLANTA");
+  if (!recepcion.fecha && l.fechaLlegadaReal) {
+    recepcion.fecha = l.fechaLlegadaReal;
+    recepcion.origen = "Sistema";
+    recepcion.fuente = "LoteImportacion.fechaLlegadaReal";
+  }
+
+  const levanteFecha = l.expediente?.fechaLevante ?? null;
+  return [
+    desdeFila("EMBARQUE_REAL"),
+    desdeFila("LLEGADA_PUERTO"),
+    desdeFila("INSPECCION_ADUANERA"),
+    {
+      tipo: "LEVANTE",
+      etiqueta: "Levante aduanero",
+      fecha: levanteFecha,
+      origen: levanteFecha ? "Manual" : null,
+      fuente: levanteFecha ? "ExpedienteAduanero.fechaLevante" : null,
+      registradoPor: null,
+      nota: null,
+    },
+    recepcion,
+  ];
+};
+
 const serializarLote = (l: LoteConDetalle) => {
   // Variación de ETA (§5): diferencia entre lo que informó el proveedor
   // (fechaLlegadaEstimada) y lo que calcula el tracking marítimo en vivo
@@ -494,6 +578,10 @@ const serializarLote = (l: LoteConDetalle) => {
           : null,
     },
     contenedores: (l.contenedores ?? []).map(serializarContenedor),
+    // Solo se emiten cuando la consulta incluyó la relación: una respuesta
+    // parcial (p. ej. tras editar el embarque) no debe mostrar "sin hitos".
+    hitos: l.hitos ? serializarHitosLote(l) : undefined,
+    documentos: l.documentos ? l.documentos.map(serializarDocumentoLote) : undefined,
     expediente: l.expediente ? serializarExpediente(l.expediente) : null,
     costeos: (l.costeos ?? []).map(serializarCosteo),
   };
@@ -601,6 +689,8 @@ const INCLUDE_ORDEN_DETALLE = {
       expediente: { include: { vistosBuenos: true } },
       costeos: { orderBy: { fechaLiquidacion: "desc" as const } },
       contenedores: { orderBy: { numero: "asc" as const } },
+      hitos: true,
+      documentos: { orderBy: { createdAt: "desc" as const } },
     },
   },
   historial: { orderBy: { createdAt: "asc" as const } },
@@ -1260,8 +1350,14 @@ export const actualizarEstadoLote = async (req: AuthenticatedRequest, res: Respo
       });
     }
 
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("cambiar el estado del lote") });
+    }
     if (!ESTADOS_TRANSITO_MANUAL.includes(lote.estado)) {
       return res.status(400).json({
         message: `El lote ya está en estado "${lote.estado}" y no puede volver a tránsito manual.`,
@@ -1300,8 +1396,14 @@ export const actualizarEstadoLote = async (req: AuthenticatedRequest, res: Respo
 export const actualizarEmbarqueLote = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("editar el embarque") });
+    }
 
     const {
       blAwb,
@@ -1370,8 +1472,14 @@ export const actualizarEmbarqueLote = async (req: AuthenticatedRequest, res: Res
 export const crearContenedorLote = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("agregar contenedores") });
+    }
 
     const numeroContenedor = String(req.body.numero).trim().toUpperCase();
     const existente = await prisma.contenedorLote.findFirst({
@@ -1399,8 +1507,14 @@ export const eliminarContenedorLote = async (req: AuthenticatedRequest, res: Res
     const tenantId = req.user!.tenantId;
     const contenedor = await prisma.contenedorLote.findFirst({
       where: { id: req.params.contenedorId, lote: { id: req.params.id, tenantId } },
+      include: {
+        lote: { include: { ordenCompra: { select: { eliminado: true, estado: true } } } },
+      },
     });
     if (!contenedor) return res.status(404).json({ message: "Contenedor no encontrado." });
+    if (ordenNoOperable(contenedor.lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("eliminar contenedores") });
+    }
 
     await prisma.contenedorLote.delete({ where: { id: contenedor.id } });
     return res.status(204).send();
@@ -1420,8 +1534,14 @@ export const eliminarContenedorLote = async (req: AuthenticatedRequest, res: Res
 export const sincronizarTrackingLote = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("sincronizar el tracking") });
+    }
 
     const { sincronizarUnLote, TrackingSimuladoNoPermitidoError } =
       await import("./embarques-tracking.job");
@@ -1445,12 +1565,54 @@ export const sincronizarTrackingLote = async (req: AuthenticatedRequest, res: Re
   }
 };
 
+/** El lote cambió de estado entre la lectura y la escritura (otra solicitud ganó). */
+class ConflictoEstadoLoteError extends Error {}
+
+/** La orden de un lote anulada/eliminada no admite movimientos de recepción ni costeo. */
+const ordenNoOperable = (orden: { eliminado: boolean; estado: string }) =>
+  orden.eliminado || orden.estado === "Anulada";
+
+const ORDEN_ANULADA_MSG = (accion: string) =>
+  `La orden de este lote está anulada: no se puede ${accion}.`;
+
+/**
+ * Auditoría de descargas: deja en el historial de la orden quién descargó qué
+ * documento (tipo + id del documento). No guarda contenido ni ruta física. Se
+ * escribe ANTES de entregar el archivo: si el registro falla, no se entrega
+ * (falla cerrada) y la descarga responde 500.
+ */
+const registrarDescargaDocumento = (
+  req: AuthenticatedRequest,
+  ordenCompraId: string,
+  etiqueta: string,
+  documentoId: string,
+) =>
+  prisma.importacionHistorial.create({
+    data: {
+      ordenCompraId,
+      actor: req.user!.nombre,
+      accion: "Documento descargado",
+      detalle: `${etiqueta} (${documentoId})`,
+      etapa: "Documentación",
+    },
+  });
+
 /**
  * Ingreso físico a planta antes de la factura/liquidación final. Genera un
  * costeo PROVISIONAL por ítem (FOB * TRM pactada, sin arancel/flete/
  * agenciamiento porque aún no se conocen) para que el inventario tenga un
  * costo de referencia inmediato; liquidarCosteoImportacion agrega después la
  * fila definitiva sin borrar esta.
+ *
+ * Qué significa "recibir" HOY (verificado en este código): cambia el estado del
+ * lote a "Liberado pre-compra", sella la recepción física en planta
+ * (LoteImportacion.fechaLlegadaReal + hito RECEPCION_PLANTA) y crea el costeo
+ * provisional. NO crea existencias por lote, movimientos de almacén, cuarentena
+ * ni liberación de Calidad, y NO escribe en Siesa.
+ *
+ * El cambio de estado es condicional (updateMany sobre los estados previos a la
+ * recepción) dentro de la misma transacción que el costeo y el historial: dos
+ * recepciones simultáneas del mismo lote no duplican el costeo provisional.
  */
 export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1460,6 +1622,11 @@ export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Res
       include: { ordenCompra: { include: { items: true } } },
     });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: "La orden de este lote está anulada: no se puede recibir en planta." });
+    }
     if (lote.estado === "Liberado pre-compra" || lote.estado === "Nacionalizado") {
       return res
         .status(400)
@@ -1488,28 +1655,62 @@ export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Res
       };
     });
 
-    await prisma.$transaction([
-      prisma.loteImportacion.update({
-        where: { id: lote.id },
-        data: {
-          estado: "Liberado pre-compra",
-          fechaLlegadaReal: lote.fechaLlegadaReal ?? new Date(),
-        },
-      }),
-      prisma.costeoImportacionDetalle.createMany({ data: costeosProvisionales }),
-      prisma.importacionHistorial.create({
-        data: {
-          ordenCompraId: lote.ordenCompraId,
-          actor: req.user!.nombre,
-          accion: "Recibido en planta (pre-compra)",
-          detalle: `Lote ${lote.blAwb}: costeo provisional generado para ${costeosProvisionales.length} ítem(s).`,
-        },
-      }),
-    ]);
+    const fechaRecepcion = lote.fechaLlegadaReal ?? new Date();
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        const cambiado = await tx.loteImportacion.updateMany({
+          where: { id: lote.id, tenantId, estado: { in: ESTADOS_TRANSITO_MANUAL } },
+          data: { estado: "Liberado pre-compra", fechaLlegadaReal: fechaRecepcion },
+        });
+        if (cambiado.count === 0) throw new ConflictoEstadoLoteError();
+
+        await tx.loteImportacionHito.upsert({
+          where: { loteId_tipo: { loteId: lote.id, tipo: "RECEPCION_PLANTA" } },
+          create: {
+            tenantId,
+            loteId: lote.id,
+            tipo: "RECEPCION_PLANTA",
+            fecha: fechaRecepcion,
+            origen: "Sistema",
+            registradoPorId: req.user!.id,
+            registradoPorNombre: req.user!.nombre,
+          },
+          update: {
+            fecha: fechaRecepcion,
+            origen: "Sistema",
+            registradoPorId: req.user!.id,
+            registradoPorNombre: req.user!.nombre,
+          },
+        });
+        await tx.costeoImportacionDetalle.createMany({ data: costeosProvisionales });
+        await tx.importacionHistorial.create({
+          data: {
+            ordenCompraId: lote.ordenCompraId,
+            actor: req.user!.nombre,
+            accion: "Recibido en planta (pre-compra)",
+            detalle: `Lote ${lote.blAwb}: costeo provisional generado para ${costeosProvisionales.length} ítem(s).`,
+            etapa: "Recepción",
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof ConflictoEstadoLoteError) {
+        return res.status(409).json({
+          message:
+            "El estado del lote cambió mientras se procesaba la recepción. Recarga e intenta de nuevo.",
+        });
+      }
+      throw error;
+    }
 
     const actualizado = await prisma.loteImportacion.findUnique({
       where: { id: lote.id },
-      include: { expediente: { include: { vistosBuenos: true } }, costeos: true },
+      include: {
+        expediente: { include: { vistosBuenos: true } },
+        costeos: true,
+        hitos: true,
+      },
     });
 
     return res.json(serializarLote(actualizado!));
@@ -1520,11 +1721,20 @@ export const recibirPreCompraPlanta = async (req: AuthenticatedRequest, res: Res
 };
 
 /**
- * Liquidación definitiva del landed cost (NIC 2), prorrateada por ítem según
- * su participación en el valor FOB del lote. Registra además la diferencia
- * en cambio (NIC 21) entre la TRM pactada en la orden y la TRM real de
- * nacionalización. No borra el costeo provisional: agrega la fila definitiva
- * (esProvisional=false) para conservar la trazabilidad de la estimación.
+ * Liquidación definitiva del landed cost (NIC 2), prorrateada por ítem. Valor
+ * CIF, arancel e IVA se reparten SIEMPRE por participación en el valor FOB del
+ * lote; fletes nacionales, agenciamiento y otros costos se reparten por el
+ * método que elija quien liquida (`metodoProrrateoGastos`: FOB por defecto —
+ * el comportamiento histórico —, PESO o VOLUMEN). PESO/VOLUMEN exigen dato
+ * válido en todos los ítems: si falta, se rechaza (no se reparte con otro
+ * método). Registra además la diferencia en cambio (NIC 21) entre la TRM
+ * pactada en la orden y la TRM real de nacionalización. No borra el costeo
+ * provisional: agrega la fila definitiva (esProvisional=false) para conservar
+ * la trazabilidad de la estimación, y guarda el método usado en cada fila.
+ *
+ * El cambio a "Nacionalizado" es condicional (updateMany sobre los estados
+ * liquidables) en la misma transacción que las filas de costeo y el historial:
+ * dos liquidaciones simultáneas del mismo lote no duplican el costeo definitivo.
  */
 export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1537,6 +1747,11 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
       },
     });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: "La orden de este lote está anulada: no se puede liquidar el costeo." });
+    }
     if (!ESTADOS_LOTE_LIQUIDABLES.includes(lote.estado)) {
       return res.status(400).json({
         message: `No se puede liquidar un lote en estado "${lote.estado}". Debe estar en: ${ESTADOS_LOTE_LIQUIDABLES.join(", ")}.`,
@@ -1569,41 +1784,53 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
       return res.status(400).json({ message: "La orden no tiene ítems para liquidar." });
     }
 
+    const montos = validarMontosLiquidacion(req.body);
+    if (!montos.ok) return res.status(400).json({ message: montos.mensaje });
     const {
-      trmLiquidacion,
-      valorCifTotalUsd,
-      arancelTotalCop,
-      ivaTotalCop,
-      ivaDescontableCop,
-      fletesNacionalesCop,
-      agenciamientoCop,
-      otrosCostosCop,
-    } = req.body;
+      trmLiquidacion: trmLiq,
+      valorCifTotalUsd: totalCif,
+      arancelTotalCop: totalArancel,
+      ivaTotalCop: totalIva,
+      ivaDescontableCop: totalIvaDescontable,
+      fletesNacionalesCop: totalFletes,
+      agenciamientoCop: totalAgenciamiento,
+      otrosCostosCop: totalOtros,
+    } = montos.montos;
 
-    const trmLiq = numero(trmLiquidacion);
-    const trmPactada = numero(lote.ordenCompra.trmPactada);
-    const sumFobUsd = items.reduce(
-      (acc, item) => acc + numero(item.cantidad) * numero(item.valorUnitarioFob),
-      0,
-    );
-    if (sumFobUsd <= 0) {
+    const metodoSolicitado = req.body.metodoProrrateoGastos ?? "FOB";
+    if (!esMetodoProrrateo(metodoSolicitado)) {
       return res.status(400).json({
-        message: "El valor FOB total de la orden debe ser mayor a cero para prorratear costos.",
+        message: "Método de prorrateo inválido. Usa: FOB, PESO o VOLUMEN.",
       });
     }
+    if (!esMetodoAprobado(metodoSolicitado)) {
+      return res.status(400).json({
+        message: `El método de prorrateo "${metodoSolicitado}" aún no está aprobado por el negocio; usa FOB.`,
+      });
+    }
+    const metodoGastos: MetodoProrrateo = metodoSolicitado;
 
-    const totalIvaDescontable = numero(ivaDescontableCop);
-    const totalFletes = numero(fletesNacionalesCop);
-    const totalAgenciamiento = numero(agenciamientoCop);
-    const totalOtros = numero(otrosCostosCop);
-    const totalArancel = numero(arancelTotalCop);
-    const totalIva = numero(ivaTotalCop);
-    const totalCif = numero(valorCifTotalUsd);
+    const trmPactada = numero(lote.ordenCompra.trmPactada);
+    const itemsParaProrrateo = items.map((item) => ({
+      itemId: item.id,
+      descripcion: item.descripcion,
+      fobUsd: numero(item.cantidad) * numero(item.valorUnitarioFob),
+      pesoKg: item.pesoKg !== null && item.pesoKg !== undefined ? numero(item.pesoKg) : null,
+      volumenM3:
+        item.volumenM3 !== null && item.volumenM3 !== undefined ? numero(item.volumenM3) : null,
+    }));
+
+    const porFob = calcularParticipaciones(itemsParaProrrateo, "FOB");
+    if (!porFob.ok) return res.status(400).json({ message: porFob.mensaje });
+    const porGastos =
+      metodoGastos === "FOB" ? porFob : calcularParticipaciones(itemsParaProrrateo, metodoGastos);
+    if (!porGastos.ok) return res.status(400).json({ message: porGastos.mensaje });
 
     const costeosDefinitivos = items.map((item) => {
       const cantidad = numero(item.cantidad);
       const fobUsdItem = cantidad * numero(item.valorUnitarioFob);
-      const participacion = fobUsdItem / sumFobUsd;
+      const participacion = porFob.participaciones.get(item.id)!;
+      const participacionGastos = porGastos.participaciones.get(item.id)!;
 
       const valorCifUsd = totalCif * participacion;
       const valorCifCop = valorCifUsd * trmLiq;
@@ -1611,9 +1838,9 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
       const ivaTotalCopItem = totalIva * participacion;
       const ivaDescontableCopItem = totalIvaDescontable * participacion;
       const ivaCapitalizableCop = ivaTotalCopItem - ivaDescontableCopItem;
-      const fletesNacionalesCopItem = totalFletes * participacion;
-      const agenciamientoCopItem = totalAgenciamiento * participacion;
-      const otrosCostosCopItem = totalOtros * participacion;
+      const fletesNacionalesCopItem = totalFletes * participacionGastos;
+      const agenciamientoCopItem = totalAgenciamiento * participacionGastos;
+      const otrosCostosCopItem = totalOtros * participacionGastos;
       const diferenciaCambioCop = (trmLiq - trmPactada) * fobUsdItem;
 
       const costoTotalCop =
@@ -1644,30 +1871,47 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
         costoTotalCop,
         costoUnitarioCop: costoTotalCop / cantidad,
         esProvisional: false,
+        metodoProrrateoGastos: metodoGastos,
         liquidadoPorId: req.user!.id,
       };
     });
 
-    await prisma.$transaction([
-      prisma.costeoImportacionDetalle.createMany({ data: costeosDefinitivos }),
-      prisma.loteImportacion.update({ where: { id: lote.id }, data: { estado: "Nacionalizado" } }),
-      prisma.importacionHistorial.create({
-        data: {
-          ordenCompraId: lote.ordenCompraId,
-          actor: req.user!.nombre,
-          accion: "Costeo de importación liquidado",
-          detalle: `Lote ${lote.blAwb}: costo total landed $${costeosDefinitivos
-            .reduce((acc, c) => acc + c.costoTotalCop, 0)
-            .toLocaleString("es-CO")}`,
-        },
-      }),
-    ]);
+    try {
+      await prisma.$transaction(async (tx) => {
+        const cambiado = await tx.loteImportacion.updateMany({
+          where: { id: lote.id, tenantId, estado: { in: ESTADOS_LOTE_LIQUIDABLES } },
+          data: { estado: "Nacionalizado" },
+        });
+        if (cambiado.count === 0) throw new ConflictoEstadoLoteError();
+
+        await tx.costeoImportacionDetalle.createMany({ data: costeosDefinitivos });
+        await tx.importacionHistorial.create({
+          data: {
+            ordenCompraId: lote.ordenCompraId,
+            actor: req.user!.nombre,
+            accion: "Costeo de importación liquidado",
+            detalle: `Lote ${lote.blAwb}: costo total landed $${costeosDefinitivos
+              .reduce((acc, c) => acc + c.costoTotalCop, 0)
+              .toLocaleString("es-CO")} (gastos prorrateados por ${metodoGastos}).`,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof ConflictoEstadoLoteError) {
+        return res.status(409).json({
+          message:
+            "El estado del lote cambió mientras se procesaba la liquidación (posible liquidación simultánea). Recarga e intenta de nuevo.",
+        });
+      }
+      throw error;
+    }
 
     const actualizado = await prisma.loteImportacion.findUnique({
       where: { id: lote.id },
       include: {
         expediente: { include: { vistosBuenos: true } },
         costeos: { orderBy: { fechaLiquidacion: "desc" } },
+        hitos: true,
       },
     });
 
@@ -1780,8 +2024,16 @@ export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
 export const actualizarExpedienteAduanero = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: ORDEN_ANULADA_MSG("actualizar el expediente aduanero") });
+    }
 
     const { numeroDIM, fechaDIM, certificadoOrigenTlc, fechaLevante, estado } = req.body;
     if (estado !== undefined && estado !== null && !ESTADOS_EXPEDIENTE_VALIDOS.includes(estado)) {
@@ -1842,10 +2094,19 @@ export const subirDocumentoExpedienteAduanero = async (
       return res.status(400).json({ message: "No se recibió ningún archivo." });
     }
 
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Lote de importación no encontrado." });
+    }
+    if (ordenNoOperable(lote.ordenCompra)) {
+      fs.unlink(archivo.path, () => {});
+      return res
+        .status(400)
+        .json({ message: ORDEN_ANULADA_MSG("adjuntar documentos al expediente") });
     }
 
     const expedienteActual = await prisma.expedienteAduanero.findUnique({
@@ -1925,6 +2186,8 @@ export const obtenerDocumentoExpedienteAduanero = async (
       return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
     }
 
+    await registrarDescargaDocumento(req, lote.ordenCompraId, campos.etiqueta, expediente.id);
+
     const nombre = expediente[campos.nombre];
     const mime = expediente[campos.mime];
     res.setHeader("Content-Type", mime || "application/octet-stream");
@@ -1949,8 +2212,16 @@ export const eliminarDocumentoExpedienteAduanero = async (
     const campos = TIPOS_DOCUMENTO_EXPEDIENTE[tipo];
     if (!campos) return res.status(400).json({ message: "Tipo de documento inválido." });
 
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: ORDEN_ANULADA_MSG("eliminar documentos del expediente") });
+    }
 
     const expediente = await prisma.expedienteAduanero.findUnique({ where: { loteId: lote.id } });
     const ruta = expediente ? expediente[campos.ruta] : null;
@@ -1959,8 +2230,6 @@ export const eliminarDocumentoExpedienteAduanero = async (
         .status(404)
         .json({ message: `Este lote no tiene un documento de ${campos.etiqueta} adjunto.` });
     }
-
-    fs.unlink(path.join(UPLOADS_DIR_EXPEDIENTES, ruta), () => {});
 
     const datosLimpios = {
       [campos.nombre]: null,
@@ -1984,6 +2253,10 @@ export const eliminarDocumentoExpedienteAduanero = async (
       }),
     ]);
 
+    // El archivo se borra DESPUÉS de confirmar la transacción: si esta falla, la
+    // fila y el archivo siguen coherentes (antes se borraba el archivo primero).
+    fs.unlink(path.join(UPLOADS_DIR_EXPEDIENTES, ruta), () => {});
+
     return res.json(serializarExpediente(actualizado));
   } catch (error) {
     console.error("Error al eliminar documento del expediente aduanero:", error);
@@ -2000,8 +2273,14 @@ export const eliminarDocumentoExpedienteAduanero = async (
 export const crearVistoBueno = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const lote = await prisma.loteImportacion.findFirst({ where: { id: req.params.id, tenantId } });
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
     if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("registrar vistos buenos") });
+    }
 
     const { entidad, numero: numeroVisto, fecha } = req.body;
 
@@ -2045,9 +2324,18 @@ export const actualizarVistoBueno = async (req: AuthenticatedRequest, res: Respo
     const tenantId = req.user!.tenantId;
     const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
       where: { id: req.params.id, expediente: { tenantId } },
-      include: { expediente: { include: { lote: true } } },
+      include: {
+        expediente: {
+          include: {
+            lote: { include: { ordenCompra: { select: { eliminado: true, estado: true } } } },
+          },
+        },
+      },
     });
     if (!vistoBueno) return res.status(404).json({ message: "Visto bueno no encontrado." });
+    if (ordenNoOperable(vistoBueno.expediente.lote.ordenCompra)) {
+      return res.status(400).json({ message: ORDEN_ANULADA_MSG("actualizar vistos buenos") });
+    }
 
     const { entidad, numero: numeroVisto, estado, fecha } = req.body;
     if (estado !== undefined && estado !== null && !ESTADOS_VISTO_BUENO_VALIDOS.includes(estado)) {
@@ -2096,11 +2384,23 @@ export const subirDocumentoVistoBueno = async (req: AuthenticatedRequest, res: R
 
     const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
       where: { id: req.params.id, expediente: { tenantId } },
-      include: { expediente: { include: { lote: true } } },
+      include: {
+        expediente: {
+          include: {
+            lote: { include: { ordenCompra: { select: { eliminado: true, estado: true } } } },
+          },
+        },
+      },
     });
     if (!vistoBueno) {
       fs.unlink(archivo.path, () => {});
       return res.status(404).json({ message: "Visto bueno no encontrado." });
+    }
+    if (ordenNoOperable(vistoBueno.expediente.lote.ordenCompra)) {
+      fs.unlink(archivo.path, () => {});
+      return res
+        .status(400)
+        .json({ message: ORDEN_ANULADA_MSG("adjuntar documentos a vistos buenos") });
     }
 
     if (vistoBueno.archivoRuta) {
@@ -2145,6 +2445,7 @@ export const obtenerDocumentoVistoBueno = async (req: AuthenticatedRequest, res:
     const tenantId = req.user!.tenantId;
     const vistoBueno = await prisma.vistoBuenoAduanero.findFirst({
       where: { id: req.params.id, expediente: { tenantId } },
+      include: { expediente: { include: { lote: { select: { ordenCompraId: true } } } } },
     });
     if (!vistoBueno || !vistoBueno.archivoRuta) {
       return res.status(404).json({ message: "Este visto bueno no tiene un documento adjunto." });
@@ -2154,6 +2455,13 @@ export const obtenerDocumentoVistoBueno = async (req: AuthenticatedRequest, res:
     if (!fs.existsSync(rutaAbsoluta)) {
       return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
     }
+
+    await registrarDescargaDocumento(
+      req,
+      vistoBueno.expediente.lote.ordenCompraId,
+      "Visto bueno",
+      vistoBueno.id,
+    );
 
     res.setHeader("Content-Type", vistoBueno.archivoMime || "application/octet-stream");
     res.setHeader(
@@ -2265,6 +2573,13 @@ export const obtenerDocumentoOrdenCompraIntl = async (req: AuthenticatedRequest,
       return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
     }
 
+    await registrarDescargaDocumento(
+      req,
+      documento.ordenCompraId,
+      `Documento de la orden (${documento.tipo})`,
+      documento.id,
+    );
+
     res.setHeader("Content-Type", documento.mime || "application/octet-stream");
     res.setHeader(
       "Content-Disposition",
@@ -2288,8 +2603,6 @@ export const eliminarDocumentoOrdenCompraIntl = async (
     });
     if (!documento) return res.status(404).json({ message: "Documento no encontrado." });
 
-    fs.unlink(path.join(UPLOADS_DIR_ORDENES_COMPRA_INTL, documento.ruta), () => {});
-
     await prisma.$transaction([
       prisma.ordenCompraIntlDocumento.delete({ where: { id: documento.id } }),
       prisma.importacionHistorial.create({
@@ -2302,9 +2615,331 @@ export const eliminarDocumentoOrdenCompraIntl = async (
       }),
     ]);
 
+    // Después de confirmar la transacción (ver eliminarDocumentoExpedienteAduanero).
+    fs.unlink(path.join(UPLOADS_DIR_ORDENES_COMPRA_INTL, documento.ruta), () => {});
+
     return res.json({ message: "Documento eliminado." });
   } catch (error) {
     console.error("Error al eliminar documento inicial de la orden:", error);
+    return res.status(500).json({ message: "Error al eliminar el documento." });
+  }
+};
+
+// --- Hitos reales del lote ---
+// Hecho real con fecha y origen (ver domain/importaciones/hitos-lote.ts). Nunca
+// reemplaza fechaLlegadaEstimada (proveedor) ni etaTrackingActual (tracking): son
+// datos con dueños distintos. Registrar o corregir deja el valor anterior en
+// ImportacionHistorial (append-only), en la misma transacción.
+
+const ETAPA_HITO: Record<TipoHitoLote, string> = {
+  EMBARQUE_REAL: "Embarque",
+  LLEGADA_PUERTO: "Tránsito",
+  INSPECCION_ADUANERA: "Aduana",
+  RECEPCION_PLANTA: "Recepción",
+};
+
+const esErrorUnicoPrisma = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
+const fechaCorta = (fecha: Date) => fecha.toISOString().slice(0, 10);
+
+export const registrarHitoLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipo = req.params.tipo;
+    if (!esTipoHitoManual(tipo)) {
+      return res.status(400).json({
+        message:
+          "Tipo de hito inválido o no registrable a mano. Usa: EMBARQUE_REAL, LLEGADA_PUERTO o INSPECCION_ADUANERA (la recepción en planta la registra el sistema al recibir el lote).",
+      });
+    }
+
+    const fecha = new Date(req.body.fecha);
+    if (Number.isNaN(fecha.getTime())) {
+      return res.status(400).json({ message: "La fecha del hito no es válida." });
+    }
+
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } }, hitos: true },
+    });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: "La orden de este lote está anulada: no se pueden registrar hitos." });
+    }
+
+    const existentes: HitosExistentes = {};
+    for (const h of lote.hitos) {
+      if ((TIPOS_HITO_LOTE as readonly string[]).includes(h.tipo)) {
+        existentes[h.tipo as TipoHitoLote] = h.fecha;
+      }
+    }
+    // Lotes recibidos antes de existir la tabla de hitos: su recepción está en
+    // fechaLlegadaReal (única fuente que la escribe).
+    if (!existentes.RECEPCION_PLANTA && lote.fechaLlegadaReal) {
+      existentes.RECEPCION_PLANTA = lote.fechaLlegadaReal;
+    }
+
+    const errorHito = validarHito(tipo, fecha, existentes, new Date());
+    if (errorHito) return res.status(400).json({ message: errorHito });
+
+    const anterior = lote.hitos.find((h) => h.tipo === tipo);
+    const nota =
+      typeof req.body.nota === "string" && req.body.nota.trim() ? req.body.nota.trim() : null;
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.loteImportacionHito.upsert({
+          where: { loteId_tipo: { loteId: lote.id, tipo } },
+          create: {
+            tenantId,
+            loteId: lote.id,
+            tipo,
+            fecha,
+            origen: "Manual",
+            nota,
+            registradoPorId: req.user!.id,
+            registradoPorNombre: req.user!.nombre,
+          },
+          update: {
+            fecha,
+            origen: "Manual",
+            nota,
+            registradoPorId: req.user!.id,
+            registradoPorNombre: req.user!.nombre,
+          },
+        });
+        await tx.importacionHistorial.create({
+          data: {
+            ordenCompraId: lote.ordenCompraId,
+            actor: req.user!.nombre,
+            accion: anterior
+              ? `Hito corregido: ${ETIQUETA_HITO[tipo]}`
+              : `Hito registrado: ${ETIQUETA_HITO[tipo]}`,
+            detalle: `Lote ${lote.blAwb}: ${fechaCorta(fecha)}${
+              anterior ? ` (antes: ${fechaCorta(anterior.fecha)})` : ""
+            }${nota ? `. ${nota}` : ""}`,
+            origen: "Manual",
+            etapa: ETAPA_HITO[tipo],
+          },
+        });
+      });
+    } catch (error) {
+      if (esErrorUnicoPrisma(error)) {
+        return res.status(409).json({
+          message: "Otro usuario registró este hito al mismo tiempo. Recarga e intenta de nuevo.",
+        });
+      }
+      throw error;
+    }
+
+    const hitos = await prisma.loteImportacionHito.findMany({
+      where: { loteId: lote.id, tenantId },
+    });
+    return res.json(serializarHitosLote({ ...lote, hitos }));
+  } catch (error) {
+    console.error("Error al registrar hito del lote:", error);
+    return res.status(500).json({ message: "Error al registrar el hito del lote." });
+  }
+};
+
+export const eliminarHitoLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const tipo = req.params.tipo;
+    if (!esTipoHitoManual(tipo)) {
+      return res.status(400).json({ message: "Solo se pueden eliminar hitos registrados a mano." });
+    }
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
+    if (!lote) return res.status(404).json({ message: "Lote de importación no encontrado." });
+    if (ordenNoOperable(lote.ordenCompra)) {
+      return res
+        .status(400)
+        .json({ message: "La orden de este lote está anulada: no se pueden modificar hitos." });
+    }
+
+    const existente = await prisma.loteImportacionHito.findFirst({
+      where: { loteId: lote.id, tenantId, tipo },
+    });
+    if (!existente) {
+      return res.status(404).json({ message: "Este lote no tiene ese hito registrado." });
+    }
+
+    const eliminado = await prisma.$transaction(async (tx) => {
+      const borrados = await tx.loteImportacionHito.deleteMany({
+        where: { id: existente.id, tenantId },
+      });
+      if (borrados.count === 0) return false;
+      await tx.importacionHistorial.create({
+        data: {
+          ordenCompraId: lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Hito eliminado: ${ETIQUETA_HITO[tipo]}`,
+          detalle: `Lote ${lote.blAwb}: se retiró la fecha ${fechaCorta(existente.fecha)}.`,
+          origen: "Manual",
+          etapa: ETAPA_HITO[tipo],
+        },
+      });
+      return true;
+    });
+    if (!eliminado) {
+      return res.status(404).json({ message: "Este lote no tiene ese hito registrado." });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Error al eliminar hito del lote:", error);
+    return res.status(500).json({ message: "Error al eliminar el hito del lote." });
+  }
+};
+
+// --- Documentos del lote (B/L-AWB, COA, otros) ---
+// Mismo patrón que los documentos iniciales de la orden: filas en
+// LoteImportacionDocumento, archivo privado servido solo por endpoint
+// autenticado que valida tenant, historial en la misma transacción. No se
+// valida obligatoriedad: la regla (por material/proveedor/país) no está definida.
+
+export const subirDocumentoLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const etiqueta = TIPOS_DOCUMENTO_LOTE[req.params.tipo];
+    const archivo = (req as AuthenticatedRequest & { file?: Express.Multer.File }).file;
+
+    if (!etiqueta) {
+      if (archivo) fs.unlink(archivo.path, () => {});
+      return res.status(400).json({
+        message: `Tipo de documento inválido. Usa: ${Object.keys(TIPOS_DOCUMENTO_LOTE).join(", ")}.`,
+      });
+    }
+    if (!archivo) return res.status(400).json({ message: "No se recibió ningún archivo." });
+
+    const lote = await prisma.loteImportacion.findFirst({
+      where: { id: req.params.id, tenantId },
+      include: { ordenCompra: { select: { eliminado: true, estado: true } } },
+    });
+    if (!lote) {
+      fs.unlink(archivo.path, () => {});
+      return res.status(404).json({ message: "Lote de importación no encontrado." });
+    }
+    if (ordenNoOperable(lote.ordenCompra)) {
+      fs.unlink(archivo.path, () => {});
+      return res
+        .status(400)
+        .json({ message: "La orden de este lote está anulada: no se pueden adjuntar documentos." });
+    }
+
+    // Tenant/lote ya confirmados: recién acá se mueve el archivo de la carpeta
+    // temporal a la carpeta real de este lote.
+    const rutaDefinitiva = moverArchivoDefinitivo(UPLOADS_DIR_LOTES_IMPORTACION, archivo, lote.id);
+
+    try {
+      const [documento] = await prisma.$transaction([
+        prisma.loteImportacionDocumento.create({
+          data: {
+            tenantId,
+            loteId: lote.id,
+            tipo: etiqueta,
+            nombreOriginal: archivo.originalname,
+            mime: archivo.mimetype,
+            tamano: archivo.size,
+            ruta: rutaDefinitiva,
+            subidoPorId: req.user!.id,
+            subidoPorNombre: req.user!.nombre,
+          },
+        }),
+        prisma.importacionHistorial.create({
+          data: {
+            ordenCompraId: lote.ordenCompraId,
+            actor: req.user!.nombre,
+            accion: `Documento de lote adjuntado (${etiqueta})`,
+            detalle: `Lote ${lote.blAwb}: ${archivo.originalname}`,
+            etapa: "Documentación",
+          },
+        }),
+      ]);
+      return res.status(201).json(serializarDocumentoLote(documento));
+    } catch (error) {
+      // La transacción falló: no dejar el archivo huérfano en disco.
+      fs.unlink(path.join(UPLOADS_DIR_LOTES_IMPORTACION, rutaDefinitiva), () => {});
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error al subir documento del lote:", error);
+    return res.status(500).json({ message: "Error al subir el documento." });
+  }
+};
+
+export const obtenerDocumentoLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const documento = await prisma.loteImportacionDocumento.findFirst({
+      where: { id: req.params.documentoId, tenantId, loteId: req.params.id },
+      include: { lote: { select: { ordenCompraId: true } } },
+    });
+    if (!documento) return res.status(404).json({ message: "Documento no encontrado." });
+    const lote = documento.lote;
+
+    const rutaAbsoluta = path.join(UPLOADS_DIR_LOTES_IMPORTACION, documento.ruta);
+    if (!fs.existsSync(rutaAbsoluta)) {
+      return res.status(404).json({ message: "El archivo ya no está disponible en el servidor." });
+    }
+
+    await registrarDescargaDocumento(
+      req,
+      lote.ordenCompraId,
+      `Documento del lote (${documento.tipo})`,
+      documento.id,
+    );
+
+    res.setHeader("Content-Type", documento.mime || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(documento.nombreOriginal || "documento")}"`,
+    );
+    return res.sendFile(rutaAbsoluta);
+  } catch (error) {
+    console.error("Error al obtener documento del lote:", error);
+    return res.status(500).json({ message: "Error al obtener el documento." });
+  }
+};
+
+export const eliminarDocumentoLote = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const documento = await prisma.loteImportacionDocumento.findFirst({
+      where: { id: req.params.documentoId, tenantId, loteId: req.params.id },
+      include: { lote: { select: { ordenCompraId: true, blAwb: true } } },
+    });
+    if (!documento) return res.status(404).json({ message: "Documento no encontrado." });
+
+    const eliminado = await prisma.$transaction(async (tx) => {
+      const borrados = await tx.loteImportacionDocumento.deleteMany({
+        where: { id: documento.id, tenantId },
+      });
+      if (borrados.count === 0) return false;
+      await tx.importacionHistorial.create({
+        data: {
+          ordenCompraId: documento.lote.ordenCompraId,
+          actor: req.user!.nombre,
+          accion: `Documento de lote eliminado (${documento.tipo})`,
+          detalle: `Lote ${documento.lote.blAwb}: ${documento.nombreOriginal}`,
+          etapa: "Documentación",
+        },
+      });
+      return true;
+    });
+    if (!eliminado) return res.status(404).json({ message: "Documento no encontrado." });
+
+    // Después de confirmar la transacción: archivo y fila quedan coherentes.
+    fs.unlink(path.join(UPLOADS_DIR_LOTES_IMPORTACION, documento.ruta), () => {});
+    return res.json({ message: "Documento eliminado." });
+  } catch (error) {
+    console.error("Error al eliminar documento del lote:", error);
     return res.status(500).json({ message: "Error al eliminar el documento." });
   }
 };

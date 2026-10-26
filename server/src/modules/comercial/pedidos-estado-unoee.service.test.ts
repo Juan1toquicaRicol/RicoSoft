@@ -97,12 +97,20 @@ describe("etiquetas de estado UnoEE", () => {
   });
 
   it("estado de ítem: precedencia facturado > remisionado > backorder > comprometido", () => {
-    const base = { cantidad: 10, cantidadComprometida: 0, cantidadRemisionada: 0, cantidadFacturada: 0, backorder: false };
+    const base = {
+      cantidad: 10,
+      cantidadComprometida: 0,
+      cantidadRemisionada: 0,
+      cantidadFacturada: 0,
+      backorder: false,
+    };
     expect(estadoItemUnoee({ ...base, cantidadFacturada: 10 })).toBe("Facturado");
     expect(estadoItemUnoee({ ...base, cantidadFacturada: 4 })).toBe("Parcialmente facturado");
     expect(estadoItemUnoee({ ...base, cantidadRemisionada: 10 })).toBe("Remisionado");
     expect(estadoItemUnoee({ ...base, cantidadRemisionada: 2 })).toBe("Parcialmente remisionado");
-    expect(estadoItemUnoee({ ...base, backorder: true, cantidadComprometida: 5 })).toBe("Backorder");
+    expect(estadoItemUnoee({ ...base, backorder: true, cantidadComprometida: 5 })).toBe(
+      "Backorder",
+    );
     expect(estadoItemUnoee({ ...base, cantidadComprometida: 5 })).toBe("Comprometido");
     expect(estadoItemUnoee(base)).toBe("Sin comprometer");
   });
@@ -121,7 +129,12 @@ describe("obtenerEstadoPedidoUnoee", () => {
   });
 
   it("Caso B: sin erpRowId -> vinculado=false, sin consultar Siesa", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "p", estado: "BORRADOR", erpRowId: null, erpEstadoSincronizacion: null });
+    mocks.findFirst.mockResolvedValue({
+      id: "p",
+      estado: "BORRADOR",
+      erpRowId: null,
+      erpEstadoSincronizacion: null,
+    });
     const dto = await obtenerEstadoPedidoUnoee("t1", "p");
     expect(dto).toMatchObject({
       vinculado: false,
@@ -134,7 +147,12 @@ describe("obtenerEstadoPedidoUnoee", () => {
   });
 
   it("Caso A: cabecera y detalle de ítems del PDV, en 2 consultas (resumen + líneas)", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "p", estado: "LISTO_PARA_ERP", erpRowId: 77, erpEstadoSincronizacion: "VINCULADO" });
+    mocks.findFirst.mockResolvedValue({
+      id: "p",
+      estado: "LISTO_PARA_ERP",
+      erpRowId: 77,
+      erpEstadoSincronizacion: "VINCULADO",
+    });
     mocks.query
       .mockResolvedValueOnce({ recordset: [cabeceraSiesa] })
       .mockResolvedValueOnce({ recordset: lineasSiesa });
@@ -179,15 +197,30 @@ describe("obtenerEstadoPedidoUnoee", () => {
   });
 
   it("vinculado pero Siesa no devuelve el PDV -> encontradoEnSiesa=false, sin líneas", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "p", estado: "LISTO_PARA_ERP", erpRowId: 77, erpEstadoSincronizacion: "VINCULADO" });
+    mocks.findFirst.mockResolvedValue({
+      id: "p",
+      estado: "LISTO_PARA_ERP",
+      erpRowId: 77,
+      erpEstadoSincronizacion: "VINCULADO",
+    });
     mocks.query.mockResolvedValueOnce({ recordset: [] });
     const dto = await obtenerEstadoPedidoUnoee("t1", "p");
-    expect(dto).toMatchObject({ vinculado: true, encontradoEnSiesa: false, cabecera: null, items: [] });
+    expect(dto).toMatchObject({
+      vinculado: true,
+      encontradoEnSiesa: false,
+      cabecera: null,
+      items: [],
+    });
     expect(mocks.query).toHaveBeenCalledTimes(1);
   });
 
   it("falla de Siesa -> SiesaConsultaError", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "p", estado: "LISTO_PARA_ERP", erpRowId: 77, erpEstadoSincronizacion: "VINCULADO" });
+    mocks.findFirst.mockResolvedValue({
+      id: "p",
+      estado: "LISTO_PARA_ERP",
+      erpRowId: 77,
+      erpEstadoSincronizacion: "VINCULADO",
+    });
     mocks.query.mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(obtenerEstadoPedidoUnoee("t1", "p")).rejects.toBeInstanceOf(SiesaConsultaError);
   });

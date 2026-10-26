@@ -132,7 +132,8 @@ interface FilaLinea {
   valorNeto: number | null;
 }
 
-export const formatearConsecutivoCotizacionSiesa = (consec: number) => `COT-CDV-${String(consec).padStart(5, "0")}`;
+export const formatearConsecutivoCotizacionSiesa = (consec: number) =>
+  `COT-CDV-${String(consec).padStart(5, "0")}`;
 
 const redondear2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -391,7 +392,11 @@ async function crearCotizacionLocal(
             detalle: `${actor.nombre} ingresó la cotización ${formatearNumeroCotizacion(nueva.numero)} desde Siesa (${c.consecutivo}, rowid ${c.erpRowId}).`,
             entidadTipo: "Cotizacion",
             entidadId: nueva.id,
-            datosNuevos: JSON.stringify({ erpRowId: c.erpRowId, erpNumero: c.consecutivo, items: c.items.length }),
+            datosNuevos: JSON.stringify({
+              erpRowId: c.erpRowId,
+              erpNumero: c.consecutivo,
+              items: c.items.length,
+            }),
           },
         });
         return nueva.id;
@@ -522,7 +527,9 @@ export async function sincronizarCotizacionesSiesa(
     advertencias: [
       "Si Siesa no trae f430_fecha_vcto_cotizacion, el vencimiento se estima como fecha + 15 días (vencimientoEstimado).",
       "descuentoGlobalTasa (f430_tasa_dscto_global_cap) es informativa: no se aplica como descuento final hasta validar su semántica en UnoEE.",
-      ...(guardar ? [] : ["Modo simulación: no se creó ni modificó ninguna cotización en RicoSoft."]),
+      ...(guardar
+        ? []
+        : ["Modo simulación: no se creó ni modificó ninguna cotización en RicoSoft."]),
     ],
   };
 }

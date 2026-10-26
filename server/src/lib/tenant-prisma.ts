@@ -104,6 +104,11 @@ const MODELOS_TENANT_SCOPED = new Set([
   //   crudo en el módulo gestion-humana (sin bug activo detectado), pero
   //   quedaban fuera de esta lista curada sin ninguna razón documentada.
   "OrdenCompraIntlDocumento",
+  // Hitos y documentos de lote (Importaciones): tenantId NOT NULL, sin semántica
+  // GENERAL. importaciones.controller.ts los filtra manualmente por tenantId; se
+  // listan aquí como defensa en profundidad, igual que OrdenCompraIntlDocumento.
+  "LoteImportacionHito",
+  "LoteImportacionDocumento",
   "ConfiguracionInventario",
   // ConfiguracionComercial (Ventas/Proformas): mismo patrón que
   // ConfiguracionInventario arriba — una fila por tenant, sin ninguna

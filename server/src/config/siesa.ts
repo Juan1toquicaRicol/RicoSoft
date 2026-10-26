@@ -139,5 +139,10 @@ export async function cerrarSiesaPool(): Promise<void> {
 }
 
 export { sql };
-export { clasificarErrorSiesa, respuestaErrorSiesa, marcarErrorSiesa, esErrorSiesa } from "../lib/siesa-errores";
+export {
+  clasificarErrorSiesa,
+  respuestaErrorSiesa,
+  marcarErrorSiesa,
+  esErrorSiesa,
+} from "../lib/siesa-errores";
 export type { CausaFalloSiesa } from "../lib/siesa-errores";

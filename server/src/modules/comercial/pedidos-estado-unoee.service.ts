@@ -101,10 +101,7 @@ interface FilaLinea {
 /** Líneas del PDV (una consulta), filtradas por compañía y tipo PDV. */
 export async function leerLineasPdv(ciaId: number, pdvRowId: number) {
   const pool = await getSiesaPool();
-  const { recordset } = await pool
-    .request()
-    .input("ciaId", ciaId)
-    .input("rowId", pdvRowId)
+  const { recordset } = await pool.request().input("ciaId", ciaId).input("rowId", pdvRowId)
     .query<FilaLinea>(`
       SELECT
         m.f431_rowid AS lineaRowId,
@@ -204,7 +201,9 @@ export async function obtenerEstadoPedidoUnoee(
   if (!ciaId) throw new SiesaNoConfiguradoError();
 
   try {
-    const resumen = (await leerCompromisoSiesaPorPdv(ciaId, [pedido.erpRowId])).get(pedido.erpRowId);
+    const resumen = (await leerCompromisoSiesaPorPdv(ciaId, [pedido.erpRowId])).get(
+      pedido.erpRowId,
+    );
     if (!resumen) {
       return { ...base, vinculado: true, encontradoEnSiesa: false, cabecera: null, items: [] };
     }

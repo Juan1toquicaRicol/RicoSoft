@@ -40,7 +40,9 @@ export interface DestinoIntegracion {
 export function parsearDatabaseUrl(url: string): DestinoIntegracion {
   const m = /^sqlserver:\/\/([^:;\\]+)(?:\\([^:;]+))?(?::(\d+))?;(.*)$/i.exec(url.trim());
   if (!m) {
-    throw new Error("DATABASE_URL no tiene el formato sqlserver://host:puerto;database=...;user=...");
+    throw new Error(
+      "DATABASE_URL no tiene el formato sqlserver://host:puerto;database=...;user=...",
+    );
   }
   const pares = new Map<string, string>();
   for (const parte of m[4].split(";")) {
@@ -72,7 +74,9 @@ export function validarDestinoIntegracion(
   const db = destino.database.toLowerCase();
 
   if (BASES_PROHIBIDAS.some((b) => b.toLowerCase() === db)) {
-    throw new Error(`Suite de integración bloqueada: la base "${destino.database}" está prohibida como destino de pruebas.`);
+    throw new Error(
+      `Suite de integración bloqueada: la base "${destino.database}" está prohibida como destino de pruebas.`,
+    );
   }
   if (db === BASE_QA_APROBADA) {
     if (destino.host !== HOST_QA_APROBADO) {
@@ -86,7 +90,9 @@ export function validarDestinoIntegracion(
       );
     }
     if (destino.user.toLowerCase() === "sa") {
-      throw new Error('Suite de integración bloqueada: no se permite el usuario "sa" contra saas_dev_qa; usa el login de mínimo privilegio.');
+      throw new Error(
+        'Suite de integración bloqueada: no se permite el usuario "sa" contra saas_dev_qa; usa el login de mínimo privilegio.',
+      );
     }
     if (destino.user.toLowerCase() !== LOGIN_QA[rolQa]) {
       throw new Error(
@@ -108,13 +114,20 @@ export function validarDestinoIntegracion(
  * Como validarDestinoIntegracion, pero exige que el destino sea saas_dev_qa Y que
  * el login corresponda al rol del comando: `migrador` (deploy/status) o `runner` (pruebas).
  */
-export function validarDestinoQa(databaseUrl: string | undefined, rol: keyof typeof LOGIN_QA): DestinoIntegracion {
+export function validarDestinoQa(
+  databaseUrl: string | undefined,
+  rol: keyof typeof LOGIN_QA,
+): DestinoIntegracion {
   const destino = validarDestinoIntegracion(databaseUrl, rol);
   if (destino.database.toLowerCase() !== BASE_QA_APROBADA) {
-    throw new Error(`Bloqueado: este comando solo opera sobre ${BASE_QA_APROBADA}, no sobre "${destino.database}".`);
+    throw new Error(
+      `Bloqueado: este comando solo opera sobre ${BASE_QA_APROBADA}, no sobre "${destino.database}".`,
+    );
   }
   if (destino.user.toLowerCase() !== LOGIN_QA[rol]) {
-    throw new Error(`Bloqueado: para el rol "${rol}" se exige el login ${LOGIN_QA[rol]}, no "${destino.user}".`);
+    throw new Error(
+      `Bloqueado: para el rol "${rol}" se exige el login ${LOGIN_QA[rol]}, no "${destino.user}".`,
+    );
   }
   return destino;
 }

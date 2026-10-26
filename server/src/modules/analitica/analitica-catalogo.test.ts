@@ -47,9 +47,7 @@ describe("catálogo de métricas/dimensiones", () => {
   });
 
   it("solo la dimensión fecha permite línea/área", () => {
-    expect(visualizacionesPermitidas("fecha")).toEqual(
-      expect.arrayContaining(["linea", "area"]),
-    );
+    expect(visualizacionesPermitidas("fecha")).toEqual(expect.arrayContaining(["linea", "area"]));
     expect(visualizacionesPermitidas("cliente")).not.toContain("linea");
     expect(visualizacionesPermitidas("vendedor")).not.toContain("area");
   });
@@ -61,15 +59,12 @@ describe("validarConfiguracionAnalisis", () => {
   });
 
   it("acepta margen agrupado por vendedor (válida)", () => {
-    expect(
-      validarConfiguracionAnalisis({ ...base, dimensionPrincipal: "vendedor" }).ok,
-    ).toBe(true);
+    expect(validarConfiguracionAnalisis({ ...base, dimensionPrincipal: "vendedor" }).ok).toBe(true);
   });
 
   it("acepta ventas agrupado por fecha (ventas por día, válida)", () => {
     expect(
-      validarConfiguracionAnalisis({ ...base, metrica: "ventas", dimensionPrincipal: "fecha" })
-        .ok,
+      validarConfiguracionAnalisis({ ...base, metrica: "ventas", dimensionPrincipal: "fecha" }).ok,
     ).toBe(true);
   });
 
@@ -115,7 +110,11 @@ describe("validarConfiguracionAnalisis", () => {
   });
 
   it("rechaza fechaInicio posterior o igual a fechaFin", () => {
-    const r = validarConfiguracionAnalisis({ ...base, fechaInicio: "2026-02-01", fechaFin: "2026-02-01" });
+    const r = validarConfiguracionAnalisis({
+      ...base,
+      fechaInicio: "2026-02-01",
+      fechaFin: "2026-02-01",
+    });
     expect(r.ok).toBe(false);
   });
 

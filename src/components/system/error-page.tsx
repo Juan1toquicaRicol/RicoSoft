@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-import { WifiOff, ShieldAlert, LockKeyhole, ServerCrash, Clock3, SearchX, AlertTriangle } from "lucide-react";
+import {
+  WifiOff,
+  ShieldAlert,
+  LockKeyhole,
+  ServerCrash,
+  Clock3,
+  SearchX,
+  AlertTriangle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/config/api";
@@ -53,14 +61,16 @@ const VARIANTES: Record<ErrorVariant, VariantContent> = {
   NETWORK: {
     icon: <WifiOff {...ICON_PROPS} />,
     titulo: "No se pudo conectar con RicoSoft",
-    descripcion: "No fue posible comunicarnos con el servidor. Verifica la conexión e inténtalo nuevamente.",
+    descripcion:
+      "No fue posible comunicarnos con el servidor. Verifica la conexión e inténtalo nuevamente.",
     mostrarReintentar: true,
     mostrarInicio: false,
   },
   TIMEOUT: {
     icon: <Clock3 {...ICON_PROPS} />,
     titulo: "La operación está tardando demasiado",
-    descripcion: "El servidor no respondió dentro del tiempo esperado. Puedes intentarlo nuevamente.",
+    descripcion:
+      "El servidor no respondió dentro del tiempo esperado. Puedes intentarlo nuevamente.",
     mostrarReintentar: true,
     mostrarInicio: false,
   },

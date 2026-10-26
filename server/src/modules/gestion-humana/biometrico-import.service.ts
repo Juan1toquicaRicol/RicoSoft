@@ -165,7 +165,10 @@ export interface ReporteImportacionBiometrica {
  */
 export async function sincronizarFuenteBiometrica(
   fuenteNombre: string,
-  opciones: { tamanoLote?: number; onProgreso?: (progreso: ProgresoImportacionBiometrica) => void } = {},
+  opciones: {
+    tamanoLote?: number;
+    onProgreso?: (progreso: ProgresoImportacionBiometrica) => void;
+  } = {},
 ): Promise<ReporteImportacionBiometrica> {
   const tamanoLote = opciones.tamanoLote ?? TAMANO_LOTE_DEFAULT;
   const fuente = await obtenerFuenteOrThrow(fuenteNombre);
@@ -207,7 +210,11 @@ export async function sincronizarFuenteBiometrica(
           externalUserId: { in: idsUnicos },
           activo: true,
         },
-        select: { externalUserId: true, empleadoId: true, empleado: { select: { empresaId: true } } },
+        select: {
+          externalUserId: true,
+          empleadoId: true,
+          empleado: { select: { empresaId: true } },
+        },
       });
       const mapaEmpleado = new Map(vinculos.map((v) => [v.externalUserId, v]));
 
@@ -226,7 +233,8 @@ export async function sincronizarFuenteBiometrica(
           fecha: soloFecha(fila.CheckTime),
           checkType: fila.CheckType,
           tipoMarcacion: mapearTipoMarcacion(fila.CheckType),
-          dispositivoId: fila.Sensorid !== null && fila.Sensorid !== undefined ? String(fila.Sensorid) : null,
+          dispositivoId:
+            fila.Sensorid !== null && fila.Sensorid !== undefined ? String(fila.Sensorid) : null,
           workType: fila.WorkType,
           attFlag: fila.AttFlag,
           checked: normalizarBit(fila.Checked),

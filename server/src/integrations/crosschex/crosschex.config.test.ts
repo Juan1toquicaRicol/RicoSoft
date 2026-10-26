@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
-import { leerConfigCrossChex, construirConnectionString, CrossChexConfigError } from "./crosschex.config";
+import {
+  leerConfigCrossChex,
+  construirConnectionString,
+  CrossChexConfigError,
+} from "./crosschex.config";
 
 describe("leerConfigCrossChex", () => {
   const envOriginal = { ...process.env };

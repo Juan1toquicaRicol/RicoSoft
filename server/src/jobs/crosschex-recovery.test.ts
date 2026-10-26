@@ -26,7 +26,8 @@ describe("recuperarSincronizacionesBiometricoInterrumpidas", () => {
 
   it("solo recupera EN_CURSO más viejo que el umbral (15 min por defecto), no todo EN_CURSO", async () => {
     const antes = Date.now();
-    const { recuperarSincronizacionesBiometricoInterrumpidas } = await import("./crosschex-recovery");
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
 
     await recuperarSincronizacionesBiometricoInterrumpidas();
 
@@ -43,7 +44,8 @@ describe("recuperarSincronizacionesBiometricoInterrumpidas", () => {
   it("respeta CROSSCHEX_SYNC_STALE_MINUTES si está configurado", async () => {
     process.env.CROSSCHEX_SYNC_STALE_MINUTES = "5";
     const antes = Date.now();
-    const { recuperarSincronizacionesBiometricoInterrumpidas } = await import("./crosschex-recovery");
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
 
     await recuperarSincronizacionesBiometricoInterrumpidas();
 
@@ -56,7 +58,8 @@ describe("recuperarSincronizacionesBiometricoInterrumpidas", () => {
   it("ignora un CROSSCHEX_SYNC_STALE_MINUTES inválido y cae al default de 15", async () => {
     process.env.CROSSCHEX_SYNC_STALE_MINUTES = "no-es-un-numero";
     const antes = Date.now();
-    const { recuperarSincronizacionesBiometricoInterrumpidas } = await import("./crosschex-recovery");
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
 
     await recuperarSincronizacionesBiometricoInterrumpidas();
 
@@ -68,7 +71,8 @@ describe("recuperarSincronizacionesBiometricoInterrumpidas", () => {
 
   it("marca FALLIDO con finalizadoEn y mensajeError, y devuelve el count", async () => {
     updateManyMock.mockResolvedValue({ count: 2 });
-    const { recuperarSincronizacionesBiometricoInterrumpidas } = await import("./crosschex-recovery");
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
 
     const count = await recuperarSincronizacionesBiometricoInterrumpidas();
 

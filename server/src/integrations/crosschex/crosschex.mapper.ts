@@ -54,7 +54,14 @@ export function parsearCheckTime(checkTime: Date | string): Date {
   }
   const [, anio, mes, dia, hora, minuto, segundo] = m;
   return new Date(
-    Date.UTC(Number(anio), Number(mes) - 1, Number(dia), Number(hora), Number(minuto), Number(segundo)),
+    Date.UTC(
+      Number(anio),
+      Number(mes) - 1,
+      Number(dia),
+      Number(hora),
+      Number(minuto),
+      Number(segundo),
+    ),
   );
 }
 
@@ -62,7 +69,9 @@ export function parsearCheckTime(checkTime: Date | string): Date {
  * para poblar MarcacionBiometrica.fecha sin un segundo parseo. */
 export function soloFecha(checkTime: Date | string): Date {
   const parseado = parsearCheckTime(checkTime);
-  return new Date(Date.UTC(parseado.getUTCFullYear(), parseado.getUTCMonth(), parseado.getUTCDate()));
+  return new Date(
+    Date.UTC(parseado.getUTCFullYear(), parseado.getUTCMonth(), parseado.getUTCDate()),
+  );
 }
 
 /** Normaliza un BIT de Access: el driver ODBC puede devolverlo como

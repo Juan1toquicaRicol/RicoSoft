@@ -26,9 +26,21 @@ describe("accionesProforma", () => {
   });
 
   it("respeta permisos: Aceptar exige comercial.proformas.aceptar (no basta gestionar); Crear Pedido exige gestionar pedidos", () => {
-    const soloGestionar = { gestionarProformas: true, aceptarProformas: false, gestionarPedidos: true };
-    const soloAceptar = { gestionarProformas: false, aceptarProformas: true, gestionarPedidos: true };
-    const sinPedidos = { gestionarProformas: true, aceptarProformas: true, gestionarPedidos: false };
+    const soloGestionar = {
+      gestionarProformas: true,
+      aceptarProformas: false,
+      gestionarPedidos: true,
+    };
+    const soloAceptar = {
+      gestionarProformas: false,
+      aceptarProformas: true,
+      gestionarPedidos: true,
+    };
+    const sinPedidos = {
+      gestionarProformas: true,
+      aceptarProformas: true,
+      gestionarPedidos: false,
+    };
     expect(accionesProforma("ENVIADA", soloGestionar).puedeAceptar).toBe(false);
     expect(accionesProforma("ENVIADA", soloAceptar).puedeAceptar).toBe(true);
     expect(accionesProforma("ACEPTADA", sinPedidos).puedeCrearPedido).toBe(false);

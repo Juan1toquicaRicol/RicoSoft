@@ -4,6 +4,9 @@ import {
   agregarDias,
   factorIncrementoLogistico,
   calcularTendencia,
+  evaluarDiferenciaDias,
+  contarMotivos,
+  variacionTrmPct,
 } from "./importaciones-analitica.calculos";
 
 describe("diferenciaDias", () => {
@@ -93,5 +96,52 @@ describe("calcularTendencia", () => {
     const t = calcularTendencia(50, 0);
     expect(t.variacionAbsoluta).toBe(50);
     expect(t.variacionPorcentual).toBeNull();
+  });
+});
+
+describe("evaluarDiferenciaDias", () => {
+  it("devuelve los días y ningún motivo cuando ambas fechas son coherentes", () => {
+    const r = evaluarDiferenciaDias(
+      new Date("2026-01-01T00:00:00Z"),
+      new Date("2026-01-03T12:00:00Z"),
+    );
+    expect(r.dias).toBeCloseTo(2.5, 6);
+    expect(r.motivo).toBeNull();
+  });
+
+  it("distingue falta de inicio, falta de fin y fechas inconsistentes", () => {
+    expect(evaluarDiferenciaDias(null, new Date())).toEqual({ dias: null, motivo: "SIN_INICIO" });
+    expect(evaluarDiferenciaDias(new Date(), undefined)).toEqual({ dias: null, motivo: "SIN_FIN" });
+    expect(
+      evaluarDiferenciaDias(new Date("2026-02-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z")),
+    ).toEqual({ dias: null, motivo: "FECHAS_INCONSISTENTES" });
+  });
+
+  it("acepta diferencia cero (mismo instante)", () => {
+    const f = new Date("2026-01-01T00:00:00Z");
+    expect(evaluarDiferenciaDias(f, f)).toEqual({ dias: 0, motivo: null });
+  });
+});
+
+describe("contarMotivos", () => {
+  it("cuenta motivos e ignora los null", () => {
+    expect(contarMotivos(["A", null, "B", "A", null])).toEqual({ A: 2, B: 1 });
+    expect(contarMotivos([null, null])).toEqual({});
+  });
+});
+
+describe("variacionTrmPct", () => {
+  it("calcula la variación porcentual de liquidación frente a lo pactado", () => {
+    expect(variacionTrmPct(4000, 4200)).toBeCloseTo(5, 6);
+    expect(variacionTrmPct(4000, 3800)).toBeCloseTo(-5, 6);
+    expect(variacionTrmPct(4000, 4000)).toBe(0);
+  });
+
+  it("devuelve null con datos faltantes, no finitos o pactada no positiva (sin dividir por cero)", () => {
+    expect(variacionTrmPct(null, 4200)).toBeNull();
+    expect(variacionTrmPct(4000, undefined)).toBeNull();
+    expect(variacionTrmPct(0, 4200)).toBeNull();
+    expect(variacionTrmPct(-1, 4200)).toBeNull();
+    expect(variacionTrmPct(4000, Number.NaN)).toBeNull();
   });
 });

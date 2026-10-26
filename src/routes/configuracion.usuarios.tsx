@@ -164,9 +164,9 @@ function UsuariosConfigPage() {
   const [cargandoMembresias, setCargandoMembresias] = useState(false);
   const [nuevaMembresiaTenantId, setNuevaMembresiaTenantId] = useState("");
   const [rolesTenantElegido, setRolesTenantElegido] = useState<RolOpcion[]>([]);
-  const [departamentosTenantElegido, setDepartamentosTenantElegido] = useState<DepartamentoOpcion[]>(
-    [],
-  );
+  const [departamentosTenantElegido, setDepartamentosTenantElegido] = useState<
+    DepartamentoOpcion[]
+  >([]);
   const [nuevaMembresiaRolId, setNuevaMembresiaRolId] = useState("");
   const [nuevaMembresiaDepartamentoId, setNuevaMembresiaDepartamentoId] = useState("");
   const [nuevaMembresiaSuperadmin, setNuevaMembresiaSuperadmin] = useState(false);
@@ -180,9 +180,9 @@ function UsuariosConfigPage() {
   const [editMembresiaRolId, setEditMembresiaRolId] = useState("");
   const [editMembresiaDepartamentoId, setEditMembresiaDepartamentoId] = useState("");
   const [editMembresiaRoles, setEditMembresiaRoles] = useState<RolOpcion[]>([]);
-  const [editMembresiaDepartamentos, setEditMembresiaDepartamentos] = useState<DepartamentoOpcion[]>(
-    [],
-  );
+  const [editMembresiaDepartamentos, setEditMembresiaDepartamentos] = useState<
+    DepartamentoOpcion[]
+  >([]);
   const [guardandoEdicionMembresia, setGuardandoEdicionMembresia] = useState(false);
 
   const claveDeAgrupacion = useMemo(() => {
@@ -959,7 +959,9 @@ function UsuariosConfigPage() {
                             <Select
                               value={editMembresiaDepartamentoId || "__sin_departamento__"}
                               onValueChange={(v) =>
-                                setEditMembresiaDepartamentoId(v === "__sin_departamento__" ? "" : v)
+                                setEditMembresiaDepartamentoId(
+                                  v === "__sin_departamento__" ? "" : v,
+                                )
                               }
                             >
                               <SelectTrigger className="h-8 text-xs">

@@ -17,10 +17,7 @@ import {
   siguienteNumeroPedidoComercial,
   avanzarContadorPedidoComercial,
 } from "./pedidos-consecutivo";
-import {
-  ESTADO_PROFORMA,
-  puedeCrearPedidoDesdeProforma,
-} from "../proformas/proformas-estados";
+import { ESTADO_PROFORMA, puedeCrearPedidoDesdeProforma } from "../proformas/proformas-estados";
 import {
   obtenerCompromisoInventarioPedidos,
   SiesaConsultaError,
@@ -349,7 +346,8 @@ export const crearPedidoDesdeProforma = async (req: AuthenticatedRequest, res: R
   } catch (error) {
     if (error instanceof ProformaYaNoAceptadaError) {
       return res.status(409).json({
-        message: "La proforma ya no está ACEPTADA (otro proceso la modificó). Recarga e intenta de nuevo.",
+        message:
+          "La proforma ya no está ACEPTADA (otro proceso la modificó). Recarga e intenta de nuevo.",
       });
     }
     if (esViolacionIndiceUnicoProforma(error)) {
@@ -374,10 +372,7 @@ export const crearPedidoDesdeProforma = async (req: AuthenticatedRequest, res: R
  * PedidoComercial.erpRowId; la compañía sale del tenant autenticado (no acepta
  * ciaId/tenantId del cliente). Pedido de otro tenant -> 404. Sin vínculo ERP ->
  * 200 con vinculado=false (sin consultar Siesa). Siesa caído -> 502 fijo. */
-export const obtenerEstadoPedidoUnoeeHandler = async (
-  req: AuthenticatedRequest,
-  res: Response,
-) => {
+export const obtenerEstadoPedidoUnoeeHandler = async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.user!.tenantId;
   const parseo = idParamSchema.safeParse(req.params);
   if (!parseo.success) {

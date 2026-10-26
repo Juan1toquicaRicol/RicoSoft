@@ -13,6 +13,8 @@ import {
   uploadDocumentoVistoBueno,
   validarOrdenIdParaArchivo,
   uploadDocumentoOrdenCompraIntl,
+  validarLoteIdParaArchivo,
+  uploadDocumentoLoteImportacion,
 } from "../../middleware/upload.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
 import {
@@ -22,6 +24,7 @@ import {
   actualizarEmbarqueLoteSchema,
   crearContenedorLoteSchema,
   liquidarCosteoImportacionSchema,
+  registrarHitoLoteSchema,
   actualizarExpedienteAduaneroSchema,
   crearVistoBuenoSchema,
   actualizarVistoBuenoSchema,
@@ -58,6 +61,11 @@ import {
   actualizarVistoBueno,
   subirDocumentoVistoBueno,
   obtenerDocumentoVistoBueno,
+  registrarHitoLote,
+  eliminarHitoLote,
+  subirDocumentoLote,
+  obtenerDocumentoLote,
+  eliminarDocumentoLote,
   subirDocumentoOrdenCompraIntl,
   obtenerDocumentoOrdenCompraIntl,
   eliminarDocumentoOrdenCompraIntl,
@@ -316,6 +324,43 @@ router.post(
   validarVistoBuenoIdParaArchivo,
   uploadDocumentoVistoBueno,
   subirDocumentoVistoBueno,
+);
+
+// Hitos reales del lote (embarque, llegada a puerto, inspección aduanera): los
+// registra una persona con el mismo permiso que el resto de la gestión de
+// tránsito. La recepción en planta NO se registra aquí: la deriva el sistema
+// al recibir el lote (importaciones.recibir). Sin permiso nuevo.
+router.put(
+  "/lotes/:id/hitos/:tipo",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(registrarHitoLoteSchema),
+  registrarHitoLote,
+);
+router.delete(
+  "/lotes/:id/hitos/:tipo",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  eliminarHitoLote,
+);
+
+// Documentos del lote (B/L-AWB, certificado de análisis, otros) — gestionar
+// tránsito para subir/eliminar (misma responsabilidad que el expediente) e
+// importaciones.ver para descargar. Sin permiso nuevo.
+router.get(
+  "/lotes/:id/documentos/:documentoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER),
+  obtenerDocumentoLote,
+);
+router.post(
+  "/lotes/:id/documentos/:tipo",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarLoteIdParaArchivo,
+  uploadDocumentoLoteImportacion,
+  subirDocumentoLote,
+);
+router.delete(
+  "/lotes/:id/documentos/:documentoId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  eliminarDocumentoLote,
 );
 
 // Actividades esperadas (motor de seguimiento) — mismo permiso que gestionar

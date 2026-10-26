@@ -143,10 +143,17 @@ describe("crosschex-sync.job", () => {
       const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
       await ejecutarCicloSincronizacionCrossChex(500);
 
-      expect(fuenteFindManyMock).toHaveBeenCalledWith({ where: { activa: true }, select: { nombre: true } });
+      expect(fuenteFindManyMock).toHaveBeenCalledWith({
+        where: { activa: true },
+        select: { nombre: true },
+      });
       expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(2);
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(1, "sede-a", { tamanoLote: 500 });
-      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(2, "sede-b", { tamanoLote: 500 });
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(1, "sede-a", {
+        tamanoLote: 500,
+      });
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenNthCalledWith(2, "sede-b", {
+        tamanoLote: 500,
+      });
     });
 
     it("una fuente con lock ocupado (SincronizacionEnCursoError) se omite sin detener el ciclo para las demás", async () => {
@@ -205,7 +212,8 @@ describe("crosschex-sync.job", () => {
   describe("detenerSchedulerCrossChex", () => {
     it("detiene la tarea programada y permite volver a iniciar después", async () => {
       process.env.CROSSCHEX_SYNC_ENABLED = "true";
-      const { iniciarSchedulerCrossChex, detenerSchedulerCrossChex } = await import("./crosschex-sync.job");
+      const { iniciarSchedulerCrossChex, detenerSchedulerCrossChex } =
+        await import("./crosschex-sync.job");
 
       iniciarSchedulerCrossChex();
       detenerSchedulerCrossChex();

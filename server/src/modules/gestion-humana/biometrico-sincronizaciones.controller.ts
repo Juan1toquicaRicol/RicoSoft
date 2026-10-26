@@ -20,7 +20,9 @@ import { leerConfigSchedulerCrossChex } from "../../jobs/crosschex-sync.job";
 type LogConFuente = SincronizacionBiometricoLog & { fuente: { id: string; nombre: string } };
 
 function serializarLog(log: LogConFuente) {
-  const duracionMs = log.finalizadoEn ? log.finalizadoEn.getTime() - log.iniciadoEn.getTime() : null;
+  const duracionMs = log.finalizadoEn
+    ? log.finalizadoEn.getTime() - log.iniciadoEn.getTime()
+    : null;
   return {
     id: log.id,
     fuente: { id: log.fuente.id, nombre: log.fuente.nombre },
@@ -70,7 +72,9 @@ export async function listarSincronizacionesBiometricas(req: AuthenticatedReques
 
     if (estado !== undefined) {
       if (typeof estado !== "string" || !ESTADOS_VALIDOS.includes(estado)) {
-        return res.status(400).json({ message: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(", ")}.` });
+        return res
+          .status(400)
+          .json({ message: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(", ")}.` });
       }
       where.estado = estado;
     }

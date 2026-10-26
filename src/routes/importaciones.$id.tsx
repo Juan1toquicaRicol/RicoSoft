@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { HitosLotePanel } from "@/components/importaciones/hitos-lote-panel";
 import {
   ImportacionHeader,
   ImportacionResumen,
@@ -68,15 +69,20 @@ import {
   type CrearNovedadInput,
   type CrearPagoInput,
   type CrearVistoBuenoInput,
+  type DocumentoLote,
   type EtapaImportacion,
   type EventoContenedorTipo,
   type LiquidarCosteoInput,
   type LoteImportacion,
+  type MetodoProrrateoGastos,
   type ResponsableTipo,
   type TipoDocumentoExpediente,
+  type TipoDocumentoLote,
   type TipoDocumentoOrdenIntl,
   type TipoNovedad,
   type VistoBuenoAduanero,
+  METODOS_PRORRATEO_GASTOS,
+  TIPOS_DOCUMENTO_LOTE,
   TIPOS_DOCUMENTO_ORDEN_INTL,
 } from "@/hooks/use-importaciones";
 import { useCatalogo } from "@/hooks/use-catalogos";
@@ -155,6 +161,7 @@ const loteVacio: CrearLoteInput = {
 };
 
 const liquidacionVacia: LiquidarCosteoInput = {
+  metodoProrrateoGastos: "FOB",
   trmLiquidacion: 4000,
   valorCifTotalUsd: 0,
   arancelTotalCop: 0,
@@ -198,6 +205,11 @@ function DetalleOrdenIntl() {
     subirDocumentoOrden,
     eliminarDocumentoOrden,
     descargarDocumentoOrden,
+    registrarHito,
+    eliminarHito,
+    subirDocumentoLote,
+    eliminarDocumentoLote,
+    descargarDocumentoLote,
     crearActividad,
     completarActividad,
     crearNovedad,
@@ -819,6 +831,21 @@ function DetalleOrdenIntl() {
                       onSincronizar={sincronizarTracking}
                     />
 
+                    <HitosLotePanel
+                      lote={lote}
+                      canManage={puedeGestionarTransito}
+                      onRegistrar={registrarHito}
+                      onEliminar={eliminarHito}
+                    />
+
+                    <DocumentosLotePanel
+                      lote={lote}
+                      canManage={puedeGestionarTransito}
+                      onSubir={subirDocumentoLote}
+                      onEliminar={eliminarDocumentoLote}
+                      onDescargar={descargarDocumentoLote}
+                    />
+
                     <ExpedienteAduaneroPanel
                       lote={lote}
                       canManage={puedeGestionarTransito}
@@ -1411,6 +1438,40 @@ function DetalleOrdenIntl() {
                 />
               </div>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">
+                Prorrateo de fletes, agenciamiento y otros costos
+              </Label>
+              <Select
+                value={liquidacionForm.metodoProrrateoGastos ?? "FOB"}
+                onValueChange={(valor) =>
+                  setLiquidacionForm({
+                    ...liquidacionForm,
+                    metodoProrrateoGastos: valor as MetodoProrrateoGastos,
+                  })
+                }
+              >
+                <SelectTrigger className="h-9 text-xs border-slate-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {METODOS_PRORRATEO_GASTOS.map((m) => (
+                    <SelectItem key={m.metodo} value={m.metodo}>
+                      {m.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-slate-500">
+                {
+                  METODOS_PRORRATEO_GASTOS.find(
+                    (m) => m.metodo === (liquidacionForm.metodoProrrateoGastos ?? "FOB"),
+                  )?.ayuda
+                }{" "}
+                El valor CIF, el arancel y el IVA siempre se reparten por FOB. Si falta el dato, la
+                liquidación se rechaza: no se reparte con otro método.
+              </p>
+            </div>
             <DialogFooter className="mt-4">
               <Button
                 type="button"
@@ -1899,6 +1960,137 @@ function DocumentosInicialesPanel({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+interface DocumentosLotePanelProps {
+  lote: LoteImportacion;
+  canManage: boolean;
+  onSubir: (loteId: string, tipo: TipoDocumentoLote, file: File) => Promise<void>;
+  onEliminar: (loteId: string, documentoId: string) => Promise<void>;
+  onDescargar: (loteId: string, documentoId: string) => Promise<Blob>;
+}
+
+/** B/L o AWB, certificado de análisis (COA) y otros documentos del lote. Solo
+ * almacena archivos: la obligatoriedad de cada uno no está definida. */
+function DocumentosLotePanel({
+  lote,
+  canManage,
+  onSubir,
+  onEliminar,
+  onDescargar,
+}: DocumentosLotePanelProps) {
+  const [subiendoTipo, setSubiendoTipo] = useState<TipoDocumentoLote | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const documentos: DocumentoLote[] = lote.documentos ?? [];
+
+  const handleSeleccion = async (tipo: TipoDocumentoLote, file: File) => {
+    setSubiendoTipo(tipo);
+    try {
+      await onSubir(lote.id, tipo, file);
+      toast.success("Documento adjuntado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al subir el documento.");
+    } finally {
+      setSubiendoTipo(null);
+    }
+  };
+
+  const handleVer = async (documentoId: string) => {
+    try {
+      const blob = await onDescargar(lote.id, documentoId);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "No fue posible abrir el documento.");
+    }
+  };
+
+  const handleEliminar = async (documentoId: string, nombre: string) => {
+    if (!confirm(`¿Eliminar el documento "${nombre}"?`)) return;
+    try {
+      await onEliminar(lote.id, documentoId);
+      toast.success("Documento eliminado.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el documento.");
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3 space-y-2">
+      <div>
+        <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          Documentos del lote
+        </h4>
+        <p className="text-[10px] text-slate-500">
+          La factura comercial, la DIM y el certificado de origen se adjuntan en el expediente
+          aduanero. Aquí no se valida obligatoriedad.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {TIPOS_DOCUMENTO_LOTE.map(({ tipo, etiqueta }) => {
+          const deEsteTipo = documentos.filter((d) => d.tipo === etiqueta);
+          return (
+            <div key={tipo} className="rounded-md border border-slate-200 p-2.5">
+              <p className="text-[10px] uppercase font-bold text-slate-500">{etiqueta}</p>
+              <input
+                ref={(el) => {
+                  fileInputRefs.current[tipo] = el;
+                }}
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleSeleccion(tipo, file);
+                  e.target.value = "";
+                }}
+              />
+              {deEsteTipo.length === 0 ? (
+                <p className="mt-1.5 text-[11px] text-slate-400">Sin documentos.</p>
+              ) : (
+                <ul className="mt-1.5 space-y-1">
+                  {deEsteTipo.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        className="truncate text-left text-[11px] text-blue-700 hover:underline"
+                        onClick={() => handleVer(d.id)}
+                        title={d.nombreOriginal}
+                      >
+                        {d.nombreOriginal}
+                      </button>
+                      {canManage && (
+                        <button
+                          type="button"
+                          className="shrink-0 text-slate-400 hover:text-red-600"
+                          onClick={() => handleEliminar(d.id, d.nombreOriginal)}
+                          title="Eliminar"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage && (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="mt-1.5 h-7 w-full text-[11px]"
+                  disabled={subiendoTipo === tipo}
+                  onClick={() => fileInputRefs.current[tipo]?.click()}
+                >
+                  <Upload className="h-3 w-3 mr-1" />
+                  {subiendoTipo === tipo ? "Subiendo..." : "Adjuntar"}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

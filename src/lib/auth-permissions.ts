@@ -874,7 +874,8 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.COTIZACIONES_VER,
     modulo: "Comercial",
     nombre: "Cotizaciones · Ver",
-    descripcion: "Permite consultar cotizaciones comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
+    descripcion:
+      "Permite consultar cotizaciones comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
   },
   {
     id: PERMISOS_SISTEMA.COTIZACIONES_GESTIONAR,
@@ -894,7 +895,8 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER,
     modulo: "Comercial",
     nombre: "Pedidos comerciales · Ver",
-    descripcion: "Permite consultar pedidos comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
+    descripcion:
+      "Permite consultar pedidos comerciales y su detalle. Sin este permiso la sección no aparece en el menú.",
   },
   {
     id: PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR,
@@ -914,7 +916,8 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.PROFORMAS_VER,
     modulo: "Comercial",
     nombre: "Proformas · Ver",
-    descripcion: "Permite consultar proformas y su detalle. Sin este permiso la sección no aparece en el menú.",
+    descripcion:
+      "Permite consultar proformas y su detalle. Sin este permiso la sección no aparece en el menú.",
   },
   {
     id: PERMISOS_SISTEMA.PROFORMAS_GESTIONAR,
@@ -1034,8 +1037,7 @@ export const LISTA_PERMISOS_DEFINICION: PermisoDefinicion[] = [
     id: PERMISOS_SISTEMA.EMPLEADOS_DETALLES_EDITAR,
     modulo: "Gestión Humana",
     nombre: "Editar detalles del colaborador",
-    descripcion:
-      "Permite registrar y modificar los datos personales sensibles del colaborador.",
+    descripcion: "Permite registrar y modificar los datos personales sensibles del colaborador.",
   },
   {
     id: PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_VER,

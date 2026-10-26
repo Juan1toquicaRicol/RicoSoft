@@ -1,6 +1,14 @@
 import odbc, { type Connection } from "odbc";
-import { construirConnectionString, leerConfigCrossChex, type CrossChexConfig } from "./crosschex.config";
-import { CrossChexQueryError, CrossChexTimeoutError, traducirErrorConexion } from "./crosschex.errors";
+import {
+  construirConnectionString,
+  leerConfigCrossChex,
+  type CrossChexConfig,
+} from "./crosschex.config";
+import {
+  CrossChexQueryError,
+  CrossChexTimeoutError,
+  traducirErrorConexion,
+} from "./crosschex.errors";
 
 /**
  * Cliente ODBC de bajo nivel para CrossChex.mdb. Solo este archivo (y
@@ -70,7 +78,10 @@ export async function conCrossChex<T>(fn: (conn: Connection) => Promise<T>): Pro
  * No expone el objeto Connection: quien llama solo ve filas o un error.
  * `params` usa parámetros ODBC (?) en vez de interpolar valores en el SQL,
  * para las consultas que reciben un valor externo (p. ej. el cursor Logid). */
-export async function ejecutarConsulta<T>(sqlText: string, params?: (string | number)[]): Promise<T[]> {
+export async function ejecutarConsulta<T>(
+  sqlText: string,
+  params?: (string | number)[],
+): Promise<T[]> {
   const config = leerConfigCrossChex();
   return conCrossChex(async (conn) => {
     try {
@@ -88,7 +99,10 @@ export async function ejecutarConsulta<T>(sqlText: string, params?: (string | nu
       return resultado as unknown as T[];
     } catch (error) {
       if (error instanceof CrossChexTimeoutError) throw error;
-      throw new CrossChexQueryError(`Falló la consulta contra CrossChex.mdb: ${(error as Error)?.message}`, error);
+      throw new CrossChexQueryError(
+        `Falló la consulta contra CrossChex.mdb: ${(error as Error)?.message}`,
+        error,
+      );
     }
   });
 }

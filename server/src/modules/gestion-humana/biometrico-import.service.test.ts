@@ -13,7 +13,13 @@ const obtenerMarcacionesDesdeMock = vi.fn();
 vi.mock("../../integrations/crosschex", () => ({
   obtenerMarcacionesDesde: (...args: unknown[]) => obtenerMarcacionesDesdeMock(...args),
   mapearTipoMarcacion: (checkType: number) =>
-    checkType === 0 ? "ENTRADA" : checkType === 2 ? "BREAK" : checkType === 3 ? "FUERATIEMPO" : "OTRO",
+    checkType === 0
+      ? "ENTRADA"
+      : checkType === 2
+        ? "BREAK"
+        : checkType === 3
+          ? "FUERATIEMPO"
+          : "OTRO",
   normalizarBit: (v: unknown) => (v === null || v === undefined ? null : Boolean(Number(v))),
   parsearCheckTime: (v: string) => new Date(v.replace(" ", "T") + "Z"),
   soloFecha: (v: string) => new Date(v.slice(0, 10) + "T00:00:00.000Z"),
@@ -58,7 +64,10 @@ vi.mock("../../config/prisma", () => ({
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        marcacionBiometrica: { findMany: marcacionFindManyMock, createMany: marcacionCreateManyMock },
+        marcacionBiometrica: {
+          findMany: marcacionFindManyMock,
+          createMany: marcacionCreateManyMock,
+        },
         fuenteBiometrica: { update: fuenteUpdateMock },
       }),
   },
@@ -112,16 +121,20 @@ describe("biometrico-import.service", () => {
   describe("dryRunImportacionHistorica", () => {
     it("lanza FuenteBiometricaNoEncontradaError si la fuente no existe", async () => {
       fuenteFindUniqueMock.mockResolvedValue(null);
-      const { dryRunImportacionHistorica, FuenteBiometricaNoEncontradaError } = await import(
-        "./biometrico-import.service"
-      );
+      const { dryRunImportacionHistorica, FuenteBiometricaNoEncontradaError } =
+        await import("./biometrico-import.service");
 
-      await expect(dryRunImportacionHistorica("no-existe")).rejects.toThrow(FuenteBiometricaNoEncontradaError);
+      await expect(dryRunImportacionHistorica("no-existe")).rejects.toThrow(
+        FuenteBiometricaNoEncontradaError,
+      );
     });
 
     it("no escribe nada: nunca llama createMany ni actualiza el cursor", async () => {
       obtenerMarcacionesDesdeMock
-        .mockResolvedValueOnce([filaCheckinout({ Logid: 1 }), filaCheckinout({ Logid: 2, CheckType: 1 })])
+        .mockResolvedValueOnce([
+          filaCheckinout({ Logid: 1 }),
+          filaCheckinout({ Logid: 2, CheckType: 1 }),
+        ])
         .mockResolvedValueOnce([]);
 
       const { dryRunImportacionHistorica } = await import("./biometrico-import.service");
@@ -156,7 +169,9 @@ describe("biometrico-import.service", () => {
     it("pagina hasta que un lote viene incompleto, empezando desde lastProcessedLogId", async () => {
       fuenteFindUniqueMock.mockResolvedValue({ ...FUENTE_FAKE, lastProcessedLogId: 100 });
       obtenerMarcacionesDesdeMock
-        .mockResolvedValueOnce(Array.from({ length: 3 }, (_, i) => filaCheckinout({ Logid: 101 + i })))
+        .mockResolvedValueOnce(
+          Array.from({ length: 3 }, (_, i) => filaCheckinout({ Logid: 101 + i })),
+        )
         .mockResolvedValueOnce([filaCheckinout({ Logid: 104 })]); // lote incompleto -> corta
 
       const { dryRunImportacionHistorica } = await import("./biometrico-import.service");
@@ -170,13 +185,16 @@ describe("biometrico-import.service", () => {
 
   describe("ejecutarImportacionHistorica", () => {
     it("lanza SincronizacionEnCursoError si ya hay un log EN_CURSO (P2002 del índice único filtrado)", async () => {
-      logCreateMock.mockRejectedValue(new PrismaClientKnownRequestErrorFake("Unique constraint failed", "P2002"));
-
-      const { ejecutarImportacionHistorica, SincronizacionEnCursoError } = await import(
-        "./biometrico-import.service"
+      logCreateMock.mockRejectedValue(
+        new PrismaClientKnownRequestErrorFake("Unique constraint failed", "P2002"),
       );
 
-      await expect(ejecutarImportacionHistorica("crosschex-flexipack")).rejects.toThrow(SincronizacionEnCursoError);
+      const { ejecutarImportacionHistorica, SincronizacionEnCursoError } =
+        await import("./biometrico-import.service");
+
+      await expect(ejecutarImportacionHistorica("crosschex-flexipack")).rejects.toThrow(
+        SincronizacionEnCursoError,
+      );
       expect(obtenerMarcacionesDesdeMock).not.toHaveBeenCalled();
     });
 
@@ -212,7 +230,10 @@ describe("biometrico-import.service", () => {
       expect(reporte.duplicados).toBe(1);
       expect(reporte.estado).toBe("COMPLETADO");
       expect(logUpdateMock).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "log-1" }, data: expect.objectContaining({ estado: "COMPLETADO" }) }),
+        expect.objectContaining({
+          where: { id: "log-1" },
+          data: expect.objectContaining({ estado: "COMPLETADO" }),
+        }),
       );
     });
 
@@ -283,7 +304,12 @@ describe("biometrico-import.service", () => {
     });
 
     it("aislamiento multi-tenant: la resolución de empleados siempre se filtra por el tenantId y proveedor de la FUENTE, nunca global", async () => {
-      const fuenteTenantB = { ...FUENTE_FAKE, id: "fuente-2", tenantId: "tenant-B", proveedor: "anviz" };
+      const fuenteTenantB = {
+        ...FUENTE_FAKE,
+        id: "fuente-2",
+        tenantId: "tenant-B",
+        proveedor: "anviz",
+      };
       fuenteFindUniqueMock.mockResolvedValue(fuenteTenantB);
       logCreateMock.mockResolvedValue({ id: "log-2", logIdDesde: 0 });
       obtenerMarcacionesDesdeMock

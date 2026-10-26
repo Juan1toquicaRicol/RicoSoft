@@ -96,7 +96,12 @@ async function main() {
     simulacion.total === total &&
     Date.now() - simulacion.simuladoEn <= VIGENCIA_SIMULACION_MS;
   if (!vigente) {
-    registrarEnLogInmutable({ accion: "PURGA_RECHAZADA", dias, total, motivo: "sin simulación previa vigente" });
+    registrarEnLogInmutable({
+      accion: "PURGA_RECHAZADA",
+      dias,
+      total,
+      motivo: "sin simulación previa vigente",
+    });
     throw new Error(
       "Purga rechazada: ejecuta primero --dry-run con el mismo --dias (vigencia 24 h y conteo sin cambios).",
     );

@@ -81,7 +81,10 @@ describe.skipIf(!RUN)("Comercial — permisos Ver/Manipular (Cotizaciones/Profor
       data: { nombre: `Test VerManipular ${sufijo}`, subdomain: `test-vermanip-${sufijo}` },
     });
     const otroTenant = await prisma.tenant.create({
-      data: { nombre: `Test VerManipular Otro ${sufijo}`, subdomain: `test-vermanip-otro-${sufijo}` },
+      data: {
+        nombre: `Test VerManipular Otro ${sufijo}`,
+        subdomain: `test-vermanip-otro-${sufijo}`,
+      },
     });
     tenantId = tenant.id;
     otroTenantId = otroTenant.id;
@@ -141,7 +144,9 @@ describe.skipIf(!RUN)("Comercial — permisos Ver/Manipular (Cotizaciones/Profor
     await prisma.pedidoComercial.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.proformaItem.deleteMany({ where: { proforma: { tenantId: { in: tenantIds } } } });
     await prisma.proforma.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.cotizacionItem.deleteMany({ where: { cotizacion: { tenantId: { in: tenantIds } } } });
+    await prisma.cotizacionItem.deleteMany({
+      where: { cotizacion: { tenantId: { in: tenantIds } } },
+    });
     await prisma.cotizacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -406,7 +411,13 @@ describe.skipIf(!RUN)("Comercial — permisos Ver/Manipular (Cotizaciones/Profor
         clienteRowId: 9002,
         clienteNombre: "Cliente Legacy",
         items: [
-          { descripcion: "Producto", cantidad: 1, precioUnitario: 1000, descuentoPct: 0, ivaPct: 19 },
+          {
+            descripcion: "Producto",
+            cantidad: 1,
+            precioUnitario: 1000,
+            descuentoPct: 0,
+            ivaPct: 19,
+          },
         ],
       });
     expect(crear.status).toBe(201);
@@ -421,9 +432,7 @@ describe.skipIf(!RUN)("Comercial — permisos Ver/Manipular (Cotizaciones/Profor
       },
     });
 
-    const lista = await request(app)
-      .get("/api/roles")
-      .set("Authorization", `Bearer ${tokenAdmin}`);
+    const lista = await request(app).get("/api/roles").set("Authorization", `Bearer ${tokenAdmin}`);
     expect(lista.status).toBe(200);
 
     const devuelto = (lista.body as Array<{ id: string; permisos: string[] }>).find(

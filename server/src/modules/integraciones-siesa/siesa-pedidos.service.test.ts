@@ -99,7 +99,6 @@ vi.mock("../../config/siesa", () => ({
   getSiesaPool: vi.fn(async () => poolFake),
 }));
 
-// eslint-disable-next-line import/first
 import { buscarCotizacionesSiesa, leerCotizacionSiesa } from "./siesa-pedidos.service";
 
 describe("siesa-pedidos.service — filtro CDV vs PDV homónimo", () => {

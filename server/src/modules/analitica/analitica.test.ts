@@ -80,7 +80,9 @@ describe("GET /api/analitica/dashboard — exige analitica.ver", () => {
   });
 
   it("superadmin -> 200", async () => {
-    const res = await request(app).get("/api/analitica/dashboard").set("x-test-user", usuario([], true));
+    const res = await request(app)
+      .get("/api/analitica/dashboard")
+      .set("x-test-user", usuario([], true));
     expect(res.status).toBe(200);
   });
 });

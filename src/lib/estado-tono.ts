@@ -13,7 +13,13 @@
  */
 export type TonoEstado = "success" | "warning" | "danger" | "info" | "neutral";
 
-export const TONOS_ESTADO: readonly TonoEstado[] = ["success", "warning", "danger", "info", "neutral"];
+export const TONOS_ESTADO: readonly TonoEstado[] = [
+  "success",
+  "warning",
+  "danger",
+  "info",
+  "neutral",
+];
 
 /** Estados operativos de Siesa / integración (etiqueta o valor crudo -> tono). */
 const TONO_OPERATIVO: Record<string, TonoEstado> = {

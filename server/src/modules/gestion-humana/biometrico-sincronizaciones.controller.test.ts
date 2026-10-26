@@ -44,7 +44,13 @@ function fakeRes() {
 
 function fakeReq(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest {
   return {
-    user: { id: "user-1", tenantId: "tenant-A", nombre: "Ana Admin", isSuperadmin: false, permisos: [] } as never,
+    user: {
+      id: "user-1",
+      tenantId: "tenant-A",
+      nombre: "Ana Admin",
+      isSuperadmin: false,
+      permisos: [],
+    } as never,
     params: {},
     query: {},
     body: {},
@@ -68,7 +74,13 @@ const LOG_FAKE = {
   mensajeError: null,
 };
 
-const FUENTE_A = { id: "fuente-1", tenantId: "tenant-A", nombre: "sede-a", proveedor: "anviz", activa: true };
+const FUENTE_A = {
+  id: "fuente-1",
+  tenantId: "tenant-A",
+  nombre: "sede-a",
+  proveedor: "anviz",
+  activa: true,
+};
 
 describe("biometrico-sincronizaciones.controller", () => {
   beforeEach(() => {
@@ -83,12 +95,17 @@ describe("biometrico-sincronizaciones.controller", () => {
     logFindManyMock.mockResolvedValue([LOG_FAKE]);
     logCountMock.mockResolvedValue(1);
     auditoriaCreateMock.mockResolvedValue({});
-    leerConfigSchedulerCrossChexMock.mockReturnValue({ habilitado: true, expresionCron: "* * * * *", tamanoLote: 1000 });
+    leerConfigSchedulerCrossChexMock.mockReturnValue({
+      habilitado: true,
+      expresionCron: "* * * * *",
+      tamanoLote: 1000,
+    });
   });
 
   describe("listarSincronizacionesBiometricas", () => {
     it("solo lista del tenant autenticado, con paginación", async () => {
-      const { listarSincronizacionesBiometricas } = await import("./biometrico-sincronizaciones.controller");
+      const { listarSincronizacionesBiometricas } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await listarSincronizacionesBiometricas(fakeReq(), res);
 
@@ -99,7 +116,8 @@ describe("biometrico-sincronizaciones.controller", () => {
     });
 
     it("calcula duracionMs a partir de iniciadoEn/finalizadoEn", async () => {
-      const { listarSincronizacionesBiometricas } = await import("./biometrico-sincronizaciones.controller");
+      const { listarSincronizacionesBiometricas } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await listarSincronizacionesBiometricas(fakeReq(), res);
 
@@ -107,7 +125,8 @@ describe("biometrico-sincronizaciones.controller", () => {
     });
 
     it("rechaza un estado inválido con 400", async () => {
-      const { listarSincronizacionesBiometricas } = await import("./biometrico-sincronizaciones.controller");
+      const { listarSincronizacionesBiometricas } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await listarSincronizacionesBiometricas(fakeReq({ query: { estado: "INVENTADO" } }), res);
 
@@ -116,7 +135,8 @@ describe("biometrico-sincronizaciones.controller", () => {
     });
 
     it("filtra por fuenteId y estado válidos", async () => {
-      const { listarSincronizacionesBiometricas } = await import("./biometrico-sincronizaciones.controller");
+      const { listarSincronizacionesBiometricas } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await listarSincronizacionesBiometricas(
         fakeReq({ query: { fuenteId: "fuente-1", estado: "FALLIDO" } }),
@@ -134,7 +154,8 @@ describe("biometrico-sincronizaciones.controller", () => {
   describe("obtenerSincronizacionBiometrica", () => {
     it("404 si el log es de otro tenant", async () => {
       logFindFirstMock.mockResolvedValue(null);
-      const { obtenerSincronizacionBiometrica } = await import("./biometrico-sincronizaciones.controller");
+      const { obtenerSincronizacionBiometrica } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await obtenerSincronizacionBiometrica(fakeReq({ params: { id: "log-de-otro-tenant" } }), res);
 
@@ -145,9 +166,13 @@ describe("biometrico-sincronizaciones.controller", () => {
   describe("sincronizarFuenteBiometricaManual", () => {
     it("404 si la fuente pertenece a otro tenant, no llama al service", async () => {
       fuenteFindFirstMock.mockResolvedValue(null);
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
-      await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-otro-tenant" } }), res);
+      await sincronizarFuenteBiometricaManual(
+        fakeReq({ params: { id: "fuente-otro-tenant" } }),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(sincronizarFuenteBiometricaMock).not.toHaveBeenCalled();
@@ -155,7 +180,8 @@ describe("biometrico-sincronizaciones.controller", () => {
 
     it("409 si la fuente está desactivada", async () => {
       fuenteFindFirstMock.mockResolvedValue({ ...FUENTE_A, activa: false });
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 
@@ -177,7 +203,8 @@ describe("biometrico-sincronizaciones.controller", () => {
         logIdHasta: 10,
       });
 
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 
@@ -188,9 +215,12 @@ describe("biometrico-sincronizaciones.controller", () => {
 
     it("lock ocupado (SincronizacionEnCursoError) produce 409 controlado, no 500", async () => {
       fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
-      sincronizarFuenteBiometricaMock.mockRejectedValue(new SincronizacionEnCursoErrorFake("ya en curso"));
+      sincronizarFuenteBiometricaMock.mockRejectedValue(
+        new SincronizacionEnCursoErrorFake("ya en curso"),
+      );
 
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 
@@ -201,7 +231,8 @@ describe("biometrico-sincronizaciones.controller", () => {
       fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
       sincronizarFuenteBiometricaMock.mockRejectedValue(new Error("boom"));
 
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 
@@ -223,7 +254,8 @@ describe("biometrico-sincronizaciones.controller", () => {
         logIdHasta: null,
       });
 
-      const { sincronizarFuenteBiometricaManual } = await import("./biometrico-sincronizaciones.controller");
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
       const res = fakeRes();
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 

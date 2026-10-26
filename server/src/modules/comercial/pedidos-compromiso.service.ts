@@ -97,7 +97,8 @@ export function etiquetaEstadoUnoee(
 /** Máximo de rowids por consulta (límite de 2100 parámetros de SQL Server). */
 export const TAMANO_LOTE_SIESA = 500;
 
-const aBool = (v: unknown): boolean | null => (v === null || v === undefined ? null : v === true || v === 1);
+const aBool = (v: unknown): boolean | null =>
+  v === null || v === undefined ? null : v === true || v === 1;
 
 interface FilaSiesa {
   pdvRowId: number;
@@ -179,20 +180,20 @@ export async function leerCompromisoSiesaPorPdv(
       const cantidadRemisionada = Number(r.cantidadRemisionada ?? 0);
       const cantidadFacturada = Number(r.cantidadFacturada ?? 0);
       const estadoOperativo = determinarEstadoPedidoVentaSiesa({
-          indUltEstadoAprobado: aBool(r.indUltEstadoAprobado),
-          indBackorderDocto: aBool(r.indBackorderDocto),
-          indBackorderLinea: aBool(r.indBackorderLinea),
-          indRetenidoMargen: aBool(r.indRetenidoMargen),
-          indRetenidoCupo: aBool(r.indRetenidoCupo),
-          indRetenidoMora: aBool(r.indRetenidoMora),
-          indRetenidoBloqueo: aBool(r.indRetenidoBloqueo),
-          indRetenidoAnticipo: aBool(r.indRetenidoAnticipo),
-          indRemisionado: aBool(r.indRemisionado),
-          indFacturado: aBool(r.indFacturado),
-          cantPedida: cantidadPedida,
-          cantRemisionada: cantidadRemisionada,
-          cantFacturada: cantidadFacturada,
-        });
+        indUltEstadoAprobado: aBool(r.indUltEstadoAprobado),
+        indBackorderDocto: aBool(r.indBackorderDocto),
+        indBackorderLinea: aBool(r.indBackorderLinea),
+        indRetenidoMargen: aBool(r.indRetenidoMargen),
+        indRetenidoCupo: aBool(r.indRetenidoCupo),
+        indRetenidoMora: aBool(r.indRetenidoMora),
+        indRetenidoBloqueo: aBool(r.indRetenidoBloqueo),
+        indRetenidoAnticipo: aBool(r.indRetenidoAnticipo),
+        indRemisionado: aBool(r.indRemisionado),
+        indFacturado: aBool(r.indFacturado),
+        cantPedida: cantidadPedida,
+        cantRemisionada: cantidadRemisionada,
+        cantFacturada: cantidadFacturada,
+      });
       const comprometida = Number(r.cantidadComprometida ?? 0);
       resultado.set(r.pdvRowId, {
         pdvRowId: r.pdvRowId,
@@ -228,9 +229,7 @@ export function construirCompromiso(
     erpRowId: pedido.erpRowId,
     estadoComercial: pedido.estado,
     estadoSincronizacion:
-      pedido.erpRowId === null
-        ? "NO_VINCULADO"
-        : (pedido.erpEstadoSincronizacion ?? "VINCULADO"),
+      pedido.erpRowId === null ? "NO_VINCULADO" : (pedido.erpEstadoSincronizacion ?? "VINCULADO"),
   };
   if (pedido.erpRowId === null) return { ...base, compromiso: "SIN_VINCULO_ERP", siesa: null };
   if (!siesa) return { ...base, compromiso: "SIESA_NO_ENCONTRADO", siesa: null };

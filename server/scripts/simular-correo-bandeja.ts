@@ -31,7 +31,11 @@
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
-import type { EmailMessage, EmailProvider, ListNewMessagesResult } from "../src/integrations/email/email-provider";
+import type {
+  EmailMessage,
+  EmailProvider,
+  ListNewMessagesResult,
+} from "../src/integrations/email/email-provider";
 import { RegexDocumentExtractionProvider } from "../src/integrations/document-extraction/regex-extraction-provider";
 import { clasificarCorreo } from "../src/modules/importaciones/importaciones-bandeja-clasificacion.service";
 
@@ -66,19 +70,26 @@ async function mainSinBaseDeDatos(args: string[]): Promise<void> {
     "Incoterm: FOB",
     "Container: ABCD1234567",
   ].join("\n");
-  const adjuntos = rutasAdjuntos.length > 0
-    ? rutasAdjuntos.map((ruta) => {
-        const extension = path.extname(ruta).toLowerCase();
-        if (extension !== ".pdf" && extension !== ".txt") {
-          throw new Error(`Solo se admiten PDF o TXT en modo offline: ${path.basename(ruta)}`);
-        }
-        return {
-          nombre: path.basename(ruta),
-          mimeType: extension === ".pdf" ? "application/pdf" : "text/plain",
-          contenido: fs.readFileSync(ruta),
-        };
-      })
-    : [{ nombre: "shipping-confirmation.txt", mimeType: "text/plain", contenido: Buffer.from(ejemplo) }];
+  const adjuntos =
+    rutasAdjuntos.length > 0
+      ? rutasAdjuntos.map((ruta) => {
+          const extension = path.extname(ruta).toLowerCase();
+          if (extension !== ".pdf" && extension !== ".txt") {
+            throw new Error(`Solo se admiten PDF o TXT en modo offline: ${path.basename(ruta)}`);
+          }
+          return {
+            nombre: path.basename(ruta),
+            mimeType: extension === ".pdf" ? "application/pdf" : "text/plain",
+            contenido: fs.readFileSync(ruta),
+          };
+        })
+      : [
+          {
+            nombre: "shipping-confirmation.txt",
+            mimeType: "text/plain",
+            contenido: Buffer.from(ejemplo),
+          },
+        ];
 
   const clasificacion = clasificarCorreo({
     asunto,
@@ -95,12 +106,19 @@ async function mainSinBaseDeDatos(args: string[]): Promise<void> {
     console.log(`\nAdjunto: ${adjunto.nombre} | campos extraídos: ${resultado.campos.length}`);
     for (const campo of resultado.campos) {
       const valor = mostrarValores ? ` = ${JSON.stringify(campo.valor)}` : "";
-      console.log(`  - ${campo.campo}${valor} | página ${campo.pagina ?? "—"} | ${resultado.motorUsado}`);
+      console.log(
+        `  - ${campo.campo}${valor} | página ${campo.pagina ?? "—"} | ${resultado.motorUsado}`,
+      );
     }
   }
 
-  console.log("\nAlcance: clasificación y extracción. Proveedor, tenant, orden, persistencia y bandeja requieren base de datos.");
-  if (!mostrarValores) console.log("Para inspeccionar valores localmente, repite con --valores; evita compartir datos sensibles.");
+  console.log(
+    "\nAlcance: clasificación y extracción. Proveedor, tenant, orden, persistencia y bandeja requieren base de datos.",
+  );
+  if (!mostrarValores)
+    console.log(
+      "Para inspeccionar valores localmente, repite con --valores; evita compartir datos sensibles.",
+    );
 }
 
 class ProviderDeSimulacion implements EmailProvider {
@@ -123,140 +141,152 @@ class ProviderDeSimulacion implements EmailProvider {
 async function mainConBaseDeDatos() {
   await import("dotenv/config");
   const { prisma } = await import("../src/config/prisma");
-  const { _establecerProviderParaTests, ejecutarCicloIngestaCorreos } = await import("../src/modules/importaciones/importaciones-bandeja-ingesta.job");
-  const { ejecutarCicloProcesamientoCorreos } = await import("../src/modules/importaciones/importaciones-bandeja-procesamiento.job");
+  const { _establecerProviderParaTests, ejecutarCicloIngestaCorreos } =
+    await import("../src/modules/importaciones/importaciones-bandeja-ingesta.job");
+  const { ejecutarCicloProcesamientoCorreos } =
+    await import("../src/modules/importaciones/importaciones-bandeja-procesamiento.job");
   try {
-  const busqueda = process.argv[2];
-  const numeroOrdenArg = process.argv[3];
+    const busqueda = process.argv[2];
+    const numeroOrdenArg = process.argv[3];
 
-  if (!busqueda) {
-    const proveedores = await prisma.proveedor.findMany({
-      where: { email: { not: null }, activo: true },
-      select: { id: true, tenantId: true, nombre: true, nit: true, email: true },
-      take: 15,
-    });
-    console.log("Uso: npx tsx scripts/simular-correo-bandeja.ts <nombre o NIT del proveedor> [numeroOrden]\n");
-    console.log("Proveedores disponibles (con email configurado):\n");
-    for (const p of proveedores) {
-      console.log(`  - ${p.nombre} | NIT ${p.nit} | ${p.email} | tenant ${p.tenantId}`);
+    if (!busqueda) {
+      const proveedores = await prisma.proveedor.findMany({
+        where: { email: { not: null }, activo: true },
+        select: { id: true, tenantId: true, nombre: true, nit: true, email: true },
+        take: 15,
+      });
+      console.log(
+        "Uso: npx tsx scripts/simular-correo-bandeja.ts <nombre o NIT del proveedor> [numeroOrden]\n",
+      );
+      console.log("Proveedores disponibles (con email configurado):\n");
+      for (const p of proveedores) {
+        console.log(`  - ${p.nombre} | NIT ${p.nit} | ${p.email} | tenant ${p.tenantId}`);
+      }
+      if (proveedores.length === 0) {
+        console.log(
+          "  (Ninguno. Configúrale un email a un proveedor primero — Configuración → Proveedores.)",
+        );
+      }
+      return;
     }
-    if (proveedores.length === 0) {
-      console.log("  (Ninguno. Configúrale un email a un proveedor primero — Configuración → Proveedores.)");
-    }
-    return;
-  }
 
-  const proveedor = await prisma.proveedor.findFirst({
-    where: {
-      activo: true,
-      email: { not: null },
-      OR: [{ nombre: { contains: busqueda } }, { nit: { contains: busqueda } }],
-    },
-  });
-  if (!proveedor || !proveedor.email) {
-    throw new Error(`No se encontró ningún proveedor activo con email que coincida con "${busqueda}".`);
-  }
-
-  let numeroOrden = numeroOrdenArg;
-  if (!numeroOrden) {
-    const orden = await prisma.ordenCompraIntl.findFirst({
-      where: { tenantId: proveedor.tenantId, proveedorId: proveedor.id, eliminado: false },
-      orderBy: { createdAt: "desc" },
+    const proveedor = await prisma.proveedor.findFirst({
+      where: {
+        activo: true,
+        email: { not: null },
+        OR: [{ nombre: { contains: busqueda } }, { nit: { contains: busqueda } }],
+      },
     });
-    if (!orden) {
+    if (!proveedor || !proveedor.email) {
       throw new Error(
-        `"${proveedor.nombre}" no tiene ninguna Orden de Compra Internacional todavía. Créala primero, o pasa un numeroOrden explícito como segundo argumento.`,
+        `No se encontró ningún proveedor activo con email que coincida con "${busqueda}".`,
       );
     }
-    numeroOrden = orden.numeroOrden;
-  }
 
-  const sufijo = randomUUID().slice(0, 8);
-  const providerAttachmentId = randomUUID();
-  const textoAdjunto = [
-    `Shipment Confirmation - ${numeroOrden}`,
-    `Supplier: ${proveedor.nombre}`,
-    `PO: ${numeroOrden}`,
-    "500 SACOS DE 25 KG C/U",
-    "PESO NETO: 12.500 KG",
-    "ETA: 18/10/2026",
-    "Incoterm: FOB",
-    "Container: ABCD1234567",
-  ].join("\n");
+    let numeroOrden = numeroOrdenArg;
+    if (!numeroOrden) {
+      const orden = await prisma.ordenCompraIntl.findFirst({
+        where: { tenantId: proveedor.tenantId, proveedorId: proveedor.id, eliminado: false },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!orden) {
+        throw new Error(
+          `"${proveedor.nombre}" no tiene ninguna Orden de Compra Internacional todavía. Créala primero, o pasa un numeroOrden explícito como segundo argumento.`,
+        );
+      }
+      numeroOrden = orden.numeroOrden;
+    }
 
-  const mensaje: EmailMessage = {
-    messageId: `<simulacion-${sufijo}@localhost>`,
-    providerMessageId: randomUUID(),
-    from: proveedor.email,
-    to: ["importaciones@ricol.com.co"],
-    subject: `Shipping Confirmation - Order ${numeroOrden}`,
-    date: new Date(),
-    bodyText: `Estimados, adjuntamos la confirmación de embarque de la orden ${numeroOrden}.`,
-    bodyHtml: null,
-    attachments: [
-      {
-        providerAttachmentId,
-        filename: "shipping-confirmation.txt",
-        mimeType: "text/plain",
-        size: textoAdjunto.length,
+    const sufijo = randomUUID().slice(0, 8);
+    const providerAttachmentId = randomUUID();
+    const textoAdjunto = [
+      `Shipment Confirmation - ${numeroOrden}`,
+      `Supplier: ${proveedor.nombre}`,
+      `PO: ${numeroOrden}`,
+      "500 SACOS DE 25 KG C/U",
+      "PESO NETO: 12.500 KG",
+      "ETA: 18/10/2026",
+      "Incoterm: FOB",
+      "Container: ABCD1234567",
+    ].join("\n");
+
+    const mensaje: EmailMessage = {
+      messageId: `<simulacion-${sufijo}@localhost>`,
+      providerMessageId: randomUUID(),
+      from: proveedor.email,
+      to: ["importaciones@ricol.com.co"],
+      subject: `Shipping Confirmation - Order ${numeroOrden}`,
+      date: new Date(),
+      bodyText: `Estimados, adjuntamos la confirmación de embarque de la orden ${numeroOrden}.`,
+      bodyHtml: null,
+      attachments: [
+        {
+          providerAttachmentId,
+          filename: "shipping-confirmation.txt",
+          mimeType: "text/plain",
+          size: textoAdjunto.length,
+        },
+      ],
+    };
+
+    console.log(
+      `\nSimulando correo de "${proveedor.nombre}" <${proveedor.email}> sobre la orden ${numeroOrden}...\n`,
+    );
+
+    _establecerProviderParaTests(
+      new ProviderDeSimulacion(mensaje, Buffer.from(textoAdjunto, "utf-8"), providerAttachmentId),
+    );
+    process.env.IMPORTACIONES_EMAIL_SYNC_ENABLED = "true";
+    process.env.IMPORTACIONES_PROCESSING_ENABLED = "true";
+
+    await ejecutarCicloIngestaCorreos();
+    await ejecutarCicloProcesamientoCorreos();
+
+    const correo = await prisma.importacionCorreo.findUniqueOrThrow({
+      where: { messageId: mensaje.messageId },
+      include: {
+        adjuntos: { include: { extracciones: true } },
+        excepciones: true,
+        proveedor: { select: { nombre: true } },
+        ordenCompra: { select: { numeroOrden: true } },
       },
-    ],
-  };
+    });
 
-  console.log(`\nSimulando correo de "${proveedor.nombre}" <${proveedor.email}> sobre la orden ${numeroOrden}...\n`);
+    console.log("── Resultado ──────────────────────────────────────────");
+    console.log(`Correo ID:            ${correo.id}`);
+    console.log(`Estado:               ${correo.estadoProcesamiento}`);
+    console.log(`Clasificación:        ${correo.clasificacion ?? "—"}`);
+    console.log(`Proveedor detectado:  ${correo.proveedor?.nombre ?? "(ninguno)"}`);
+    console.log(`Orden detectada:      ${correo.ordenCompra?.numeroOrden ?? "(ninguna)"}`);
+    console.log(`Último error:         ${correo.ultimoError ?? "—"}`);
 
-  _establecerProviderParaTests(
-    new ProviderDeSimulacion(mensaje, Buffer.from(textoAdjunto, "utf-8"), providerAttachmentId),
-  );
-  process.env.IMPORTACIONES_EMAIL_SYNC_ENABLED = "true";
-  process.env.IMPORTACIONES_PROCESSING_ENABLED = "true";
-
-  await ejecutarCicloIngestaCorreos();
-  await ejecutarCicloProcesamientoCorreos();
-
-  const correo = await prisma.importacionCorreo.findUniqueOrThrow({
-    where: { messageId: mensaje.messageId },
-    include: {
-      adjuntos: { include: { extracciones: true } },
-      excepciones: true,
-      proveedor: { select: { nombre: true } },
-      ordenCompra: { select: { numeroOrden: true } },
-    },
-  });
-
-  console.log("── Resultado ──────────────────────────────────────────");
-  console.log(`Correo ID:            ${correo.id}`);
-  console.log(`Estado:               ${correo.estadoProcesamiento}`);
-  console.log(`Clasificación:        ${correo.clasificacion ?? "—"}`);
-  console.log(`Proveedor detectado:  ${correo.proveedor?.nombre ?? "(ninguno)"}`);
-  console.log(`Orden detectada:      ${correo.ordenCompra?.numeroOrden ?? "(ninguna)"}`);
-  console.log(`Último error:         ${correo.ultimoError ?? "—"}`);
-
-  for (const adjunto of correo.adjuntos) {
-    console.log(`\nAdjunto: ${adjunto.nombreOriginal} (${adjunto.estadoExtraccion})`);
-    for (const ext of adjunto.extracciones) {
-      console.log(`  - ${ext.campo}: "${ext.valorExtraido}" (página ${ext.pagina ?? "—"}, motor ${ext.motorUsado})`);
+    for (const adjunto of correo.adjuntos) {
+      console.log(`\nAdjunto: ${adjunto.nombreOriginal} (${adjunto.estadoExtraccion})`);
+      for (const ext of adjunto.extracciones) {
+        console.log(
+          `  - ${ext.campo}: "${ext.valorExtraido}" (página ${ext.pagina ?? "—"}, motor ${ext.motorUsado})`,
+        );
+      }
     }
-  }
 
-  if (correo.excepciones.length > 0) {
-    console.log("\nExcepciones generadas:");
-    for (const exc of correo.excepciones) {
-      console.log(`  - [${exc.tipo}] ${exc.descripcion} (estado: ${exc.estado})`);
+    if (correo.excepciones.length > 0) {
+      console.log("\nExcepciones generadas:");
+      for (const exc of correo.excepciones) {
+        console.log(`  - [${exc.tipo}] ${exc.descripcion} (estado: ${exc.estado})`);
+      }
     }
-  }
 
-  console.log(`\nVer en la UI: /importaciones/bandeja/${correo.id}`);
-  console.log("──────────────────────────────────────────────────────\n");
-
+    console.log(`\nVer en la UI: /importaciones/bandeja/${correo.id}`);
+    console.log("──────────────────────────────────────────────────────\n");
   } finally {
     await prisma.$disconnect();
   }
 }
 
-const accion = process.argv[2] === "--offline"
-  ? mainSinBaseDeDatos(process.argv.slice(3))
-  : mainConBaseDeDatos();
+const accion =
+  process.argv[2] === "--offline"
+    ? mainSinBaseDeDatos(process.argv.slice(3))
+    : mainConBaseDeDatos();
 
 accion.catch((error) => {
   console.error("Error en la simulación:", error);

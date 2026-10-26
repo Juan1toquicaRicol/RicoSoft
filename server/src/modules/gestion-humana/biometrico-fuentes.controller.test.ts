@@ -50,7 +50,13 @@ function fakeRes() {
 
 function fakeReq(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest {
   return {
-    user: { id: "user-1", tenantId: "tenant-A", nombre: "Ana Admin", isSuperadmin: false, permisos: [] } as never,
+    user: {
+      id: "user-1",
+      tenantId: "tenant-A",
+      nombre: "Ana Admin",
+      isSuperadmin: false,
+      permisos: [],
+    } as never,
     params: {},
     query: {},
     body: {},
@@ -128,7 +134,13 @@ describe("biometrico-fuentes.controller", () => {
 
       const res = fakeRes();
       await crearFuenteBiometrica(
-        fakeReq({ body: { nombre: "crosschex-flexipack", proveedor: "anviz", tenantId: "tenant-B-inyectado" } }),
+        fakeReq({
+          body: {
+            nombre: "crosschex-flexipack",
+            proveedor: "anviz",
+            tenantId: "tenant-B-inyectado",
+          },
+        }),
         res,
       );
 
@@ -141,7 +153,10 @@ describe("biometrico-fuentes.controller", () => {
     it("rechaza un proveedor no soportado", async () => {
       const { crearFuenteBiometrica } = await import("./biometrico-fuentes.controller");
       const res = fakeRes();
-      await crearFuenteBiometrica(fakeReq({ body: { nombre: "sede-b", proveedor: "hikvision" } }), res);
+      await crearFuenteBiometrica(
+        fakeReq({ body: { nombre: "sede-b", proveedor: "hikvision" } }),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(createMock).not.toHaveBeenCalled();
@@ -157,7 +172,9 @@ describe("biometrico-fuentes.controller", () => {
     });
 
     it("nombre duplicado (P2002) responde 409, no 500", async () => {
-      createMock.mockRejectedValue(new PrismaClientKnownRequestErrorFake("Unique constraint", "P2002"));
+      createMock.mockRejectedValue(
+        new PrismaClientKnownRequestErrorFake("Unique constraint", "P2002"),
+      );
       const { crearFuenteBiometrica } = await import("./biometrico-fuentes.controller");
 
       const res = fakeRes();
@@ -188,7 +205,10 @@ describe("biometrico-fuentes.controller", () => {
       const { actualizarFuenteBiometrica } = await import("./biometrico-fuentes.controller");
 
       const res = fakeRes();
-      await actualizarFuenteBiometrica(fakeReq({ params: { id: "x" }, body: { nombre: "nuevo" } }), res);
+      await actualizarFuenteBiometrica(
+        fakeReq({ params: { id: "x" }, body: { nombre: "nuevo" } }),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(updateMock).not.toHaveBeenCalled();
@@ -220,7 +240,12 @@ describe("biometrico-fuentes.controller", () => {
       await actualizarFuenteBiometrica(
         fakeReq({
           params: { id: "fuente-1" },
-          body: { nombre: "x-nombre", tenantId: "tenant-B", proveedor: "otro", lastProcessedLogId: 999999 },
+          body: {
+            nombre: "x-nombre",
+            tenantId: "tenant-B",
+            proveedor: "otro",
+            lastProcessedLogId: 999999,
+          },
         }),
         res,
       );
@@ -252,7 +277,10 @@ describe("biometrico-fuentes.controller", () => {
       const res = fakeRes();
       await desactivarFuenteBiometrica(fakeReq({ params: { id: "fuente-1" } }), res);
 
-      expect(updateMock).toHaveBeenCalledWith({ where: { id: "fuente-1" }, data: { activa: false } });
+      expect(updateMock).toHaveBeenCalledWith({
+        where: { id: "fuente-1" },
+        data: { activa: false },
+      });
     });
 
     it("404 si la fuente es de otro tenant", async () => {

@@ -117,8 +117,14 @@ export async function crearAsociacionBiometrica(req: AuthenticatedRequest, res: 
     if (typeof fuenteId !== "string" || !fuenteId) {
       return res.status(400).json({ message: "fuenteId es obligatorio." });
     }
-    if (typeof externalUserId !== "string" || externalUserId.trim().length === 0 || externalUserId.length > 50) {
-      return res.status(400).json({ message: "externalUserId es obligatorio (máximo 50 caracteres)." });
+    if (
+      typeof externalUserId !== "string" ||
+      externalUserId.trim().length === 0 ||
+      externalUserId.length > 50
+    ) {
+      return res
+        .status(400)
+        .json({ message: "externalUserId es obligatorio (máximo 50 caracteres)." });
     }
     if (typeof empleadoId !== "string" || !empleadoId) {
       return res.status(400).json({ message: "empleadoId es obligatorio." });
@@ -181,7 +187,8 @@ export async function actualizarAsociacionBiometrica(req: AuthenticatedRequest, 
     }
 
     const asociacion = await prisma.empleadoBiometrico.findFirst({ where: { id, tenantId } });
-    if (!asociacion) return res.status(404).json({ message: "Asociación biométrica no encontrada." });
+    if (!asociacion)
+      return res.status(404).json({ message: "Asociación biométrica no encontrada." });
 
     const actualizada = await prisma.empleadoBiometrico.update({
       where: { id },
@@ -215,7 +222,8 @@ export async function eliminarAsociacionBiometrica(req: AuthenticatedRequest, re
     const { id } = req.params;
 
     const asociacion = await prisma.empleadoBiometrico.findFirst({ where: { id, tenantId } });
-    if (!asociacion) return res.status(404).json({ message: "Asociación biométrica no encontrada." });
+    if (!asociacion)
+      return res.status(404).json({ message: "Asociación biométrica no encontrada." });
 
     if (!asociacion.activo) return res.status(204).send();
 

@@ -154,10 +154,7 @@ export const requireAnyPermission = (permisosRequeridos: string[]) => {
     if (!req.user) {
       return res.status(401).json({ message: "No autenticado." });
     }
-    if (
-      req.user.isSuperadmin ||
-      permisosRequeridos.some((p) => req.user!.permisos.includes(p))
-    ) {
+    if (req.user.isSuperadmin || permisosRequeridos.some((p) => req.user!.permisos.includes(p))) {
       return next();
     }
     return res.status(403).json({ message: "No tienes permiso para realizar esta acción." });

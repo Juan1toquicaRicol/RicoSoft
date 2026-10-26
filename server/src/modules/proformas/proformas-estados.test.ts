@@ -9,7 +9,12 @@ import {
 
 describe("máquina de estados de Proforma", () => {
   it("ENVIADA -> ACEPTADA -> PEDIDO_CREADO; ANULADA aparte", () => {
-    expect(Object.values(ESTADO_PROFORMA)).toEqual(["ENVIADA", "ACEPTADA", "PEDIDO_CREADO", "ANULADA"]);
+    expect(Object.values(ESTADO_PROFORMA)).toEqual([
+      "ENVIADA",
+      "ACEPTADA",
+      "PEDIDO_CREADO",
+      "ANULADA",
+    ]);
   });
 
   it("solo ENVIADA puede aceptarse", () => {

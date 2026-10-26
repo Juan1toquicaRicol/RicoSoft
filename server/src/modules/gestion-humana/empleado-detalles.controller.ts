@@ -582,6 +582,8 @@ export const subirDocumentoEmpleado = async (req: AuthenticatedRequest, res: Res
             empleadoId: id,
             tipo: tipoDoc,
             estudioId: estudioIdValido,
+            // Reject control characters and path separators from uploaded names.
+            // eslint-disable-next-line no-control-regex
             archivoNombre: nombreArchivoUtf8(archivo.originalname).replace(/[\x00-\x1f"\\/]/g, "_"),
             archivoRuta,
             archivoMime: archivo.mimetype,

@@ -104,7 +104,12 @@ describe("obtenerDashboardResumen — agregaciones SQL", () => {
         topProveedores: [{ nombre: "ACME", valor: 350 }],
       },
       solicitudes: { total: 4, porEstado: { Pendiente: 4 } },
-      importaciones: { totalLotes: 3, enTransito: 2, nacionalizados: 1, pendientesDocumentacion: 3 },
+      importaciones: {
+        totalLotes: 3,
+        enTransito: 2,
+        nacionalizados: 1,
+        pendientesDocumentacion: 3,
+      },
       servicios: { activos: 3, costoRecurrenteMensual: 200, proximosVencimientos: 1 },
       creditos: {
         total: 3,
@@ -174,7 +179,12 @@ describe("obtenerDashboardResumen — agregaciones SQL", () => {
 
     const res = await llamar([], true);
     const b = res.body as Record<string, Record<string, unknown>>;
-    expect(b.facturas).toMatchObject({ total: 0, valorPendiente: 0, vencidas: 0, topProveedores: [] });
+    expect(b.facturas).toMatchObject({
+      total: 0,
+      valorPendiente: 0,
+      vencidas: 0,
+      topProveedores: [],
+    });
     expect(b.creditos).toEqual({ total: 0, totalSaldo: 0, pendientes: 0, topDeudores: [] });
     expect(b.servicios).toEqual({ activos: 0, costoRecurrenteMensual: 0, proximosVencimientos: 0 });
     expect(b.despachos).toEqual({ total: 0, enProceso: 0, entregados: 0, novedadesAbiertas: 0 });

@@ -151,7 +151,10 @@ describe("leerCompromisoSiesaPorPdv — lote y unión", () => {
 
   it("deriva el estado operativo con las reglas existentes (flags reales de Siesa)", async () => {
     mocks.query.mockResolvedValue({
-      recordset: [filaSiesa(1, 5, { indRetenidoCupo: true }), filaSiesa(2, 5, { indBackorderLinea: 1 })],
+      recordset: [
+        filaSiesa(1, 5, { indRetenidoCupo: true }),
+        filaSiesa(2, 5, { indBackorderLinea: 1 }),
+      ],
     });
     const mapa = await leerCompromisoSiesaPorPdv(7, [1, 2]);
     expect(mapa.get(1)?.estadoOperativo).toBe("Retenido");
@@ -161,7 +164,11 @@ describe("leerCompromisoSiesaPorPdv — lote y unión", () => {
 
 describe("obtenerCompromisoInventarioPedidos", () => {
   it("acota por tenantId, agrupa TODOS los vinculados en un lote y no toca Proformas", async () => {
-    mocks.findMany.mockResolvedValue([pedido("a", 11, 3), pedido("b", null, 2), pedido("c", 12, 1)]);
+    mocks.findMany.mockResolvedValue([
+      pedido("a", 11, 3),
+      pedido("b", null, 2),
+      pedido("c", 12, 1),
+    ]);
     mocks.query.mockResolvedValue({ recordset: [filaSiesa(11, 6), filaSiesa(12, 0)] });
 
     const dtos = await obtenerCompromisoInventarioPedidos("tenant-1", ["a", "b", "c"]);
@@ -172,7 +179,11 @@ describe("obtenerCompromisoInventarioPedidos", () => {
     });
     expect(mocks.resolverCia).toHaveBeenCalledWith("tenant-1");
     expect(mocks.query).toHaveBeenCalledTimes(1);
-    expect(dtos.map((d) => d.compromiso)).toEqual(["COMPROMETIDO", "SIN_VINCULO_ERP", "NO_COMPROMETIDO"]);
+    expect(dtos.map((d) => d.compromiso)).toEqual([
+      "COMPROMETIDO",
+      "SIN_VINCULO_ERP",
+      "NO_COMPROMETIDO",
+    ]);
     expect(mocks.proformaTocada).not.toHaveBeenCalled();
   });
 

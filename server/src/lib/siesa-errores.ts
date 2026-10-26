@@ -17,7 +17,11 @@ export function marcarErrorSiesa<T>(error: T): T {
 }
 
 export function esErrorSiesa(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as Record<symbol, unknown>)[ORIGEN_SIESA] === true;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as Record<symbol, unknown>)[ORIGEN_SIESA] === true
+  );
 }
 
 /** Causa de un fallo al hablar con Siesa, para decidir si el pool se descarta. */

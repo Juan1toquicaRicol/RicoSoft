@@ -13,7 +13,13 @@ import { PERMISOS_SISTEMA } from "../../lib/permissions";
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
-const item = { descripcion: "Producto", cantidad: 2, precioUnitario: 1000, descuentoPct: 0, ivaPct: 19 };
+const item = {
+  descripcion: "Producto",
+  cantidad: 2,
+  precioUnitario: 1000,
+  descuentoPct: 0,
+  ivaPct: 19,
+};
 
 // Interruptores (prisma.$use se registra una vez y alcanza al cliente `tx`).
 let fallarAuditoria = false;
@@ -51,13 +57,20 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
 
   const crearTenant = async (etiqueta: string, permisosRol?: string[]) => {
     const tenant = await prisma.tenant.create({
-      data: { nombre: `Estados ${etiqueta} ${sufijo}`, subdomain: `test-estados-${etiqueta}-${sufijo}` },
+      data: {
+        nombre: `Estados ${etiqueta} ${sufijo}`,
+        subdomain: `test-estados-${etiqueta}-${sufijo}`,
+      },
     });
     tenantIds.push(tenant.id);
     const email = `estados-${etiqueta}-${sufijo}@test.ricosoft.local`;
     const rol = permisosRol
       ? await prisma.rol.create({
-          data: { tenantId: tenant.id, nombre: `Rol ${etiqueta} ${sufijo}`, permisos: JSON.stringify(permisosRol) },
+          data: {
+            tenantId: tenant.id,
+            nombre: `Rol ${etiqueta} ${sufijo}`,
+            permisos: JSON.stringify(permisosRol),
+          },
         })
       : null;
     await prisma.user.create({
@@ -81,7 +94,8 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
       .post("/api/proformas")
       .set(auth(tok))
       .send({ clienteRowId: 1, clienteNombre: "Cliente Estados", items: [item] });
-    if (res.status !== 201) throw new Error(`crearProforma ${res.status} ${JSON.stringify(res.body)}`);
+    if (res.status !== 201)
+      throw new Error(`crearProforma ${res.status} ${JSON.stringify(res.body)}`);
     return res.body as { id: string; numero: number; estado: string };
   };
   const aceptar = (id: string, tok = token) =>
@@ -119,7 +133,9 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
   });
 
   afterAll(async () => {
-    await prisma.pedidoComercialItem.deleteMany({ where: { pedido: { tenantId: { in: tenantIds } } } });
+    await prisma.pedidoComercialItem.deleteMany({
+      where: { pedido: { tenantId: { in: tenantIds } } },
+    });
     await prisma.pedidoComercial.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.proformaItem.deleteMany({ where: { proforma: { tenantId: { in: tenantIds } } } });
     await prisma.proforma.deleteMany({ where: { tenantId: { in: tenantIds } } });
@@ -163,7 +179,11 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
       const crearUsuario = async (etiqueta: string, permisos: string[]) => {
         const email = `estados-rbac-${etiqueta}-${sufijo}@test.ricosoft.local`;
         const rol = await prisma.rol.create({
-          data: { tenantId, nombre: `Rol rbac ${etiqueta} ${sufijo}`, permisos: JSON.stringify(permisos) },
+          data: {
+            tenantId,
+            nombre: `Rol rbac ${etiqueta} ${sufijo}`,
+            permisos: JSON.stringify(permisos),
+          },
         });
         await prisma.user.create({
           data: {
@@ -280,7 +300,13 @@ describe.skipIf(!RUN)("Proforma — máquina de estados y consecutivo de Pedido"
       // ...pero pedidos SIN proforma coexisten (índice filtrado, no @@unique plano).
       for (const numero of [999_002, 999_003]) {
         await prisma.pedidoComercial.create({
-          data: { tenantId, numero, clienteRowId: 1, clienteNombre: "Sin proforma", creadoPorNombre: "Suite" },
+          data: {
+            tenantId,
+            numero,
+            clienteRowId: 1,
+            clienteNombre: "Sin proforma",
+            creadoPorNombre: "Suite",
+          },
         });
       }
     });

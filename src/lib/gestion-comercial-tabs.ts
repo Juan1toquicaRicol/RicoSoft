@@ -32,7 +32,6 @@ export function tabDesdeUrl(valor: unknown): TabGestion | undefined {
   }
 }
 
-
 export function tabsVisibles(tienePermiso: (permiso: string) => boolean): DefinicionTabGestion[] {
   return TABS_GESTION.filter((t) => !t.permisos || t.permisos.every(tienePermiso));
 }

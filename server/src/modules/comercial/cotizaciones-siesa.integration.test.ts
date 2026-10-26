@@ -55,25 +55,26 @@ function crearRequestFake() {
         const rowIds = Object.entries(inputs)
           .filter(([k]) => /^r\d+$/.test(k))
           .map(([, v]) => v as number);
-        const recordset = DOCS.filter((d) => d.cia === inputs.ciaId && rowIds.includes(d.rowId)).flatMap(
-          (d) =>
-            d.lineas.map((l, i) => ({
-              docRowId: d.rowId,
-              lineaRowId: d.rowId * 10 + i,
-              itemRowId: 700 + i,
-              referencia: `REF-${i + 1}`,
-              descripcion: `Producto ${i + 1}`,
-              unidadMedida: "KG  ",
-              listaPrecio: "001",
-              bodegaRowId: 1,
-              tasaImpuesto: l.impuesto ? 19 : null,
-              cantidad: l.cantidad,
-              precioUnitario: l.precio,
-              descuentoLinea: l.descuento ?? 0,
-              descuentoGlobal: 0,
-              impuesto: l.impuesto ?? 0,
-              valorNeto: l.impuesto ? l.impuesto / 0.19 : l.cantidad * l.precio,
-            })),
+        const recordset = DOCS.filter(
+          (d) => d.cia === inputs.ciaId && rowIds.includes(d.rowId),
+        ).flatMap((d) =>
+          d.lineas.map((l, i) => ({
+            docRowId: d.rowId,
+            lineaRowId: d.rowId * 10 + i,
+            itemRowId: 700 + i,
+            referencia: `REF-${i + 1}`,
+            descripcion: `Producto ${i + 1}`,
+            unidadMedida: "KG  ",
+            listaPrecio: "001",
+            bodegaRowId: 1,
+            tasaImpuesto: l.impuesto ? 19 : null,
+            cantidad: l.cantidad,
+            precioUnitario: l.precio,
+            descuentoLinea: l.descuento ?? 0,
+            descuentoGlobal: 0,
+            impuesto: l.impuesto ?? 0,
+            valorNeto: l.impuesto ? l.impuesto / 0.19 : l.cantidad * l.precio,
+          })),
         );
         return { recordset };
       }
@@ -125,226 +126,242 @@ let fallarAuditoria = false;
   },
 );
 
-describe.skipIf(!RUN)("POST /comercial/cotizaciones/siesa/sincronizar — persistencia (BD real)", () => {
-  const app = createApp();
-  const PASSWORD = "TestPassword123";
-  const sufijo = randomUUID().slice(0, 8);
-  const tenantIds: string[] = [];
+describe.skipIf(!RUN)(
+  "POST /comercial/cotizaciones/siesa/sincronizar — persistencia (BD real)",
+  () => {
+    const app = createApp();
+    const PASSWORD = "TestPassword123";
+    const sufijo = randomUUID().slice(0, 8);
+    const tenantIds: string[] = [];
 
-  let tenantA: string;
-  let tenantB: string;
-  let tenantSinSiesa: string;
-  let tokenA: string;
-  let tokenB: string;
-  let tokenSinSiesa: string;
-  let tokenSoloVer: string;
+    let tenantA: string;
+    let tenantB: string;
+    let tenantSinSiesa: string;
+    let tokenA: string;
+    let tokenB: string;
+    let tokenSinSiesa: string;
+    let tokenSoloVer: string;
 
-  const sincronizar = (body: object, tok = tokenA) =>
-    request(app)
-      .post("/api/comercial/cotizaciones/siesa/sincronizar")
-      .set("Authorization", `Bearer ${tok}`)
-      .send(body);
+    const sincronizar = (body: object, tok = tokenA) =>
+      request(app)
+        .post("/api/comercial/cotizaciones/siesa/sincronizar")
+        .set("Authorization", `Bearer ${tok}`)
+        .send(body);
 
-  const cotizacionesDe = (tenantId: string, erpRowId: number) =>
-    prisma.cotizacion.findMany({ where: { tenantId, erpRowId }, include: { items: true } });
+    const cotizacionesDe = (tenantId: string, erpRowId: number) =>
+      prisma.cotizacion.findMany({ where: { tenantId, erpRowId }, include: { items: true } });
 
-  beforeAll(async () => {
-    const passwordHash = await bcrypt.hash(PASSWORD, 10);
-    const mk = async (etiqueta: string, siesaCiaId?: number) => {
-      const t = await prisma.tenant.create({
+    beforeAll(async () => {
+      const passwordHash = await bcrypt.hash(PASSWORD, 10);
+      const mk = async (etiqueta: string, siesaCiaId?: number) => {
+        const t = await prisma.tenant.create({
+          data: {
+            nombre: `Test CotSiesa ${etiqueta} ${sufijo}`,
+            subdomain: `test-cotsiesa-${etiqueta}-${sufijo}`,
+            ...(siesaCiaId ? { siesaCiaId } : {}),
+          },
+        });
+        tenantIds.push(t.id);
+        return t.id;
+      };
+      tenantA = await mk("a", CIA_A);
+      tenantB = await mk("b", CIA_B);
+      tenantSinSiesa = await mk("nosiesa");
+
+      const mkUser = async (tid: string, etiqueta: string, extra: object = {}) => {
+        const email = `cotsiesa-${etiqueta}-${sufijo}@test.ricosoft.local`;
+        await prisma.user.create({
+          data: {
+            tenantId: tid,
+            email,
+            passwordHash,
+            nombre: `Usuario ${etiqueta}`,
+            isSuperadmin: true,
+            activo: true,
+            ...extra,
+          },
+        });
+        const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
+        if (res.status !== 200) throw new Error(`Login falló ${etiqueta}: ${res.status}`);
+        return res.body.token as string;
+      };
+      tokenA = await mkUser(tenantA, "a");
+      tokenB = await mkUser(tenantB, "b");
+      tokenSinSiesa = await mkUser(tenantSinSiesa, "nosiesa");
+
+      const rol = await prisma.rol.create({
         data: {
-          nombre: `Test CotSiesa ${etiqueta} ${sufijo}`,
-          subdomain: `test-cotsiesa-${etiqueta}-${sufijo}`,
-          ...(siesaCiaId ? { siesaCiaId } : {}),
+          tenantId: tenantA,
+          nombre: `Solo ver ${sufijo}`,
+          permisos: JSON.stringify([PERMISOS_SISTEMA.COTIZACIONES_VER]),
         },
       });
-      tenantIds.push(t.id);
-      return t.id;
-    };
-    tenantA = await mk("a", CIA_A);
-    tenantB = await mk("b", CIA_B);
-    tenantSinSiesa = await mk("nosiesa");
+      tokenSoloVer = await mkUser(tenantA, "ver", { isSuperadmin: false, rolId: rol.id });
+    });
 
-    const mkUser = async (tid: string, etiqueta: string, extra: object = {}) => {
-      const email = `cotsiesa-${etiqueta}-${sufijo}@test.ricosoft.local`;
-      await prisma.user.create({
-        data: {
-          tenantId: tid,
-          email,
-          passwordHash,
-          nombre: `Usuario ${etiqueta}`,
-          isSuperadmin: true,
-          activo: true,
-          ...extra,
-        },
+    afterAll(async () => {
+      await prisma.cotizacionItem.deleteMany({
+        where: { cotizacion: { tenantId: { in: tenantIds } } },
       });
-      const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
-      if (res.status !== 200) throw new Error(`Login falló ${etiqueta}: ${res.status}`);
-      return res.body.token as string;
-    };
-    tokenA = await mkUser(tenantA, "a");
-    tokenB = await mkUser(tenantB, "b");
-    tokenSinSiesa = await mkUser(tenantSinSiesa, "nosiesa");
+      await prisma.cotizacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+      await prisma.$disconnect();
+    });
 
-    const rol = await prisma.rol.create({
-      data: {
+    it("simulación (guardar por defecto): clasifica pero NO escribe nada", async () => {
+      const doc = nuevoDoc();
+      const res = await sincronizar({ limite: 1 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.modo).toBe("SIMULACION");
+      expect(res.body.cotizaciones[0]).toMatchObject({
+        erpRowId: doc.rowId,
+        estadoSincronizacion: "NUEVA",
+      });
+      expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
+    });
+
+    it("guardar=true: crea ATÓMICAMENTE la cotización BORRADOR con ítems, campos de Siesa y auditoría", async () => {
+      const doc = nuevoDoc({ cliente: "Cliente Persistido" });
+      const res = await sincronizar({ guardar: true, limite: 1 });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        modo: "GUARDADO",
+        creadas: 1,
+        actualizadas: 0,
+        errores: [],
+      });
+
+      const [c] = await cotizacionesDe(tenantA, doc.rowId);
+      expect(c).toMatchObject({
         tenantId: tenantA,
-        nombre: `Solo ver ${sufijo}`,
-        permisos: JSON.stringify([PERMISOS_SISTEMA.COTIZACIONES_VER]),
-      },
+        estado: "BORRADOR",
+        erpTipoDocumento: "CDV",
+        erpNumero: `COT-CDV-${String(doc.consec).padStart(5, "0")}`,
+        erpEstadoSincronizacion: "VINCULADO",
+        moneda: "COP",
+        clienteRowId: 3001,
+        clienteNombre: "Cliente Persistido",
+        clienteNit: "900111222-3",
+        vendedorNombre: "Vendedor Siesa",
+      });
+      // vencimiento = fecha (2026-09-10) + 15 días
+      expect(c.fechaVencimiento?.toISOString().slice(0, 10)).toBe("2026-09-25");
+      expect(c.items).toHaveLength(2);
+      const it0 = c.items.find((i) => i.orden === 0)!;
+      expect(it0).toMatchObject({ referencia: "REF-1", itemRowId: 700, descripcion: "Producto 1" });
+      expect(Number(it0.cantidad)).toBe(10);
+      expect(Number(it0.precioUnitario)).toBe(1000);
+      expect(Number(it0.descuentoPct)).toBe(5); // 500 / (10 x 1000)
+      expect(Number(it0.ivaPct)).toBe(19);
+
+      const auditoria = await prisma.auditoria.findMany({
+        where: { tenantId: tenantA, entidadId: c.id, accion: "COTIZACION_SIESA_CREADA" },
+      });
+      expect(auditoria).toHaveLength(1);
     });
-    tokenSoloVer = await mkUser(tenantA, "ver", { isSuperadmin: false, rolId: rol.id });
-  });
 
-  afterAll(async () => {
-    await prisma.cotizacionItem.deleteMany({ where: { cotizacion: { tenantId: { in: tenantIds } } } });
-    await prisma.cotizacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
-    await prisma.$disconnect();
-  });
+    it("guardar=true con f430_fecha_vcto_cotizacion presente: usa ESE vencimiento (no fecha + 15)", async () => {
+      const doc = nuevoDoc({ vencimiento: new Date("2026-10-30") });
+      const res = await sincronizar({ guardar: true, limite: 1 });
+      expect(res.body.creadas).toBe(1);
 
-  it("simulación (guardar por defecto): clasifica pero NO escribe nada", async () => {
-    const doc = nuevoDoc();
-    const res = await sincronizar({ limite: 1 });
-
-    expect(res.status).toBe(200);
-    expect(res.body.modo).toBe("SIMULACION");
-    expect(res.body.cotizaciones[0]).toMatchObject({ erpRowId: doc.rowId, estadoSincronizacion: "NUEVA" });
-    expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
-  });
-
-  it("guardar=true: crea ATÓMICAMENTE la cotización BORRADOR con ítems, campos de Siesa y auditoría", async () => {
-    const doc = nuevoDoc({ cliente: "Cliente Persistido" });
-    const res = await sincronizar({ guardar: true, limite: 1 });
-
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ modo: "GUARDADO", creadas: 1, actualizadas: 0, errores: [] });
-
-    const [c] = await cotizacionesDe(tenantA, doc.rowId);
-    expect(c).toMatchObject({
-      tenantId: tenantA,
-      estado: "BORRADOR",
-      erpTipoDocumento: "CDV",
-      erpNumero: `COT-CDV-${String(doc.consec).padStart(5, "0")}`,
-      erpEstadoSincronizacion: "VINCULADO",
-      moneda: "COP",
-      clienteRowId: 3001,
-      clienteNombre: "Cliente Persistido",
-      clienteNit: "900111222-3",
-      vendedorNombre: "Vendedor Siesa",
+      const [c] = await cotizacionesDe(tenantA, doc.rowId);
+      expect(c.fechaVencimiento?.toISOString().slice(0, 10)).toBe("2026-10-30");
+      expect(c.items[0]).toMatchObject({ unidadMedida: "KG", bodegaRowId: 1 });
     });
-    // vencimiento = fecha (2026-09-10) + 15 días
-    expect(c.fechaVencimiento?.toISOString().slice(0, 10)).toBe("2026-09-25");
-    expect(c.items).toHaveLength(2);
-    const it0 = c.items.find((i) => i.orden === 0)!;
-    expect(it0).toMatchObject({ referencia: "REF-1", itemRowId: 700, descripcion: "Producto 1" });
-    expect(Number(it0.cantidad)).toBe(10);
-    expect(Number(it0.precioUnitario)).toBe(1000);
-    expect(Number(it0.descuentoPct)).toBe(5); // 500 / (10 x 1000)
-    expect(Number(it0.ivaPct)).toBe(19);
 
-    const auditoria = await prisma.auditoria.findMany({
-      where: { tenantId: tenantA, entidadId: c.id, accion: "COTIZACION_SIESA_CREADA" },
+    it("re-sincronizar una vinculada en BORRADOR la ACTUALIZA (sin duplicar) y reemplaza los ítems", async () => {
+      const doc = nuevoDoc();
+      await sincronizar({ guardar: true, limite: 1 });
+      const [antes] = await cotizacionesDe(tenantA, doc.rowId);
+
+      doc.lineas = [{ cantidad: 3, precio: 9000 }]; // Siesa cambió
+      const res = await sincronizar({ guardar: true, limite: 1 });
+
+      expect(res.body).toMatchObject({ creadas: 0, actualizadas: 1, yaVinculadas: 1 });
+      const despues = await cotizacionesDe(tenantA, doc.rowId);
+      expect(despues).toHaveLength(1); // no duplicó
+      expect(despues[0].id).toBe(antes.id);
+      expect(despues[0].numero).toBe(antes.numero); // el consecutivo interno no cambia
+      expect(despues[0].items).toHaveLength(1);
+      expect(Number(despues[0].items[0].precioUnitario)).toBe(9000);
     });
-    expect(auditoria).toHaveLength(1);
-  });
 
-  it("guardar=true con f430_fecha_vcto_cotizacion presente: usa ESE vencimiento (no fecha + 15)", async () => {
-    const doc = nuevoDoc({ vencimiento: new Date("2026-10-30") });
-    const res = await sincronizar({ guardar: true, limite: 1 });
-    expect(res.body.creadas).toBe(1);
+    it("una vinculada que YA NO es BORRADOR no se toca (omitida)", async () => {
+      const doc = nuevoDoc();
+      await sincronizar({ guardar: true, limite: 1 });
+      const [c] = await cotizacionesDe(tenantA, doc.rowId);
+      await prisma.cotizacion.update({ where: { id: c.id }, data: { estado: "ENVIADA" } });
 
-    const [c] = await cotizacionesDe(tenantA, doc.rowId);
-    expect(c.fechaVencimiento?.toISOString().slice(0, 10)).toBe("2026-10-30");
-    expect(c.items[0]).toMatchObject({ unidadMedida: "KG", bodegaRowId: 1 });
-  });
+      doc.lineas = [{ cantidad: 1, precio: 1 }];
+      const res = await sincronizar({ guardar: true, limite: 1 });
 
-  it("re-sincronizar una vinculada en BORRADOR la ACTUALIZA (sin duplicar) y reemplaza los ítems", async () => {
-    const doc = nuevoDoc();
-    await sincronizar({ guardar: true, limite: 1 });
-    const [antes] = await cotizacionesDe(tenantA, doc.rowId);
+      expect(res.body).toMatchObject({ creadas: 0, actualizadas: 0, omitidas: 1 });
+      expect(res.body.cotizaciones[0].resultado).toBe("OMITIDA_NO_BORRADOR");
+      const [despues] = await cotizacionesDe(tenantA, doc.rowId);
+      expect(despues.estado).toBe("ENVIADA");
+      expect(despues.items).toHaveLength(2); // ítems intactos
+    });
 
-    doc.lineas = [{ cantidad: 3, precio: 9000 }]; // Siesa cambió
-    const res = await sincronizar({ guardar: true, limite: 1 });
+    it("ROLLBACK: si la auditoría falla NO queda cotización ni ítems huérfanos, y se reporta el error", async () => {
+      const doc = nuevoDoc();
+      fallarAuditoria = true;
+      let res;
+      try {
+        res = await sincronizar({ guardar: true, limite: 1 });
+      } finally {
+        fallarAuditoria = false;
+      }
 
-    expect(res.body).toMatchObject({ creadas: 0, actualizadas: 1, yaVinculadas: 1 });
-    const despues = await cotizacionesDe(tenantA, doc.rowId);
-    expect(despues).toHaveLength(1); // no duplicó
-    expect(despues[0].id).toBe(antes.id);
-    expect(despues[0].numero).toBe(antes.numero); // el consecutivo interno no cambia
-    expect(despues[0].items).toHaveLength(1);
-    expect(Number(despues[0].items[0].precioUnitario)).toBe(9000);
-  });
+      expect(res.status).toBe(200);
+      expect(res.body.errores).toHaveLength(1);
+      expect(JSON.stringify(res.body)).not.toMatch(/boom/);
+      expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
+      // el reintento posterior funciona (nada quedó a medias)
+      const ok = await sincronizar({ guardar: true, limite: 1 });
+      expect(ok.body.creadas).toBe(1);
+    });
 
-  it("una vinculada que YA NO es BORRADOR no se toca (omitida)", async () => {
-    const doc = nuevoDoc();
-    await sincronizar({ guardar: true, limite: 1 });
-    const [c] = await cotizacionesDe(tenantA, doc.rowId);
-    await prisma.cotizacion.update({ where: { id: c.id }, data: { estado: "ENVIADA" } });
+    it("carrera: dos sincronizaciones simultáneas -> UNA sola cotización local por erpRowId", async () => {
+      const doc = nuevoDoc();
+      const [r1, r2] = await Promise.all([
+        sincronizar({ guardar: true, limite: 1 }),
+        sincronizar({ guardar: true, limite: 1 }),
+      ]);
 
-    doc.lineas = [{ cantidad: 1, precio: 1 }];
-    const res = await sincronizar({ guardar: true, limite: 1 });
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(1);
+      const creadas = r1.body.creadas + r2.body.creadas;
+      expect(creadas).toBe(1);
+    });
 
-    expect(res.body).toMatchObject({ creadas: 0, actualizadas: 0, omitidas: 1 });
-    expect(res.body.cotizaciones[0].resultado).toBe("OMITIDA_NO_BORRADOR");
-    const [despues] = await cotizacionesDe(tenantA, doc.rowId);
-    expect(despues.estado).toBe("ENVIADA");
-    expect(despues.items).toHaveLength(2); // ítems intactos
-  });
+    it("aislamiento multi-tenant: cada tenant lee su compañía Siesa y crea SUS cotizaciones", async () => {
+      const docB = nuevoDoc({ cia: CIA_B });
+      const res = await sincronizar(
+        { guardar: true, limite: 1, ciaId: CIA_A, tenantId: tenantA },
+        tokenB,
+      );
 
-  it("ROLLBACK: si la auditoría falla NO queda cotización ni ítems huérfanos, y se reporta el error", async () => {
-    const doc = nuevoDoc();
-    fallarAuditoria = true;
-    let res;
-    try {
-      res = await sincronizar({ guardar: true, limite: 1 });
-    } finally {
-      fallarAuditoria = false;
-    }
+      expect(res.status).toBe(200);
+      expect(res.body.creadas).toBe(1);
+      expect(await cotizacionesDe(tenantB, docB.rowId)).toHaveLength(1);
+      expect(await cotizacionesDe(tenantA, docB.rowId)).toHaveLength(0); // no cruza tenants
+    });
 
-    expect(res.status).toBe(200);
-    expect(res.body.errores).toHaveLength(1);
-    expect(JSON.stringify(res.body)).not.toMatch(/boom/);
-    expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
-    // el reintento posterior funciona (nada quedó a medias)
-    const ok = await sincronizar({ guardar: true, limite: 1 });
-    expect(ok.body.creadas).toBe(1);
-  });
+    it("permisos: solo cotizaciones.ver -> 403 sin escribir; tenant sin siesaCiaId -> 400", async () => {
+      const doc = nuevoDoc();
+      const denegado = await sincronizar({ guardar: true, limite: 1 }, tokenSoloVer);
+      expect(denegado.status).toBe(403);
+      expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
 
-  it("carrera: dos sincronizaciones simultáneas -> UNA sola cotización local por erpRowId", async () => {
-    const doc = nuevoDoc();
-    const [r1, r2] = await Promise.all([
-      sincronizar({ guardar: true, limite: 1 }),
-      sincronizar({ guardar: true, limite: 1 }),
-    ]);
-
-    expect(r1.status).toBe(200);
-    expect(r2.status).toBe(200);
-    expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(1);
-    const creadas = r1.body.creadas + r2.body.creadas;
-    expect(creadas).toBe(1);
-  });
-
-  it("aislamiento multi-tenant: cada tenant lee su compañía Siesa y crea SUS cotizaciones", async () => {
-    const docB = nuevoDoc({ cia: CIA_B });
-    const res = await sincronizar({ guardar: true, limite: 1, ciaId: CIA_A, tenantId: tenantA }, tokenB);
-
-    expect(res.status).toBe(200);
-    expect(res.body.creadas).toBe(1);
-    expect(await cotizacionesDe(tenantB, docB.rowId)).toHaveLength(1);
-    expect(await cotizacionesDe(tenantA, docB.rowId)).toHaveLength(0); // no cruza tenants
-  });
-
-  it("permisos: solo cotizaciones.ver -> 403 sin escribir; tenant sin siesaCiaId -> 400", async () => {
-    const doc = nuevoDoc();
-    const denegado = await sincronizar({ guardar: true, limite: 1 }, tokenSoloVer);
-    expect(denegado.status).toBe(403);
-    expect(await cotizacionesDe(tenantA, doc.rowId)).toHaveLength(0);
-
-    const sinCia = await sincronizar({ guardar: true }, tokenSinSiesa);
-    expect(sinCia.status).toBe(400);
-  });
-});
+      const sinCia = await sincronizar({ guardar: true }, tokenSinSiesa);
+      expect(sinCia.status).toBe(400);
+    });
+  },
+);

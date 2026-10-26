@@ -10,7 +10,11 @@
  *   npx tsx scripts/explore-crosschex.ts
  */
 import "dotenv/config";
-import { obtenerUltimasMarcaciones, obtenerUsuarios, verificarConexion } from "../src/integrations/crosschex";
+import {
+  obtenerUltimasMarcaciones,
+  obtenerUsuarios,
+  verificarConexion,
+} from "../src/integrations/crosschex";
 
 async function main() {
   console.log("Verificando conexión a CrossChex.mdb...");

@@ -92,10 +92,7 @@ export function VistaEstadoPedidoUnoee({
       {!loading && error && (
         <p
           role="alert"
-          className={cn(
-            "mt-3 rounded-md border px-3 py-2 text-xs",
-            CLASES_TONO_ESTADO.danger,
-          )}
+          className={cn("mt-3 rounded-md border px-3 py-2 text-xs", CLASES_TONO_ESTADO.danger)}
         >
           {error}{" "}
           <button type="button" className="font-semibold underline" onClick={onReintentar}>
@@ -140,8 +137,12 @@ export function VistaEstadoPedidoUnoee({
             <TarjetaCabecera etiqueta="Valor total" destacada>
               {money(estado.cabecera.valorTotal)}
             </TarjetaCabecera>
-            <TarjetaCabecera etiqueta="Descuentos">{money(estado.cabecera.descuentos)}</TarjetaCabecera>
-            <TarjetaCabecera etiqueta="Impuestos">{money(estado.cabecera.impuestos)}</TarjetaCabecera>
+            <TarjetaCabecera etiqueta="Descuentos">
+              {money(estado.cabecera.descuentos)}
+            </TarjetaCabecera>
+            <TarjetaCabecera etiqueta="Impuestos">
+              {money(estado.cabecera.impuestos)}
+            </TarjetaCabecera>
           </dl>
 
           <div className="overflow-x-auto rounded-md border border-slate-200">

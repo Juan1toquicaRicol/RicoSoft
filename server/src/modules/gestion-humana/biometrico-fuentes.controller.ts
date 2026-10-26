@@ -36,7 +36,12 @@ function serializarFuente(fuente: FuenteConUltimaSincronizacion) {
     createdAt: fuente.createdAt,
     updatedAt: fuente.updatedAt,
     ultimaSincronizacion: ultima
-      ? { id: ultima.id, estado: ultima.estado, iniciadoEn: ultima.iniciadoEn, finalizadoEn: ultima.finalizadoEn }
+      ? {
+          id: ultima.id,
+          estado: ultima.estado,
+          iniciadoEn: ultima.iniciadoEn,
+          finalizadoEn: ultima.finalizadoEn,
+        }
       : null,
   };
 }
@@ -209,7 +214,10 @@ export async function desactivarFuenteBiometrica(req: AuthenticatedRequest, res:
       return res.json(serializarFuente({ ...fuente, sincronizaciones: [] }));
     }
 
-    const actualizada = await prisma.fuenteBiometrica.update({ where: { id }, data: { activa: false } });
+    const actualizada = await prisma.fuenteBiometrica.update({
+      where: { id },
+      data: { activa: false },
+    });
 
     await prisma.auditoria.create({
       data: {

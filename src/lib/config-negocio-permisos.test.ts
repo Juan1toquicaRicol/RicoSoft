@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { accesoConfigNegocio, PERMISOS_ENTRADA_CONFIG_NEGOCIO } from "./config-negocio-permisos";
 
-const con = (...permisos: string[]) => (p: string) => permisos.includes(p);
+const con =
+  (...permisos: string[]) =>
+  (p: string) =>
+    permisos.includes(p);
 
 describe("acceso a Configuración de negocio (guard = acción de edición)", () => {
   it("sin ninguno de los permisos de edición no entra", () => {
-    expect(accesoConfigNegocio(con(PERMISOS_SISTEMA.ANALITICA_VER, PERMISOS_SISTEMA.PROFORMAS_VER))).toEqual({
+    expect(
+      accesoConfigNegocio(con(PERMISOS_SISTEMA.ANALITICA_VER, PERMISOS_SISTEMA.PROFORMAS_VER)),
+    ).toEqual({
       puedeEntrar: false,
       puedeEditarInventario: false,
       puedeEditarComercial: false,

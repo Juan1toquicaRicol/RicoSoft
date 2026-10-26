@@ -65,8 +65,7 @@ export const listarDocumentosComerciales = async (req: AuthenticatedRequest, res
   // en comercial.routes.ts) solo garantiza acceso a AL MENOS una sección, no a
   // las tres. Sin este filtro, alguien con únicamente pedidos_comerciales.ver
   // vería también las cotizaciones y proformas de todo el tenant.
-  const puede = (permiso: string) =>
-    req.user!.isSuperadmin || req.user!.permisos.includes(permiso);
+  const puede = (permiso: string) => req.user!.isSuperadmin || req.user!.permisos.includes(permiso);
   const puedeVerCotizaciones = puede(PERMISOS_SISTEMA.COTIZACIONES_VER);
   const puedeVerProformas = puede(PERMISOS_SISTEMA.PROFORMAS_VER);
   const puedeVerPedidos = puede(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER);

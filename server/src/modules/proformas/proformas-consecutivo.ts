@@ -15,10 +15,7 @@ type DbConsecutivo = Pick<Prisma.TransactionClient, "proforma" | "configuracionC
  * cubre números manuales altos y proformas creadas antes del contador, de
  * modo que un número ya usado jamás se vuelve a sugerir.
  */
-export function calcularSiguienteNumero(
-  contador: number | null,
-  maxNumero: number | null,
-): number {
+export function calcularSiguienteNumero(contador: number | null, maxNumero: number | null): number {
   return Math.max(contador ?? PRIMER_NUMERO_PROFORMA, (maxNumero ?? 0) + 1);
 }
 

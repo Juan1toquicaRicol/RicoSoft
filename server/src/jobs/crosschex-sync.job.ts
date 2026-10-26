@@ -39,7 +39,8 @@ export function leerConfigSchedulerCrossChex(): ConfigSchedulerCrossChex {
   const tamanoLoteEnv = process.env.CROSSCHEX_SYNC_BATCH_SIZE
     ? Number(process.env.CROSSCHEX_SYNC_BATCH_SIZE)
     : TAMANO_LOTE_DEFAULT;
-  const tamanoLote = Number.isFinite(tamanoLoteEnv) && tamanoLoteEnv > 0 ? tamanoLoteEnv : TAMANO_LOTE_DEFAULT;
+  const tamanoLote =
+    Number.isFinite(tamanoLoteEnv) && tamanoLoteEnv > 0 ? tamanoLoteEnv : TAMANO_LOTE_DEFAULT;
 
   return { habilitado, expresionCron, tamanoLote };
 }
@@ -50,7 +51,9 @@ export function leerConfigSchedulerCrossChex(): ConfigSchedulerCrossChex {
  * fuente tiene su propio lock (el índice único filtrado es por fuenteId), así
  * que una fuente ocupada u ocurrida en error NUNCA detiene a las demás.
  */
-export async function ejecutarCicloSincronizacionCrossChex(tamanoLote = TAMANO_LOTE_DEFAULT): Promise<void> {
+export async function ejecutarCicloSincronizacionCrossChex(
+  tamanoLote = TAMANO_LOTE_DEFAULT,
+): Promise<void> {
   const fuentes = await prisma.fuenteBiometrica.findMany({
     where: { activa: true },
     select: { nombre: true },
@@ -60,7 +63,9 @@ export async function ejecutarCicloSincronizacionCrossChex(tamanoLote = TAMANO_L
     try {
       const reporte = await sincronizarFuenteBiometrica(fuente.nombre, { tamanoLote });
       if (reporte.estado === "FALLIDO") {
-        console.error(`[crosschex-sync] "${fuente.nombre}" terminó FALLIDA: ${reporte.mensajeError}`);
+        console.error(
+          `[crosschex-sync] "${fuente.nombre}" terminó FALLIDA: ${reporte.mensajeError}`,
+        );
         reportarFalloEnCorrida("crosschex-sync", `"${fuente.nombre}": ${reporte.mensajeError}`);
       } else if (reporte.leidos > 0) {
         console.log(
@@ -75,7 +80,9 @@ export async function ejecutarCicloSincronizacionCrossChex(tamanoLote = TAMANO_L
         // Esperado bajo concurrencia (rule 11: una corrida que tarda más de
         // un minuto hace que el siguiente tick encuentre el lock ocupado).
         // No es un error de la aplicación, solo se deja constancia en info.
-        console.log(`[crosschex-sync] "${fuente.nombre}": omitida, ya hay una sincronización en curso.`);
+        console.log(
+          `[crosschex-sync] "${fuente.nombre}": omitida, ya hay una sincronización en curso.`,
+        );
       } else {
         console.error(`[crosschex-sync] Error inesperado sincronizando "${fuente.nombre}":`, error);
         reportarFalloEnCorrida(
@@ -99,7 +106,9 @@ let tareaProgramada: ScheduledTask | null = null;
 export function iniciarSchedulerCrossChex(): ScheduledTask | null {
   const config = leerConfigSchedulerCrossChex();
   if (!config.habilitado) {
-    console.log("[crosschex-sync] Scheduler deshabilitado (CROSSCHEX_SYNC_ENABLED distinto de 'true').");
+    console.log(
+      "[crosschex-sync] Scheduler deshabilitado (CROSSCHEX_SYNC_ENABLED distinto de 'true').",
+    );
     return null;
   }
   if (tareaProgramada) return tareaProgramada;

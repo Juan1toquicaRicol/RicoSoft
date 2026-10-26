@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { mapearTipoMarcacion, normalizarBit, parsearCheckTime, soloFecha } from "./crosschex.mapper";
+import {
+  mapearTipoMarcacion,
+  normalizarBit,
+  parsearCheckTime,
+  soloFecha,
+} from "./crosschex.mapper";
 
 describe("mapearTipoMarcacion", () => {
   it("mapea los CheckType confirmados contra CrossChex", () => {

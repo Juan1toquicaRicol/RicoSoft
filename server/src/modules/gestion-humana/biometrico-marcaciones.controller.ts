@@ -34,7 +34,9 @@ function serializarMarcacion(m: MarcacionConRelaciones) {
     tipoMarcacion: m.tipoMarcacion,
     dispositivoId: m.dispositivoId,
     fuente: { id: m.fuente.id, nombre: m.fuente.nombre },
-    empleado: m.empleado ? { id: m.empleado.id, nombres: m.empleado.nombres, apellidos: m.empleado.apellidos } : null,
+    empleado: m.empleado
+      ? { id: m.empleado.id, nombres: m.empleado.nombres, apellidos: m.empleado.apellidos }
+      : null,
   };
 }
 
@@ -58,7 +60,15 @@ function parsearFecha(valor: unknown): Date | undefined {
 export async function listarMarcacionesBiometricas(req: AuthenticatedRequest, res: Response) {
   try {
     const tenantId = req.user!.tenantId;
-    const { fuenteId, empleadoId, externalUserId, checkType, soloNoAsociados, fechaDesde, fechaHasta } = req.query;
+    const {
+      fuenteId,
+      empleadoId,
+      externalUserId,
+      checkType,
+      soloNoAsociados,
+      fechaDesde,
+      fechaHasta,
+    } = req.query;
     const { page, limit } = leerPaginacion(req.query);
 
     const where: Prisma.MarcacionBiometricaWhereInput = { tenantId };

@@ -29,7 +29,9 @@ export interface AccesoConfigNegocio {
   puedeEditarComercial: boolean;
 }
 
-export function accesoConfigNegocio(tienePermiso: (permiso: string) => boolean): AccesoConfigNegocio {
+export function accesoConfigNegocio(
+  tienePermiso: (permiso: string) => boolean,
+): AccesoConfigNegocio {
   const puedeEditarInventario = tienePermiso(PERMISOS_SISTEMA.INVENTARIO_CONFIGURAR);
   const puedeEditarComercial = tienePermiso(PERMISOS_SISTEMA.CONFIGURACION_EDITAR);
   return {

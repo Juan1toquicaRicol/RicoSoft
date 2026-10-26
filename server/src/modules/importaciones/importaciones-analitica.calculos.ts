@@ -86,3 +86,46 @@ export function calcularTendencia(actual: number | null, referencia: number | nu
   const variacionPorcentual = referencia !== 0 ? (variacionAbsoluta / referencia) * 100 : null;
   return { actual, referencia, variacionPorcentual, variacionAbsoluta };
 }
+
+export type MotivoDiferencia = "SIN_INICIO" | "SIN_FIN" | "FECHAS_INCONSISTENTES";
+
+/**
+ * Igual que `diferenciaDias`, pero además informa POR QUÉ no hay valor, para
+ * que la analítica pueda mostrar cuántos registros se excluyeron y por qué
+ * (sin falsear el dato ni sustituir la fecha faltante por otra).
+ */
+export function evaluarDiferenciaDias(
+  inicio: Date | null | undefined,
+  fin: Date | null | undefined,
+): { dias: number | null; motivo: MotivoDiferencia | null } {
+  if (!inicio) return { dias: null, motivo: "SIN_INICIO" };
+  if (!fin) return { dias: null, motivo: "SIN_FIN" };
+  const ms = fin.getTime() - inicio.getTime();
+  if (ms < 0) return { dias: null, motivo: "FECHAS_INCONSISTENTES" };
+  return { dias: ms / (1000 * 60 * 60 * 24), motivo: null };
+}
+
+/** Cuenta cuántas veces aparece cada motivo (ignora los null = sin exclusión). */
+export function contarMotivos(motivos: Array<string | null>): Record<string, number> {
+  const conteo: Record<string, number> = {};
+  for (const motivo of motivos) {
+    if (motivo === null) continue;
+    conteo[motivo] = (conteo[motivo] ?? 0) + 1;
+  }
+  return conteo;
+}
+
+/**
+ * Variación porcentual de la TRM de liquidación frente a la TRM pactada en la
+ * orden: (liquidación − pactada) / pactada × 100. Positivo = el dólar subió
+ * entre lo pactado y lo liquidado. null si falta alguno o la pactada no es > 0.
+ */
+export function variacionTrmPct(
+  trmPactada: number | null | undefined,
+  trmLiquidacion: number | null | undefined,
+): number | null {
+  if (trmPactada == null || trmLiquidacion == null) return null;
+  if (!Number.isFinite(trmPactada) || !Number.isFinite(trmLiquidacion)) return null;
+  if (trmPactada <= 0) return null;
+  return ((trmLiquidacion - trmPactada) / trmPactada) * 100;
+}

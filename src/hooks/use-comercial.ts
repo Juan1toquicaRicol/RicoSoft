@@ -80,10 +80,7 @@ export interface PedidoComercial extends TotalesComercial {
 }
 
 export type EstadoCompromiso =
-  | "SIN_VINCULO_ERP"
-  | "SIESA_NO_ENCONTRADO"
-  | "NO_COMPROMETIDO"
-  | "COMPROMETIDO";
+  "SIN_VINCULO_ERP" | "SIESA_NO_ENCONTRADO" | "NO_COMPROMETIDO" | "COMPROMETIDO";
 
 /** Compromiso de inventario de un pedido en Siesa (solo lectura). Mantiene
  * separados el estado comercial (RicoSoft), el de sincronización y el
@@ -331,7 +328,10 @@ export function useAccionesCotizacion() {
     rechazar: (id: string, observacion?: string) => accion(id, "rechazar", observacion),
     anular: (id: string, observacion?: string) => accion(id, "anular", observacion),
     crearProforma: (id: string) =>
-      fetchAuth(`/comercial/cotizaciones/${id}/proforma`, { method: "POST", body: JSON.stringify({}) }),
+      fetchAuth(`/comercial/cotizaciones/${id}/proforma`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
     /** Vincula/corrige a mano el documento Siesa (CDV rowid) de esta cotización. */
     asignarErp: (id: string, erpRowId: number) =>
       fetchAuth(`/comercial/cotizaciones/${id}/asignar-erp`, {

@@ -48,7 +48,13 @@ function fakeRes() {
 
 function fakeReq(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest {
   return {
-    user: { id: "user-1", tenantId: "tenant-A", nombre: "Ana Admin", isSuperadmin: false, permisos: [] } as never,
+    user: {
+      id: "user-1",
+      tenantId: "tenant-A",
+      nombre: "Ana Admin",
+      isSuperadmin: false,
+      permisos: [],
+    } as never,
     params: {},
     query: {},
     body: {},
@@ -56,8 +62,20 @@ function fakeReq(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRe
   } as AuthenticatedRequest;
 }
 
-const FUENTE_A = { id: "fuente-1", tenantId: "tenant-A", nombre: "sede-a", proveedor: "anviz", activa: true };
-const EMPLEADO_A = { id: "empleado-1", tenantId: "tenant-A", nombres: "Juan", apellidos: "Pérez", eliminado: false };
+const FUENTE_A = {
+  id: "fuente-1",
+  tenantId: "tenant-A",
+  nombre: "sede-a",
+  proveedor: "anviz",
+  activa: true,
+};
+const EMPLEADO_A = {
+  id: "empleado-1",
+  tenantId: "tenant-A",
+  nombres: "Juan",
+  apellidos: "Pérez",
+  eliminado: false,
+};
 
 describe("biometrico-asociaciones.controller", () => {
   beforeEach(() => {
@@ -76,7 +94,8 @@ describe("biometrico-asociaciones.controller", () => {
 
   describe("listarAsociacionesBiometricas", () => {
     it("siempre filtra por el tenant autenticado", async () => {
-      const { listarAsociacionesBiometricas } = await import("./biometrico-asociaciones.controller");
+      const { listarAsociacionesBiometricas } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await listarAsociacionesBiometricas(fakeReq(), res);
 
@@ -86,7 +105,8 @@ describe("biometrico-asociaciones.controller", () => {
     });
 
     it("aplica paginación por defecto y respeta límites", async () => {
-      const { listarAsociacionesBiometricas } = await import("./biometrico-asociaciones.controller");
+      const { listarAsociacionesBiometricas } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await listarAsociacionesBiometricas(fakeReq({ query: { limit: "9999" } }), res);
 
@@ -99,9 +119,13 @@ describe("biometrico-asociaciones.controller", () => {
 
     it("404 si fuenteId pertenece a otro tenant, sin llegar a listar", async () => {
       fuenteFindFirstMock.mockResolvedValue(null);
-      const { listarAsociacionesBiometricas } = await import("./biometrico-asociaciones.controller");
+      const { listarAsociacionesBiometricas } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
-      await listarAsociacionesBiometricas(fakeReq({ query: { fuenteId: "fuente-de-otro-tenant" } }), res);
+      await listarAsociacionesBiometricas(
+        fakeReq({ query: { fuenteId: "fuente-de-otro-tenant" } }),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(empleadoBiometricoFindManyMock).not.toHaveBeenCalled();
@@ -109,7 +133,8 @@ describe("biometrico-asociaciones.controller", () => {
 
     it("filtra por fuenteId exacto (Fase 6.1: ya no por proveedor), aislando fuentes del mismo proveedor entre sí", async () => {
       fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
-      const { listarAsociacionesBiometricas } = await import("./biometrico-asociaciones.controller");
+      const { listarAsociacionesBiometricas } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await listarAsociacionesBiometricas(fakeReq({ query: { fuenteId: "fuente-1" } }), res);
 
@@ -136,7 +161,14 @@ describe("biometrico-asociaciones.controller", () => {
       const { crearAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await crearAsociacionBiometrica(
-        fakeReq({ body: { fuenteId: "fuente-1", externalUserId: "33", empleadoId: "empleado-1", proveedor: "otro-inyectado" } }),
+        fakeReq({
+          body: {
+            fuenteId: "fuente-1",
+            externalUserId: "33",
+            empleadoId: "empleado-1",
+            proveedor: "otro-inyectado",
+          },
+        }),
         res,
       );
 
@@ -159,7 +191,9 @@ describe("biometrico-asociaciones.controller", () => {
       const { crearAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await crearAsociacionBiometrica(
-        fakeReq({ body: { fuenteId: "fuente-otro-tenant", externalUserId: "33", empleadoId: "empleado-1" } }),
+        fakeReq({
+          body: { fuenteId: "fuente-otro-tenant", externalUserId: "33", empleadoId: "empleado-1" },
+        }),
         res,
       );
 
@@ -173,7 +207,13 @@ describe("biometrico-asociaciones.controller", () => {
       const { crearAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await crearAsociacionBiometrica(
-        fakeReq({ body: { fuenteId: "fuente-1", externalUserId: "33", empleadoId: "empleado-de-otro-tenant" } }),
+        fakeReq({
+          body: {
+            fuenteId: "fuente-1",
+            externalUserId: "33",
+            empleadoId: "empleado-de-otro-tenant",
+          },
+        }),
         res,
       );
 
@@ -214,16 +254,24 @@ describe("biometrico-asociaciones.controller", () => {
   describe("actualizarAsociacionBiometrica (activar/desactivar)", () => {
     it("404 si la asociación es de otro tenant", async () => {
       empleadoBiometricoFindFirstMock.mockResolvedValue(null);
-      const { actualizarAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
+      const { actualizarAsociacionBiometrica } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
-      await actualizarAsociacionBiometrica(fakeReq({ params: { id: "x" }, body: { activo: false } }), res);
+      await actualizarAsociacionBiometrica(
+        fakeReq({ params: { id: "x" }, body: { activo: false } }),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(empleadoBiometricoUpdateMock).not.toHaveBeenCalled();
     });
 
     it("solo permite tocar 'activo', nunca empleadoId/externalUserId/proveedor", async () => {
-      empleadoBiometricoFindFirstMock.mockResolvedValue({ id: "assoc-1", tenantId: "tenant-A", externalUserId: "33" });
+      empleadoBiometricoFindFirstMock.mockResolvedValue({
+        id: "assoc-1",
+        tenantId: "tenant-A",
+        externalUserId: "33",
+      });
       empleadoBiometricoUpdateMock.mockResolvedValue({
         id: "assoc-1",
         proveedor: "anviz",
@@ -234,7 +282,8 @@ describe("biometrico-asociaciones.controller", () => {
         empleado: null,
       });
 
-      const { actualizarAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
+      const { actualizarAsociacionBiometrica } =
+        await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await actualizarAsociacionBiometrica(
         fakeReq({
@@ -252,14 +301,22 @@ describe("biometrico-asociaciones.controller", () => {
 
   describe("eliminarAsociacionBiometrica", () => {
     it("desactiva en vez de borrar físicamente", async () => {
-      empleadoBiometricoFindFirstMock.mockResolvedValue({ id: "assoc-1", tenantId: "tenant-A", activo: true, externalUserId: "33" });
+      empleadoBiometricoFindFirstMock.mockResolvedValue({
+        id: "assoc-1",
+        tenantId: "tenant-A",
+        activo: true,
+        externalUserId: "33",
+      });
       empleadoBiometricoUpdateMock.mockResolvedValue({});
 
       const { eliminarAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
       const res = fakeRes();
       await eliminarAsociacionBiometrica(fakeReq({ params: { id: "assoc-1" } }), res);
 
-      expect(empleadoBiometricoUpdateMock).toHaveBeenCalledWith({ where: { id: "assoc-1" }, data: { activo: false } });
+      expect(empleadoBiometricoUpdateMock).toHaveBeenCalledWith({
+        where: { id: "assoc-1" },
+        data: { activo: false },
+      });
       expect(res.status).toHaveBeenCalledWith(204);
     });
   });

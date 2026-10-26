@@ -23,7 +23,10 @@ describe("siguienteNumeroPedidoComercial", () => {
     const config = vi.fn().mockResolvedValue({ siguienteConsecutivoPedidoComercial: 7 });
     const ultimo = vi.fn().mockResolvedValue({ numero: 9 });
     const n = await siguienteNumeroPedidoComercial(
-      { configuracionComercial: { findFirst: config }, pedidoComercial: { findFirst: ultimo } } as never,
+      {
+        configuracionComercial: { findFirst: config },
+        pedidoComercial: { findFirst: ultimo },
+      } as never,
       "t1",
     );
     expect(n).toBe(10);

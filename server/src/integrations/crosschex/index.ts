@@ -1,8 +1,21 @@
-export { leerConfigCrossChex, construirConnectionString, CrossChexConfigError } from "./crosschex.config";
+export {
+  leerConfigCrossChex,
+  construirConnectionString,
+  CrossChexConfigError,
+} from "./crosschex.config";
 export type { CrossChexConfig } from "./crosschex.config";
 export { verificarConexion, ejecutarConsulta, conCrossChex } from "./crosschex.client";
-export { obtenerUltimasMarcaciones, obtenerUsuarios, obtenerMarcacionesDesde } from "./crosschex.queries";
-export { mapearTipoMarcacion, normalizarBit, parsearCheckTime, soloFecha } from "./crosschex.mapper";
+export {
+  obtenerUltimasMarcaciones,
+  obtenerUsuarios,
+  obtenerMarcacionesDesde,
+} from "./crosschex.queries";
+export {
+  mapearTipoMarcacion,
+  normalizarBit,
+  parsearCheckTime,
+  soloFecha,
+} from "./crosschex.mapper";
 export {
   CrossChexConnectionError,
   CrossChexQueryError,

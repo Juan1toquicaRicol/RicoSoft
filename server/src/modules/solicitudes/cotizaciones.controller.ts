@@ -256,7 +256,8 @@ export const seleccionarCotizacionGanadora = async (req: AuthenticatedRequest, r
     // aprobar/rechazar su propia solicitud.
     if (solicitud.solicitanteId && solicitud.solicitanteId === req.user!.id) {
       return res.status(403).json({
-        message: "No puedes seleccionar la cotización ganadora de una solicitud que tú mismo creaste.",
+        message:
+          "No puedes seleccionar la cotización ganadora de una solicitud que tú mismo creaste.",
       });
     }
 

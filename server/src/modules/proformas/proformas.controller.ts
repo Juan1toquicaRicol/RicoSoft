@@ -231,7 +231,11 @@ export const buscarCotizaciones = async (req: AuthenticatedRequest, res: Respons
 
   const siesaCiaId = await resolverCiaSiesa(tenantId);
   if (!siesaCiaId) {
-    return res.json({ disponible: false, motivo: "Este tenant no tiene Siesa configurado.", items: [] });
+    return res.json({
+      disponible: false,
+      motivo: "Este tenant no tiene Siesa configurado.",
+      items: [],
+    });
   }
 
   try {
@@ -333,9 +337,9 @@ export const anularProforma = async (req: AuthenticatedRequest, res: Response) =
     return res.status(500).json({ message: "No fue posible anular la proforma." });
   }
   if (!resultado) {
-    return res
-      .status(409)
-      .json({ message: "La proforma cambió de estado y ya no admite anulación. Recarga e intenta de nuevo." });
+    return res.status(409).json({
+      message: "La proforma cambió de estado y ya no admite anulación. Recarga e intenta de nuevo.",
+    });
   }
   return res.json(resultado);
 };
@@ -394,9 +398,9 @@ export const aceptarProforma = async (req: AuthenticatedRequest, res: Response) 
     return res.status(500).json({ message: "No fue posible aceptar la proforma." });
   }
   if (!resultado) {
-    return res
-      .status(409)
-      .json({ message: "La proforma cambió de estado y ya no puede aceptarse. Recarga e intenta de nuevo." });
+    return res.status(409).json({
+      message: "La proforma cambió de estado y ya no puede aceptarse. Recarga e intenta de nuevo.",
+    });
   }
   return res.json(resultado);
 };
@@ -518,7 +522,8 @@ export const eliminarProforma = async (req: AuthenticatedRequest, res: Response)
   });
   if (pedidosRelacionados > 0) {
     return res.status(409).json({
-      message: "No se puede eliminar: esta proforma tiene pedidos comerciales relacionados. Elimínalos primero.",
+      message:
+        "No se puede eliminar: esta proforma tiene pedidos comerciales relacionados. Elimínalos primero.",
     });
   }
 
@@ -786,9 +791,9 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(400).json({ message: "La cotización indicada no existe en este tenant." });
     }
     if (cot.estado === "ANULADA" || cot.estado === "RECHAZADA") {
-      return res
-        .status(400)
-        .json({ message: `La cotización COT-${cot.numero} está ${cot.estado.toLowerCase()} y no puede generar una proforma.` });
+      return res.status(400).json({
+        message: `La cotización COT-${cot.numero} está ${cot.estado.toLowerCase()} y no puede generar una proforma.`,
+      });
     }
     cotizacionInterna = { id: cot.id, numero: cot.numero };
 
@@ -819,7 +824,9 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(502).json({ message: "No fue posible validar la cotización con Siesa." });
     }
     if (!cotizacion) {
-      return res.status(400).json({ message: "La cotización indicada no existe en esta compañía." });
+      return res
+        .status(400)
+        .json({ message: "La cotización indicada no existe en esta compañía." });
     }
     cotizacionValidada = {
       numero: cotizacion.cotizacionNumero,
@@ -862,7 +869,11 @@ export const crearProforma = async (req: AuthenticatedRequest, res: Response) =>
         }
         if (cotizacionInterna) {
           const duplicadaInterna = await tx.proforma.findFirst({
-            where: { tenantId, cotizacionId: cotizacionInterna.id, estado: { not: ESTADO_PROFORMA.ANULADA } },
+            where: {
+              tenantId,
+              cotizacionId: cotizacionInterna.id,
+              estado: { not: ESTADO_PROFORMA.ANULADA },
+            },
             select: { numero: true },
           });
           if (duplicadaInterna) {

@@ -134,7 +134,9 @@ describe.skipIf(!RUN)(
       const usuarioIds = usuariosPrueba.map((u) => u.id);
       await prisma.auditoria.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
       await prisma.user.deleteMany({ where: { id: { in: usuarioIds } } });
-      await prisma.rol.deleteMany({ where: { tenantId: tenantRealId, nombre: { contains: sufijo } } });
+      await prisma.rol.deleteMany({
+        where: { tenantId: tenantRealId, nombre: { contains: sufijo } },
+      });
       await prisma.tenant.deleteMany({ where: { id: tenantFakeId } });
     });
 

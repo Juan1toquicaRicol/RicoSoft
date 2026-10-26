@@ -116,7 +116,9 @@ export function useDetalleCotizacion() {
     ): Promise<{ disponible: boolean; motivo?: string; cotizacion?: CotizacionDetalle }> => {
       setLoading(true);
       try {
-        return await fetchAuth(`/proformas/cotizaciones/${encodeURIComponent(cotizacionIdExterno)}`);
+        return await fetchAuth(
+          `/proformas/cotizaciones/${encodeURIComponent(cotizacionIdExterno)}`,
+        );
       } finally {
         setLoading(false);
       }

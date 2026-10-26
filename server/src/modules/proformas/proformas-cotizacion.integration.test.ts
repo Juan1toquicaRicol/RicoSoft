@@ -15,7 +15,12 @@ const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 
 const COTIZACIONES: Record<
   string,
-  { cotizacionIdExterno: string; cotizacionNumero: string; erpDocumentoNumero: string | null; clienteRowId: number }
+  {
+    cotizacionIdExterno: string;
+    cotizacionNumero: string;
+    erpDocumentoNumero: string | null;
+    clienteRowId: number;
+  }
 > = {
   "501": {
     cotizacionIdExterno: "501",
@@ -69,13 +74,15 @@ vi.mock("../integraciones-siesa/siesa-pedidos.service", () => ({
     if (ciaId !== 900901) return [];
     return Object.values(COTIZACIONES)
       .filter((c) => c.cotizacionNumero.includes(search.replace(/\D+/g, "")))
-      .map((c) => ({ ...c, clienteNombre: "Cliente de la cotización", fecha: new Date("2026-09-01") }));
+      .map((c) => ({
+        ...c,
+        clienteNombre: "Cliente de la cotización",
+        fecha: new Date("2026-09-01"),
+      }));
   }),
 }));
 
-// eslint-disable-next-line import/first
 import { createApp } from "../../app";
-// eslint-disable-next-line import/first
 import { prisma } from "../../config/prisma";
 
 function itemBase(overrides: Record<string, unknown> = {}) {

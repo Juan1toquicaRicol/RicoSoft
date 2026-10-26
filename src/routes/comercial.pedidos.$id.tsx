@@ -6,7 +6,14 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { money } from "@/lib/data";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requirePermisoGuard } from "@/lib/route-guards";
@@ -76,7 +83,10 @@ function DetallePedido() {
     return (
       <AppShell title="Pedido" description="No encontrado">
         <p className="text-xs text-slate-500">{error || "Pedido no encontrado."}</p>
-        <Link to="/comercial/gestion" className="mt-2 inline-block text-xs font-semibold text-estado-info-fg hover:underline">
+        <Link
+          to="/comercial/gestion"
+          className="mt-2 inline-block text-xs font-semibold text-estado-info-fg hover:underline"
+        >
           Volver a Gestión Comercial
         </Link>
       </AppShell>
@@ -110,23 +120,27 @@ function DetallePedido() {
               disabled={procesando}
               className="gap-1.5"
               onClick={() =>
-                ejecutar(() => acciones.marcarListoParaErp(pedido.id), "Pedido marcado listo para ERP.")
+                ejecutar(
+                  () => acciones.marcarListoParaErp(pedido.id),
+                  "Pedido marcado listo para ERP.",
+                )
               }
             >
               <PackageCheck className="h-3.5 w-3.5" /> Marcar listo para ERP
             </Button>
           )}
-          {puedeConfirmar && ["BORRADOR", "CONFIRMADO", "LISTO_PARA_ERP"].includes(pedido.estado) && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={procesando}
-              className="gap-1.5 text-estado-danger-fg hover:bg-estado-danger-bg"
-              onClick={() => ejecutar(() => acciones.anular(pedido.id), "Pedido anulado.")}
-            >
-              <Ban className="h-3.5 w-3.5" /> Anular
-            </Button>
-          )}
+          {puedeConfirmar &&
+            ["BORRADOR", "CONFIRMADO", "LISTO_PARA_ERP"].includes(pedido.estado) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={procesando}
+                className="gap-1.5 text-estado-danger-fg hover:bg-estado-danger-bg"
+                onClick={() => ejecutar(() => acciones.anular(pedido.id), "Pedido anulado.")}
+              >
+                <Ban className="h-3.5 w-3.5" /> Anular
+              </Button>
+            )}
         </>
       }
     >
@@ -157,7 +171,9 @@ function DetallePedido() {
               <span className="text-slate-500">Cotización</span>
               {pedido.cotizacion ? (
                 <Link to="/comercial/cotizaciones/$id" params={{ id: pedido.cotizacion.id }}>
-                  <Badge variant="outline">COT-{String(pedido.cotizacion.numero).padStart(5, "0")}</Badge>
+                  <Badge variant="outline">
+                    COT-{String(pedido.cotizacion.numero).padStart(5, "0")}
+                  </Badge>
                 </Link>
               ) : (
                 <span className="text-slate-500">Sin cotización</span>
@@ -184,7 +200,9 @@ function DetallePedido() {
                   <span className="tabular-nums text-slate-700">{pedido.erpNumero}</span>
                 )}
                 <EstadoBadge
-                  estado={pedido.erpNumero || pedido.erpRowId ? "Vinculado" : "Pendiente de envío a ERP"}
+                  estado={
+                    pedido.erpNumero || pedido.erpRowId ? "Vinculado" : "Pendiente de envío a ERP"
+                  }
                 />
               </span>
             </div>

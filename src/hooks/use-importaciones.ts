@@ -39,7 +39,61 @@ export interface CosteoImportacionDetalle {
   costoTotalCop: number;
   costoUnitarioCop: number;
   esProvisional: boolean;
+  /** Método con el que se prorratearon fletes/agenciamiento/otros costos en la
+   * liquidación definitiva. null en el costeo provisional y en liquidaciones
+   * anteriores al campo (todas se prorratearon por FOB). */
+  metodoProrrateoGastos: MetodoProrrateoGastos | null;
   fechaLiquidacion: string;
+}
+
+export type MetodoProrrateoGastos = "FOB" | "PESO" | "VOLUMEN";
+
+/** Solo se ofrecen los métodos aprobados por el negocio (hoy únicamente FOB; PESO y
+ * VOLUMEN esperan la decisión contable — el backend los rechaza con 400). */
+export const METODOS_PRORRATEO_GASTOS: {
+  metodo: MetodoProrrateoGastos;
+  etiqueta: string;
+  ayuda: string;
+}[] = [{ metodo: "FOB", etiqueta: "Valor comercial (FOB)", ayuda: "Comportamiento histórico." }];
+
+/** EMBARQUE_REAL | LLEGADA_PUERTO | INSPECCION_ADUANERA los registra una persona;
+ * RECEPCION_PLANTA la deriva el sistema al recibir el lote; LEVANTE viene del
+ * expediente aduanero. */
+export type TipoHitoLote =
+  "EMBARQUE_REAL" | "LLEGADA_PUERTO" | "INSPECCION_ADUANERA" | "LEVANTE" | "RECEPCION_PLANTA";
+
+export type TipoHitoLoteManual = "EMBARQUE_REAL" | "LLEGADA_PUERTO" | "INSPECCION_ADUANERA";
+
+export interface HitoLote {
+  tipo: TipoHitoLote;
+  etiqueta: string;
+  /** null = todavía no ocurrió / no se registró (nunca se completa con una estimación). */
+  fecha: string | null;
+  origen: string | null;
+  fuente: string | null;
+  registradoPor: string | null;
+  nota: string | null;
+}
+
+export type TipoDocumentoLote = "bl-awb" | "certificado-analisis" | "otros";
+
+// Mismo catálogo EXACTO que TIPOS_DOCUMENTO_LOTE en
+// server/src/domain/importaciones/documentos-lote.ts. La obligatoriedad de cada
+// tipo NO está definida: solo se almacenan archivos.
+export const TIPOS_DOCUMENTO_LOTE: { tipo: TipoDocumentoLote; etiqueta: string }[] = [
+  { tipo: "bl-awb", etiqueta: "B/L o AWB" },
+  { tipo: "certificado-analisis", etiqueta: "Certificado de análisis (COA)" },
+  { tipo: "otros", etiqueta: "Otros" },
+];
+
+export interface DocumentoLote {
+  id: string;
+  tipo: string;
+  nombreOriginal: string;
+  mime: string;
+  tamano: number;
+  subidoPorNombre: string | null;
+  createdAt: string;
 }
 
 export interface VistoBuenoAduanero {
@@ -134,6 +188,9 @@ export interface LoteImportacion {
   buque: { nombre: string | null; imo: string | null; mmsi: string | null } | null;
   tracking: TrackingLote;
   contenedores: ContenedorLote[];
+  /** Hechos reales del recorrido (con origen y fuente). Ausente en respuestas parciales. */
+  hitos?: HitoLote[];
+  documentos?: DocumentoLote[];
   expediente: ExpedienteAduanero | null;
   costeos: CosteoImportacionDetalle[];
 }
@@ -396,6 +453,8 @@ export interface LiquidarCosteoInput {
   fletesNacionalesCop?: number;
   agenciamientoCop?: number;
   otrosCostosCop?: number;
+  /** Omitido = FOB. Arancel, IVA y CIF se reparten siempre por FOB. */
+  metodoProrrateoGastos?: MetodoProrrateoGastos;
 }
 
 export type TipoDocumentoExpediente = "dim" | "factura-comercial" | "certificado-origen";
@@ -1020,6 +1079,49 @@ export function useOrdenCompraIntl(id: string | undefined) {
     return fetchAuthBlob(`/importaciones/${ordenId}/documentos/${documentoId}`);
   }, []);
 
+  const registrarHito = useCallback(
+    async (loteId: string, tipo: TipoHitoLoteManual, fecha: string, nota?: string) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/hitos/${tipo}`, {
+        method: "PUT",
+        body: JSON.stringify({ fecha, nota: nota?.trim() ? nota.trim() : null }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarHito = useCallback(
+    async (loteId: string, tipo: TipoHitoLoteManual) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/hitos/${tipo}`, { method: "DELETE" });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const subirDocumentoLote = useCallback(
+    async (loteId: string, tipo: TipoDocumentoLote, file: File) => {
+      const formData = new FormData();
+      formData.append("archivo", file);
+      await fetchAuthUpload(`/importaciones/lotes/${loteId}/documentos/${tipo}`, formData);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const eliminarDocumentoLote = useCallback(
+    async (loteId: string, documentoId: string) => {
+      await fetchAuth(`/importaciones/lotes/${loteId}/documentos/${documentoId}`, {
+        method: "DELETE",
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const descargarDocumentoLote = useCallback(async (loteId: string, documentoId: string) => {
+    return fetchAuthBlob(`/importaciones/lotes/${loteId}/documentos/${documentoId}`);
+  }, []);
+
   const crearActividad = useCallback(
     async (data: CrearActividadInput) => {
       if (!id) return;
@@ -1122,6 +1224,11 @@ export function useOrdenCompraIntl(id: string | undefined) {
     subirDocumentoOrden,
     eliminarDocumentoOrden,
     descargarDocumentoOrden,
+    registrarHito,
+    eliminarHito,
+    subirDocumentoLote,
+    eliminarDocumentoLote,
+    descargarDocumentoLote,
     crearActividad,
     completarActividad,
     crearNovedad,

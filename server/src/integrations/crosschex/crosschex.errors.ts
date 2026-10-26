@@ -37,13 +37,19 @@ export function traducirErrorConexion(error: unknown): CrossChexConnectionError 
     ?.odbcErrors;
   const detalle = odbcErrors?.map((e) => e.message).join("; ") || (error as Error)?.message;
 
-  if (detalle && /no se pudo encontrar el archivo|file does not exist|could not find file/i.test(detalle)) {
+  if (
+    detalle &&
+    /no se pudo encontrar el archivo|file does not exist|could not find file/i.test(detalle)
+  ) {
     return new CrossChexConnectionError(
       "No se pudo abrir CrossChex.mdb: el archivo no existe o no es accesible desde este proceso.",
       error,
     );
   }
-  if (detalle && /driver de administrador de datos|data source name not found|no default driver/i.test(detalle)) {
+  if (
+    detalle &&
+    /driver de administrador de datos|data source name not found|no default driver/i.test(detalle)
+  ) {
     return new CrossChexConnectionError(
       "El driver ODBC de Microsoft Access no está instalado o no coincide en arquitectura (32/64 bits) con este proceso Node.",
       error,
@@ -61,5 +67,8 @@ export function traducirErrorConexion(error: unknown): CrossChexConnectionError 
     );
   }
 
-  return new CrossChexConnectionError(`No se pudo conectar a CrossChex.mdb: ${detalle ?? "error desconocido"}`, error);
+  return new CrossChexConnectionError(
+    `No se pudo conectar a CrossChex.mdb: ${detalle ?? "error desconocido"}`,
+    error,
+  );
 }

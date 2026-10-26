@@ -545,7 +545,10 @@ function Inventario() {
                 search={{ tab: "pedidos" }}
                 className="panel p-5 bg-white border-slate-200 shadow-2xs text-left cursor-pointer transition hover:border-slate-300 hover:shadow-md"
               >
-                <TarjetaComprometidoSiesa valor={inventario.totalComprometidoValor ?? 0} conEnlace />
+                <TarjetaComprometidoSiesa
+                  valor={inventario.totalComprometidoValor ?? 0}
+                  conEnlace
+                />
               </Link>
             ) : (
               <div className="panel p-5 bg-white border-slate-200 shadow-2xs text-left">

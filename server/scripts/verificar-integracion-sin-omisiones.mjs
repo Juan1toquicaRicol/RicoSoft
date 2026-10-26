@@ -17,7 +17,9 @@ const problemas = [];
 if (!numTotalTests) problemas.push("no se ejecutó ningún test");
 if (numFailedTests) problemas.push(`${numFailedTests} tests fallaron`);
 if (numPendingTests || numTodoTests) {
-  problemas.push(`${numPendingTests + numTodoTests} tests omitidos (skip/todo) — omisión silenciosa`);
+  problemas.push(
+    `${numPendingTests + numTodoTests} tests omitidos (skip/todo) — omisión silenciosa`,
+  );
 }
 if (numPassedTests !== numTotalTests) problemas.push("pasaron != total");
 

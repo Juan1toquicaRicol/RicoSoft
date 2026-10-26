@@ -90,7 +90,9 @@ describe.skipIf(!RUN)("Comercial — Cotizaciones, Pedidos, y cadena con Proform
     await prisma.pedidoComercial.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.proformaItem.deleteMany({ where: { proforma: { tenantId: { in: tenantIds } } } });
     await prisma.proforma.deleteMany({ where: { tenantId: { in: tenantIds } } });
-    await prisma.cotizacionItem.deleteMany({ where: { cotizacion: { tenantId: { in: tenantIds } } } });
+    await prisma.cotizacionItem.deleteMany({
+      where: { cotizacion: { tenantId: { in: tenantIds } } },
+    });
     await prisma.cotizacion.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
     await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });

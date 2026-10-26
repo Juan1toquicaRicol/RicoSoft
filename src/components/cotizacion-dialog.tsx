@@ -234,7 +234,10 @@ export function CotizacionDialog({
             </div>
             <div className="space-y-2">
               {items.map((it, idx) => (
-                <div key={idx} className="grid grid-cols-12 items-end gap-2 rounded-md border border-slate-200 p-2">
+                <div
+                  key={idx}
+                  className="grid grid-cols-12 items-end gap-2 rounded-md border border-slate-200 p-2"
+                >
                   <div className="col-span-4 space-y-1">
                     <Label className="text-[10px] text-slate-500">Descripción</Label>
                     <Input
@@ -255,7 +258,9 @@ export function CotizacionDialog({
                     <Input
                       type="number"
                       value={it.precioUnitario}
-                      onChange={(e) => actualizarItem(idx, { precioUnitario: Number(e.target.value) })}
+                      onChange={(e) =>
+                        actualizarItem(idx, { precioUnitario: Number(e.target.value) })
+                      }
                     />
                   </div>
                   <div className="col-span-1 space-y-1">
@@ -263,7 +268,9 @@ export function CotizacionDialog({
                     <Input
                       type="number"
                       value={it.descuentoPct}
-                      onChange={(e) => actualizarItem(idx, { descuentoPct: Number(e.target.value) })}
+                      onChange={(e) =>
+                        actualizarItem(idx, { descuentoPct: Number(e.target.value) })
+                      }
                     />
                   </div>
                   <div className="col-span-1 space-y-1">

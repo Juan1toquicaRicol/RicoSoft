@@ -7,7 +7,14 @@ import { AppShell } from "@/components/app-shell";
 import { Badge, EstadoBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { money } from "@/lib/data";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requirePermisoGuard } from "@/lib/route-guards";
@@ -95,7 +102,10 @@ function DetalleCotizacion() {
     return (
       <AppShell title="Cotización" description="No encontrada">
         <p className="text-xs text-slate-500">{error || "Cotización no encontrada."}</p>
-        <Link to="/comercial/gestion" className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline">
+        <Link
+          to="/comercial/gestion"
+          className="mt-2 inline-block text-xs font-semibold text-blue-700 hover:underline"
+        >
           Volver a Gestión Comercial
         </Link>
       </AppShell>
@@ -129,7 +139,9 @@ function DetalleCotizacion() {
                 size="sm"
                 disabled={procesando}
                 className="gap-1.5"
-                onClick={() => ejecutar(() => acciones.aprobar(cotizacion.id), "Cotización aprobada.")}
+                onClick={() =>
+                  ejecutar(() => acciones.aprobar(cotizacion.id), "Cotización aprobada.")
+                }
               >
                 <Check className="h-3.5 w-3.5" /> Aprobar
               </Button>
@@ -138,7 +150,9 @@ function DetalleCotizacion() {
                 variant="outline"
                 disabled={procesando}
                 className="gap-1.5"
-                onClick={() => ejecutar(() => acciones.rechazar(cotizacion.id), "Cotización rechazada.")}
+                onClick={() =>
+                  ejecutar(() => acciones.rechazar(cotizacion.id), "Cotización rechazada.")
+                }
               >
                 <X className="h-3.5 w-3.5" /> Rechazar
               </Button>
@@ -161,7 +175,10 @@ function DetalleCotizacion() {
               disabled={procesando}
               className="gap-1.5"
               onClick={() =>
-                ejecutar(() => acciones.crearProforma(cotizacion.id), "Proforma creada desde la cotización.")
+                ejecutar(
+                  () => acciones.crearProforma(cotizacion.id),
+                  "Proforma creada desde la cotización.",
+                )
               }
             >
               <FileOutput className="h-3.5 w-3.5" /> Crear Proforma

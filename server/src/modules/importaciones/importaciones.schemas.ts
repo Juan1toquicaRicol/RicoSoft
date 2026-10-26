@@ -115,6 +115,21 @@ export const liquidarCosteoImportacionSchema = z.object({
   fletesNacionalesCop: numero.nullish(),
   agenciamientoCop: numero.nullish(),
   otrosCostosCop: numero.nullish(),
+  // Método de prorrateo de fletes/agenciamiento/otros costos. Omitido = FOB
+  // (comportamiento histórico). Arancel, IVA y CIF se reparten siempre por FOB.
+  metodoProrrateoGastos: z
+    .enum(["FOB", "PESO", "VOLUMEN"], {
+      errorMap: () => ({ message: "Método de prorrateo inválido. Usa: FOB, PESO o VOLUMEN." }),
+    })
+    .nullish(),
+});
+
+/** Registro/corrección de un hito real del lote (la fecha es obligatoria). */
+export const registrarHitoLoteSchema = z.object({
+  fecha: z
+    .string(textoObligatorio("La fecha del hito es obligatoria."))
+    .min(1, "La fecha del hito es obligatoria."),
+  nota: z.string().max(500, "La nota no puede superar 500 caracteres.").nullish(),
 });
 
 // PUT (reemplazo completo de los campos editables), no PATCH: el frontend

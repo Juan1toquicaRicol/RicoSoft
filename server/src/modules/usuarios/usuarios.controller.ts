@@ -596,7 +596,8 @@ export const resetPasswordUsuario = async (req: AuthenticatedRequest, res: Respo
           }));
       if (objetivoEsSuperadmin) {
         return res.status(403).json({
-          message: "Solo un superadministrador puede restablecer la contraseña de otro superadministrador.",
+          message:
+            "Solo un superadministrador puede restablecer la contraseña de otro superadministrador.",
         });
       }
     }

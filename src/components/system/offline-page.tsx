@@ -21,7 +21,12 @@ export function OfflinePage({ onRetry }: { onRetry?: () => void }) {
           </p>
         </div>
         {onRetry && (
-          <Button size="sm" variant="outline" className="h-6 shrink-0 text-[11px]" onClick={onRetry}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 shrink-0 text-[11px]"
+            onClick={onRetry}
+          >
             Reintentar
           </Button>
         )}

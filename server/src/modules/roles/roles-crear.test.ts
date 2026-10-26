@@ -17,7 +17,9 @@ vi.mock("../../config/prisma", () => ({
   },
 }));
 vi.mock("../permisos/permisos.service", () => ({
-  obtenerCodigosPermisosAsignables: vi.fn(async () => new Set(["facturas.ver", "usuarios.eliminar"])),
+  obtenerCodigosPermisosAsignables: vi.fn(
+    async () => new Set(["facturas.ver", "usuarios.eliminar"]),
+  ),
 }));
 
 import { crearRol } from "./roles.controller";

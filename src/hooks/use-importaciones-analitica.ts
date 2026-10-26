@@ -38,7 +38,70 @@ export interface ResumenAnaliticaImportaciones {
     tendencia: Tendencia;
     desglosePorProveedor: DesglosePorClave[];
   };
+  variacionTrm: {
+    agregado: AgregadoDias;
+    tendencia: Tendencia;
+    desglosePorProveedor: DesglosePorClave[];
+  };
   totalOperacionesConsideradas: number;
+  metadatos: MetadatosAnalitica;
+  alertas: AlertasImportaciones;
+}
+
+export interface DefinicionIndicador {
+  definicion: string;
+  fechaInicio: string;
+  fechaFin: string;
+  unidad: "días" | "%";
+  /** Motivo → cantidad de operaciones del periodo excluidas por ese motivo. */
+  exclusiones: Record<string, number>;
+}
+
+export interface MetadatosAnalitica {
+  periodo: {
+    desde: string | null;
+    hasta: string | null;
+    baseFecha: string;
+    estadosIncluidos: string[];
+    generadoEn: string;
+  };
+  indicadores: {
+    leadTime: DefinicionIndicador;
+    tiempoDesaduanamiento: DefinicionIndicador;
+    factorIncrementoLogistico: DefinicionIndicador;
+    variacionTrm: DefinicionIndicador;
+  };
+}
+
+export interface AlertaLoteRetrasado {
+  ordenCompraId: string;
+  codigo: string | null;
+  numeroOrden: string;
+  loteId: string;
+  blAwb: string;
+  fechaLlegadaEstimadaProveedor: string;
+  etaTrackingActual: string | null;
+  diasVencida: number;
+}
+
+export interface AlertasImportaciones {
+  generadoEn: string;
+  etaProveedorVencida: { definicion: string; cantidad: number; lotes: AlertaLoteRetrasado[] };
+  actividadesVencidas: { definicion: string; cantidad: number };
+  documentosAdjuntos: {
+    definicion: string;
+    cantidadLotes: number;
+    sinAdjuntar: Record<string, number>;
+    lotes: Array<{
+      ordenCompraId: string;
+      codigo: string | null;
+      numeroOrden: string;
+      loteId: string;
+      blAwb: string;
+      estado: string;
+      adjuntos: Record<string, boolean>;
+    }>;
+  };
 }
 
 export interface OperacionAnalitica {
@@ -49,20 +112,28 @@ export interface OperacionAnalitica {
   paisOrigen: string;
   puertoDestino: string | null;
   fechaOrden: string;
-  fechaDisponibleBodega: string | null;
-  fechaDisponibleBodegaOrigen: string | null;
+  fechaRecepcionPlanta: string | null;
+  fechaRecepcionPlantaOrigen: string | null;
   fechaLlegadaPuerto: string | null;
   fechaLlegadaPuertoOrigen: string | null;
-  fechaNacionalizado: string | null;
-  fechaNacionalizadoOrigen: string | null;
+  fechaLevante: string | null;
+  fechaLevanteOrigen: string | null;
   leadTimeDias: number | null;
   tiempoDesaduanamientoDias: number | null;
   valorFobTotalCop: number | null;
   costoLandedFinalCop: number | null;
   factorIncrementoLogisticoPct: number | null;
+  trmPactada: number;
+  trmLiquidacion: number | null;
+  variacionTrmPct: number | null;
   excluidoLeadTime: boolean;
   excluidoDesaduanamiento: boolean;
   excluidoFactorLogistico: boolean;
+  excluidoVariacionTrm: boolean;
+  motivoExclusionLeadTime: string | null;
+  motivoExclusionDesaduanamiento: string | null;
+  motivoExclusionFactorLogistico: string | null;
+  motivoExclusionVariacionTrm: string | null;
 }
 
 export interface FiltrosAnaliticaImportaciones {
@@ -85,7 +156,7 @@ function construirQuery(filtros: FiltrosAnaliticaImportaciones): string {
 }
 
 /**
- * Analítica de Importaciones V1 — carga el resumen agregado (3 KPIs) y el
+ * Analítica de Importaciones — carga el resumen agregado (KPIs, definiciones, exclusiones y alertas) y el
  * detalle tabular de operaciones desde el backend
  * (importaciones-analitica.service.ts), que ya hace toda la agregación y
  * exclusión de datos insuficientes. El frontend nunca calcula ni infiere

@@ -23,7 +23,13 @@ function fakeRes() {
 
 function fakeReq(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest {
   return {
-    user: { id: "user-1", tenantId: "tenant-A", nombre: "Ana Admin", isSuperadmin: false, permisos: [] } as never,
+    user: {
+      id: "user-1",
+      tenantId: "tenant-A",
+      nombre: "Ana Admin",
+      isSuperadmin: false,
+      permisos: [],
+    } as never,
     params: {},
     query: {},
     body: {},
@@ -80,7 +86,16 @@ describe("biometrico-marcaciones.controller", () => {
     const item = body.items[0];
     const serializado = JSON.stringify(item).toLowerCase();
     expect(serializado).not.toContain("pwd");
-    for (const campo of ["worktype", "attflag", "checked", "exported", "opendoorflag", "temperature", "whynoopen", "mask"]) {
+    for (const campo of [
+      "worktype",
+      "attflag",
+      "checked",
+      "exported",
+      "opendoorflag",
+      "temperature",
+      "whynoopen",
+      "mask",
+    ]) {
       expect(Object.keys(item).map((k) => k.toLowerCase())).not.toContain(campo);
     }
     expect(item).toMatchObject({
@@ -130,7 +145,14 @@ describe("biometrico-marcaciones.controller", () => {
     const { listarMarcacionesBiometricas } = await import("./biometrico-marcaciones.controller");
     const res = fakeRes();
     await listarMarcacionesBiometricas(
-      fakeReq({ query: { fuenteId: "fuente-1", empleadoId: "empleado-1", externalUserId: "33", checkType: "2" } }),
+      fakeReq({
+        query: {
+          fuenteId: "fuente-1",
+          empleadoId: "empleado-1",
+          externalUserId: "33",
+          checkType: "2",
+        },
+      }),
       res,
     );
 

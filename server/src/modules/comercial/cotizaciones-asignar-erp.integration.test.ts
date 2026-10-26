@@ -120,10 +120,7 @@ describe.skipIf(!RUN)(
       return res.body.token as string;
     };
 
-    const crearCotizacion = async (
-      tid: string,
-      overrides: { erpRowId?: number | null } = {},
-    ) => {
+    const crearCotizacion = async (tid: string, overrides: { erpRowId?: number | null } = {}) => {
       numeroBase += 1;
       return prisma.cotizacion.create({
         data: {

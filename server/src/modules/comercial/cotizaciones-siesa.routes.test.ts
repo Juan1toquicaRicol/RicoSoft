@@ -47,7 +47,13 @@ app.use(
 );
 
 const usuario = (permisos: string[], isSuperadmin = false) =>
-  JSON.stringify({ id: "u1", nombre: "Ana Comercial", tenantId: "tenant-A", isSuperadmin, permisos });
+  JSON.stringify({
+    id: "u1",
+    nombre: "Ana Comercial",
+    tenantId: "tenant-A",
+    isSuperadmin,
+    permisos,
+  });
 const RUTA = "/api/comercial/cotizaciones/siesa/sincronizar";
 
 describe("POST /comercial/cotizaciones/siesa/sincronizar", () => {
@@ -113,7 +119,10 @@ describe("POST /comercial/cotizaciones/siesa/sincronizar", () => {
   });
 
   it("guardar con un valor no booleano -> 400", async () => {
-    const res = await request(app).post(RUTA).set("x-test-user", usuario([], true)).send({ guardar: "si" });
+    const res = await request(app)
+      .post(RUTA)
+      .set("x-test-user", usuario([], true))
+      .send({ guardar: "si" });
     expect(res.status).toBe(400);
   });
 

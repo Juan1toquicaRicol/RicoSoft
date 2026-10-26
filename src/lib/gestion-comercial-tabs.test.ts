@@ -13,7 +13,9 @@ describe("pestañas de Gestión Comercial", () => {
     const soloPedidos = tabsVisibles(con(PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER));
     expect(valores(soloPedidos)).toEqual(["todos", "pedido"]);
 
-    const docs = tabsVisibles(con(PERMISOS_SISTEMA.COTIZACIONES_VER, PERMISOS_SISTEMA.PROFORMAS_VER));
+    const docs = tabsVisibles(
+      con(PERMISOS_SISTEMA.COTIZACIONES_VER, PERMISOS_SISTEMA.PROFORMAS_VER),
+    );
     expect(valores(docs)).toEqual(["todos", "cotizacion", "proforma"]);
 
     const todo = tabsVisibles(

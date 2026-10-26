@@ -167,10 +167,7 @@ function TableMessageRow({
           </p>
         )}
         {kind === "error" && (
-          <p
-            role="alert"
-            className="py-8 text-center text-xs font-medium text-estado-danger-fg"
-          >
+          <p role="alert" className="py-8 text-center text-xs font-medium text-estado-danger-fg">
             {title ?? "No fue posible cargar los datos."}
           </p>
         )}
