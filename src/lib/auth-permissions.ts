@@ -119,7 +119,7 @@ export const PERMISOS_SISTEMA = {
   ANALITICA_VER: "analitica.ver",
   PROYECCION_GESTIONAR: "proyeccion.gestionar",
 
-  // Módulo Importaciones y Exportaciones
+  // Módulo Importaciones
   IMPORTACIONES_VER: "importaciones.ver",
   IMPORTACIONES_CREAR: "importaciones.crear",
   IMPORTACIONES_GESTIONAR_TRANSITO: "importaciones.gestionar_transito",

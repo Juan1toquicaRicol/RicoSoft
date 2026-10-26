@@ -179,7 +179,7 @@ const CATALOGO_DEFECTO: Array<{
   },
   {
     clave: "importaciones",
-    nombre: "Importaciones y Exportaciones",
+    nombre: "Importaciones",
     ruta: "/importaciones",
     icono: "Ship",
     permisoClave: "importaciones.ver",

@@ -48,7 +48,7 @@ export const Route = createFileRoute("/importaciones/")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.IMPORTACIONES_VER),
   head: () => ({
     meta: [
-      { title: "Importaciones y Exportaciones | RicoSoft" },
+      { title: "Importaciones | RicoSoft" },
       {
         name: "description",
         content:
@@ -177,7 +177,7 @@ function ImportacionesPage() {
 
   return (
     <AppShell
-      title="Importaciones y Exportaciones"
+      title="Importaciones"
       description="Órdenes de compra internacional, trazabilidad de lotes por BL/AWB y costeo landed bajo NIC 2/21."
       actions={
         <div className="flex items-center gap-2">

@@ -149,7 +149,7 @@ export const CATALOGO_MODULOS: ModuloDef[] = [
   },
   {
     clave: "importaciones",
-    nombre: "Importaciones y Exportaciones",
+    nombre: "Importaciones",
     secciones: [
       {
         clave: "importaciones_requisitos",
