@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, ChevronRight, Info, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { AppShell } from "@/components/app-shell";
@@ -27,6 +27,9 @@ import type { AnalisisGuardado, ConfiguracionAnalisis } from "@/hooks/use-analit
 
 const HISTORICO_PAGE_SIZE = 20;
 
+const DESCRIPCION_ANALITICA =
+  "Resumen de ventas basado en datos de Siesa y análisis personalizados";
+
 const MESES_CORTOS_VENTAS = [
   "",
   "Ene",
@@ -49,12 +52,12 @@ export const Route = createFileRoute("/analitica")({
       { title: "Analítica | RicoSoft" },
       {
         name: "description",
-        content: "Dashboards interactivos y comparativos por proveedor, área, contrato y empresa.",
+        content: DESCRIPCION_ANALITICA,
       },
       { property: "og:title", content: "Analítica | RicoSoft" },
       {
         property: "og:description",
-        content: "Comparativos mensuales, anuales y por centro de costos.",
+        content: DESCRIPCION_ANALITICA,
       },
     ],
   }),
@@ -103,10 +106,7 @@ function Analitica() {
   }
 
   return (
-    <AppShell
-      title="Analítica"
-      description="Comparativos interactivos del gasto documental y ventas (calculado desde facturas y Siesa)"
-    >
+    <AppShell title="Analítica" description={DESCRIPCION_ANALITICA}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="inline-flex h-9 items-center gap-1 rounded-lg bg-slate-100 p-1">
           <button
@@ -151,6 +151,34 @@ function Analitica() {
   );
 }
 
+/** Falla de red/servidor de una sección (distinta de una respuesta válida "sin datos"), con reintento solo de esa sección. */
+function ErrorSeccion({
+  titulo,
+  mensaje,
+  onReintentar,
+  className = "",
+}: {
+  titulo: string;
+  mensaje: string;
+  onReintentar: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="alert"
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white p-4 text-xs text-slate-700 shadow-2xs ${className}`}
+    >
+      <div>
+        <p className="font-bold text-slate-900">{titulo}</p>
+        <p className="mt-0.5 text-slate-500">{mensaje}</p>
+      </div>
+      <Button size="sm" variant="outline" onClick={onReintentar}>
+        Reintentar
+      </Button>
+    </div>
+  );
+}
+
 /**
  * Contenido histórico de Analítica (los paneles fijos previos a la P0 de
  * constructor de análisis): sigue reutilizando exactamente los mismos hooks
@@ -159,9 +187,15 @@ function Analitica() {
  * "Mis análisis" y al constructor configurable.
  */
 function AnaliticaResumen() {
-  const { ventas, loading: cargandoVentas } = useVentasGerencial();
+  const {
+    ventas,
+    loading: cargandoVentas,
+    error: errorVentas,
+    refresh: recargarVentas,
+  } = useVentasGerencial();
   const vendedoresVentas = useVentasPorVendedor();
   const cargandoVendedores = vendedoresVentas.loading;
+  const errorVendedores = vendedoresVentas.error;
 
   const [historicoBusqueda, setHistoricoBusqueda] = useState("");
   const [historicoBusquedaDebounced, setHistoricoBusquedaDebounced] = useState("");
@@ -198,6 +232,15 @@ function AnaliticaResumen() {
     },
     historicoCargado,
   );
+
+  // useHistoricoVentas arranca con loading=false mientras está deshabilitado: en el primer render
+  // tras pedirlo habría un instante "sin cargar y sin datos" que se vería como "No disponible.".
+  // Se trata como cargando hasta que el hook haya reportado loading=true al menos una vez.
+  const [historicoVioCarga, setHistoricoVioCarga] = useState(false);
+  useEffect(() => {
+    if (historico.loading) setHistoricoVioCarga(true);
+  }, [historico.loading]);
+  const cargandoHistorico = historico.loading || !historicoVioCarga;
 
   useEffect(() => {
     setHistoricoPage(1);
@@ -243,7 +286,9 @@ function AnaliticaResumen() {
             <p className="mt-0.5 text-[11px] text-slate-500">
               {vendedoresVentas.resumenHoy
                 ? `${vendedoresVentas.resumenHoy.documentos} documentos hoy`
-                : "Sin datos de hoy"}
+                : errorVendedores
+                  ? "No se pudo cargar"
+                  : "Sin datos de hoy"}
             </p>
           </div>
           <div className="panel p-4 bg-white border-slate-200 shadow-2xs">
@@ -326,9 +371,55 @@ function AnaliticaResumen() {
         </div>
       )}
 
-      {!cargandoVentas && !ventas.disponible && (
+      {cargandoVentas && !ventas.disponible && (
+        <div
+          role="status"
+          className="panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500"
+        >
+          Cargando ventas…
+        </div>
+      )}
+
+      {!cargandoVentas && errorVentas && (
+        <ErrorSeccion
+          titulo="No se pudieron cargar las ventas"
+          mensaje={
+            ventas.disponible
+              ? `${errorVentas} Se muestran los últimos datos cargados.`
+              : errorVentas
+          }
+          onReintentar={recargarVentas}
+        />
+      )}
+
+      {!cargandoVentas && !errorVentas && !ventas.disponible && (
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
           {ventas.motivo ?? "Ventas no disponibles."}
+        </div>
+      )}
+
+      {cargandoVendedores && vendedoresVentas.vendedores.length === 0 && (
+        <div role="status" className="mt-4 text-xs text-slate-500">
+          Cargando ventas por vendedor…
+        </div>
+      )}
+
+      {!cargandoVendedores && errorVendedores && (
+        <ErrorSeccion
+          className="mt-4"
+          titulo="No se pudieron cargar las ventas del día y por vendedor"
+          mensaje={
+            vendedoresVentas.disponible
+              ? `${errorVendedores} Se muestran los últimos datos cargados.`
+              : errorVendedores
+          }
+          onReintentar={vendedoresVentas.refresh}
+        />
+      )}
+
+      {!cargandoVendedores && !errorVendedores && !vendedoresVentas.disponible && (
+        <div className="panel mt-4 p-5 bg-white border-slate-200 shadow-2xs text-xs text-slate-500">
+          {vendedoresVentas.motivo ?? "Ventas por vendedor no disponibles."}
         </div>
       )}
 
@@ -336,115 +427,113 @@ function AnaliticaResumen() {
           debajo de la evolución mensual: la actividad del día pesa más que
           cualquier análisis histórico (jerarquía: ahora > atención > acción
           > por qué > histórico). */}
-      {ventas.disponible &&
-        vendedoresVentas.disponible &&
-        vendedoresVentas.detalleHoy.length > 0 && (
-          <PanelColapsable
-            className="mt-4"
-            title="Detalle de hoy, por hora"
-            description="Ritmo de venta del día — ayuda a detectar horas fuertes y horas débiles"
-          >
-            <div className="max-h-80 overflow-y-auto overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-100/80">
-                  <TableRow className="hover:bg-slate-100/80">
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Hora
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Vendedor
-                    </TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Cliente
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Neto
-                    </TableHead>
+      {vendedoresVentas.disponible && vendedoresVentas.detalleHoy.length > 0 && (
+        <PanelColapsable
+          className="mt-4"
+          title="Detalle de hoy, por hora"
+          description="Ritmo de venta del día — ayuda a detectar horas fuertes y horas débiles"
+        >
+          <div className="max-h-80 overflow-y-auto overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-100/80">
+                <TableRow className="hover:bg-slate-100/80">
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Hora
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Vendedor
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Cliente
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Neto
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vendedoresVentas.detalleHoy.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell className="num text-xs text-slate-600">
+                      {new Date(v.hora).toLocaleTimeString("es-CO", {
+                        timeZone: "UTC",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-700">
+                      {v.vendedorNombre ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-700">
+                      <div className="min-w-0 truncate max-w-[220px]">
+                        {v.clienteNombre ?? "Sin cliente"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="num text-right text-xs font-semibold text-slate-900">
+                      {money(v.neto)}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vendedoresVentas.detalleHoy.map((v) => (
-                    <TableRow key={v.id}>
-                      <TableCell className="num text-xs text-slate-600">
-                        {new Date(v.hora).toLocaleTimeString("es-CO", {
-                          timeZone: "UTC",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-700">
-                        {v.vendedorNombre ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-700">
-                        <div className="min-w-0 truncate max-w-[220px]">
-                          {v.clienteNombre ?? "Sin cliente"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="num text-right text-xs font-semibold text-slate-900">
-                        {money(v.neto)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </PanelColapsable>
-        )}
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </PanelColapsable>
+      )}
 
-      {ventas.disponible &&
-        vendedoresVentas.disponible &&
-        vendedoresVentas.vendedores.length > 0 && (
-          <PanelColapsable
-            className="mt-4"
-            title="Ventas diarias por vendedor"
-            description={`Ranking por venta · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "mes actual"} (Siesa)${cargandoVendedores ? " · cargando…" : ""}`}
-          >
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-100/80">
-                  <TableRow className="hover:bg-slate-100/80">
-                    <TableHead className="w-8" />
-                    <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Vendedor
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Hoy
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Ayer
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Últimos 7 días
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Mes actual
-                    </TableHead>
-                    <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                      Documentos
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vendedoresVentas.vendedores.map((v) => (
-                    <FilaVendedor
-                      key={v.vendedorRowId ?? v.vendedorNombre}
-                      vendedor={v}
-                      detalleHoy={vendedoresVentas.detalleHoy}
-                      onVerHistorico={() =>
-                        v.vendedorRowId &&
-                        setDrillDown({
-                          tipo: "vendedor",
-                          id: v.vendedorRowId,
-                          nombre: v.vendedorNombre ?? "Vendedor",
-                        })
-                      }
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </PanelColapsable>
-        )}
+      {vendedoresVentas.disponible && vendedoresVentas.vendedores.length > 0 && (
+        <PanelColapsable
+          className="mt-4"
+          title="Ventas diarias por vendedor"
+          description={`Ranking por venta · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "mes actual"} (Siesa)${cargandoVendedores ? " · cargando…" : ""}`}
+        >
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-100/80">
+                <TableRow className="hover:bg-slate-100/80">
+                  <TableHead className="w-8">
+                    <span className="sr-only">Detalle</span>
+                  </TableHead>
+                  <TableHead className="text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Vendedor
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Hoy
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Ayer
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Últimos 7 días
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Mes actual
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
+                    Documentos
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vendedoresVentas.vendedores.map((v) => (
+                  <FilaVendedor
+                    key={v.vendedorRowId ?? v.vendedorNombre}
+                    vendedor={v}
+                    detalleHoy={vendedoresVentas.detalleHoy}
+                    onVerHistorico={() =>
+                      v.vendedorRowId &&
+                      setDrillDown({
+                        tipo: "vendedor",
+                        id: v.vendedorRowId,
+                        nombre: v.vendedorNombre ?? "Vendedor",
+                      })
+                    }
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </PanelColapsable>
+      )}
 
       <div className="mt-6 mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -472,7 +561,14 @@ function AnaliticaResumen() {
               Cargar ventas históricas
             </Button>
           </div>
-        ) : !historico.disponible && !historico.loading ? (
+        ) : historico.error && !cargandoHistorico && historico.items.length === 0 ? (
+          <ErrorSeccion
+            className="m-4"
+            titulo="No se pudo cargar el histórico de ventas"
+            mensaje={historico.error}
+            onReintentar={historico.refresh}
+          />
+        ) : !historico.disponible && !cargandoHistorico ? (
           <div className="p-5 text-xs text-slate-500">{historico.motivo ?? "No disponible."}</div>
         ) : (
           <>
@@ -537,17 +633,28 @@ function AnaliticaResumen() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historico.loading && (
+                  {cargandoHistorico && (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-xs text-slate-500">
                         Cargando...
                       </TableCell>
                     </TableRow>
                   )}
-                  {!historico.loading && historico.items.length === 0 && (
+                  {!cargandoHistorico && historico.error && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-6">
+                        <ErrorSeccion
+                          titulo="No se pudo cargar esta página del histórico"
+                          mensaje={historico.error}
+                          onReintentar={historico.refresh}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!cargandoHistorico && !historico.error && historico.items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-xs text-slate-500">
-                        {historico.error || "No hay ventas registradas para estos filtros."}
+                        No hay ventas registradas para estos filtros.
                       </TableCell>
                     </TableRow>
                   )}
@@ -589,7 +696,7 @@ function AnaliticaResumen() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={historicoPage <= 1 || historico.loading}
+                    disabled={historicoPage <= 1 || cargandoHistorico}
                     onClick={() => setHistoricoPage((p) => Math.max(1, p - 1))}
                     className="gap-1"
                   >
@@ -598,7 +705,7 @@ function AnaliticaResumen() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={historicoPage >= historico.totalPages || historico.loading}
+                    disabled={historicoPage >= historico.totalPages || cargandoHistorico}
                     onClick={() => setHistoricoPage((p) => Math.min(historico.totalPages, p + 1))}
                     className="gap-1"
                   >
@@ -652,19 +759,33 @@ function FilaVendedor({
   onVerHistorico: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
+  const detalleId = useId();
+  const nombre = v.vendedorNombre ?? "Sin nombre";
   const ventasDeHoy = detalleHoy.filter((d) => d.vendedorRowId === v.vendedorRowId);
 
   return (
     <>
+      {/* El clic en la fila se conserva para mouse; el teclado y los lectores de pantalla usan el botón. */}
       <TableRow className="cursor-pointer" onClick={() => setAbierto((a) => !a)}>
         <TableCell className="w-8">
-          <ChevronDown
-            className={`h-3.5 w-3.5 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`}
-          />
+          <button
+            type="button"
+            aria-expanded={abierto}
+            aria-controls={detalleId}
+            aria-label={`${abierto ? "Ocultar" : "Ver"} ventas de hoy de ${nombre}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAbierto((a) => !a);
+            }}
+            className="cursor-pointer rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1"
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={`h-3.5 w-3.5 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`}
+            />
+          </button>
         </TableCell>
-        <TableCell className="text-xs font-semibold text-slate-800">
-          {v.vendedorNombre ?? "Sin nombre"}
-        </TableCell>
+        <TableCell className="text-xs font-semibold text-slate-800">{nombre}</TableCell>
         <TableCell className="num text-right text-xs text-slate-600">{money(v.hoy)}</TableCell>
         <TableCell className="num text-right text-xs text-slate-600">{money(v.ayer)}</TableCell>
         <TableCell className="num text-right text-xs text-slate-600">
@@ -678,7 +799,7 @@ function FilaVendedor({
         </TableCell>
       </TableRow>
       {abierto && (
-        <TableRow className="hover:bg-transparent">
+        <TableRow id={detalleId} className="hover:bg-transparent">
           <TableCell colSpan={7} className="bg-slate-50/60 px-6 py-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Ventas de hoy de {v.vendedorNombre ?? "este vendedor"}
