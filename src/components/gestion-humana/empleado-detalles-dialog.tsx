@@ -19,6 +19,7 @@ import { SelectorArchivo } from "@/components/gestion-humana/selector-archivo";
 import { validarArchivoAdjunto } from "@/lib/archivo-adjunto";
 import { DetallePersonalCampos } from "@/components/gestion-humana/detalle-personal-campos";
 import { DETALLE_PERSONAL_VACIO, type DetallePersonalForm } from "@/lib/detalle-personal";
+import { crearGuardaSolicitudes } from "@/lib/solicitud-vigente";
 import type { OpcionesSeguridadSocial } from "@/hooks/use-seguridad-social";
 import { fetchAuth, fetchAuthBlob, fetchAuthUpload } from "@/lib/session";
 
@@ -92,12 +93,19 @@ export function EmpleadoDetallesDialog({
   const [estTitulo, setEstTitulo] = useState("");
   const [estInstitucion, setEstInstitucion] = useState("");
 
+  // Una respuesta solo actualiza el diálogo si sigue siendo la última solicitud
+  // del colaborador activo: una carga lenta del anterior no puede pisar al nuevo.
+  const [guarda] = useState(() => crearGuardaSolicitudes<string>());
+
   const cargar = useCallback(async () => {
     if (!empleadoId || !permisos.verDetalles) return;
+    const token = guarda.iniciar(empleadoId);
+    if (token === null) return;
     setCargando(true);
     setErrorCarga("");
     try {
       const data: DetallesApi = await fetchAuth(`/gestion-humana/empleados/${empleadoId}/detalles`);
+      if (!guarda.esVigente(token)) return;
       setDatos(data);
       setForm(
         Object.fromEntries(
@@ -108,14 +116,18 @@ export function EmpleadoDetallesDialog({
         ) as unknown as DetallePersonalForm,
       );
     } catch (err: unknown) {
+      if (!guarda.esVigente(token)) return;
       setErrorCarga(err instanceof Error ? err.message : "Error al cargar los detalles.");
     } finally {
-      setCargando(false);
+      if (guarda.esVigente(token)) setCargando(false);
     }
-  }, [empleadoId, permisos.verDetalles]);
+  }, [empleadoId, permisos.verDetalles, guarda]);
 
   useEffect(() => {
+    guarda.activar(empleadoId);
     setDatos(null);
+    setForm({ ...DETALLE_PERSONAL_VACIO });
+    setCargando(false);
     setErrorCarga("");
     setFamNombre("");
     setFamParentesco("");
@@ -125,6 +137,8 @@ export function EmpleadoDetallesDialog({
     setCorreo(empleado?.correo ?? "");
     setTipoContrato(empleado?.tipoContrato ?? "");
     cargar();
+    // Al cerrar o desmontar se invalida lo que siga en vuelo.
+    return () => guarda.activar(null);
     // Solo se reinicia al abrir/cambiar de colaborador.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empleadoId]);

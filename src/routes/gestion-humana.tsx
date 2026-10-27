@@ -71,6 +71,15 @@ import { SelectorArchivo } from "@/components/gestion-humana/selector-archivo";
 import { validarArchivoAdjunto } from "@/lib/archivo-adjunto";
 import { DetallePersonalCampos } from "@/components/gestion-humana/detalle-personal-campos";
 import { DETALLE_PERSONAL_VACIO } from "@/lib/detalle-personal";
+import {
+  ejecutarAlta,
+  empFormInicial,
+  hayCambiosPendientesAlta,
+  resolverCierreAlta,
+  type ApiDetallesAlta,
+  type EmpFormAlta,
+  type EstudioAlta,
+} from "@/lib/gestion-humana-alta";
 import { useOpcionesSeguridadSocial } from "@/hooks/use-seguridad-social";
 import { EmpleadoDetallesDialog } from "@/components/gestion-humana/empleado-detalles-dialog";
 import { correoRequeridoParaCargo, validarCorreoColaborador } from "@/lib/cargos";
@@ -210,18 +219,10 @@ function GestionHumana() {
   };
 
   // Forms states
-  const [empForm, setEmpForm] = useState({
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
-    documento: "",
-    nombres: "",
-    apellidos: "",
-    correo: "",
-    cargoId: "",
-    tipoContrato: "",
-    area: "",
-    fechaContratacion: hoyLocalISO(),
-    salarioActual: 2000000,
-  });
+  const areaPorDefecto = departamentos[0]?.nombre ?? "";
+  const [empForm, setEmpForm] = useState<EmpFormAlta>(() =>
+    empFormInicial(empresaActiva, "", hoyLocalISO()),
+  );
   const correoRequerido = correoRequeridoParaCargo(cargosOpciones, empForm.cargoId || null);
 
   // Pestaña "Detalles" del registro: se guarda DESPUÉS de crear el colaborador
@@ -232,9 +233,7 @@ function GestionHumana() {
   const [familiaresNuevos, setFamiliaresNuevos] = useState<
     { nombre: string; parentesco: string }[]
   >([]);
-  const [estudiosNuevos, setEstudiosNuevos] = useState<
-    { titulo: string; institucion: string; archivo?: File }[]
-  >([]);
+  const [estudiosNuevos, setEstudiosNuevos] = useState<EstudioAlta[]>([]);
   const [estNuevoArchivo, setEstNuevoArchivo] = useState<File | null>(null);
   const [certificadoNuevo, setCertificadoNuevo] = useState<File | null>(null);
   const [famNuevoNombre, setFamNuevoNombre] = useState("");
@@ -242,6 +241,14 @@ function GestionHumana() {
   const [estNuevoTitulo, setEstNuevoTitulo] = useState("");
   const [estNuevaInstitucion, setEstNuevaInstitucion] = useState("");
   const [guardandoEmpleado, setGuardandoEmpleado] = useState(false);
+  // Alta en dos fases: tras crear el colaborador su id queda aquí; si fallan detalles
+  // o adjuntos, el diálogo sigue abierto y reintentar NO vuelve a crear el colaborador.
+  const [altaCreadaId, setAltaCreadaId] = useState<string | null>(null);
+  const [altaResultado, setAltaResultado] = useState<{
+    guardados: string[];
+    fallidos: { etiqueta: string; mensaje: string }[];
+  } | null>(null);
+  const [confirmarDescarteAlta, setConfirmarDescarteAlta] = useState(false);
   const puedeCapturarDetalles = permisosDetalles.verDetalles && permisosDetalles.editarDetalles;
 
   // Preselecciona el primer departamento real configurado apenas carguen.
@@ -335,105 +342,145 @@ function GestionHumana() {
   // Handlers
   const handleSaveEmpleado = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!empForm.nombres.trim() || !empForm.apellidos.trim() || !empForm.documento.trim()) {
-      setTabRegistro("datos");
-      toast.error("Completa cédula, nombres y apellidos.");
-      return;
-    }
-    const validacionCorreo = validarCorreoColaborador(
-      empForm.correo,
-      correoRequerido,
-      empForm.empresaId,
-    );
-    if (!validacionCorreo.ok) {
-      setTabRegistro("datos");
-      toast.error(validacionCorreo.message);
-      return;
+    // Con el colaborador ya creado (reintento) los datos están bloqueados y no se revalidan.
+    let correoValidado = "";
+    if (!altaCreadaId) {
+      if (!empForm.nombres.trim() || !empForm.apellidos.trim() || !empForm.documento.trim()) {
+        setTabRegistro("datos");
+        toast.error("Completa cédula, nombres y apellidos.");
+        return;
+      }
+      const validacionCorreo = validarCorreoColaborador(
+        empForm.correo,
+        correoRequerido,
+        empForm.empresaId,
+      );
+      if (!validacionCorreo.ok) {
+        setTabRegistro("datos");
+        toast.error(validacionCorreo.message);
+        return;
+      }
+      correoValidado = validacionCorreo.correo;
     }
     setGuardandoEmpleado(true);
-    let creado: { id: string } | undefined;
+    let resultado;
     try {
-      creado = await addEmpleado({
-        empresaId: empForm.empresaId,
-        documento: empForm.documento,
-        nombres: empForm.nombres,
-        apellidos: empForm.apellidos,
-        correo: validacionCorreo.correo,
-        ...(empForm.cargoId ? { cargoId: empForm.cargoId } : {}),
-        ...(empForm.tipoContrato ? { tipoContrato: empForm.tipoContrato } : {}),
-        area: empForm.area,
-        fechaContratacion: empForm.fechaContratacion,
-        salarioActual: Number(empForm.salarioActual),
+      resultado = await ejecutarAlta({
+        creadoId: altaCreadaId,
+        crear: () =>
+          addEmpleado({
+            empresaId: empForm.empresaId,
+            documento: empForm.documento,
+            nombres: empForm.nombres,
+            apellidos: empForm.apellidos,
+            correo: correoValidado,
+            ...(empForm.cargoId ? { cargoId: empForm.cargoId } : {}),
+            ...(empForm.tipoContrato ? { tipoContrato: empForm.tipoContrato } : {}),
+            area: empForm.area,
+            fechaContratacion: empForm.fechaContratacion,
+            salarioActual: Number(empForm.salarioActual),
+          }),
+        borrador: {
+          detalle: detalleForm,
+          familiares: familiaresNuevos,
+          estudios: estudiosNuevos,
+          certificado: certificadoNuevo,
+        },
+        crearApi: crearApiDetallesAlta,
+        puedeCapturarDetalles,
+        puedeGestionarDocumentos: permisosDetalles.gestionarDocumentos,
       });
     } catch (err: unknown) {
+      // Solo puede fallar la creación del colaborador: no existe y no hay nada que reintentar.
       toast.error(err instanceof Error ? err.message : "Error al registrar el colaborador.");
       setGuardandoEmpleado(false);
       return;
     }
-
-    // Detalles capturados en la pestaña "Detalles": el colaborador YA existe;
-    // si algo falla aquí no se pierde, se avisa y se completa desde "Detalles".
-    const hayDetalle = Object.values(detalleForm).some((v) => v.trim());
-    if (
-      creado?.id &&
-      puedeCapturarDetalles &&
-      (hayDetalle || familiaresNuevos.length > 0 || estudiosNuevos.length > 0 || certificadoNuevo)
-    ) {
-      const base = `/gestion-humana/empleados/${creado.id}`;
-      try {
-        if (hayDetalle) {
-          await fetchAuth(`${base}/detalles`, { method: "PUT", body: JSON.stringify(detalleForm) });
-        }
-        for (const f of familiaresNuevos) {
-          await fetchAuth(`${base}/familiares`, { method: "POST", body: JSON.stringify(f) });
-        }
-        for (const est of estudiosNuevos) {
-          const estudio: { id: string } = await fetchAuth(`${base}/estudios`, {
-            method: "POST",
-            body: JSON.stringify({ titulo: est.titulo, institucion: est.institucion }),
-          });
-          if (est.archivo && permisosDetalles.gestionarDocumentos) {
-            const fd = new FormData();
-            fd.append("tipo", "SOPORTE_ESTUDIO");
-            fd.append("estudioId", estudio.id);
-            fd.append("archivo", est.archivo);
-            await fetchAuthUpload(`${base}/documentos`, fd);
-          }
-        }
-        if (certificadoNuevo && permisosDetalles.gestionarDocumentos) {
-          const fd = new FormData();
-          fd.append("tipo", "CERTIFICADO_BANCARIO");
-          fd.append("archivo", certificadoNuevo);
-          await fetchAuthUpload(`${base}/documentos`, fd);
-        }
-      } catch (err: unknown) {
-        toast.warning(
-          `Colaborador registrado, pero no se pudieron guardar todos los detalles (${
-            err instanceof Error ? err.message : "error desconocido"
-          }). Complétalos desde el botón "Detalles".`,
-        );
-      }
-    }
     setGuardandoEmpleado(false);
+
+    if (resultado.fallidos.length > 0) {
+      // El colaborador YA existe: se conservan solo los pendientes y el diálogo sigue abierto.
+      setAltaCreadaId(resultado.creadoId);
+      setAltaResultado({ guardados: resultado.guardados, fallidos: resultado.fallidos });
+      setDetalleForm(resultado.pendiente.detalle);
+      setFamiliaresNuevos(resultado.pendiente.familiares);
+      setEstudiosNuevos(resultado.pendiente.estudios);
+      setCertificadoNuevo(resultado.pendiente.certificado);
+      setTabRegistro("detalles");
+      toast.warning(
+        "Colaborador registrado, pero faltan detalles por guardar. Revisa el aviso y reintenta.",
+      );
+      return;
+    }
+
+    if (altaCreadaId) toast.success("Detalles pendientes guardados.");
+    reiniciarFormularioAlta();
+    setModalEmpleadoOpen(false);
+  };
+
+  const crearApiDetallesAlta = (empleadoId: string): ApiDetallesAlta => {
+    const base = `/gestion-humana/empleados/${empleadoId}`;
+    const subir = (tipo: string, archivo: File, estudioId?: string) => {
+      const fd = new FormData();
+      fd.append("tipo", tipo);
+      if (estudioId) fd.append("estudioId", estudioId);
+      fd.append("archivo", archivo);
+      return fetchAuthUpload(`${base}/documentos`, fd);
+    };
+    return {
+      guardarDetalle: (d) =>
+        fetchAuth(`${base}/detalles`, { method: "PUT", body: JSON.stringify(d) }),
+      agregarFamiliar: (f) =>
+        fetchAuth(`${base}/familiares`, { method: "POST", body: JSON.stringify(f) }),
+      crearEstudio: (e) =>
+        fetchAuth(`${base}/estudios`, { method: "POST", body: JSON.stringify(e) }),
+      subirSoporteEstudio: (estudioId, archivo) => subir("SOPORTE_ESTUDIO", archivo, estudioId),
+      subirCertificadoBancario: (archivo) => subir("CERTIFICADO_BANCARIO", archivo),
+    };
+  };
+
+  /** Deja el alta como nueva: datos, detalles, familiares, estudios, archivos y estado de reintento. */
+  const reiniciarFormularioAlta = () => {
     setTabRegistro("datos");
     setDetalleForm(DETALLE_VACIO);
     setFamiliaresNuevos([]);
     setEstudiosNuevos([]);
     setEstNuevoArchivo(null);
     setCertificadoNuevo(null);
-    setModalEmpleadoOpen(false);
-    setEmpForm({
-      empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
-      documento: "",
-      nombres: "",
-      apellidos: "",
-      correo: "",
-      cargoId: "",
-      tipoContrato: "",
-      area: "",
-      fechaContratacion: hoyLocalISO(),
-      salarioActual: 2000000,
-    });
+    setFamNuevoNombre("");
+    setFamNuevoParentesco("");
+    setEstNuevoTitulo("");
+    setEstNuevaInstitucion("");
+    setAltaCreadaId(null);
+    setAltaResultado(null);
+    setConfirmarDescarteAlta(false);
+    setEmpForm(empFormInicial(empresaActiva, areaPorDefecto, hoyLocalISO()));
+  };
+
+  const altaBase = useMemo(
+    () => empFormInicial(empresaActiva, areaPorDefecto, hoyLocalISO()),
+    [empresaActiva, areaPorDefecto],
+  );
+  const altaTieneCambios = hayCambiosPendientesAlta({
+    empForm,
+    base: altaBase,
+    borrador: {
+      detalle: detalleForm,
+      familiares: familiaresNuevos,
+      estudios: estudiosNuevos,
+      certificado: certificadoNuevo,
+    },
+    enEdicion: {
+      textos: [famNuevoNombre, famNuevoParentesco, estNuevoTitulo, estNuevaInstitucion],
+      archivo: estNuevoArchivo,
+    },
+  });
+
+  /** Cancelar, X y Escape: piden confirmación si hay cambios pendientes; nunca cierran mientras se guarda. */
+  const solicitarCierreAlta = () => {
+    const decision = resolverCierreAlta(altaTieneCambios, guardandoEmpleado);
+    if (decision === "confirmar") setConfirmarDescarteAlta(true);
+    else if (decision === "cerrar") setModalEmpleadoOpen(false);
   };
 
   const handleSaveSalario = async (e: React.FormEvent) => {
@@ -1091,7 +1138,10 @@ function GestionHumana() {
       />
 
       {/* MODAL 1: REGISTRAR COLABORADOR */}
-      <Dialog open={modalEmpleadoOpen} onOpenChange={setModalEmpleadoOpen}>
+      <Dialog
+        open={modalEmpleadoOpen}
+        onOpenChange={(abierto) => (abierto ? setModalEmpleadoOpen(true) : solicitarCierreAlta())}
+      >
         <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-white border-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-900 font-bold">
@@ -1117,178 +1167,219 @@ function GestionHumana() {
                 </TabsList>
               )}
               <TabsContent value="datos" className="space-y-4 mt-0">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
-                      Empresa
-                    </Label>
-                    <Select
-                      value={empForm.empresaId}
-                      onValueChange={(val) => setEmpForm({ ...empForm, empresaId: val })}
-                    >
-                      <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200">
-                        {empresas.map((e) => (
-                          <SelectItem key={e.id} value={e.id} className="text-xs">
-                            {e.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="documento" className="text-xs font-semibold text-slate-700">
-                      Cédula de Ciudadanía *
-                    </Label>
-                    <Input
-                      required
-                      id="documento"
-                      placeholder="Ej. 1020304050"
-                      value={empForm.documento}
-                      onChange={(e) => setEmpForm({ ...empForm, documento: e.target.value })}
-                      className="h-9 text-xs border-slate-300"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="nombres" className="text-xs font-semibold text-slate-700">
-                      Nombres *
-                    </Label>
-                    <Input
-                      required
-                      id="nombres"
-                      placeholder="Carlos Alberto"
-                      value={empForm.nombres}
-                      onChange={(e) => setEmpForm({ ...empForm, nombres: e.target.value })}
-                      className="h-9 text-xs border-slate-300"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="apellidos" className="text-xs font-semibold text-slate-700">
-                      Apellidos *
-                    </Label>
-                    <Input
-                      required
-                      id="apellidos"
-                      placeholder="Gómez Pérez"
-                      value={empForm.apellidos}
-                      onChange={(e) => setEmpForm({ ...empForm, apellidos: e.target.value })}
-                      className="h-9 text-xs border-slate-300"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="correo" className="text-xs font-semibold text-slate-700">
-                    Correo Corporativo{correoRequerido ? " *" : " (opcional)"}
-                  </Label>
-                  <Input
-                    required={correoRequerido}
-                    type="email"
-                    id="correo"
-                    placeholder={`usuario@${DOMINIO_POR_EMPRESA[empForm.empresaId] ?? "empresa.com"}`}
-                    value={empForm.correo}
-                    onChange={(e) => setEmpForm({ ...empForm, correo: e.target.value })}
-                    className="h-9 text-xs border-slate-300"
-                  />
-                  <p className="text-[11px] text-slate-400">
-                    {DOMINIO_POR_EMPRESA[empForm.empresaId]
-                      ? `Solo se permite el dominio de la empresa seleccionada (@${DOMINIO_POR_EMPRESA[empForm.empresaId]}).`
-                      : "Solo se permiten correos corporativos."}
+                {altaCreadaId && (
+                  <p className="text-[11px] text-slate-500">
+                    El colaborador ya fue registrado; estos datos quedaron bloqueados. Reintenta los
+                    detalles pendientes desde la pestaña Detalles.
                   </p>
-                </div>
+                )}
+                <fieldset disabled={!!altaCreadaId} className="min-w-0 space-y-4 border-0 p-0 m-0">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
+                        Empresa
+                      </Label>
+                      <Select
+                        value={empForm.empresaId}
+                        onValueChange={(val) => setEmpForm({ ...empForm, empresaId: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200">
+                          {empresas.map((e) => (
+                            <SelectItem key={e.id} value={e.id} className="text-xs">
+                              {e.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="documento" className="text-xs font-semibold text-slate-700">
+                        Cédula de Ciudadanía *
+                      </Label>
+                      <Input
+                        required
+                        id="documento"
+                        placeholder="Ej. 1020304050"
+                        value={empForm.documento}
+                        onChange={(e) => setEmpForm({ ...empForm, documento: e.target.value })}
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="nombres" className="text-xs font-semibold text-slate-700">
+                        Nombres *
+                      </Label>
+                      <Input
+                        required
+                        id="nombres"
+                        placeholder="Carlos Alberto"
+                        value={empForm.nombres}
+                        onChange={(e) => setEmpForm({ ...empForm, nombres: e.target.value })}
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="apellidos" className="text-xs font-semibold text-slate-700">
+                        Apellidos *
+                      </Label>
+                      <Input
+                        required
+                        id="apellidos"
+                        placeholder="Gómez Pérez"
+                        value={empForm.apellidos}
+                        onChange={(e) => setEmpForm({ ...empForm, apellidos: e.target.value })}
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
-                    <Label htmlFor="cargo" className="text-xs font-semibold text-slate-700">
-                      Cargo
+                    <Label htmlFor="correo" className="text-xs font-semibold text-slate-700">
+                      Correo Corporativo{correoRequerido ? " *" : " (opcional)"}
+                    </Label>
+                    <Input
+                      required={correoRequerido}
+                      type="email"
+                      id="correo"
+                      placeholder={`usuario@${DOMINIO_POR_EMPRESA[empForm.empresaId] ?? "empresa.com"}`}
+                      value={empForm.correo}
+                      onChange={(e) => setEmpForm({ ...empForm, correo: e.target.value })}
+                      className="h-9 text-xs border-slate-300"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      {DOMINIO_POR_EMPRESA[empForm.empresaId]
+                        ? `Solo se permite el dominio de la empresa seleccionada (@${DOMINIO_POR_EMPRESA[empForm.empresaId]}).`
+                        : "Solo se permiten correos corporativos."}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="cargo" className="text-xs font-semibold text-slate-700">
+                        Cargo
+                      </Label>
+                      <Combobox
+                        id="cargo"
+                        options={cargosOpciones.map((c) => ({ value: c.id, label: c.nombre }))}
+                        value={empForm.cargoId}
+                        onValueChange={(val) => setEmpForm({ ...empForm, cargoId: val })}
+                        placeholder="Selecciona un cargo"
+                        searchPlaceholder="Buscar cargo..."
+                        emptyText="No hay cargos activos."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
+                        Departamento
+                      </Label>
+                      <Select
+                        value={empForm.area}
+                        onValueChange={(val) => setEmpForm({ ...empForm, area: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200">
+                          {departamentos.map((d) => (
+                            <SelectItem key={d.id} value={d.nombre} className="text-xs">
+                              {d.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="tipo-contrato" className="text-xs font-semibold text-slate-700">
+                      Tipo de contrato
                     </Label>
                     <Combobox
-                      id="cargo"
-                      options={cargosOpciones.map((c) => ({ value: c.id, label: c.nombre }))}
-                      value={empForm.cargoId}
-                      onValueChange={(val) => setEmpForm({ ...empForm, cargoId: val })}
-                      placeholder="Selecciona un cargo"
-                      searchPlaceholder="Buscar cargo..."
-                      emptyText="No hay cargos activos."
+                      id="tipo-contrato"
+                      options={opcionesSeguridadSocial.tiposContrato.map((n) => ({
+                        value: n,
+                        label: n,
+                      }))}
+                      value={empForm.tipoContrato}
+                      onValueChange={(val) => setEmpForm({ ...empForm, tipoContrato: val })}
+                      placeholder="Selecciona un tipo de contrato"
+                      searchPlaceholder="Buscar..."
+                      emptyText="Sin opciones. Agrégalas en Gestión de información."
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="area" className="text-xs font-semibold text-slate-700">
-                      Departamento
-                    </Label>
-                    <Select
-                      value={empForm.area}
-                      onValueChange={(val) => setEmpForm({ ...empForm, area: val })}
-                    >
-                      <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200">
-                        {departamentos.map((d) => (
-                          <SelectItem key={d.id} value={d.nombre} className="text-xs">
-                            {d.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="tipo-contrato" className="text-xs font-semibold text-slate-700">
-                    Tipo de contrato
-                  </Label>
-                  <Combobox
-                    id="tipo-contrato"
-                    options={opcionesSeguridadSocial.tiposContrato.map((n) => ({
-                      value: n,
-                      label: n,
-                    }))}
-                    value={empForm.tipoContrato}
-                    onValueChange={(val) => setEmpForm({ ...empForm, tipoContrato: val })}
-                    placeholder="Selecciona un tipo de contrato"
-                    searchPlaceholder="Buscar..."
-                    emptyText="Sin opciones. Agrégalas en Gestión de información."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="fecha" className="text-xs font-semibold text-slate-700">
-                      Fecha Contratación
-                    </Label>
-                    <Input
-                      type="date"
-                      id="fecha"
-                      value={empForm.fechaContratacion}
-                      onChange={(e) =>
-                        setEmpForm({ ...empForm, fechaContratacion: e.target.value })
-                      }
-                      className="h-9 text-xs border-slate-300"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="fecha" className="text-xs font-semibold text-slate-700">
+                        Fecha Contratación
+                      </Label>
+                      <Input
+                        type="date"
+                        id="fecha"
+                        value={empForm.fechaContratacion}
+                        onChange={(e) =>
+                          setEmpForm({ ...empForm, fechaContratacion: e.target.value })
+                        }
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="salario" className="text-xs font-semibold text-slate-700">
+                        Salario Mensual (COP)
+                      </Label>
+                      <Input
+                        type="number"
+                        id="salario"
+                        value={empForm.salarioActual}
+                        onChange={(e) =>
+                          setEmpForm({ ...empForm, salarioActual: Number(e.target.value) })
+                        }
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="salario" className="text-xs font-semibold text-slate-700">
-                      Salario Mensual (COP)
-                    </Label>
-                    <Input
-                      type="number"
-                      id="salario"
-                      value={empForm.salarioActual}
-                      onChange={(e) =>
-                        setEmpForm({ ...empForm, salarioActual: Number(e.target.value) })
-                      }
-                      className="h-9 text-xs border-slate-300"
-                    />
-                  </div>
-                </div>
+                </fieldset>
               </TabsContent>
               <TabsContent value="detalles" className="space-y-5 mt-0">
+                {altaResultado && (
+                  <div
+                    role="alert"
+                    className="space-y-2 rounded-md border border-slate-300 bg-slate-50 p-3 text-xs text-slate-700"
+                  >
+                    <p className="font-bold text-slate-900">
+                      Colaborador registrado. Los detalles se guardaron parcialmente.
+                    </p>
+                    {altaResultado.guardados.length > 0 && (
+                      <div>
+                        <p className="font-semibold">Guardado</p>
+                        <ul className="list-disc pl-4">
+                          {altaResultado.guardados.map((g) => (
+                            <li key={g}>{g}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold">Pendiente (falló)</p>
+                      <ul className="list-disc pl-4">
+                        {altaResultado.fallidos.map((f) => (
+                          <li key={f.etiqueta}>
+                            {f.etiqueta}: {f.mensaje}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p className="text-slate-500">
+                      Usa «Reintentar pendientes»: no se vuelve a crear el colaborador.
+                    </p>
+                  </div>
+                )}
                 <p className="text-[11px] text-slate-500">
                   Información adicional opcional. Los adjuntos (PDF, PNG, JPG o WEBP de hasta 10 MB)
                   son privados y se suben al guardar el colaborador.
@@ -1540,21 +1631,40 @@ function GestionHumana() {
             </Tabs>
 
             <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setModalEmpleadoOpen(false)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={solicitarCierreAlta}>
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoEmpleado}>
-                Guardar Colaborador
+                {altaCreadaId ? "Reintentar pendientes" : "Guardar Colaborador"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={confirmarDescarteAlta} onOpenChange={setConfirmarDescarteAlta}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar el alta en curso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {altaCreadaId
+                ? "El colaborador ya fue registrado, pero los detalles pendientes se perderán. Podrás completarlos después desde el botón «Detalles»."
+                : "Se perderán los datos, detalles, familiares, estudios y archivos que ingresaste."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                reiniciarFormularioAlta();
+                setModalEmpleadoOpen(false);
+              }}
+            >
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* MODAL 2: AJUSTE SALARIAL */}
       <Dialog open={modalSalarioOpen} onOpenChange={setModalSalarioOpen}>
