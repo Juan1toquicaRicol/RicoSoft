@@ -119,6 +119,7 @@ export function BiometricoMarcacionesPanel() {
               id="marc-desde"
               type="date"
               value={desde}
+              max={hasta || undefined}
               onChange={(e) => {
                 setDesde(e.target.value);
                 setPagina(1);
@@ -134,6 +135,7 @@ export function BiometricoMarcacionesPanel() {
               id="marc-hasta"
               type="date"
               value={hasta}
+              min={desde || undefined}
               onChange={(e) => {
                 setHasta(e.target.value);
                 setPagina(1);
@@ -154,6 +156,22 @@ export function BiometricoMarcacionesPanel() {
               Solo sin asociar a un empleado
             </Label>
           </div>
+          {(desde || hasta || soloSinAsociar) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 text-xs"
+              onClick={() => {
+                setDesde("");
+                setHasta("");
+                setSoloSinAsociar(false);
+                setPagina(1);
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          )}
         </div>
 
         {error && (

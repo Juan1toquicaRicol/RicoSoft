@@ -277,7 +277,9 @@ export function BiometricoFuentesPanel({
             La conexión al archivo CrossChex se configura en el servidor mediante
             <code className="mx-1 rounded bg-white/70 px-1 py-0.5">CROSSCHEX_MDB_PATH</code>. Crear
             o activar una fuente aquí no habilita por sí solo la sincronización automática; esta
-            depende de la configuración del servidor.
+            depende de la configuración del servidor. Solo puede haber una fuente activa en toda la
+            instalación, y no se puede crear ni activar otra mientras haya una sincronización en
+            curso.
           </AlertDescription>
         </Alert>
 

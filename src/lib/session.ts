@@ -103,15 +103,19 @@ export async function fetchCurrentUser(): Promise<SessionUser | null> {
  * Wrapper de fetchApi que adjunta el Bearer token de la sesión activa.
  * Úsalo para cualquier llamada a un endpoint protegido del backend.
  */
-export async function fetchAuth(endpoint: string, options: RequestInit = {}) {
+export async function fetchAuth(endpoint: string, options: RequestInit = {}, timeoutMs?: number) {
   const token = getToken();
-  return fetchApi(endpoint, {
-    ...options,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+  return fetchApi(
+    endpoint,
+    {
+      ...options,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
     },
-  });
+    timeoutMs,
+  );
 }
 
 /**

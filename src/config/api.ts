@@ -118,16 +118,20 @@ async function fetchWithTimeout(
 /**
  * Cliente HTTP centralizado para conectar el Frontend con el Backend en Node.js
  */
-export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
+export const fetchApi = async (endpoint: string, options: RequestInit = {}, timeoutMs?: number) => {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
+    response = await fetchWithTimeout(
+      `${API_URL}${endpoint}`,
+      {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options.headers,
+        },
       },
-    });
+      timeoutMs,
+    );
   } catch (error) {
     throw error instanceof ApiError ? error : classifyFetchError(error, false);
   }

@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ApiError } from "@/config/api";
 import { fetchAuth } from "@/lib/session";
 
 interface SincronizacionBiometrica {
@@ -57,6 +58,8 @@ interface FuenteResumen {
 const BASE = "/gestion-humana/biometrico";
 const POR_PAGINA = 10;
 const REFRESCO_MS = 30_000;
+// La sincronización manual espera el resultado completo: el límite por defecto (20 s) es muy corto.
+const ESPERA_SINCRONIZACION_MS = 5 * 60_000;
 
 const TH = "text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5";
 
@@ -137,14 +140,17 @@ export function BiometricoSincronizacionesPanel({
 
   const fuenteActiva = fuentes.find((f) => f.activa) ?? null;
   const ultima = pagina === 1 ? (datos?.items[0] ?? null) : null;
+  const hayCorridaEnCurso = ultima?.estado === "EN_CURSO";
 
   const sincronizarAhora = async () => {
     if (!fuenteActiva) return;
     setSincronizando(true);
     try {
-      const reporte = await fetchAuth(`${BASE}/fuentes/${fuenteActiva.id}/sincronizar`, {
-        method: "POST",
-      });
+      const reporte = await fetchAuth(
+        `${BASE}/fuentes/${fuenteActiva.id}/sincronizar`,
+        { method: "POST" },
+        ESPERA_SINCRONIZACION_MS,
+      );
       if (reporte?.estado === "FALLIDO") {
         toast.error(`La sincronización falló: ${reporte.mensajeError ?? "error desconocido"}`);
       } else {
@@ -154,7 +160,15 @@ export function BiometricoSincronizacionesPanel({
       }
       await cargar(true);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "No fue posible sincronizar.");
+      if (err instanceof ApiError && err.kind === "timeout") {
+        // El servidor sigue trabajando aunque el navegador dejó de esperar.
+        toast.warning(
+          "La sincronización sigue en el servidor. Revisa el historial en unos minutos; no vuelvas a pulsar el botón.",
+        );
+        await cargar(true);
+      } else {
+        toast.error(err instanceof Error ? err.message : "No fue posible sincronizar.");
+      }
     } finally {
       setSincronizando(false);
     }
@@ -186,8 +200,14 @@ export function BiometricoSincronizacionesPanel({
               size="sm"
               className="h-8 gap-2 text-xs"
               onClick={() => void sincronizarAhora()}
-              disabled={sincronizando || !fuenteActiva}
-              title={fuenteActiva ? undefined : "No hay una fuente biométrica activa."}
+              disabled={sincronizando || !fuenteActiva || hayCorridaEnCurso}
+              title={
+                !fuenteActiva
+                  ? "No hay una fuente biométrica activa."
+                  : hayCorridaEnCurso
+                    ? "Ya hay una sincronización en curso."
+                    : undefined
+              }
             >
               {sincronizando ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -224,6 +224,28 @@ describe("biometrico-asociaciones.controller", () => {
       expect(empleadoBiometricoCreateMock).not.toHaveBeenCalled();
     });
 
+    it("duplicado con una asociación INACTIVA existente: el 409 indica que debe reactivarla", async () => {
+      fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
+      empleadoFindFirstMock.mockResolvedValue(EMPLEADO_A);
+      empleadoBiometricoCreateMock.mockRejectedValue(
+        new PrismaClientKnownRequestErrorFake("Unique constraint", "P2002"),
+      );
+      empleadoBiometricoFindFirstMock.mockResolvedValue({ activo: false });
+
+      const { crearAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
+      const res = fakeRes();
+      await crearAsociacionBiometrica(
+        fakeReq({ body: { fuenteId: "fuente-1", externalUserId: "33", empleadoId: "empleado-1" } }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      const mensaje = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0].message as string;
+      expect(mensaje).toContain("INACTIVA");
+      expect(mensaje).toContain("Reactívala");
+      expect(empleadoBiometricoFindFirstMock.mock.calls[0][0].where.tenantId).toBe("tenant-A");
+    });
+
     it("duplicado (P2002) responde 409 controlado, no 500", async () => {
       fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
       empleadoFindFirstMock.mockResolvedValue(EMPLEADO_A);

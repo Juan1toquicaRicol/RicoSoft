@@ -163,10 +163,30 @@ export async function crearAsociacionBiometrica(req: AuthenticatedRequest, res: 
     return res.status(201).json(serializarAsociacion(asociacion));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return res.status(409).json({
-        message:
-          "Ya existe una asociación con ese externalUserId para esta fuente, o este colaborador ya tiene una asociación activa con esta fuente.",
-      });
+      // Las restricciones únicas incluyen las asociaciones INACTIVAS: desactivar no libera
+      // ni el ID del biométrico ni al colaborador. Se dice cuál es el caso para que la
+      // persona sepa que debe reactivar la existente en lugar de crear otra.
+      let existente: { activo: boolean } | null = null;
+      try {
+        existente = await prisma.empleadoBiometrico.findFirst({
+          where: {
+            tenantId: req.user!.tenantId,
+            fuenteId: req.body?.fuenteId,
+            OR: [
+              { externalUserId: String(req.body?.externalUserId ?? "").trim() },
+              { empleadoId: req.body?.empleadoId },
+            ],
+          },
+          select: { activo: true },
+        });
+      } catch {
+        // Solo afina el mensaje; si falla, se usa el genérico.
+      }
+      const message =
+        existente && !existente.activo
+          ? "Ya existe una asociación INACTIVA para ese ID de usuario o para ese colaborador en esta fuente. Reactívala en la lista de asociaciones: desactivar no libera el ID ni al colaborador."
+          : "Ya existe una asociación activa para ese ID de usuario o para ese colaborador en esta fuente.";
+      return res.status(409).json({ message });
     }
     console.error("Error al crear asociación biométrica:", error);
     return res.status(500).json({ message: "Error al crear la asociación biométrica." });
