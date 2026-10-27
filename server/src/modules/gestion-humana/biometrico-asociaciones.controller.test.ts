@@ -8,6 +8,7 @@ const empleadoBiometricoCreateMock = vi.fn();
 const empleadoBiometricoFindFirstMock = vi.fn();
 const empleadoBiometricoUpdateMock = vi.fn();
 const fuenteFindFirstMock = vi.fn();
+const usuariosMock = vi.fn(async () => ({ mapa: new Map(), disponible: false, incompleto: false }));
 const empleadoFindFirstMock = vi.fn();
 const auditoriaCreateMock = vi.fn();
 
@@ -21,6 +22,10 @@ class PrismaClientKnownRequestErrorFake extends Error {
 
 vi.mock("@prisma/client", () => ({
   Prisma: { PrismaClientKnownRequestError: PrismaClientKnownRequestErrorFake },
+}));
+
+vi.mock("./biometrico-usuarios.service", () => ({
+  usuariosDelBiometrico: (...args: unknown[]) => usuariosMock(...args),
 }));
 
 vi.mock("../../config/prisma", () => ({

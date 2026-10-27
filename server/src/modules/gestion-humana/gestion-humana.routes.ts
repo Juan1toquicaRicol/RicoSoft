@@ -61,6 +61,7 @@ import {
   eliminarAsociacionBiometrica,
 } from "./biometrico-asociaciones.controller";
 import { listarMarcacionesBiometricas } from "./biometrico-marcaciones.controller";
+import { listarUsuariosBiometrico } from "./biometrico-usuarios.controller";
 import {
   listarSincronizacionesBiometricas,
   obtenerSincronizacionBiometrica,
@@ -253,6 +254,13 @@ router.delete(
   "/biometrico/asociaciones/:id",
   requirePermission(PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR),
   eliminarAsociacionBiometrica,
+);
+
+// Biométrico — usuarios registrados en el biométrico (solo lectura)
+router.get(
+  "/biometrico/usuarios",
+  requirePermission(PERMISOS_SISTEMA.BIOMETRICO_VER),
+  listarUsuariosBiometrico,
 );
 
 // Biométrico — marcaciones (solo lectura) (Fase 6)

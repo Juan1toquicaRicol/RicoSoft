@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatoHoraReloj, hoyLocal } from "@/lib/hora-reloj";
 import { fetchAuth } from "@/lib/session";
 
 interface MarcacionBiometrica {
@@ -23,6 +24,8 @@ interface MarcacionBiometrica {
   fecha: string;
   horaMarcacion: string;
   externalUserId: string;
+  /** Usuario registrado en el biométrico (CrossChex), no el empleado de RicoSoft. */
+  usuarioBiometrico: { nombre: string | null; codigo: string | null } | null;
   externalLogId: string;
   tipoMarcacion: string;
   dispositivoId: string | null;
@@ -32,6 +35,8 @@ interface MarcacionBiometrica {
 
 interface PaginaMarcaciones {
   items: MarcacionBiometrica[];
+  ultimaMarcacion: string | null;
+  nombresDisponibles: boolean;
   page: number;
   total: number;
   totalPages: number;
@@ -46,16 +51,6 @@ const TIPO: Record<string, string> = {
   FUERATIEMPO: "Fuera de tiempo",
   OTRO: "Otro",
 };
-
-/**
- * La hora se guarda tal como la marcó el reloj (sin zona horaria). Se muestra
- * con los componentes en UTC para que el navegador no la desplace.
- */
-function formatoHoraReloj(iso: string): string {
-  const d = new Date(iso);
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${dos(d.getUTCDate())}/${dos(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${dos(d.getUTCHours())}:${dos(d.getUTCMinutes())}:${dos(d.getUTCSeconds())}`;
-}
 
 export function BiometricoMarcacionesPanel() {
   const [pagina, setPagina] = useState(1);
@@ -96,6 +91,12 @@ export function BiometricoMarcacionesPanel() {
             Eventos tal como los reporta el reloj. La hora es la del reloj, sin ajuste de zona
             horaria.
           </p>
+          {datos && (
+            <p className="mt-1 text-xs font-semibold text-slate-700">
+              Última marcación guardada:{" "}
+              {datos.ultimaMarcacion ? formatoHoraReloj(datos.ultimaMarcacion) : "ninguna todavía"}
+            </p>
+          )}
         </div>
         <Button
           type="button"
@@ -156,6 +157,20 @@ export function BiometricoMarcacionesPanel() {
               Solo sin asociar a un empleado
             </Label>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9 text-xs"
+            onClick={() => {
+              const hoy = hoyLocal();
+              setDesde(hoy);
+              setHasta(hoy);
+              setPagina(1);
+            }}
+          >
+            Hoy
+          </Button>
           {(desde || hasta || soloSinAsociar) && (
             <Button
               type="button"
@@ -174,6 +189,15 @@ export function BiometricoMarcacionesPanel() {
           )}
         </div>
 
+        {datos && !datos.nombresDisponibles && datos.items.length > 0 && (
+          <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+            <AlertDescription className="text-xs">
+              No se pudieron leer los nombres del biométrico en este momento; se muestra solo el ID
+              de cada usuario.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertDescription className="text-xs">{error}</AlertDescription>
@@ -188,7 +212,11 @@ export function BiometricoMarcacionesPanel() {
           <EmptyState
             icon={Clock}
             title="No hay marcaciones con esos filtros"
-            description="Prueba con otro rango de fechas, o quita el filtro de sin asociar."
+            description={
+              datos.ultimaMarcacion
+                ? `Prueba con otro rango o quita los filtros. La última marcación guardada es del ${formatoHoraReloj(datos.ultimaMarcacion)}: si es anterior al día que buscas, aún no han llegado las de ese día (la sincronización corre cada minuto).`
+                : "Todavía no se ha guardado ninguna marcación. Revisa la vista Sincronizaciones."
+            }
           />
         ) : (
           datos && (
@@ -197,8 +225,8 @@ export function BiometricoMarcacionesPanel() {
                 <TableHeader className="bg-slate-100/80">
                   <TableRow className="hover:bg-slate-100/80">
                     <TableHead className={TH}>Hora del reloj</TableHead>
-                    <TableHead className={TH}>Empleado</TableHead>
-                    <TableHead className={TH}>ID en el biométrico</TableHead>
+                    <TableHead className={TH}>Usuario del biométrico</TableHead>
+                    <TableHead className={TH}>Empleado en RicoSoft</TableHead>
                     <TableHead className={TH}>Tipo</TableHead>
                     <TableHead className={TH}>Dispositivo</TableHead>
                     <TableHead className={TH}>Fuente</TableHead>
@@ -209,6 +237,17 @@ export function BiometricoMarcacionesPanel() {
                     <TableRow key={m.id}>
                       <TableCell className="px-4 py-3 text-xs text-slate-700">
                         {formatoHoraReloj(m.horaMarcacion)}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {m.usuarioBiometrico?.nombre ?? "Sin nombre en el biométrico"}
+                        </span>
+                        <span className="block text-[11px] text-slate-500">
+                          ID {m.externalUserId}
+                          {m.usuarioBiometrico?.codigo
+                            ? ` · Código ${m.usuarioBiometrico.codigo}`
+                            : ""}
+                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3 text-xs">
                         {m.empleado ? (
@@ -223,9 +262,6 @@ export function BiometricoMarcacionesPanel() {
                             Sin asociar
                           </Badge>
                         )}
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-xs text-slate-600">
-                        {m.externalUserId}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-xs text-slate-600">
                         {TIPO[m.tipoMarcacion] ?? m.tipoMarcacion}

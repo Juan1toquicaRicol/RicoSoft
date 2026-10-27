@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Prisma, EmpleadoBiometrico } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { usuariosDelBiometrico, type UsuarioBiometrico } from "./biometrico-usuarios.service";
 
 /**
  * API administrativa de EmpleadoBiometrico (Fase 6): el vínculo explícito
@@ -21,8 +22,13 @@ type AsociacionConRelaciones = EmpleadoBiometrico & {
   empleado: { id: string; nombres: string; apellidos: string; documento: string } | null;
 };
 
-function serializarAsociacion(a: AsociacionConRelaciones) {
+function serializarAsociacion(
+  a: AsociacionConRelaciones,
+  usuarios?: Map<string, UsuarioBiometrico>,
+) {
+  const usuario = usuarios?.get(a.externalUserId);
   return {
+    usuarioBiometrico: usuario ? { nombre: usuario.nombre, codigo: usuario.codigo } : null,
     id: a.id,
     fuenteId: a.fuenteId,
     proveedor: a.proveedor,
@@ -83,8 +89,10 @@ export async function listarAsociacionesBiometricas(req: AuthenticatedRequest, r
       prisma.empleadoBiometrico.count({ where }),
     ]);
 
+    const usuarios = await usuariosDelBiometrico(tenantId);
+
     return res.json({
-      items: items.map(serializarAsociacion),
+      items: items.map((a) => serializarAsociacion(a, usuarios.mapa)),
       page,
       limit,
       total,

@@ -46,10 +46,18 @@ interface EmpleadoOption {
   documento: string;
 }
 
+interface UsuarioBiometrico {
+  userid: string;
+  codigo: string | null;
+  nombre: string | null;
+  asociado: boolean;
+}
+
 interface AsociacionBiometrica {
   id: string;
   fuenteId: string;
   externalUserId: string;
+  usuarioBiometrico?: { nombre: string | null; codigo: string | null } | null;
   activo: boolean;
   empleado: EmpleadoOption | null;
 }
@@ -87,6 +95,7 @@ export function BiometricoFuentesPanel({
   const [cargandoAsociaciones, setCargandoAsociaciones] = useState(false);
   const [errorAsociaciones, setErrorAsociaciones] = useState("");
   const [externalUserId, setExternalUserId] = useState("");
+  const [usuariosBiometrico, setUsuariosBiometrico] = useState<UsuarioBiometrico[]>([]);
   const [empleadoId, setEmpleadoId] = useState("");
   const [creandoAsociacion, setCreandoAsociacion] = useState(false);
   const [asociacionOcupadaId, setAsociacionOcupadaId] = useState<string | null>(null);
@@ -154,6 +163,26 @@ export function BiometricoFuentesPanel({
   useEffect(() => {
     void cargarFuentes();
   }, [cargarFuentes]);
+
+  // Usuarios registrados en el biométrico (para elegir el ID sin tener que teclearlo).
+  // Si no se pueden leer, el campo sigue funcionando como texto libre.
+  useEffect(() => {
+    if (!puedeAsociar || !fuenteSeleccionadaId) {
+      setUsuariosBiometrico([]);
+      return;
+    }
+    let activo = true;
+    fetchAuth("/gestion-humana/biometrico/usuarios")
+      .then((r: { items?: UsuarioBiometrico[] }) => {
+        if (activo) setUsuariosBiometrico(Array.isArray(r?.items) ? r.items : []);
+      })
+      .catch(() => {
+        if (activo) setUsuariosBiometrico([]);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [puedeAsociar, fuenteSeleccionadaId, asociaciones.length]);
 
   const crearFuente = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -463,8 +492,24 @@ export function BiometricoFuentesPanel({
                       onChange={(event) => setExternalUserId(event.target.value)}
                       placeholder="Ej. 14"
                       className="h-9 border-slate-300 text-xs"
+                      list="crosschex-usuarios"
                       required
                     />
+                    <datalist id="crosschex-usuarios">
+                      {usuariosBiometrico
+                        .filter((u) => !u.asociado)
+                        .map((u) => (
+                          <option key={u.userid} value={u.userid}>
+                            {u.nombre ?? "Sin nombre"}
+                            {u.codigo ? ` · ${u.codigo}` : ""}
+                          </option>
+                        ))}
+                    </datalist>
+                    <p className="text-[11px] text-slate-500">
+                      {usuariosBiometrico.length > 0
+                        ? "Elige un usuario del biométrico que aún no esté asociado, o escribe su ID."
+                        : "Escribe el ID tal como aparece en CrossChex."}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">
@@ -545,8 +590,8 @@ export function BiometricoFuentesPanel({
                   <Table>
                     <TableHeader className="bg-slate-100/80">
                       <TableRow className="hover:bg-slate-100/80">
-                        <TableHead className={TH}>ID CrossChex</TableHead>
-                        <TableHead className={TH}>Colaborador</TableHead>
+                        <TableHead className={TH}>Usuario del biométrico</TableHead>
+                        <TableHead className={TH}>Colaborador en RicoSoft</TableHead>
                         <TableHead className={TH}>Estado</TableHead>
                         {puedeAsociar && (
                           <TableHead className={`${TH} text-right`}>Activa</TableHead>
@@ -559,8 +604,14 @@ export function BiometricoFuentesPanel({
                           key={asociacion.id}
                           className={asociacion.activo ? "" : "opacity-70"}
                         >
-                          <TableCell className="px-4 py-3 text-xs font-semibold text-slate-900">
-                            {asociacion.externalUserId}
+                          <TableCell className="px-4 py-3 text-xs">
+                            <span className="font-semibold text-slate-900">
+                              {asociacion.usuarioBiometrico?.nombre ??
+                                "Sin nombre en el biométrico"}
+                            </span>
+                            <span className="block text-[11px] text-slate-500">
+                              ID {asociacion.externalUserId}
+                            </span>
                           </TableCell>
                           <TableCell className="px-4 py-3 text-xs text-slate-700">
                             {asociacion.empleado

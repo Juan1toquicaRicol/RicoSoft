@@ -4,14 +4,21 @@ import type { Response } from "express";
 
 const findManyMock = vi.fn();
 const countMock = vi.fn();
+const findFirstMock = vi.fn();
+const usuariosMock = vi.fn();
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
     marcacionBiometrica: {
       findMany: (...args: unknown[]) => findManyMock(...args),
       count: (...args: unknown[]) => countMock(...args),
+      findFirst: (...args: unknown[]) => findFirstMock(...args),
     },
   },
+}));
+
+vi.mock("./biometrico-usuarios.service", () => ({
+  usuariosDelBiometrico: (...args: unknown[]) => usuariosMock(...args),
 }));
 
 function fakeRes() {
@@ -65,6 +72,10 @@ describe("biometrico-marcaciones.controller", () => {
     countMock.mockReset();
     findManyMock.mockResolvedValue([MARCACION_FAKE]);
     countMock.mockResolvedValue(1);
+    findFirstMock.mockReset();
+    findFirstMock.mockResolvedValue({ horaMarcacion: new Date("2026-09-07T08:00:00Z") });
+    usuariosMock.mockReset();
+    usuariosMock.mockResolvedValue({ mapa: new Map(), disponible: false, incompleto: false });
   });
 
   it("siempre filtra por el tenant autenticado", async () => {
@@ -194,5 +205,73 @@ describe("biometrico-marcaciones.controller", () => {
     const where = findManyMock.mock.calls[0][0].where;
     expect(where.fecha.gte).toBeInstanceOf(Date);
     expect(where.fecha.lte).toBeInstanceOf(Date);
+  });
+
+  it("incluye el usuario registrado en el biométrico (nombre en CrossChex), distinto del empleado de RicoSoft", async () => {
+    usuariosMock.mockResolvedValue({
+      mapa: new Map([["33", { userid: "33", codigo: "A-33", nombre: "Juan P. (biométrico)" }]]),
+      disponible: true,
+      incompleto: false,
+    });
+    const { listarMarcacionesBiometricas } = await import("./biometrico-marcaciones.controller");
+    const res = fakeRes();
+    await listarMarcacionesBiometricas(fakeReq(), res);
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.items[0].usuarioBiometrico).toEqual({
+      nombre: "Juan P. (biométrico)",
+      codigo: "A-33",
+    });
+    expect(body.items[0].empleado).toEqual({
+      id: "empleado-1",
+      nombres: "Juan",
+      apellidos: "Pérez",
+    });
+    expect(body.nombresDisponibles).toBe(true);
+    expect(usuariosMock).toHaveBeenCalledWith("tenant-A");
+  });
+
+  it("si el biométrico no está disponible, la marcación se muestra igual con usuarioBiometrico null", async () => {
+    const { listarMarcacionesBiometricas } = await import("./biometrico-marcaciones.controller");
+    const res = fakeRes();
+    await listarMarcacionesBiometricas(fakeReq(), res);
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].usuarioBiometrico).toBeNull();
+    expect(body.nombresDisponibles).toBe(false);
+  });
+
+  it("devuelve la última marcación guardada del tenant SIN aplicar los filtros del listado", async () => {
+    findManyMock.mockResolvedValue([]);
+    countMock.mockResolvedValue(0);
+    const { listarMarcacionesBiometricas } = await import("./biometrico-marcaciones.controller");
+    const res = fakeRes();
+    await listarMarcacionesBiometricas(
+      fakeReq({ query: { fechaDesde: "2026-10-27", fechaHasta: "2026-10-27" } }),
+      res,
+    );
+
+    expect(findFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId: "tenant-A" },
+        orderBy: { horaMarcacion: "desc" },
+      }),
+    );
+    expect(res.json.mock.calls[0][0].ultimaMarcacion).toEqual(new Date("2026-09-07T08:00:00Z"));
+  });
+
+  it("un filtro de un solo día usa gte y lte sobre la misma medianoche UTC (incluye el día completo)", async () => {
+    const { listarMarcacionesBiometricas } = await import("./biometrico-marcaciones.controller");
+    const res = fakeRes();
+    await listarMarcacionesBiometricas(
+      fakeReq({ query: { fechaDesde: "2026-10-27", fechaHasta: "2026-10-27" } }),
+      res,
+    );
+
+    const where = findManyMock.mock.calls[0][0].where;
+    expect(where.fecha.gte.toISOString()).toBe("2026-10-27T00:00:00.000Z");
+    expect(where.fecha.lte.toISOString()).toBe("2026-10-27T00:00:00.000Z");
+    expect(where.tenantId).toBe("tenant-A");
   });
 });

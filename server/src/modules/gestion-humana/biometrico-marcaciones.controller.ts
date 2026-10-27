@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Prisma, MarcacionBiometrica } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { usuariosDelBiometrico, type UsuarioBiometrico } from "./biometrico-usuarios.service";
 
 /**
  * Consulta de solo lectura de MarcacionBiometrica (Fase 6). Nunca hay
@@ -23,12 +24,15 @@ type MarcacionConRelaciones = MarcacionBiometrica & {
   fuente: { id: string; nombre: string };
 };
 
-function serializarMarcacion(m: MarcacionConRelaciones) {
+function serializarMarcacion(m: MarcacionConRelaciones, usuarios: Map<string, UsuarioBiometrico>) {
+  const usuario = usuarios.get(m.externalUserId);
   return {
     id: m.id,
     fecha: m.fecha,
     horaMarcacion: m.horaMarcacion,
     externalUserId: m.externalUserId,
+    // Usuario registrado en el biométrico (nombre en CrossChex), distinto del empleado de RicoSoft.
+    usuarioBiometrico: usuario ? { nombre: usuario.nombre, codigo: usuario.codigo } : null,
     externalLogId: m.externalLogId,
     checkType: m.checkType,
     tipoMarcacion: m.tipoMarcacion,
@@ -101,7 +105,7 @@ export async function listarMarcacionesBiometricas(req: AuthenticatedRequest, re
       where.fecha = filtroFecha;
     }
 
-    const [items, total] = await Promise.all([
+    const [items, total, ultima, usuarios] = await Promise.all([
       prisma.marcacionBiometrica.findMany({
         where,
         include: INCLUDE_RELACIONES,
@@ -110,10 +114,20 @@ export async function listarMarcacionesBiometricas(req: AuthenticatedRequest, re
         take: limit,
       }),
       prisma.marcacionBiometrica.count({ where }),
+      // Última marcación guardada del tenant (sin filtros): permite ver de un vistazo
+      // qué tan al día está la información cuando un filtro no devuelve resultados.
+      prisma.marcacionBiometrica.findFirst({
+        where: { tenantId },
+        orderBy: { horaMarcacion: "desc" },
+        select: { horaMarcacion: true },
+      }),
+      usuariosDelBiometrico(tenantId),
     ]);
 
     return res.json({
-      items: items.map(serializarMarcacion),
+      items: items.map((m) => serializarMarcacion(m, usuarios.mapa)),
+      ultimaMarcacion: ultima?.horaMarcacion ?? null,
+      nombresDisponibles: usuarios.disponible,
       page,
       limit,
       total,
