@@ -5,6 +5,9 @@ export interface SessionUser {
   tenantId: string;
   tenantNombre: string;
   nombre: string;
+  /** null/ausentes en cuentas antiguas aún sin completar (nombre sigue siendo el nombre completo). */
+  nombres?: string | null;
+  apellidos?: string | null;
   email: string;
   telefono: string | null;
   rol: string | null;

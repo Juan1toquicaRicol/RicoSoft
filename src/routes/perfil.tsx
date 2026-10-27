@@ -25,7 +25,8 @@ export const Route = createFileRoute("/perfil")({
 function PerfilPage() {
   const { user, refresh } = useSession();
 
-  const [nombre, setNombre] = useState(user?.nombre ?? "");
+  const [nombres, setNombres] = useState(user?.nombres ?? "");
+  const [apellidos, setApellidos] = useState(user?.apellidos ?? "");
   const [telefono, setTelefono] = useState(user?.telefono ?? "");
   const [guardando, setGuardando] = useState(false);
   const [errorPerfil, setErrorPerfil] = useState("");
@@ -40,12 +41,22 @@ function PerfilPage() {
 
   if (!user) return null;
 
+  // Cuentas antiguas: solo existe el nombre completo; separarlo es opcional y lo hace la persona.
+  const cuentaCompletada = !!user.nombres && !!user.apellidos;
+
   const handleGuardarPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorPerfil("");
     setOkPerfil(false);
-    if (!nombre.trim()) {
-      setErrorPerfil("El nombre es obligatorio.");
+    const nombresLimpios = nombres.trim();
+    const apellidosLimpios = apellidos.trim();
+    if (!!nombresLimpios !== !!apellidosLimpios) {
+      setErrorPerfil("Completa los nombres y los apellidos, o deja ambos vacíos.");
+      return;
+    }
+    // Cuenta antigua con ambos campos vacíos: se conserva el nombre completo actual sin separarlo.
+    if (!nombresLimpios && cuentaCompletada) {
+      setErrorPerfil("Los nombres y los apellidos son obligatorios.");
       return;
     }
     setGuardando(true);
@@ -55,7 +66,12 @@ function PerfilPage() {
       // petición, por lo que no es posible editar a otro usuario.
       await fetchAuth("/usuarios/me", {
         method: "PATCH",
-        body: JSON.stringify({ nombre: nombre.trim(), telefono: telefono.trim() || null }),
+        body: JSON.stringify({
+          ...(nombresLimpios
+            ? { nombres: nombresLimpios, apellidos: apellidosLimpios }
+            : { nombre: user.nombre }),
+          telefono: telefono.trim() || null,
+        }),
       });
       await refresh();
       setOkPerfil(true);
@@ -143,17 +159,35 @@ function PerfilPage() {
           <form onSubmit={handleGuardarPerfil} className="p-6 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="nombre" className="text-xs font-semibold text-slate-700">
-                  Nombre completo *
+                <Label htmlFor="nombres" className="text-xs font-semibold text-slate-700">
+                  Nombres{cuentaCompletada ? " *" : ""}
                 </Label>
                 <Input
-                  id="nombre"
-                  required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
+                  id="nombres"
+                  required={cuentaCompletada}
+                  value={nombres}
+                  onChange={(e) => setNombres(e.target.value)}
                   className="h-9 text-sm border-slate-300"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="apellidos" className="text-xs font-semibold text-slate-700">
+                  Apellidos{cuentaCompletada ? " *" : ""}
+                </Label>
+                <Input
+                  id="apellidos"
+                  required={cuentaCompletada}
+                  value={apellidos}
+                  onChange={(e) => setApellidos(e.target.value)}
+                  className="h-9 text-sm border-slate-300"
+                />
+              </div>
+              {!cuentaCompletada && (
+                <p className="text-[11px] text-slate-500 sm:col-span-2">
+                  Tu nombre registrado es «{user.nombre}». Puedes completar nombres y apellidos por
+                  separado (opcional); mientras tanto se conserva tal como está.
+                </p>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="telefono" className="text-xs font-semibold text-slate-700">
                   Teléfono

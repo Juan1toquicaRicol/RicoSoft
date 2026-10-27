@@ -146,7 +146,8 @@ function UsuariosConfigPage() {
   const [usuarioAEliminar, setUsuarioAEliminar] = useState<UsuarioApi | null>(null);
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({
-    nombre: "",
+    nombres: "",
+    apellidos: "",
     email: "",
     password: "",
     departamentoId: "",
@@ -547,7 +548,14 @@ function UsuariosConfigPage() {
   };
 
   const abrirCreacion = () => {
-    setNuevoUsuario({ nombre: "", email: "", password: "", departamentoId: "", rolId: "" });
+    setNuevoUsuario({
+      nombres: "",
+      apellidos: "",
+      email: "",
+      password: "",
+      departamentoId: "",
+      rolId: "",
+    });
     setErrorNuevoUsuario("");
     setCreandoUsuario(true);
   };
@@ -556,8 +564,8 @@ function UsuariosConfigPage() {
     e.preventDefault();
     setErrorNuevoUsuario("");
 
-    if (!nuevoUsuario.nombre.trim()) {
-      setErrorNuevoUsuario("El nombre es obligatorio.");
+    if (!nuevoUsuario.nombres.trim() || !nuevoUsuario.apellidos.trim()) {
+      setErrorNuevoUsuario("Los nombres y los apellidos son obligatorios.");
       return;
     }
     if (!esDominioCorporativoValido(nuevoUsuario.email)) {
@@ -575,14 +583,17 @@ function UsuariosConfigPage() {
       await fetchAuth("/usuarios", {
         method: "POST",
         body: JSON.stringify({
-          nombre: nuevoUsuario.nombre.trim(),
+          nombres: nuevoUsuario.nombres.trim(),
+          apellidos: nuevoUsuario.apellidos.trim(),
           email: nuevoUsuario.email.trim(),
           password: nuevoUsuario.password,
           departamentoId: nuevoUsuario.departamentoId || null,
           rolId: nuevoUsuario.rolId || null,
         }),
       });
-      toast.success(`Usuario "${nuevoUsuario.nombre.trim()}" creado correctamente.`);
+      toast.success(
+        `Usuario "${nuevoUsuario.nombres.trim()} ${nuevoUsuario.apellidos.trim()}" creado correctamente.`,
+      );
       setCreandoUsuario(false);
       fetchUsuarios();
     } catch (err: unknown) {
@@ -1162,14 +1173,25 @@ function UsuariosConfigPage() {
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="nuevo-usuario-nombre">Nombre completo *</Label>
-              <Input
-                id="nuevo-usuario-nombre"
-                required
-                value={nuevoUsuario.nombre}
-                onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="nuevo-usuario-nombres">Nombres *</Label>
+                <Input
+                  id="nuevo-usuario-nombres"
+                  required
+                  value={nuevoUsuario.nombres}
+                  onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombres: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nuevo-usuario-apellidos">Apellidos *</Label>
+                <Input
+                  id="nuevo-usuario-apellidos"
+                  required
+                  value={nuevoUsuario.apellidos}
+                  onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, apellidos: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

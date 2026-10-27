@@ -117,7 +117,8 @@ function Login() {
 
   // Estados del formulario y conmutador
   const [isRegistering, setIsRegistering] = useState(false);
-  const [nombre, setNombre] = useState("");
+  const [nombres, setNombres] = useState("");
+  const [apellidos, setApellidos] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [departamentoId, setDepartamentoId] = useState("");
@@ -249,14 +250,15 @@ function Login() {
         // Enviar registro al Backend
         await fetchApi("/auth/register", {
           method: "POST",
-          body: JSON.stringify({ nombre, email, password, departamentoId }),
+          body: JSON.stringify({ nombres, apellidos, email, password, departamentoId }),
         });
 
         setSuccessMessage(
           "Cuenta registrada. Queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
         );
         setIsRegistering(false);
-        setNombre("");
+        setNombres("");
+        setApellidos("");
         setPassword("");
         setDepartamentoId("");
       } catch (err: unknown) {
@@ -432,23 +434,36 @@ function Login() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Campo Nombre (Solo visible en Registro) */}
             {isRegistering && (
-              <CampoContorno
-                id="nombre"
-                label="Nombre completo"
-                adorno={
-                  <User className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                }
-              >
-                <Input
-                  id="nombre"
-                  type="text"
-                  required={isRegistering}
-                  placeholder="Ej. Juan Pérez"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className={`${CLASE_CONTROL} pr-12`}
-                />
-              </CampoContorno>
+              <>
+                <CampoContorno
+                  id="nombres"
+                  label="Nombres"
+                  adorno={
+                    <User className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                  }
+                >
+                  <Input
+                    id="nombres"
+                    type="text"
+                    required={isRegistering}
+                    placeholder="Ej. Juan Carlos"
+                    value={nombres}
+                    onChange={(e) => setNombres(e.target.value)}
+                    className={`${CLASE_CONTROL} pr-12`}
+                  />
+                </CampoContorno>
+                <CampoContorno id="apellidos" label="Apellidos">
+                  <Input
+                    id="apellidos"
+                    type="text"
+                    required={isRegistering}
+                    placeholder="Ej. Pérez Gómez"
+                    value={apellidos}
+                    onChange={(e) => setApellidos(e.target.value)}
+                    className={CLASE_CONTROL}
+                  />
+                </CampoContorno>
+              </>
             )}
 
             {/* Email */}
