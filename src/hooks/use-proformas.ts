@@ -89,7 +89,7 @@ export interface CotizacionDetalle extends CotizacionBusqueda {
   }[];
 }
 
-/** Buscador de cotizaciones de origen (Siesa) por número visible. */
+/** Buscador de cotizaciones de origen por número visible. */
 export function useBusquedaCotizaciones() {
   const [loading, setLoading] = useState(false);
 

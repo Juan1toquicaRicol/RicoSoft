@@ -87,7 +87,7 @@ function Oportunidades() {
             </div>
             <p className="text-xs text-slate-500">
               Clientes recurrentes que dejaron de comprar y caídas fuertes en clientes top —
-              estimado a partir del histórico de compras (Siesa)
+              estimado a partir del histórico de compras
             </p>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">

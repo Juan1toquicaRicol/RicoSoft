@@ -243,7 +243,7 @@ export function PestanaFacturasSiesa() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Fecha emisión (Siesa)</p>
+                      <p className="text-slate-500">Fecha emisión</p>
                       <p className="font-semibold text-slate-800">
                         {facturaDetalle.fechaEmision
                           ? new Date(facturaDetalle.fechaEmision).toLocaleDateString("es-CO")

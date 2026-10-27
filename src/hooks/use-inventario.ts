@@ -85,7 +85,7 @@ export interface PronosticoDemanda {
   tendenciaFuerte?: PronosticoProducto[];
 }
 
-/** Pronóstico de demanda calculado en vivo sobre ventas reales por producto (Siesa). */
+/** Pronóstico de demanda calculado en vivo sobre ventas reales por producto. */
 export function usePronosticoDemanda() {
   const [pronostico, setPronostico] = useState<PronosticoDemanda>({ disponible: false });
   const [loading, setLoading] = useState(true);

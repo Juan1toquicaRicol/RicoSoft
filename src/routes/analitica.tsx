@@ -300,9 +300,7 @@ function AnaliticaResumen() {
                 ? formatCantidad(vendedoresVentas.resumenHoy.kilos, "KG")
                 : "—"}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Solo productos vendidos por kilo (Siesa)
-            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">Solo productos vendidos por kilo</p>
           </div>
           <div className="panel p-4 bg-white border-slate-200 shadow-2xs sm:col-span-2">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -329,9 +327,7 @@ function AnaliticaResumen() {
                 ? formatCantidad(vendedoresVentas.resumenMes.kilos, "KG")
                 : "—"}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Solo productos vendidos por kilo (Siesa)
-            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">Solo productos vendidos por kilo</p>
           </div>
         </div>
       )}
@@ -339,7 +335,7 @@ function AnaliticaResumen() {
       {ventas.disponible && (
         <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
           <h2 className="text-sm font-bold text-slate-900">Evolución de ventas</h2>
-          <p className="text-xs text-slate-500">Ventas netas mensuales (Siesa)</p>
+          <p className="text-xs text-slate-500">Ventas netas mensuales</p>
           <div className="mt-4 h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -484,7 +480,7 @@ function AnaliticaResumen() {
         <PanelColapsable
           className="mt-4"
           title="Ventas diarias por vendedor"
-          description={`Ranking por venta · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "mes actual"} (Siesa)${cargandoVendedores ? " · cargando…" : ""}`}
+          description={`Ranking por venta · ${ventas.periodoActual ? formatearRangoMes(ventas.periodoActual.anio, ventas.periodoActual.mes) : "mes actual"}${cargandoVendedores ? " · cargando…" : ""}`}
         >
           <div className="overflow-x-auto">
             <Table>
@@ -509,7 +505,7 @@ function AnaliticaResumen() {
                     Mes actual
                   </TableHead>
                   <TableHead className="text-right text-[11px] uppercase tracking-wider text-slate-600 font-bold">
-                    Documentos
+                    Ventas
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -537,7 +533,7 @@ function AnaliticaResumen() {
 
       <div className="mt-6 mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-          <Info className="h-3.5 w-3.5" /> Histórico de ventas (Siesa)
+          <Info className="h-3.5 w-3.5" /> Histórico de ventas
         </div>
         {drillDown && (
           <button

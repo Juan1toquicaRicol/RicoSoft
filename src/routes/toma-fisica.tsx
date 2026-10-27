@@ -90,8 +90,8 @@ function DialogoNuevaToma({
         <DialogHeader>
           <DialogTitle>Nueva toma física</DialogTitle>
           <DialogDescription>
-            Se toma un snapshot en vivo de la existencia real de la bodega elegida (Siesa) — el
-            conteo físico se registra después, línea por línea.
+            Se toma un snapshot en vivo de la existencia real de la bodega elegida — el conteo
+            físico se registra después, línea por línea.
           </DialogDescription>
         </DialogHeader>
         {!loading && !bodegas.disponible && (

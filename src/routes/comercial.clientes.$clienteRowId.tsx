@@ -199,8 +199,8 @@ function PestanaCredito({ clienteRowId }: { clienteRowId: number }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-400">
-        Snapshot de análisis crediticio (Siesa) — actualizado {formatFechaHora(data.actualizadoEn)}.
-        No reemplaza la cartera en vivo (pestaña Cartera).
+        Snapshot de análisis crediticio — actualizado {formatFechaHora(data.actualizadoEn)}. No
+        reemplaza la cartera en vivo (pestaña Cartera).
       </p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
