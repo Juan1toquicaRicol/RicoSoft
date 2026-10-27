@@ -10,6 +10,7 @@ import {
 } from "../../lib/permissions";
 import { esDominioCorporativoValido, obtenerTenantPorCorreo } from "../../lib/dominios";
 import { validarPasswordSegura } from "../../lib/password";
+import { resolverNombreUsuario } from "../../lib/nombre-persona";
 import { whereAlcance } from "../../lib/alcance";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -39,12 +40,20 @@ export class AuthError extends Error {
 }
 
 export const registerUserService = async (data: {
-  nombre: string;
+  nombre?: string;
+  nombres?: string;
+  apellidos?: string;
   email: string;
   password: string;
   departamentoId: string;
 }) => {
-  const { nombre, email, password, departamentoId } = data;
+  const { email, password, departamentoId } = data;
+
+  // nombres + apellidos (o solo `nombre`): `nombre` se deriva de los dos; ver lib/nombre-persona.ts.
+  const datosNombre = resolverNombreUsuario(data);
+  if (!datosNombre) {
+    throw new AuthError("El nombre es obligatorio.");
+  }
 
   // Validar el dominio del correo. esDominioCorporativoValido es solo un
   // filtro rápido de formato ("¿es un dominio corporativo reconocido en
@@ -117,7 +126,7 @@ export const registerUserService = async (data: {
   // permisos.
   const nuevoUsuario = await prisma.user.create({
     data: {
-      nombre,
+      ...datosNombre,
       email: emailLimpio,
       passwordHash: hashedPassword,
       tenantId: tenant.id,

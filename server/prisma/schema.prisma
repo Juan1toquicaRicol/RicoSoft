@@ -96,7 +96,12 @@ model User {
   tenantId                         String                     @db.UniqueIdentifier
   email                            String                     @unique @db.VarChar(255)
   passwordHash                     String                     @db.Text
+  /// Nombre completo (compatibilidad): se deriva de nombres + apellidos cuando
+  /// ambos existen; en cuentas antiguas es el único dato y no se separa solo.
   nombre                           String                     @db.VarChar(255)
+  /// Opcionales: NULL = cuenta pendiente de completar. Ver lib/nombre-persona.ts.
+  nombres                          String?                    @db.VarChar(255)
+  apellidos                        String?                    @db.VarChar(255)
   telefono                         String?                    @db.VarChar(50)
   rol                              String?                    @default("COLABORADOR") @db.VarChar(50)
   createdAt                        DateTime                   @default(now())

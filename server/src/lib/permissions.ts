@@ -221,6 +221,9 @@ export interface SessionUser {
    * "Estás en: X" en el menú principal, ver switchTenantService. */
   tenantNombre: string;
   nombre: string;
+  /** null en cuentas antiguas aún sin completar (ver lib/nombre-persona.ts). */
+  nombres: string | null;
+  apellidos: string | null;
   email: string;
   telefono: string | null;
   rol: string | null;
@@ -349,6 +352,8 @@ export async function loadSessionUser(
       tenantId,
       tenantNombre: membresia.tenant.nombre,
       nombre: user.nombre,
+      nombres: user.nombres,
+      apellidos: user.apellidos,
       email: user.email,
       telefono: user.telefono,
       rol: membresia.rolRel?.nombre ?? null,
@@ -369,6 +374,8 @@ export async function loadSessionUser(
     tenantId: user.tenantId,
     tenantNombre: user.tenant.nombre,
     nombre: user.nombre,
+    nombres: user.nombres,
+    apellidos: user.apellidos,
     email: user.email,
     telefono: user.telefono,
     rol: user.rolRel?.nombre ?? user.rol,

@@ -12,30 +12,70 @@ const booleanoObligatorio = (mensaje: string) => ({
   invalid_type_error: mensaje,
 });
 
-export const crearUsuarioSchema = z.object({
-  nombre: z
-    .string(textoObligatorio("El nombre es obligatorio."))
+/**
+ * Nombre de la cuenta: `nombres` + `apellidos` (columnas independientes) o,
+ * por compatibilidad con clientes antiguos, solo `nombre` (nombre completo).
+ * Si llega uno de los dos del par, deben venir ambos.
+ */
+export const camposNombreUsuario = {
+  nombre: z.string(textoObligatorio("El nombre es obligatorio.")).trim().optional(),
+  nombres: z
+    .string(textoObligatorio("Los nombres son obligatorios."))
     .trim()
-    .min(1, "El nombre es obligatorio."),
-  email: z
-    .string(textoObligatorio("El correo es obligatorio."))
+    .max(120, "Los nombres no pueden superar 120 caracteres.")
+    .optional(),
+  apellidos: z
+    .string(textoObligatorio("Los apellidos son obligatorios."))
     .trim()
-    .min(1, "El correo es obligatorio."),
-  password: z
-    .string(textoObligatorio("La contraseña es obligatoria."))
-    .min(1, "La contraseña es obligatoria."),
-  departamentoId: z.string().nullish(),
-  rolId: z.string().nullish(),
-});
+    .max(120, "Los apellidos no pueden superar 120 caracteres.")
+    .optional(),
+};
 
-export const actualizarPerfilPropioSchema = z.object({
-  nombre: z
-    .string(textoObligatorio("El nombre es obligatorio."))
-    .trim()
-    .min(1, "El nombre es obligatorio."),
-  // El formato del teléfono (si viene) se valida en el controlador, no aquí.
-  telefono: z.string().nullish(),
-});
+export function validarNombreUsuario(
+  datos: { nombre?: string; nombres?: string; apellidos?: string },
+  ctx: z.RefinementCtx,
+) {
+  const nombres = datos.nombres?.trim() ?? "";
+  const apellidos = datos.apellidos?.trim() ?? "";
+  if (nombres || apellidos) {
+    if (!nombres) {
+      ctx.addIssue({ code: "custom", path: ["nombres"], message: "Los nombres son obligatorios." });
+    } else if (!apellidos) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["apellidos"],
+        message: "Los apellidos son obligatorios.",
+      });
+    }
+    return;
+  }
+  if (!datos.nombre?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["nombres"], message: "El nombre es obligatorio." });
+  }
+}
+
+export const crearUsuarioSchema = z
+  .object({
+    ...camposNombreUsuario,
+    email: z
+      .string(textoObligatorio("El correo es obligatorio."))
+      .trim()
+      .min(1, "El correo es obligatorio."),
+    password: z
+      .string(textoObligatorio("La contraseña es obligatoria."))
+      .min(1, "La contraseña es obligatoria."),
+    departamentoId: z.string().nullish(),
+    rolId: z.string().nullish(),
+  })
+  .superRefine(validarNombreUsuario);
+
+export const actualizarPerfilPropioSchema = z
+  .object({
+    ...camposNombreUsuario,
+    // El formato del teléfono (si viene) se valida en el controlador, no aquí.
+    telefono: z.string().nullish(),
+  })
+  .superRefine(validarNombreUsuario);
 
 export const cambiarPasswordPropioSchema = z.object({
   passwordActual: z

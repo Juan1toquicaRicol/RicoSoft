@@ -36,9 +36,16 @@ export const registerController = async (req: Request, res: Response) => {
   try {
     // La forma del body (campos presentes, tipo string) ya la valida el
     // middleware validarBody(registerSchema) en la ruta.
-    const { nombre, email, password, departamentoId } = req.body;
+    const { nombre, nombres, apellidos, email, password, departamentoId } = req.body;
 
-    const nuevoUsuario = await registerUserService({ nombre, email, password, departamentoId });
+    const nuevoUsuario = await registerUserService({
+      nombre,
+      nombres,
+      apellidos,
+      email,
+      password,
+      departamentoId,
+    });
 
     return res.status(201).json({
       message:

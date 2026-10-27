@@ -7,6 +7,7 @@ import { whereAlcance } from "../../lib/alcance";
 import { validarPasswordSegura } from "../../lib/password";
 import { esDominioCorporativoValido } from "../../lib/dominios";
 import { parseRolPermisos, primerPermisoQueExcedeAlActor } from "../../lib/permissions";
+import { datosActualizacionNombre, resolverNombreUsuario } from "../../lib/nombre-persona";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -22,17 +23,33 @@ export const actualizarPerfilPropio = async (req: AuthenticatedRequest, res: Res
   try {
     const userId = req.user!.id;
     // Forma del body ya validada por validarBody(actualizarPerfilPropioSchema).
-    const { nombre, telefono } = req.body;
+    const { nombre, nombres, apellidos, telefono } = req.body;
 
     const telefonoLimpio = typeof telefono === "string" ? telefono.trim() : "";
     if (telefonoLimpio && !/^[0-9+()\-\s]{6,20}$/.test(telefonoLimpio)) {
       return res.status(400).json({ message: "El teléfono no tiene un formato válido." });
     }
 
+    // nombres + apellidos (o solo `nombre` de un cliente antiguo): ver lib/nombre-persona.ts.
+    const datosNombre = datosActualizacionNombre(
+      { nombre, nombres, apellidos },
+      { nombre: req.user!.nombre },
+    );
+    if (!datosNombre) {
+      return res.status(400).json({ message: "El nombre es obligatorio." });
+    }
+
     const actualizado = await prisma.user.update({
       where: { id: userId },
-      data: { nombre: nombre.trim(), telefono: telefonoLimpio || null },
-      select: { id: true, nombre: true, email: true, telefono: true },
+      data: { ...datosNombre, telefono: telefonoLimpio || null },
+      select: {
+        id: true,
+        nombre: true,
+        nombres: true,
+        apellidos: true,
+        email: true,
+        telefono: true,
+      },
     });
 
     await prisma.auditoria.create({
@@ -170,6 +187,8 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
         select: {
           id: true,
           nombre: true,
+          nombres: true,
+          apellidos: true,
           email: true,
           rol: true,
           rolId: true,
@@ -203,6 +222,8 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
             select: {
               id: true,
               nombre: true,
+              nombres: true,
+              apellidos: true,
               email: true,
               activo: true,
               createdAt: true,
@@ -219,6 +240,8 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
     const filasNativas = nativos.map((u) => ({
       id: u.id,
       nombre: u.nombre,
+      nombres: u.nombres,
+      apellidos: u.apellidos,
       email: u.email,
       rol: u.rol,
       rolId: u.rolId,
@@ -236,6 +259,8 @@ export const listarUsuarios = async (req: AuthenticatedRequest, res: Response) =
     const filasMembresia = membresias.map((m) => ({
       id: m.user.id,
       nombre: m.user.nombre,
+      nombres: m.user.nombres,
+      apellidos: m.user.apellidos,
       email: m.user.email,
       rol: m.rolRel?.nombre ?? null,
       rolId: m.rolRel?.id ?? null,
@@ -278,7 +303,12 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const tenantId = req.user!.tenantId;
     // Forma del body ya validada por validarBody(crearUsuarioSchema).
-    const { nombre, email, password, departamentoId, rolId } = req.body;
+    const { nombre, nombres, apellidos, email, password, departamentoId, rolId } = req.body;
+
+    const datosNombre = resolverNombreUsuario({ nombre, nombres, apellidos });
+    if (!datosNombre) {
+      return res.status(400).json({ message: "El nombre es obligatorio." });
+    }
 
     if (!esDominioCorporativoValido(email)) {
       return res.status(400).json({
@@ -329,7 +359,7 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
     const nuevo = await prisma.user.create({
       data: {
         tenantId,
-        nombre: nombre.trim(),
+        ...datosNombre,
         email: emailLimpio,
         passwordHash,
         departamentoId: departamentoId || null,
@@ -339,6 +369,8 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
       select: {
         id: true,
         nombre: true,
+        nombres: true,
+        apellidos: true,
         email: true,
         activo: true,
         departamentoId: true,
@@ -360,6 +392,8 @@ export const crearUsuario = async (req: AuthenticatedRequest, res: Response) => 
         entidadId: nuevo.id,
         datosNuevos: JSON.stringify({
           nombre: nuevo.nombre,
+          nombres: nuevo.nombres,
+          apellidos: nuevo.apellidos,
           email: nuevo.email,
           departamentoId: nuevo.departamentoId,
           rolId: nuevo.rolId,
