@@ -409,7 +409,7 @@ export async function sincronizarCatalogosGenerales(
     enriquecidos: 0,
     desactivados: 0,
   };
-  const creadasEstaCorrida = new Set<string>();
+  const creadasEstaCorrida = new Map<string, string>();
   const ordenPorTipo = new Map<string, number>();
 
   for (const semilla of CATALOGOS_GENERALES) {
@@ -421,7 +421,7 @@ export async function sincronizarCatalogosGenerales(
     });
 
     if (!existente) {
-      await cliente.catalogoValor.create({
+      const creada = await cliente.catalogoValor.create({
         data: {
           tipo: semilla.tipo,
           clave: semilla.clave,
@@ -432,7 +432,7 @@ export async function sincronizarCatalogosGenerales(
           tenantId: null,
         },
       });
-      creadasEstaCorrida.add(`${semilla.tipo}/${semilla.clave}`);
+      creadasEstaCorrida.set(`${semilla.tipo}/${semilla.clave}`, creada.id);
       resultado.creados++;
       continue;
     }
@@ -457,7 +457,8 @@ export async function sincronizarCatalogosGenerales(
         ...(aliasesCombinados.length ? { aliases: aliasesCombinados } : {}),
       };
       const metadataSerializada = serializarMetadata(metadataCombinada);
-      if (metadataSerializada !== existente.metadata) cambios.metadata = metadataSerializada ?? undefined;
+      if (metadataSerializada !== existente.metadata)
+        cambios.metadata = metadataSerializada ?? undefined;
     }
     if (Object.keys(cambios).length > 0) {
       await cliente.catalogoValor.update({ where: { id: existente.id }, data: cambios });
@@ -466,9 +467,19 @@ export async function sincronizarCatalogosGenerales(
   }
 
   for (const par of DUPLICADOS_HEREDADOS) {
-    if (!creadasEstaCorrida.has(`${par.tipo}/${par.canonica}`)) continue;
+    const canonicaId = creadasEstaCorrida.get(`${par.tipo}/${par.canonica}`);
+    if (!canonicaId) continue;
+    // La canónica se excluye por id: con la collation por defecto de SQL Server
+    // (sin distinguir mayúsculas) `Transferencia` y `TRANSFERENCIA` son la misma
+    // clave y, sin esta exclusión, la sincronización apagaba la fila que acaba de crear.
     const { count } = await cliente.catalogoValor.updateMany({
-      where: { tipo: par.tipo, clave: par.heredada, tenantId: null, activo: true },
+      where: {
+        tipo: par.tipo,
+        clave: par.heredada,
+        tenantId: null,
+        activo: true,
+        id: { not: canonicaId },
+      },
       data: { activo: false },
     });
     resultado.desactivados += count;
