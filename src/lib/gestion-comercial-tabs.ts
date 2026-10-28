@@ -9,11 +9,9 @@ export interface DefinicionTabGestion {
   permisos?: string[];
 }
 
+/** Gestión Comercial solo muestra la pestaña de Proformas. */
 export const TABS_GESTION: DefinicionTabGestion[] = [
-  { value: "todos", label: "Todos" },
-  { value: "cotizacion", label: "Cotizaciones", permisos: [PERMISOS_SISTEMA.COTIZACIONES_VER] },
   { value: "proforma", label: "Proformas", permisos: [PERMISOS_SISTEMA.PROFORMAS_VER] },
-  { value: "pedido", label: "Pedidos", permisos: [PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER] },
 ];
 
 /** Valor de ?tab= en la URL -> pestaña interna (p. ej. /comercial/gestion?tab=pedidos). */
@@ -36,7 +34,7 @@ export function tabsVisibles(tienePermiso: (permiso: string) => boolean): Defini
   return TABS_GESTION.filter((t) => !t.permisos || t.permisos.every(tienePermiso));
 }
 
-/** Pestaña realmente activa: si la pedida no es visible para el usuario, "todos". */
+/** Pestaña realmente activa: si la pedida no es visible para el usuario, "proforma". */
 export function tabEfectiva(pedida: TabGestion, visibles: DefinicionTabGestion[]): TabGestion {
-  return visibles.some((t) => t.value === pedida) ? pedida : "todos";
+  return visibles.some((t) => t.value === pedida) ? pedida : "proforma";
 }

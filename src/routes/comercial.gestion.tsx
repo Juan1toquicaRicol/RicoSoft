@@ -22,7 +22,6 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 import { requireAnyPermisoGuard } from "@/lib/route-guards";
 import { useDocumentosComerciales, type DocumentoBandeja } from "@/hooks/use-comercial";
 import { NuevoDocumentoMenu } from "@/components/nuevo-documento-menu";
-import { SincronizarCotizacionesSiesa } from "@/components/sincronizar-cotizaciones-siesa-dialog";
 import {
   tabDesdeUrl,
   tabEfectiva,
@@ -37,11 +36,7 @@ import { hasPermission } from "@/lib/session";
 // (Cotizaciones, Proformas, Pedidos comerciales) — cada sección se filtra
 // aparte más abajo, tanto en las pestañas visibles como en lo que devuelve
 // el backend (ver documentos.controller.ts).
-const PERMISOS_SECCION_COMERCIAL = [
-  PERMISOS_SISTEMA.COTIZACIONES_VER,
-  PERMISOS_SISTEMA.PROFORMAS_VER,
-  PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_VER,
-];
+const PERMISOS_SECCION_COMERCIAL = [PERMISOS_SISTEMA.PROFORMAS_VER];
 
 export const Route = createFileRoute("/comercial/gestion")({
   beforeLoad: requireAnyPermisoGuard(PERMISOS_SECCION_COMERCIAL),
@@ -55,7 +50,7 @@ export const Route = createFileRoute("/comercial/gestion")({
       { title: "Gestión Comercial | RicoSoft" },
       {
         name: "description",
-        content: "Bandeja de Cotizaciones, Proformas y Pedidos comerciales.",
+        content: "Bandeja de Proformas.",
       },
     ],
   }),
@@ -219,18 +214,16 @@ function GestionComercial() {
   // requireAnyPermisoGuard) pero no ve las pestañas de Cotizaciones/Proformas
   const tabsVisibles = calcularTabsVisibles((permiso) => hasPermission(user, permiso));
 
-  const [tab, setTab] = useState<TabGestion>(tabDesdeUrl(tabUrl) ?? "todos");
-  // Cambia tras sincronizar con Siesa para recargar la bandeja (remonta BandejaDocumentos).
-  const [refresco, setRefresco] = useState(0);
+  const [tab, setTab] = useState<TabGestion>(tabDesdeUrl(tabUrl) ?? "proforma");
 
   // Si el tab activo deja de ser válido para este usuario (p. ej. un enlace
-  // ?tab=pedidos sin pedidos_comerciales.ver) se cae de vuelta a "todos".
+  // ?tab=pedidos sin pedidos_comerciales.ver) se cae de vuelta a "proforma".
   const tabEfectivo = tabEfectiva(tab, tabsVisibles);
 
   return (
     <AppShell
       title="Gestión Comercial"
-      description="Cotizaciones, Proformas y Pedidos comerciales en un solo lugar."
+      description="Proformas comerciales."
       actions={<NuevoDocumentoMenu />}
     >
       <div className="flex flex-wrap gap-1">
@@ -246,13 +239,7 @@ function GestionComercial() {
         ))}
       </div>
 
-      {tabEfectivo === "cotizacion" && (
-        <div className="mt-3 flex justify-end">
-          {/* Solo con cotizaciones.gestionar (el componente se oculta sin el permiso). */}
-          <SincronizarCotizacionesSiesa onSincronizado={() => setRefresco((n) => n + 1)} />
-        </div>
-      )}
-      <BandejaDocumentos key={`${tabEfectivo}-${refresco}`} tipo={tabEfectivo} />
+      <BandejaDocumentos key={tabEfectivo} tipo={tabEfectivo} />
     </AppShell>
   );
 }
