@@ -103,6 +103,11 @@ describe.skipIf(!RUN)("Tracking Marítimo V1 — Embarque/Buque/Contenedor (BD r
         trmPactada: 4000,
         items: [{ descripcion: "Ítem de prueba", cantidad: 10, valorUnitarioFob: 5 }],
       });
+    if (orden.status !== 201) {
+      throw new Error(
+        `No se pudo crear la orden fixture: ${orden.status} ${JSON.stringify(orden.body)}`,
+      );
+    }
     ordenAId = orden.body.id;
   });
 

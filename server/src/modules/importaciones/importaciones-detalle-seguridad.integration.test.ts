@@ -98,6 +98,11 @@ describe.skipIf(!RUN)("GET /importaciones/:id — detalle (BD real)", () => {
         trmPactada: 4000,
         items: [{ descripcion: "Ítem detalle", cantidad: 10, valorUnitarioFob: 5 }],
       });
+    if (ordenRes.status !== 201) {
+      throw new Error(
+        `No se pudo crear la orden fixture: ${ordenRes.status} ${JSON.stringify(ordenRes.body)}`,
+      );
+    }
     ordenAId = ordenRes.body.id;
   });
 
