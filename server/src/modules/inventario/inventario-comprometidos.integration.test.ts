@@ -89,6 +89,7 @@ describe.skipIf(!RUN)(
     let tokenRealSinPermiso: string;
     let tokenFake: string;
     let itemRowIdConComprometido: number;
+    const tenantIdsCreados: string[] = [];
 
     const login = async (email: string) => {
       const res = await request(app).post("/api/auth/login").send({ email, password: PASSWORD });
@@ -106,6 +107,7 @@ describe.skipIf(!RUN)(
         },
       });
       tenantTestId = tenantTest.id;
+      tenantIdsCreados.push(tenantTestId);
       const tenantFake = await prisma.tenant.create({
         data: {
           nombre: `Inv Comprometidos Fake ${sufijo}`,
@@ -114,6 +116,7 @@ describe.skipIf(!RUN)(
         },
       });
       tenantFakeId = tenantFake.id;
+      tenantIdsCreados.push(tenantFakeId);
 
       await prisma.user.create({
         data: {
@@ -168,7 +171,7 @@ describe.skipIf(!RUN)(
         select: { id: true },
       });
       const usuarioIds = usuariosPrueba.map((u) => u.id);
-      const tenantIds = [tenantTestId, tenantFakeId].filter((id): id is string => !!id);
+      const tenantIds = [...tenantIdsCreados];
       if (tenantIds.length > 0) {
         await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
       }
@@ -232,7 +235,7 @@ describe.skipIf(!RUN)(
       expect(res.status).toBe(200);
       expect(res.body.disponible).toBe(true);
       expect(Array.isArray(res.body.pedidos)).toBe(true);
-      expect(typeof res.body.totalCantidadComprometida).toBe("number");
+      expect(res.body.totalCantidadComprometida).toBe(7);
       // Todo pedido devuelto debe ser del ítem solicitado (filtro correcto).
       for (const pedido of res.body.pedidos) {
         expect(pedido.itemRowId).toBe(itemRowIdConComprometido);
@@ -258,6 +261,7 @@ describe.skipIf(!RUN)(
       const tenantSinCia = await prisma.tenant.create({
         data: { nombre: `Sin Cia ${sufijo}`, subdomain: `test-invcomp-sincia-${sufijo}` },
       });
+      tenantIdsCreados.push(tenantSinCia.id);
       const passwordHash = await bcrypt.hash(PASSWORD, 10);
       await prisma.user.create({
         data: {
@@ -277,16 +281,6 @@ describe.skipIf(!RUN)(
 
       expect(res.status).toBe(200);
       expect(res.body.disponible).toBe(false);
-
-      const usuariosTenantSinCia = await prisma.user.findMany({
-        where: { tenantId: tenantSinCia.id },
-        select: { id: true },
-      });
-      await prisma.auditoria.deleteMany({
-        where: { usuarioId: { in: usuariosTenantSinCia.map((u) => u.id) } },
-      });
-      await prisma.user.deleteMany({ where: { tenantId: tenantSinCia.id } });
-      await prisma.tenant.delete({ where: { id: tenantSinCia.id } });
     });
   },
 );
