@@ -221,6 +221,9 @@ describe.skipIf(!RUN)(
         (id): id is string => typeof id === "string",
       );
       if (tenantIds.length === 0) return;
+      // Los logins de esta suite escriben auditoría. La limpieza está limitada
+      // a los tenants creados aquí y evita dejar filas huérfanas en la BD efímera.
+      await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.user.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });

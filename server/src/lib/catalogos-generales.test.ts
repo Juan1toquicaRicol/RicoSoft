@@ -22,7 +22,10 @@ interface Fila {
   tenantId: string | null;
 }
 
-function crearAlmacen(inicial: Partial<Fila>[] = []) {
+function crearAlmacen(
+  inicial: Partial<Fila>[] = [],
+  opciones: { ignorarMayusculas?: boolean } = {},
+) {
   const filas: Fila[] = inicial.map((f, i) => ({
     id: `id-${i}`,
     tipo: "",
@@ -35,13 +38,26 @@ function crearAlmacen(inicial: Partial<Fila>[] = []) {
     tenantId: null,
     ...f,
   }));
-  const coincide = (f: Fila, where: Partial<Fila>) =>
-    Object.entries(where).every(([k, v]) => f[k as keyof Fila] === v);
+  // SQL Server (collation por defecto, p. ej. la imagen de CI) compara texto sin
+  // distinguir mayúsculas: `ignorarMayusculas` reproduce ese comportamiento. El
+  // filtro `{ not }` cubre `id: { not: ... }` de Prisma.
+  const igual = (a: unknown, b: unknown) =>
+    opciones.ignorarMayusculas && typeof a === "string" && typeof b === "string"
+      ? a.toLowerCase() === b.toLowerCase()
+      : a === b;
+  const coincide = (f: Fila, where: Record<string, unknown>) =>
+    Object.entries(where).every(([k, v]) => {
+      const actual = f[k as keyof Fila];
+      if (v !== null && typeof v === "object" && "not" in v) {
+        return !igual(actual, (v as { not: unknown }).not);
+      }
+      return igual(actual, v);
+    });
   let secuencia = 1000;
 
   const cliente = {
     catalogoValor: {
-      findFirst: async ({ where }: { where: Partial<Fila> }) =>
+      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
         filas.find((f) => coincide(f, where)) ?? null,
       create: async ({ data }: { data: Omit<Fila, "id" | "activo"> & { activo?: boolean } }) => {
         const nueva = { id: `id-${secuencia++}`, activo: true, ...data } as Fila;
@@ -53,7 +69,13 @@ function crearAlmacen(inicial: Partial<Fila>[] = []) {
         Object.assign(fila, data);
         return fila;
       },
-      updateMany: async ({ where, data }: { where: Partial<Fila>; data: Partial<Fila> }) => {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Partial<Fila>;
+      }) => {
         const objetivo = filas.filter((f) => coincide(f, where));
         objetivo.forEach((f) => Object.assign(f, data));
         return { count: objetivo.length };
@@ -132,6 +154,49 @@ describe("sincronizarCatalogosGenerales", () => {
     );
     expect(metodos.has("Cheque")).toBe(true);
     expect(metodos.has("CHEQUE")).toBe(true);
+  });
+
+  it("con comparación sin distinguir mayúsculas (SQL Server) no desactiva la fila canónica recién creada", async () => {
+    // Regresión del CI: `Transferencia`/`TRANSFERENCIA` y `Cheque`/`CHEQUE` son la
+    // MISMA fila para SQL Server, así que desactivar "el duplicado heredado" apagaba
+    // la canónica y el pago con "Transferencia" se rechazaba (400).
+    const { filas, cliente } = crearAlmacen([], { ignorarMayusculas: true });
+    await sincronizarCatalogosGenerales(cliente);
+
+    expect(buscar(filas, "METODO_PAGO", "TRANSFERENCIA")!.activo).toBe(true);
+    expect(buscar(filas, "METODO_PAGO", "CHEQUE")!.activo).toBe(true);
+    const metodos = clavesValidas(
+      filas.filter((f) => f.tipo === "METODO_PAGO"),
+      "aaaaaaaa-0000-4000-8000-000000000001",
+    );
+    for (const valor of ["Transferencia", "TRANSFERENCIA", "Cheque", "CHEQUE", "Efectivo"]) {
+      expect(metodos.has(valor)).toBe(true);
+    }
+  });
+
+  it("agrega alias canónicos faltantes sin borrar metadata existente", async () => {
+    const { filas, cliente } = crearAlmacen([
+      {
+        tipo: "METODO_PAGO",
+        clave: "TRANSFERENCIA",
+        etiqueta: "Transferencia bancaria",
+        metadata: JSON.stringify({ aliases: ["TRF"] }),
+      },
+      {
+        tipo: "METODO_PAGO",
+        clave: "CHEQUE",
+        etiqueta: "Cheque",
+        metadata: JSON.stringify({ aliases: ["CHQ"] }),
+      },
+    ]);
+
+    await sincronizarCatalogosGenerales(cliente);
+
+    const transferencia = leerMetadata(buscar(filas, "METODO_PAGO", "TRANSFERENCIA")!.metadata);
+    const cheque = leerMetadata(buscar(filas, "METODO_PAGO", "CHEQUE")!.metadata);
+    expect(transferencia.aliases).toEqual(expect.arrayContaining(["TRF", "Transferencia"]));
+    expect(cheque.aliases).toEqual(expect.arrayContaining(["CHQ", "Cheque"]));
+    expect(buscar(filas, "METODO_PAGO", "TRANSFERENCIA")!.etiqueta).toBe("Transferencia bancaria");
   });
 
   it("no pisa lo que un administrador ya personalizó (etiqueta, descripción, metadata, activo)", async () => {
