@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: server/package-lock.json
       - run: npm ci
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: server/package-lock.json
       - run: npm ci
@@ -100,6 +100,8 @@ jobs:
       - run: npx prisma generate
       - name: Aplicar migraciones reales contra la base efímera
         run: npx prisma migrate deploy
+      - name: Sincronizar catálogos generales para las pruebas
+        run: npm run catalogos:sincronizar
       - name: Suite de integración (secuencial, --maxWorkers=1)
         run: npm run test:integration:ci
       - name: Gate anti-omisión (0 tests u omitidos = fallo)

@@ -1,26 +1,80 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { createApp } from "../../app";
 import { prisma } from "../../config/prisma";
-import { getSiesaPool } from "../../config/siesa";
 
 /**
  * GET /inventario/productos/:itemRowId/comprometidos — detalle de pedidos
  * de venta que originan el "Comprometido (estimado)" del KPI de Inventario.
- * BD real (RicoSoft + Siesa), gateada por RUN_DB_INTEGRATION_TESTS=true,
- * mismo contrato del resto de la suite.
- *
- * CIA_REAL = 1 (Ricol, ya verificada en la auditoría cerrada del módulo:
- * 8.175 ítems, existe comprometido real en t400_cm_existencia). CIA_FAKE
- * es una compañía inexistente en Siesa, usada solo para el escenario de
- * aislamiento entre tenants (debe responder disponible:true con array
- * vacío, nunca datos de la CIA_REAL).
+ * RicoSoft usa SQL Server real en la suite; SIESA se dobla para validar
+ * aislamiento y permisos sin depender de VPN, credenciales ni datos vivos.
  */
 const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
-const CIA_REAL = 1;
-const CIA_FAKE = 9099;
+const CIA_TEST = 900_000_000 + Math.floor(Math.random() * 100_000_000) * 2;
+const CIA_FAKE = CIA_TEST + 1;
+const ITEM_ROW_ID = 778899;
+const llamadasCia: unknown[] = [];
+
+const getSiesaPoolMock = vi.fn(async () => ({
+  request: () => {
+    const inputs: Record<string, unknown> = {};
+    const req = {
+      input(nombre: string, valor: unknown) {
+        inputs[nombre] = valor;
+        return req;
+      },
+      async query() {
+        llamadasCia.push(inputs.ciaId);
+        if (
+          inputs.ciaId !== CIA_TEST ||
+          (inputs.itemRowId !== undefined && inputs.itemRowId !== ITEM_ROW_ID)
+        )
+          return { recordset: [] };
+        return {
+          recordset: [
+            {
+              pvDoctoRowId: 456789,
+              numeroDocumento: 12345,
+              tipoDocto: 1,
+              clienteRowId: 23456,
+              clienteNombre: "Cliente de prueba",
+              itemRowId: ITEM_ROW_ID,
+              referencia: "ITEM-TEST",
+              descripcion: "Ítem de prueba",
+              cantidadPedida: 10,
+              cantidadComprometida: 7,
+              cantidadRemisionada: 0,
+              cantidadFacturada: 0,
+              fechaPedido: new Date("2026-01-15T00:00:00.000Z"),
+              fechaEntrega: null,
+              vendedorRowId: null,
+              vendedorNombre: null,
+              indEstadoLinea: 1,
+              indEstadoDocto: 1,
+              indUltEstadoAprobado: true,
+              indBackorderDocto: false,
+              indBackorderLinea: false,
+              indRetenidoMargen: false,
+              indRetenidoCupo: false,
+              indRetenidoMora: false,
+              indRetenidoBloqueo: false,
+              indRetenidoAnticipo: false,
+              indRemisionado: false,
+              indFacturado: false,
+            },
+          ],
+        };
+      },
+    };
+    return req;
+  },
+}));
+
+vi.mock("../../config/siesa", () => ({
+  getSiesaPool: (...args: unknown[]) => getSiesaPoolMock(...args),
+}));
 
 describe.skipIf(!RUN)(
   "Inventario — GET /inventario/productos/:itemRowId/comprometidos (BD real)",
@@ -29,7 +83,7 @@ describe.skipIf(!RUN)(
     const sufijo = randomUUID().slice(0, 8);
     const PASSWORD = "TestPassword123";
 
-    let tenantRealId: string;
+    let tenantTestId: string;
     let tenantFakeId: string;
     let tokenReal: string;
     let tokenRealSinPermiso: string;
@@ -44,17 +98,14 @@ describe.skipIf(!RUN)(
     beforeAll(async () => {
       const passwordHash = await bcrypt.hash(PASSWORD, 10);
 
-      // Tenant.siesaCiaId es único (constraint real) — cia 1 ya pertenece
-      // al tenant real de Ricol, así que se reutiliza ese tenant (solo se
-      // agregan/borran usuarios y roles de prueba, nunca el tenant ni sus
-      // datos existentes).
-      const tenantReal = await prisma.tenant.findFirst({ where: { siesaCiaId: CIA_REAL } });
-      if (!tenantReal) {
-        throw new Error(
-          `No existe ningún tenant con siesaCiaId=${CIA_REAL} en esta base — no se puede correr la prueba de datos reales.`,
-        );
-      }
-      tenantRealId = tenantReal.id;
+      const tenantTest = await prisma.tenant.create({
+        data: {
+          nombre: `Inv Comprometidos Test ${sufijo}`,
+          subdomain: `test-invcomp-real-${sufijo}`,
+          siesaCiaId: CIA_TEST,
+        },
+      });
+      tenantTestId = tenantTest.id;
       const tenantFake = await prisma.tenant.create({
         data: {
           nombre: `Inv Comprometidos Fake ${sufijo}`,
@@ -66,24 +117,24 @@ describe.skipIf(!RUN)(
 
       await prisma.user.create({
         data: {
-          tenantId: tenantRealId,
+          tenantId: tenantTestId,
           email: `invcomp-admin-${sufijo}@test.ricosoft.local`,
           passwordHash,
-          nombre: "Admin Real",
+          nombre: "Admin de prueba",
           isSuperadmin: true,
           activo: true,
         },
       });
       const rolSinPermiso = await prisma.rol.create({
         data: {
-          tenantId: tenantRealId,
+          tenantId: tenantTestId,
           nombre: `Sin Permiso Inv Comp ${sufijo}`,
           permisos: JSON.stringify([]),
         },
       });
       await prisma.user.create({
         data: {
-          tenantId: tenantRealId,
+          tenantId: tenantTestId,
           email: `invcomp-sinpermiso-${sufijo}@test.ricosoft.local`,
           passwordHash,
           nombre: "Sin Permiso",
@@ -107,43 +158,27 @@ describe.skipIf(!RUN)(
       tokenRealSinPermiso = await login(`invcomp-sinpermiso-${sufijo}@test.ricosoft.local`);
       tokenFake = await login(`invcomp-admin-fake-${sufijo}@test.ricosoft.local`);
 
-      // Encuentra en vivo un ítem real con comprometido>0 en cia 1 (lectura
-      // pública, sin necesidad de fijar un rowid de antemano — puede
-      // cambiar con el tiempo).
-      const pool = await getSiesaPool();
-      const { recordset } = await pool.request().input("ciaId", CIA_REAL).query<{
-        itemRowId: number;
-      }>(`
-        SELECT TOP 1 f400_rowid_item_ext AS itemRowId
-        FROM t400_cm_existencia
-        WHERE f400_id_cia = @ciaId AND f400_cant_comprometida_1 > 0
-        GROUP BY f400_rowid_item_ext
-        HAVING SUM(f400_cant_comprometida_1) > 0
-      `);
-      itemRowIdConComprometido = recordset[0]?.itemRowId ?? 0;
+      itemRowIdConComprometido = ITEM_ROW_ID;
     });
 
     afterAll(async () => {
-      // Solo se borran los usuarios/roles de prueba creados aquí y el
-      // tenant "fake" — el tenant real (cia 1) es un tenant productivo
-      // preexistente reutilizado en beforeAll, nunca se borra.
+      // Solo se borran los tenants y datos que esta suite creó.
       const usuariosPrueba = await prisma.user.findMany({
         where: { email: { contains: `${sufijo}@test.ricosoft.local` } },
         select: { id: true },
       });
       const usuarioIds = usuariosPrueba.map((u) => u.id);
-      await prisma.auditoria.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+      const tenantIds = [tenantTestId, tenantFakeId].filter((id): id is string => !!id);
+      if (tenantIds.length > 0) {
+        await prisma.auditoria.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      }
       await prisma.user.deleteMany({ where: { id: { in: usuarioIds } } });
       // Un `where` con valor `undefined` NO filtra en Prisma: si beforeAll falló
       // antes de asignar estos ids, un deleteMany({ id: undefined }) apuntaría a
       // TODOS los tenants. Solo se borra lo que este archivo creó, si existe.
-      if (tenantRealId) {
-        await prisma.rol.deleteMany({
-          where: { tenantId: tenantRealId, nombre: { contains: sufijo } },
-        });
-      }
-      if (tenantFakeId) {
-        await prisma.tenant.deleteMany({ where: { id: tenantFakeId } });
+      if (tenantIds.length > 0) {
+        await prisma.rol.deleteMany({ where: { tenantId: { in: tenantIds } } });
+        await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
       }
     });
 
@@ -185,9 +220,10 @@ describe.skipIf(!RUN)(
       expect(resConCiaFalso.body.totalCantidadComprometida).toBe(
         resSinCia.body.totalCantidadComprometida,
       );
+      expect(llamadasCia.slice(-2)).toEqual([CIA_TEST, CIA_TEST]);
     });
 
-    it("devuelve el detalle de pedidos de un ítem real con comprometido>0 en cia 1", async () => {
+    it("devuelve el detalle de pedidos del ítem de la compañía autenticada", async () => {
       expect(itemRowIdConComprometido).toBeGreaterThan(0);
       const res = await request(app)
         .get(`/api/inventario/productos/${itemRowIdConComprometido}/comprometidos`)
@@ -204,7 +240,7 @@ describe.skipIf(!RUN)(
       }
     });
 
-    it("aislamiento: el tenant con cia falsa nunca ve el detalle real de la cia 1", async () => {
+    it("aislamiento: un tenant no ve datos asignados a otra compañía", async () => {
       expect(itemRowIdConComprometido).toBeGreaterThan(0);
       const res = await request(app)
         .get(`/api/inventario/productos/${itemRowIdConComprometido}/comprometidos`)
@@ -212,9 +248,10 @@ describe.skipIf(!RUN)(
 
       expect(res.status).toBe(200);
       expect(res.body.disponible).toBe(true);
-      // La compañía falsa no existe en Siesa → sin filas, nunca los pedidos reales de cia 1.
+      // El doble solo devuelve filas para CIA_TEST, nunca para la otra compañía.
       expect(res.body.pedidos).toEqual([]);
       expect(res.body.totalCantidadComprometida).toBe(0);
+      expect(llamadasCia.at(-1)).toBe(CIA_FAKE);
     });
 
     it("responde disponible:false si el tenant no tiene siesaCiaId configurado", async () => {

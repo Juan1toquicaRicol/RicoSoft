@@ -22,26 +22,35 @@ const RUN = process.env.RUN_DB_INTEGRATION_TESTS === "true";
 describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD real)", () => {
   const app = createApp();
   const sufijo = randomUUID().slice(0, 8);
-  // esDominioCorporativoValido (lib/dominios.ts) solo acepta un puñado de
-  // dominios reales hardcodeados, y Tenant.dominioCorporativo es @unique —
-  // no se puede crear un tenant de prueba con un dominio inventado y que
-  // pase esa validación. Se reutiliza el tenant real de RICOL (el único
-  // dueño de "ricol.com.co") SOLO como padre de datos nuevos: un
-  // departamento nuevo y usuarios con emails nuevos, jamás se toca ni se lee
-  // nada preexistente de ese tenant, y el afterAll borra únicamente lo que
-  // este archivo creó (por id).
+  // esDominioCorporativoValido solo acepta dominios aprobados y
+  // Tenant.dominioCorporativo es único. Reutiliza el tenant existente si está
+  // disponible; en una base efímera crea el fixture y lo elimina al terminar.
   const DOMINIO = "ricol.com.co";
 
   let tenantId: string;
+  let tenantCreadoPorEstaPrueba = false;
   let departamentoSistemasId: string;
   let departamentoNormalId: string;
 
   beforeAll(async () => {
-    const tenantRicol = await prisma.tenant.findUniqueOrThrow({
+    const tenantRicol = await prisma.tenant.findUnique({
       where: { dominioCorporativo: DOMINIO },
       select: { id: true },
     });
-    tenantId = tenantRicol.id;
+    if (tenantRicol) {
+      tenantId = tenantRicol.id;
+    } else {
+      const tenantFixture = await prisma.tenant.create({
+        data: {
+          nombre: `Tenant Registro ${sufijo}`,
+          subdomain: `test-registro-${sufijo}`,
+          dominioCorporativo: DOMINIO,
+        },
+        select: { id: true },
+      });
+      tenantId = tenantFixture.id;
+      tenantCreadoPorEstaPrueba = true;
+    }
 
     const departamentoSistemas = await prisma.departamento.create({
       data: { tenantId, nombre: `Sistemas Test ${sufijo}`, esSistemas: true, activo: true },
@@ -66,9 +75,15 @@ describe.skipIf(!RUN)("POST /api/auth/register — hardening (Fase 5.4.1, BD rea
     );
     try {
       await prisma.auditoria.deleteMany({ where: { usuarioId: { in: userIds } } });
+      if (tenantCreadoPorEstaPrueba && tenantId) {
+        await prisma.auditoria.deleteMany({ where: { tenantId } });
+      }
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
       if (departamentoIds.length > 0) {
         await prisma.departamento.deleteMany({ where: { id: { in: departamentoIds } } });
+      }
+      if (tenantCreadoPorEstaPrueba && tenantId) {
+        await prisma.tenant.delete({ where: { id: tenantId } });
       }
     } finally {
       await prisma.$disconnect();
