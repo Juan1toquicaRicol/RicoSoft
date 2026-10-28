@@ -9,8 +9,7 @@ import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
 
 /** Punto de entrada para crear documentos desde Gestión Comercial. Hoy solo
  * se pueden crear Proformas desde aquí: las Cotizaciones y los Pedidos ya no
- * se crean en esta pantalla (el Pedido nace de una Proforma ACEPTADA desde el
- * detalle de la Proforma). Se oculta si el usuario no tiene
+ * se crean desde la interfaz. Se oculta si el usuario no tiene
  * `proformas.gestionar`. */
 export function NuevoDocumentoMenu() {
   const { user } = useSession();

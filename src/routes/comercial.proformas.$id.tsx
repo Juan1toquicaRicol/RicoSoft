@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, FileDown, PackagePlus, Printer, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileDown, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -20,7 +20,6 @@ import {
   useAsignarDocumentoErpProforma,
   useAceptarProforma,
 } from "@/hooks/use-proformas";
-import { useAccionesPedido } from "@/hooks/use-comercial";
 import { money } from "@/lib/data";
 import { calcularTotalesProformaPreview } from "@/lib/proforma-calculo";
 import { cn } from "@/lib/utils";
@@ -124,9 +123,7 @@ function ProformaImpresion() {
   const navigate = useNavigate();
   const { proforma, loading, error, refresh } = useProforma(id);
   const { user } = useSession();
-  const accionesPedido = useAccionesPedido();
   const { eliminar, loading: eliminando } = useEliminarProforma();
-  const [creandoPedido, setCreandoPedido] = useState(false);
   const { aceptar, loading: aceptando } = useAceptarProforma();
   const puedeCrearPedido = hasPermission(user, PERMISOS_SISTEMA.PEDIDOS_COMERCIALES_GESTIONAR);
   const puedeManipularProforma = hasPermission(user, PERMISOS_SISTEMA.PROFORMAS_GESTIONAR);
@@ -164,22 +161,6 @@ function ProformaImpresion() {
       navigate({ to: "/comercial/gestion" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "No fue posible eliminar la proforma.");
-    }
-  };
-
-  const crearPedidoDesdeProforma = async () => {
-    if (!proforma) return;
-    setCreandoPedido(true);
-    try {
-      const pedido = await accionesPedido.crearDesdeProforma(proforma.id);
-      toast.success(
-        `Pedido ${pedido.numeroFormateado ?? pedido.numero} creado desde esta proforma.`,
-      );
-      await refresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "No fue posible crear el pedido.");
-    } finally {
-      setCreandoPedido(false);
     }
   };
 
@@ -468,17 +449,6 @@ function ProformaImpresion() {
               onClick={() => void aceptarProforma()}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Aceptar Proforma
-            </Button>
-          )}
-          {acciones.puedeCrearPedido && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 print:hidden"
-              disabled={creandoPedido}
-              onClick={() => void crearPedidoDesdeProforma()}
-            >
-              <PackagePlus className="h-3.5 w-3.5" /> Crear Pedido
             </Button>
           )}
         </>
