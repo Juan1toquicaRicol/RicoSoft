@@ -442,9 +442,22 @@ export async function sincronizarCatalogosGenerales(
       cambios.etiqueta = semilla.etiqueta;
     }
     if (!existente.descripcion && semilla.descripcion) cambios.descripcion = semilla.descripcion;
-    const metadataNueva = serializarMetadata(semilla.metadata);
-    if (metadataNueva && Object.keys(leerMetadata(existente.metadata)).length === 0) {
-      cambios.metadata = metadataNueva;
+    const metadataActual = leerMetadata(existente.metadata);
+    const metadataSemilla = semilla.metadata;
+    if (metadataSemilla) {
+      // Los alias son parte del contrato de compatibilidad: aunque un
+      // administrador ya haya agregado otros metadatos a la fila canónica,
+      // la sincronización debe incorporar los alias aprobados sin borrarlos.
+      const aliasesActuales = metadataActual.aliases ?? [];
+      const aliasesSemilla = metadataSemilla.aliases ?? [];
+      const aliasesCombinados = [...new Set([...aliasesActuales, ...aliasesSemilla])];
+      const agregarMetadataInicial = Object.keys(metadataActual).length === 0;
+      const metadataCombinada: MetadataCatalogo = {
+        ...(agregarMetadataInicial ? metadataSemilla : metadataActual),
+        ...(aliasesCombinados.length ? { aliases: aliasesCombinados } : {}),
+      };
+      const metadataSerializada = serializarMetadata(metadataCombinada);
+      if (metadataSerializada !== existente.metadata) cambios.metadata = metadataSerializada ?? undefined;
     }
     if (Object.keys(cambios).length > 0) {
       await cliente.catalogoValor.update({ where: { id: existente.id }, data: cambios });

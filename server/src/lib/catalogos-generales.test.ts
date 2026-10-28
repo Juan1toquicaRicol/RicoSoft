@@ -134,6 +134,31 @@ describe("sincronizarCatalogosGenerales", () => {
     expect(metodos.has("CHEQUE")).toBe(true);
   });
 
+  it("agrega alias canónicos faltantes sin borrar metadata existente", async () => {
+    const { filas, cliente } = crearAlmacen([
+      {
+        tipo: "METODO_PAGO",
+        clave: "TRANSFERENCIA",
+        etiqueta: "Transferencia bancaria",
+        metadata: JSON.stringify({ aliases: ["TRF"] }),
+      },
+      {
+        tipo: "METODO_PAGO",
+        clave: "CHEQUE",
+        etiqueta: "Cheque",
+        metadata: JSON.stringify({ aliases: ["CHQ"] }),
+      },
+    ]);
+
+    await sincronizarCatalogosGenerales(cliente);
+
+    const transferencia = leerMetadata(buscar(filas, "METODO_PAGO", "TRANSFERENCIA")!.metadata);
+    const cheque = leerMetadata(buscar(filas, "METODO_PAGO", "CHEQUE")!.metadata);
+    expect(transferencia.aliases).toEqual(expect.arrayContaining(["TRF", "Transferencia"]));
+    expect(cheque.aliases).toEqual(expect.arrayContaining(["CHQ", "Cheque"]));
+    expect(buscar(filas, "METODO_PAGO", "TRANSFERENCIA")!.etiqueta).toBe("Transferencia bancaria");
+  });
+
   it("no pisa lo que un administrador ya personalizó (etiqueta, descripción, metadata, activo)", async () => {
     const { filas, cliente } = crearAlmacen([
       {
