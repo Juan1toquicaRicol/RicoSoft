@@ -55,8 +55,20 @@ class SaldoInsuficienteError extends Error {
   }
 }
 
-/** Mismo criterio que SaldoInsuficienteError, para anularPago: un rechazo
- * de negocio (el pago ya estaba anulado), nunca retryable. */
+/** Rechazos del estado de factura comprobado después de adquirir su bloqueo. */
+class FacturaNoEncontradaError extends Error {
+  constructor() {
+    super("Factura no encontrada.");
+  }
+}
+
+class FacturaNoAprobadaError extends Error {
+  constructor(public readonly estado: string) {
+    super("Factura no aprobada.");
+  }
+}
+
+/** Rechazo de negocio para anularPago: nunca es retryable. */
 class PagoYaAnuladoError extends Error {
   constructor() {
     super("El pago ya está anulado");
@@ -253,20 +265,39 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
     let facturaActualizada: Awaited<ReturnType<typeof recalcularEstadoPorPagos>>;
     try {
       ({ pago, facturaActualizada } = await conReintentoDeConcurrencia(async () => {
-        const agregadoPrevio = await req.tenantPrisma!.pago.aggregate({
-          where: { facturaId, tenantId, estado: "Confirmado" },
-          _sum: { valor: true },
-        });
-        const saldoPendiente = Number(factura.total) - Number(agregadoPrevio._sum.valor ?? 0);
-        if (valorNum > saldoPendiente) {
-          throw new SaldoInsuficienteError(saldoPendiente);
-        }
-
-        // create + historial + recálculo de estado + auditoría son una sola
-        // unidad: si algo falla a mitad de camino, no debe quedar un pago
-        // registrado sin su auditoría, ni una factura en un estado que no
-        // corresponde a la suma real de sus pagos.
         return req.tenantPrisma!.$transaction(async (tx) => {
+          const facturasBloqueadas = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT [id]
+            FROM [dbo].[Factura] WITH (UPDLOCK, HOLDLOCK)
+            WHERE [id] = ${facturaId}
+              AND [tenantId] = ${tenantId}
+              AND [eliminado] = 0
+          `;
+          if (facturasBloqueadas.length === 0) throw new FacturaNoEncontradaError();
+
+          const facturaBloqueada = await tx.factura.findFirst({
+            where: { id: facturaId, tenantId, eliminado: false },
+            select: { estado: true, total: true, numero: true },
+          });
+          if (!facturaBloqueada) throw new FacturaNoEncontradaError();
+          if (facturaBloqueada.estado !== "Aprobada") {
+            throw new FacturaNoAprobadaError(facturaBloqueada.estado);
+          }
+
+          const agregadoPrevio = await tx.pago.aggregate({
+            where: { facturaId, tenantId, estado: "Confirmado" },
+            _sum: { valor: true },
+          });
+          const saldoPendiente =
+            Number(facturaBloqueada.total) - Number(agregadoPrevio._sum.valor ?? 0);
+          if (valorNum > saldoPendiente) {
+            throw new SaldoInsuficienteError(saldoPendiente);
+          }
+
+          // create + historial + recálculo de estado + auditoría son una sola
+          // unidad: si algo falla a mitad de camino, no debe quedar un pago
+          // registrado sin su auditoría, ni una factura en un estado que no
+          // corresponde a la suma real de sus pagos.
           const pago = await tx.pago.create({
             data: {
               tenantId,
@@ -310,7 +341,7 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
               tenantId,
               usuarioId: req.user!.id,
               accion: "PAGO_REGISTRADO",
-              detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${factura.numero}"`,
+              detalle: `${req.user!.nombre} registró un pago de $${valorNum.toLocaleString("es-CO")} para la factura "${facturaBloqueada.numero}"`,
               entidadTipo: "Pago",
               entidadId: pago.id,
               datosNuevos: JSON.stringify({
@@ -329,6 +360,14 @@ export const registrarPago = async (req: AuthenticatedRequest, res: Response) =>
       if (error instanceof SaldoInsuficienteError) {
         return res.status(409).json({
           message: `El pago ($${valorNum.toLocaleString("es-CO")}) supera el saldo pendiente de la factura ($${error.saldoPendiente.toLocaleString("es-CO")}).`,
+        });
+      }
+      if (error instanceof FacturaNoEncontradaError) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error instanceof FacturaNoAprobadaError) {
+        return res.status(409).json({
+          message: `No se puede registrar un pago sobre una factura en estado "${error.estado}". Debe estar Aprobada.`,
         });
       }
       throw error;
