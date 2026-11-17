@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Info,
   Loader2,
   Plus,
   RefreshCw,
@@ -638,24 +637,6 @@ function NuevaOrdenIntlPage() {
       }
     >
       <div>
-        {/* Aviso: el consecutivo previo al guardado es solo un estimado. */}
-        <div
-          role="note"
-          className="mb-4 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900"
-        >
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
-          <p>
-            {numeroEstimado ? (
-              <>
-                El número de la orden (<strong>{numeroEstimado}</strong>) es un estimado y se
-                asignará de forma definitiva al guardar.
-              </>
-            ) : (
-              "El número de la orden se asignará de forma definitiva al guardar."
-            )}
-          </p>
-        </div>
-
         <div className="mb-4">
           <EtapasOrdenNav
             etapaActual={etapa}
@@ -712,7 +693,6 @@ function NuevaOrdenIntlPage() {
                       <Input
                         readOnly
                         disabled
-                        aria-describedby="numero-orden-ayuda"
                         value={
                           cargandoConsecutivo
                             ? "Calculando…"
@@ -720,10 +700,6 @@ function NuevaOrdenIntlPage() {
                         }
                         className="h-9 text-xs border-slate-300 bg-slate-50 font-semibold"
                       />
-                      <p id="numero-orden-ayuda" className="text-[11px] text-slate-500">
-                        Número estimado. Se confirma al guardar: si otra persona registra una orden
-                        antes, el número final puede ser distinto.
-                      </p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-semibold text-slate-700">
@@ -789,10 +765,6 @@ function NuevaOrdenIntlPage() {
                       }))}
                       className="h-9"
                     />
-                    <p className="text-[11px] text-slate-500">
-                      Ya en el catálogo (Siesa/RicoSoft) — el nombre de la orden se toma
-                      directamente de aquí, no se puede editar por separado.
-                    </p>
                   </div>
 
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
@@ -842,10 +814,6 @@ function NuevaOrdenIntlPage() {
                             "border-red-400 focus-visible:ring-red-300",
                         )}
                       />
-                      <p className="text-[11px] text-slate-500">
-                        Se guarda como texto (snapshot) en la orden — NO crea un registro nuevo en
-                        el catálogo de proveedores.
-                      </p>
                     </div>
                   )}
                 </section>
@@ -890,9 +858,6 @@ function NuevaOrdenIntlPage() {
                         onChange={(e) => setForm({ ...form, lugarPactado: e.target.value })}
                         className="h-9 text-xs border-slate-300"
                       />
-                      <p className="text-[11px] text-slate-500">
-                        No se infiere automáticamente del Incoterm ni del país de origen.
-                      </p>
                     </div>
                   </div>
 
@@ -926,9 +891,6 @@ function NuevaOrdenIntlPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-[11px] text-slate-500">
-                        País donde se fabricó la mercancía — puede diferir del país del proveedor.
-                      </p>
                       {mostrarErroresEtapa && !form.paisOrigen && (
                         <p className="text-[11px] text-red-600">
                           El país de origen es obligatorio.
