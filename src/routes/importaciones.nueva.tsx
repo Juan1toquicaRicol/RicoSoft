@@ -3,19 +3,43 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Info,
   Loader2,
   Plus,
   RefreshCw,
   Ship,
   Trash2,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import {
+  ID_CAMPO_TRM,
+  idCampoItem,
+  validarPrecisionDecimales,
+} from "@/components/importaciones/validacion-precision-orden";
+import {
+  erroresFechaRequerida,
+  fechaRequeridaAnteriorAOrden,
+  ID_CAMPO_FECHA_REQUERIDA,
+} from "@/components/importaciones/validacion-fechas-orden";
+import { BloqueVerificacion } from "@/components/importaciones/bloque-verificacion";
+import { EtapasOrdenNav } from "@/components/importaciones/etapas-orden";
+import {
+  atributosErrorCampo,
+  debeMostrarErroresEtapa,
+  ETAPAS_ORDEN,
+  ID_ALERTA_ERRORES_ETAPA,
+  marcarAlNavegarPorIndicador,
+  primerErrorConFoco,
+  marcarEtapasMostradas,
+  type EtapasMostradas,
+  ULTIMA_ETAPA,
+  type NumeroEtapa,
+} from "@/components/importaciones/etapas-orden-config";
 import {
   Dialog,
   DialogContent,
@@ -211,6 +235,12 @@ function ItemDescripcionAutocomplete({
 
 interface Verificacion {
   texto: string;
+  /** Etapa visual del formulario a la que pertenece la regla (solo navegación). */
+  etapa: NumeroEtapa;
+  /** Solo errores de precisión decimal (alimenta camposConErrorPrecision). */
+  campoId?: string;
+  /** id del control a enfocar al ir a este error (precisión o fecha). */
+  focoId?: string;
 }
 
 function NuevaOrdenIntlPage() {
@@ -284,13 +314,43 @@ function NuevaOrdenIntlPage() {
     observaciones: "",
   });
   const [items, setItems] = useState<ItemFormulario[]>([{ ...itemVacio }]);
-  // Validación visible (borde rojo + mensaje) recién después del primer
-  // intento fallido de guardar — no se le marca todo en rojo a alguien que
-  // apenas entró a la página.
-  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  // Etapas cuyos errores ya se mostraron (ver etapas-orden-config.ts). Gobierna
+  // alerta, aria-invalid, aria-describedby y borde rojo de la etapa actual.
+  const [etapasMostradas, setEtapasMostradas] = useState<EtapasMostradas>(new Set());
   const [trmOficial, setTrmOficial] = useState<TrmOficial | null>(null);
   const [cargandoTrm, setCargandoTrm] = useState(false);
   const [preflightAbierto, setPreflightAbierto] = useState(false);
+  // Etapas visuales (solo navegación en el frontend; la orden se crea con una
+  // única llamada al final, en "Revisar").
+  const [etapa, setEtapa] = useState<NumeroEtapa>(1);
+  const [maxAlcanzada, setMaxAlcanzada] = useState<NumeroEtapa>(1);
+  const tituloEtapaRef = useRef<HTMLHeadingElement | null>(null);
+  const primeraEtapaMontada = useRef(true);
+
+  // Campo a enfocar cuando se navega a una etapa por un error concreto.
+  const campoPendienteRef = useRef<string | null>(null);
+  const enfocarCampoPendiente = () => {
+    const id = campoPendienteRef.current;
+    campoPendienteRef.current = null;
+    if (id) document.getElementById(id)?.focus();
+    return !!id;
+  };
+
+  // Gestión de foco al cambiar de etapa: el foco pasa al campo con el problema
+  // (si se llegó por un error) o, si no, al título de la etapa.
+  useEffect(() => {
+    if (primeraEtapaMontada.current) {
+      primeraEtapaMontada.current = false;
+      return;
+    }
+    const id = campoPendienteRef.current;
+    if (id && document.getElementById(id)) {
+      enfocarCampoPendiente();
+      return;
+    }
+    campoPendienteRef.current = null;
+    tituloEtapaRef.current?.focus();
+  }, [etapa]);
 
   const proveedorCatalogado = !!form.proveedorId && !proveedorNoCatalogado;
   const nombreProveedorEfectivo = proveedorCatalogado
@@ -334,76 +394,157 @@ function NuevaOrdenIntlPage() {
   // recomendaciones (sugerencias). Se muestran en el diálogo de verificación
   // final. Se recalcula en cada render, es puramente derivado del estado —
   // nunca se persiste.
+  // Regla existente (sin cambios, ver validacion-fechas-orden.ts): se reutiliza
+  // en la lista de errores y en el mensaje/estado del input de fecha.
+  const fechaRequeridaInvalida = fechaRequeridaAnteriorAOrden(
+    form.fechaRequeridaLlegada,
+    form.fechaOrden,
+  );
+
   const { errores, advertencias, recomendaciones } = useMemo(() => {
     const err: Verificacion[] = [];
     const adv: Verificacion[] = [];
     const rec: Verificacion[] = [];
 
-    if (!form.fechaOrden) err.push({ texto: "Falta la fecha de la orden." });
+    if (!form.fechaOrden) err.push({ texto: "Falta la fecha de la orden.", etapa: 1 });
     if (!form.proveedorId && !proveedorNoCatalogado) {
       err.push({
         texto: 'Selecciona un proveedor catalogado o marca "No catalogado / proveedor externo".',
+        etapa: 1,
       });
     }
     if (proveedorNoCatalogado && !form.proveedorExtranjero.trim()) {
-      err.push({ texto: "Falta el nombre del proveedor no catalogado." });
+      err.push({ texto: "Falta el nombre del proveedor no catalogado.", etapa: 1 });
     }
-    if (!form.paisOrigen) err.push({ texto: "Falta el país de origen de la mercancía." });
+    if (!form.paisOrigen) err.push({ texto: "Falta el país de origen de la mercancía.", etapa: 1 });
     if (!Number.isFinite(form.trmPactada) || form.trmPactada <= 0) {
-      err.push({ texto: "La tasa de cambio pactada debe ser mayor a cero." });
+      err.push({ texto: "La tasa de cambio pactada debe ser mayor a cero.", etapa: 1 });
     }
-    if (items.length === 0) err.push({ texto: "La orden debe tener al menos un ítem." });
+    if (items.length === 0) err.push({ texto: "La orden debe tener al menos un ítem.", etapa: 2 });
     items.forEach((it, idx) => {
-      if (!it.descripcion.trim()) err.push({ texto: `Ítem ${idx + 1}: falta la descripción.` });
-      if (!it.unidadMedida) err.push({ texto: `Ítem ${idx + 1}: falta la unidad comercial.` });
+      if (!it.descripcion.trim())
+        err.push({ texto: `Ítem ${idx + 1}: falta la descripción.`, etapa: 2 });
+      if (!it.unidadMedida)
+        err.push({ texto: `Ítem ${idx + 1}: falta la unidad comercial.`, etapa: 2 });
       if (!(Number(it.cantidad) > 0))
-        err.push({ texto: `Ítem ${idx + 1}: la cantidad debe ser mayor a cero.` });
+        err.push({ texto: `Ítem ${idx + 1}: la cantidad debe ser mayor a cero.`, etapa: 2 });
       if (Number(it.valorUnitarioFob) < 0)
-        err.push({ texto: `Ítem ${idx + 1}: el FOB unitario no puede ser negativo.` });
+        err.push({ texto: `Ítem ${idx + 1}: el FOB unitario no puede ser negativo.`, etapa: 2 });
       if (it.pesoKg != null && Number(it.pesoKg) < 0)
-        err.push({ texto: `Ítem ${idx + 1}: el peso no puede ser negativo.` });
+        err.push({ texto: `Ítem ${idx + 1}: el peso no puede ser negativo.`, etapa: 2 });
     });
-    if (
-      form.fechaRequeridaLlegada &&
-      form.fechaOrden &&
-      new Date(form.fechaRequeridaLlegada) < new Date(form.fechaOrden)
-    ) {
-      err.push({
-        texto: "La fecha requerida de llegada no puede ser anterior a la fecha de la orden.",
-      });
-    }
+    // Precisión (step 0.01): el navegador solo valida los inputs montados, y con
+    // las etapas solo está montada la visible; se revisa sobre el estado de TODOS
+    // los campos para que ningún valor rechazado antes pueda guardarse.
+    validarPrecisionDecimales({ trmPactada: form.trmPactada, items }).forEach((p) =>
+      err.push({ texto: p.texto, etapa: p.etapa, campoId: p.campoId, focoId: p.campoId }),
+    );
+    erroresFechaRequerida(form.fechaRequeridaLlegada, form.fechaOrden).forEach((e) => err.push(e));
 
     if (!form.lugarPactado.trim()) {
-      adv.push({ texto: "No indicaste el lugar pactado del Incoterm." });
+      adv.push({ texto: "No indicaste el lugar pactado del Incoterm.", etapa: 1 });
     }
     if (trmDifiereMucho) {
       adv.push({
         texto: `La tasa pactada difiere ${(diferenciaTrm * 100).toFixed(1)}% de la oficial del día.`,
+        etapa: 1,
       });
     }
-    if (!form.formaPago) adv.push({ texto: "No seleccionaste una forma de pago." });
+    if (!form.formaPago) adv.push({ texto: "No seleccionaste una forma de pago.", etapa: 1 });
     if (!form.fechaRequeridaLlegada)
-      adv.push({ texto: "No indicaste una fecha requerida de llegada." });
-    if (!form.responsableId) adv.push({ texto: "No asignaste un responsable de la importación." });
+      adv.push({ texto: "No indicaste una fecha requerida de llegada.", etapa: 3 });
+    if (!form.responsableId)
+      adv.push({ texto: "No asignaste un responsable de la importación.", etapa: 3 });
 
     if (!form.observaciones.trim())
-      rec.push({ texto: "Puedes agregar observaciones para el equipo de logística." });
+      rec.push({ texto: "Puedes agregar observaciones para el equipo de logística.", etapa: 3 });
     if (items.some((it) => !it.referencia?.trim())) {
-      rec.push({ texto: "Algunos ítems no tienen referencia interna." });
+      rec.push({ texto: "Algunos ítems no tienen referencia interna.", etapa: 2 });
     }
     if (items.some((it) => !it.referenciaProveedor?.trim())) {
       rec.push({
         texto:
           "Algunos ítems no tienen la referencia del proveedor (útil para la Bandeja Inteligente).",
+        etapa: 2,
       });
     }
 
     return { errores: err, advertencias: adv, recomendaciones: rec };
   }, [form, items, proveedorNoCatalogado, trmDifiereMucho, diferenciaTrm]);
 
-  const handleAbrirPreflight = (e: React.FormEvent) => {
+  const erroresEtapaActual = errores.filter((e) => e.etapa === etapa);
+  // Etapas ya recorridas (<= maxAlcanzada) que aún tienen errores. Se excluye la
+  // actual: sus errores ya se muestran en la alerta de la propia etapa.
+  const etapasConErrores = new Set(
+    errores.filter((e) => e.etapa <= maxAlcanzada && e.etapa !== etapa).map((e) => e.etapa),
+  );
+  // Campos con error de precisión: se marcan (borde, aria-invalid) tras un intento.
+  const camposConErrorPrecision = new Set(errores.flatMap((e) => (e.campoId ? [e.campoId] : [])));
+  // Condición única (alerta + aria-invalid + aria-describedby + borde rojo).
+  const mostrarErroresEtapa = debeMostrarErroresEtapa(
+    etapa,
+    etapasMostradas,
+    erroresEtapaActual.length,
+  );
+  const atributosPrecision = (id: string) =>
+    atributosErrorCampo(mostrarErroresEtapa, camposConErrorPrecision.has(id));
+
+  // mostrarErrores: al llegar por un error concreto ("Ir a la etapa", guarda de
+  // envío) se muestra de inmediato la alerta de la etapa y el estado del campo.
+  const irAEtapa = (destino: NumeroEtapa, focoId?: string, mostrarErrores = false) => {
+    campoPendienteRef.current = focoId ?? null;
+    if (destino === etapa) enfocarCampoPendiente();
+    setEtapa(destino);
+    setMaxAlcanzada((m) => (destino > m ? destino : m));
+    if (mostrarErrores) setEtapasMostradas((m) => marcarEtapasMostradas(m, [destino]));
+  };
+
+  // Entrada desde el indicador: si la etapa muestra "Con campos pendientes" se
+  // marca como mostrada y el foco va al control del primer error con destino de
+  // foco (focoId: precisión o fecha); si ningún error lo tiene, al título de la
+  // etapa. Justificación: el usuario llega por un pendiente concreto.
+  const irPorIndicador = (destino: NumeroEtapa) => {
+    const conPendientes = etapasConErrores.has(destino);
+    setEtapasMostradas((m) => marcarAlNavegarPorIndicador(destino, etapasConErrores, m));
+    const campo = conPendientes
+      ? errores.find((x) => x.etapa === destino && x.focoId)?.focoId
+      : undefined;
+    irAEtapa(destino, campo);
+  };
+
+  // En las etapas 1-3 el envío del formulario (botón "Siguiente" o Enter) solo
+  // avanza si la etapa actual no tiene errores bloqueantes; en "Revisar" abre
+  // la verificación final existente, que es quien dispara la única creación.
+  const handleSubmitFormulario = (e: React.FormEvent) => {
     e.preventDefault();
-    setIntentoGuardar(true);
+    if (etapa < ULTIMA_ETAPA) {
+      if (erroresEtapaActual.length > 0) {
+        setEtapasMostradas((m) => marcarEtapasMostradas(m, [etapa]));
+        const conCampo = primerErrorConFoco(erroresEtapaActual);
+        if (conCampo?.focoId) document.getElementById(conCampo.focoId)?.focus();
+        return;
+      }
+      irAEtapa((etapa + 1) as NumeroEtapa);
+      return;
+    }
+    // Intento de envío final: se marcan TODAS las etapas con errores (Revisar las
+    // lista todas), así al volver a cualquiera se ven sus mensajes y bordes.
+    setEtapasMostradas((m) =>
+      marcarEtapasMostradas(
+        m,
+        errores.map((x) => x.etapa),
+      ),
+    );
+    // Guarda del envío final: si hay un error con destino de foco (focoId:
+    // precisión decimal o fecha requerida), lleva a su etapa y al control con el
+    // problema. Los errores sin focoId no redirigen: abren el diálogo de
+    // verificación. (La guarda de precisión preserva la validación nativa de HEAD;
+    // la redirección por la fecha es nueva y no existía en HEAD.)
+    const conFoco = primerErrorConFoco(errores);
+    if (conFoco?.focoId) {
+      irAEtapa(conFoco.etapa, conFoco.focoId, true);
+      return;
+    }
     setPreflightAbierto(true);
   };
 
@@ -461,7 +602,11 @@ function NuevaOrdenIntlPage() {
       }
 
       setPreflightAbierto(false);
-      navigate({ to: "/importaciones/$id", params: { id: creada.id } });
+      navigate({
+        to: "/importaciones/$id",
+        params: { id: creada.id },
+        state: (prev) => ({ ...prev, ordenCreadaId: creada.id }),
+      });
     } catch (err: unknown) {
       toast.error(
         err instanceof Error ? err.message : "Error al registrar la orden de compra internacional.",
@@ -493,793 +638,1011 @@ function NuevaOrdenIntlPage() {
       }
     >
       <div>
-        <form
-          onSubmit={handleAbrirPreflight}
-          className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs space-y-6"
+        {/* Aviso: el consecutivo previo al guardado es solo un estimado. */}
+        <div
+          role="note"
+          className="mb-4 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900"
         >
-          {/* Identificación */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Identificación
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Número de Orden</Label>
-                <Input
-                  readOnly
-                  disabled
-                  aria-describedby="numero-orden-ayuda"
-                  value={
-                    cargandoConsecutivo ? "Calculando…" : numeroEstimado || "Se asigna al guardar"
-                  }
-                  className="h-9 text-xs border-slate-300 bg-slate-50 font-semibold"
-                />
-                <p id="numero-orden-ayuda" className="text-[11px] text-slate-500">
-                  Número estimado. Se confirma al guardar: si otra persona registra una orden antes,
-                  el número final puede ser distinto.
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Fecha de Orden *</Label>
-                <Input
-                  type="date"
-                  required
-                  value={form.fechaOrden}
-                  onChange={(e) => setForm({ ...form, fechaOrden: e.target.value })}
-                  className={cn(
-                    "h-9 text-xs border-slate-300",
-                    intentoGuardar &&
-                      !form.fechaOrden &&
-                      "border-red-400 focus-visible:ring-red-300",
-                  )}
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Proveedor */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Proveedor</h3>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Proveedor catalogado</Label>
-              <Combobox
-                value={proveedorNoCatalogado ? "" : form.proveedorId}
-                onValueChange={(val) => {
-                  const seleccionado = proveedorOpciones.find((p) => p.id === val);
-                  setProveedorNoCatalogado(false);
-                  setForm({
-                    ...form,
-                    proveedorId: val,
-                    proveedorNombreCatalogado: seleccionado?.nombre ?? "",
-                    // Solo sugiere el país configurado en el proveedor si el
-                    // usuario todavía no eligió uno a mano — nunca pisa una
-                    // elección ya hecha.
-                    paisOrigen:
-                      !form.paisOrigen && seleccionado?.paisOrigen
-                        ? seleccionado.paisOrigen
-                        : form.paisOrigen,
-                  });
-                }}
-                placeholder="Buscar proveedor por nombre o NIT..."
-                searchPlaceholder="Buscar por nombre o NIT..."
-                emptyText="Ningún proveedor coincide con el catálogo (SIESA/RicoSoft)."
-                onSearchChange={buscarProveedores}
-                loadingOptions={buscandoProveedores}
-                selectedLabel={
-                  !proveedorNoCatalogado ? form.proveedorNombreCatalogado || undefined : undefined
-                }
-                disabled={proveedorNoCatalogado}
-                options={proveedorOpciones.map((p) => ({
-                  value: p.id,
-                  label: `${p.nombre} (NIT ${p.nit})`,
-                }))}
-                className="h-9"
-              />
-              <p className="text-[11px] text-slate-500">
-                Ya en el catálogo (Siesa/RicoSoft) — el nombre de la orden se toma directamente de
-                aquí, no se puede editar por separado.
-              </p>
-            </div>
-
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={proveedorNoCatalogado}
-                onChange={(e) => {
-                  const marcado = e.target.checked;
-                  setProveedorNoCatalogado(marcado);
-                  if (marcado) {
-                    setForm({ ...form, proveedorId: "", proveedorNombreCatalogado: "" });
-                  }
-                }}
-                className="h-3.5 w-3.5"
-              />
-              No catalogado / proveedor externo
-            </label>
-
-            {proveedorCatalogado ? (
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Nombre del Proveedor{" "}
-                  <span className="font-normal text-slate-400">(autocompletado)</span>
-                </Label>
-                <Input
-                  disabled
-                  value={form.proveedorNombreCatalogado}
-                  className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
-                />
-              </div>
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+          <p>
+            {numeroEstimado ? (
+              <>
+                El número de la orden (<strong>{numeroEstimado}</strong>) es un estimado y se
+                asignará de forma definitiva al guardar.
+              </>
             ) : (
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Nombre del Proveedor no catalogado *
-                </Label>
-                <Input
-                  required
-                  disabled={!proveedorNoCatalogado}
-                  placeholder='Marca "No catalogado / proveedor externo" para escribirlo'
-                  value={form.proveedorExtranjero}
-                  onChange={(e) => setForm({ ...form, proveedorExtranjero: e.target.value })}
-                  className={cn(
-                    "h-9 text-xs border-slate-300 disabled:bg-slate-50 disabled:text-slate-400",
-                    intentoGuardar &&
-                      proveedorNoCatalogado &&
-                      !form.proveedorExtranjero &&
-                      "border-red-400 focus-visible:ring-red-300",
-                  )}
-                />
-                <p className="text-[11px] text-slate-500">
-                  Se guarda como texto (snapshot) en la orden — NO crea un registro nuevo en el
-                  catálogo de proveedores.
+              "El número de la orden se asignará de forma definitiva al guardar."
+            )}
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <EtapasOrdenNav
+            etapaActual={etapa}
+            maxAlcanzada={maxAlcanzada}
+            etapasConErrores={etapasConErrores}
+            onIr={irPorIndicador}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+          <form
+            onSubmit={handleSubmitFormulario}
+            className="panel bg-white border-slate-200 rounded-lg p-5 shadow-2xs space-y-6"
+          >
+            <h2
+              ref={tituloEtapaRef}
+              tabIndex={-1}
+              className="text-sm font-bold text-slate-900 focus:outline-none"
+            >
+              Etapa {etapa} de {ULTIMA_ETAPA}: {ETAPAS_ORDEN[etapa - 1].etiqueta}
+            </h2>
+
+            {mostrarErroresEtapa && (
+              <div
+                id={ID_ALERTA_ERRORES_ETAPA}
+                role="alert"
+                className="space-y-1 rounded-md border border-red-200 bg-red-50 p-3"
+              >
+                <p className="text-xs font-bold text-red-700">
+                  Completa lo siguiente para continuar a la siguiente etapa:
                 </p>
+                <ul className="space-y-0.5">
+                  {erroresEtapaActual.map((e, i) => (
+                    <li key={i} className="text-xs text-red-700">
+                      • {e.texto}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
-          </section>
 
-          {/* Condiciones comerciales */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Condiciones comerciales
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Incoterm *</Label>
-                <Select
-                  value={form.incoterm}
-                  disabled={cargandoIncoterms}
-                  onValueChange={(val) => setForm({ ...form, incoterm: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue placeholder={cargandoIncoterms ? "Cargando..." : undefined} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {incoterms.map((i) => (
-                      <SelectItem key={i.id} value={i.clave} className="text-xs">
-                        {i.clave}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errorIncoterms && (
-                  <p className="text-[11px] text-red-600">
-                    No se pudieron cargar los Incoterms: {errorIncoterms}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Lugar pactado</Label>
-                <Input
-                  placeholder="Ej: Shanghai, China"
-                  value={form.lugarPactado}
-                  onChange={(e) => setForm({ ...form, lugarPactado: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-                <p className="text-[11px] text-slate-500">
-                  No se infiere automáticamente del Incoterm ni del país de origen.
-                </p>
-              </div>
-            </div>
+            {etapa === 1 && (
+              <>
+                {/* Identificación */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Identificación
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Número de Orden
+                      </Label>
+                      <Input
+                        readOnly
+                        disabled
+                        aria-describedby="numero-orden-ayuda"
+                        value={
+                          cargandoConsecutivo
+                            ? "Calculando…"
+                            : numeroEstimado || "Se asigna al guardar"
+                        }
+                        className="h-9 text-xs border-slate-300 bg-slate-50 font-semibold"
+                      />
+                      <p id="numero-orden-ayuda" className="text-[11px] text-slate-500">
+                        Número estimado. Se confirma al guardar: si otra persona registra una orden
+                        antes, el número final puede ser distinto.
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Fecha de Orden *
+                      </Label>
+                      <Input
+                        type="date"
+                        required
+                        value={form.fechaOrden}
+                        onChange={(e) => setForm({ ...form, fechaOrden: e.target.value })}
+                        className={cn(
+                          "h-9 text-xs border-slate-300",
+                          mostrarErroresEtapa &&
+                            !form.fechaOrden &&
+                            "border-red-400 focus-visible:ring-red-300",
+                        )}
+                      />
+                    </div>
+                  </div>
+                </section>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">
-                  País de origen de la mercancía *
-                </Label>
-                <Select
-                  value={form.paisOrigen || undefined}
-                  disabled={cargandoPaises}
-                  onValueChange={(val) => setForm({ ...form, paisOrigen: val })}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      "h-9 text-xs border-slate-300 bg-white",
-                      intentoGuardar &&
-                        !form.paisOrigen &&
-                        "border-red-400 focus-visible:ring-red-300",
-                    )}
-                  >
-                    <SelectValue
-                      placeholder={cargandoPaises ? "Cargando..." : "Selecciona un país..."}
+                {/* Proveedor */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Proveedor
+                  </h3>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Proveedor catalogado
+                    </Label>
+                    <Combobox
+                      value={proveedorNoCatalogado ? "" : form.proveedorId}
+                      onValueChange={(val) => {
+                        const seleccionado = proveedorOpciones.find((p) => p.id === val);
+                        setProveedorNoCatalogado(false);
+                        setForm({
+                          ...form,
+                          proveedorId: val,
+                          proveedorNombreCatalogado: seleccionado?.nombre ?? "",
+                          // Solo sugiere el país configurado en el proveedor si el
+                          // usuario todavía no eligió uno a mano — nunca pisa una
+                          // elección ya hecha.
+                          paisOrigen:
+                            !form.paisOrigen && seleccionado?.paisOrigen
+                              ? seleccionado.paisOrigen
+                              : form.paisOrigen,
+                        });
+                      }}
+                      placeholder="Buscar proveedor por nombre o NIT..."
+                      searchPlaceholder="Buscar por nombre o NIT..."
+                      emptyText="Ningún proveedor coincide con el catálogo (SIESA/RicoSoft)."
+                      onSearchChange={buscarProveedores}
+                      loadingOptions={buscandoProveedores}
+                      selectedLabel={
+                        !proveedorNoCatalogado
+                          ? form.proveedorNombreCatalogado || undefined
+                          : undefined
+                      }
+                      disabled={proveedorNoCatalogado}
+                      options={proveedorOpciones.map((p) => ({
+                        value: p.id,
+                        label: `${p.nombre} (NIT ${p.nit})`,
+                      }))}
+                      className="h-9"
                     />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 max-h-64">
-                    {paises.map((p) => (
-                      <SelectItem key={p.id} value={p.clave} className="text-xs">
-                        {p.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-slate-500">
-                  País donde se fabricó la mercancía — puede diferir del país del proveedor.
-                </p>
-                {intentoGuardar && !form.paisOrigen && (
-                  <p className="text-[11px] text-red-600">El país de origen es obligatorio.</p>
-                )}
-                {errorPaises && (
-                  <p className="text-[11px] text-red-600">
-                    No se pudieron cargar los países: {errorPaises}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Moneda *</Label>
-                <Select
-                  value={form.moneda}
-                  onValueChange={(val) => setForm({ ...form, moneda: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {MONEDAS.map((m) => (
-                      <SelectItem key={m} value={m} className="text-xs">
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">
-                Tasa de cambio pactada (COP) *
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={form.trmPactada}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      trmPactada: Number(e.target.value),
-                      // Editar el valor a mano ya no es "Oficial" — nunca se
-                      // sobrescribe en silencio, pero tampoco se deja una
-                      // fuente desactualizada mostrando lo contrario.
-                      tasaCambioFuente: "Pactada",
-                    })
-                  }
-                  className="h-9 text-xs border-slate-300"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={cargandoTrm}
-                  onClick={handleObtenerTrmOficial}
-                  className="h-9 shrink-0 gap-1.5 text-xs font-semibold"
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5", cargandoTrm && "animate-spin")} />
-                  {cargandoTrm ? "Consultando..." : "TRM oficial del día"}
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-medium text-slate-500">Fecha de la tasa</Label>
-                  <Input
-                    type="date"
-                    value={form.tasaCambioFecha}
-                    onChange={(e) => setForm({ ...form, tasaCambioFecha: e.target.value })}
-                    className="h-8 text-[11px] border-slate-300"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-medium text-slate-500">Fuente</Label>
-                  <Select
-                    value={form.tasaCambioFuente || undefined}
-                    onValueChange={(val) =>
-                      setForm({ ...form, tasaCambioFuente: val as typeof form.tasaCambioFuente })
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-[11px] border-slate-300 bg-white">
-                      <SelectValue placeholder="Selecciona..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200">
-                      <SelectItem value="Oficial" className="text-xs">
-                        Oficial
-                      </SelectItem>
-                      <SelectItem value="Pactada" className="text-xs">
-                        Pactada
-                      </SelectItem>
-                      <SelectItem value="Manual" className="text-xs">
-                        Manual
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {trmOficial && (
-                <p
-                  className={cn(
-                    "flex items-center gap-1 text-[11px]",
-                    trmDifiereMucho ? "text-slate-900 font-semibold" : "text-slate-500",
-                  )}
-                >
-                  {trmDifiereMucho && <AlertTriangle className="h-3 w-3 shrink-0" />}
-                  TRM oficial vigente: {money(trmOficial.valor, "COP")}
-                  {trmDifiereMucho &&
-                    ` · difiere ${(diferenciaTrm * 100).toFixed(1)}% de la pactada — verifica que sea correcto.`}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Forma de Pago</Label>
-                <Select
-                  value={form.formaPago || undefined}
-                  disabled={cargandoFormasPago}
-                  onValueChange={(val) => setForm({ ...form, formaPago: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue
-                      placeholder={cargandoFormasPago ? "Cargando..." : "Selecciona..."}
-                    />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {formasPago.map((f) => (
-                      <SelectItem key={f.id} value={f.clave} className="text-xs">
-                        {f.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errorFormasPago && (
-                  <p className="text-[11px] text-red-600">
-                    No se pudieron cargar las formas de pago: {errorFormasPago}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">Condición de pago</Label>
-                <Input
-                  placeholder="Ej: 50% anticipo / 50% contra BL"
-                  value={form.condicionPago}
-                  onChange={(e) => setForm({ ...form, condicionPago: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Detalle de pago</Label>
-              <Textarea
-                value={form.detallePago}
-                onChange={(e) => setForm({ ...form, detallePago: e.target.value })}
-                className="text-xs border-slate-300"
-                rows={2}
-              />
-            </div>
-          </section>
-
-          {/* Logística */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Logística</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Fecha requerida de llegada
-                </Label>
-                <Input
-                  type="date"
-                  value={form.fechaRequeridaLlegada}
-                  onChange={(e) => setForm({ ...form, fechaRequeridaLlegada: e.target.value })}
-                  className="h-9 text-xs border-slate-300"
-                />
-                {form.fechaRequeridaLlegada &&
-                  form.fechaOrden &&
-                  new Date(form.fechaRequeridaLlegada) < new Date(form.fechaOrden) && (
-                    <p className="text-[11px] text-red-600">
-                      No puede ser anterior a la fecha de la orden.
+                    <p className="text-[11px] text-slate-500">
+                      Ya en el catálogo (Siesa/RicoSoft) — el nombre de la orden se toma
+                      directamente de aquí, no se puede editar por separado.
                     </p>
-                  )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Responsable de la importación
-                </Label>
-                <Select
-                  value={form.responsableId || undefined}
-                  onValueChange={(val) => setForm({ ...form, responsableId: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                    <SelectValue
-                      placeholder={cargandoResponsables ? "Cargando..." : "Selecciona..."}
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={proveedorNoCatalogado}
+                      onChange={(e) => {
+                        const marcado = e.target.checked;
+                        setProveedorNoCatalogado(marcado);
+                        if (marcado) {
+                          setForm({ ...form, proveedorId: "", proveedorNombreCatalogado: "" });
+                        }
+                      }}
+                      className="h-3.5 w-3.5"
                     />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 max-h-64">
-                    {responsableOpciones.map((u) => (
-                      <SelectItem key={u.id} value={u.id} className="text-xs">
-                        {u.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-slate-500">
-                  No reemplaza a quien crea/audita la orden — solo indica quién la gestiona.
-                </p>
-              </div>
-            </div>
-          </section>
+                    No catalogado / proveedor externo
+                  </label>
 
-          {/* Ítems */}
-          <section className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ítems</h3>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-slate-700">Ítems de la Orden *</Label>
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                onClick={() => setItems([...items, { ...itemVacio }])}
-                className="h-7 text-[11px] font-bold"
-              >
-                <Plus className="h-3 w-3 mr-1" /> Agregar ítem
-              </Button>
-            </div>
-            <p className="text-[11px] text-slate-500">
-              <strong>Cantidad</strong>: cantidad comercial comprada en la unidad seleccionada
-              (define el subtotal y el costo unitario). <strong>Peso total (Kg)</strong>: peso
-              físico del ítem completo — un dato aparte que no cambia la cantidad comercial (ej.
-              "500 SACOS de 25 Kg c/u" es Cantidad = 500, Unidad = SACO25KG, Peso total = 12.500
-              Kg).
-            </p>
-            <div className="rounded-md border border-slate-200 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow className="hover:bg-slate-50">
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
-                      Referencia
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2">
-                      Descripción
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
-                      Ref. proveedor
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-24">
-                      Unidad comercial
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-20">
-                      Cantidad
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-24">
-                      Peso total (Kg)
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
-                      FOB unitario
-                    </TableHead>
-                    <TableHead className="text-slate-600 font-bold px-2 py-2 w-28 text-right">
-                      Subtotal
-                    </TableHead>
-                    <TableHead className="w-8" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item, idx) => {
-                    const filaInvalida =
-                      intentoGuardar &&
-                      (!item.descripcion || !item.unidadMedida || Number(item.cantidad) <= 0);
-                    const subtotal =
-                      Number(item.cantidad || 0) * Number(item.valorUnitarioFob || 0);
-                    return (
-                      <TableRow key={idx}>
-                        <TableCell className="px-2 py-1.5">
-                          <Input
-                            placeholder="Ej: HUNH1024"
-                            value={item.referencia ?? ""}
-                            onChange={(e) => {
-                              const next = [...items];
-                              next[idx] = { ...next[idx], referencia: e.target.value };
-                              setItems(next);
-                            }}
-                            className="h-8 text-[11px] border-slate-300"
-                          />
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <ItemDescripcionAutocomplete
-                              value={item.descripcion}
-                              invalid={filaInvalida}
-                              onChange={(texto) => {
-                                const next = [...items];
-                                next[idx] = { ...next[idx], descripcion: texto, _origen: "manual" };
-                                setItems(next);
-                              }}
-                              onSeleccionar={(op) => {
-                                const next = [...items];
-                                next[idx] = {
-                                  ...next[idx],
-                                  descripcion: op.descripcion || next[idx].descripcion,
-                                  referencia: op.referencia || next[idx].referencia,
-                                  unidadMedida:
-                                    mapearUnidadSiesa(
-                                      op.unidadMedida,
-                                      unidadesMedida.map((u) => u.clave),
-                                    ) ?? next[idx].unidadMedida,
-                                  _origen: "siesa",
-                                };
-                                setItems(next);
-                              }}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <Input
-                            placeholder="Ref. del proveedor"
-                            value={item.referenciaProveedor ?? ""}
-                            onChange={(e) => {
-                              const next = [...items];
-                              next[idx] = { ...next[idx], referenciaProveedor: e.target.value };
-                              setItems(next);
-                            }}
-                            className="h-8 text-[11px] border-slate-300"
-                          />
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <Select
-                            value={item.unidadMedida ?? undefined}
-                            disabled={cargandoUnidadesMedida}
-                            onValueChange={(val) => {
-                              const next = [...items];
-                              next[idx] = { ...next[idx], unidadMedida: val };
-                              setItems(next);
-                            }}
-                          >
-                            <SelectTrigger
-                              className={cn(
-                                "h-8 text-[11px] border-slate-300 bg-white",
-                                filaInvalida &&
-                                  !item.unidadMedida &&
-                                  "border-red-400 focus-visible:ring-red-300",
-                              )}
-                            >
-                              <SelectValue
-                                placeholder={cargandoUnidadesMedida ? "Cargando..." : "—"}
-                              />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white border-slate-200">
-                              {unidadesMedida.map((u) => (
-                                <SelectItem key={u.id} value={u.clave} className="text-xs">
-                                  {u.clave}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {errorUnidadesMedida && (
-                            <p className="mt-0.5 text-[10px] text-red-600">
-                              Error cargando unidades.
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            required
-                            value={item.cantidad}
-                            onChange={(e) => {
-                              const next = [...items];
-                              next[idx] = { ...next[idx], cantidad: Number(e.target.value) };
-                              setItems(next);
-                            }}
-                            className={cn(
-                              "h-8 text-[11px] border-slate-300",
-                              filaInvalida &&
-                                Number(item.cantidad) <= 0 &&
-                                "border-red-400 focus-visible:ring-red-300",
-                            )}
-                          />
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.pesoKg ?? ""}
-                            onChange={(e) => {
-                              const next = [...items];
-                              next[idx] = {
-                                ...next[idx],
-                                pesoKg: e.target.value === "" ? undefined : Number(e.target.value),
-                              };
-                              setItems(next);
-                            }}
-                            className="h-8 text-[11px] border-slate-300"
-                          />
-                          {!!item.pesoKg && !!item.cantidad && (
-                            <p className="mt-0.5 whitespace-nowrap text-[10px] text-slate-400">
-                              {item.cantidad} {item.unidadMedida || "und."} ={" "}
-                              {Number(item.pesoKg).toLocaleString("es-CO")} kg
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            required
-                            value={item.valorUnitarioFob}
-                            onChange={(e) => {
-                              const next = [...items];
-                              next[idx] = {
-                                ...next[idx],
-                                valorUnitarioFob: Number(e.target.value),
-                              };
-                              setItems(next);
-                            }}
-                            className={cn(
-                              "h-8 text-[11px] border-slate-300",
-                              intentoGuardar &&
-                                Number(item.valorUnitarioFob) < 0 &&
-                                "border-red-400 focus-visible:ring-red-300",
-                            )}
-                          />
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-700 whitespace-nowrap">
-                          {money(subtotal, form.moneda)}
-                        </TableCell>
-                        <TableCell className="px-2 py-1.5 text-right">
-                          {items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                              className="text-slate-400 hover:text-slate-900"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </section>
-
-          {/* Documentos iniciales */}
-          <section className="space-y-2">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Documentos Iniciales
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                Cotización, Proforma Invoice, oferta comercial u otros documentos de soporte. Se
-                adjuntan a la orden justo después de registrarla.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {TIPOS_DOCUMENTO_ORDEN_INTL.map(({ tipo, etiqueta }) => (
-                <div key={tipo} className="rounded-md border border-slate-200 p-2.5">
-                  <p className="text-[10px] uppercase font-bold text-slate-500">{etiqueta}</p>
-                  <input
-                    ref={(el) => {
-                      documentInputRefs.current[tipo] = el;
-                    }}
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleSeleccionarDocumento(tipo, file);
-                      e.target.value = "";
-                    }}
-                  />
-                  {documentosPendientes
-                    .map((d, i) => ({ ...d, index: i }))
-                    .filter((d) => d.tipo === tipo).length === 0 ? (
-                    <p className="mt-1.5 text-[11px] text-slate-400">Sin documentos.</p>
+                  {proveedorCatalogado ? (
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nombre del Proveedor{" "}
+                        <span className="font-normal text-slate-400">(autocompletado)</span>
+                      </Label>
+                      <Input
+                        disabled
+                        value={form.proveedorNombreCatalogado}
+                        className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-500"
+                      />
+                    </div>
                   ) : (
-                    <ul className="mt-1.5 space-y-1">
-                      {documentosPendientes
-                        .map((d, i) => ({ ...d, index: i }))
-                        .filter((d) => d.tipo === tipo)
-                        .map((d) => (
-                          <li key={d.index} className="flex items-center justify-between gap-1.5">
-                            <span
-                              className="truncate text-[11px] text-slate-700"
-                              title={d.file.name}
-                            >
-                              {d.file.name}
-                            </span>
-                            <button
-                              type="button"
-                              className="shrink-0 text-slate-400 hover:text-red-600"
-                              onClick={() => handleQuitarDocumentoPendiente(d.index)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nombre del Proveedor no catalogado *
+                      </Label>
+                      <Input
+                        required
+                        disabled={!proveedorNoCatalogado}
+                        placeholder='Marca "No catalogado / proveedor externo" para escribirlo'
+                        value={form.proveedorExtranjero}
+                        onChange={(e) => setForm({ ...form, proveedorExtranjero: e.target.value })}
+                        className={cn(
+                          "h-9 text-xs border-slate-300 disabled:bg-slate-50 disabled:text-slate-400",
+                          mostrarErroresEtapa &&
+                            proveedorNoCatalogado &&
+                            !form.proveedorExtranjero &&
+                            "border-red-400 focus-visible:ring-red-300",
+                        )}
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Se guarda como texto (snapshot) en la orden — NO crea un registro nuevo en
+                        el catálogo de proveedores.
+                      </p>
+                    </div>
                   )}
+                </section>
+
+                {/* Condiciones comerciales */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Condiciones comerciales
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">Incoterm *</Label>
+                      <Select
+                        value={form.incoterm}
+                        disabled={cargandoIncoterms}
+                        onValueChange={(val) => setForm({ ...form, incoterm: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue
+                            placeholder={cargandoIncoterms ? "Cargando..." : undefined}
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200">
+                          {incoterms.map((i) => (
+                            <SelectItem key={i.id} value={i.clave} className="text-xs">
+                              {i.clave}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errorIncoterms && (
+                        <p className="text-[11px] text-red-600">
+                          No se pudieron cargar los Incoterms: {errorIncoterms}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">Lugar pactado</Label>
+                      <Input
+                        placeholder="Ej: Shanghai, China"
+                        value={form.lugarPactado}
+                        onChange={(e) => setForm({ ...form, lugarPactado: e.target.value })}
+                        className="h-9 text-xs border-slate-300"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        No se infiere automáticamente del Incoterm ni del país de origen.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        País de origen de la mercancía *
+                      </Label>
+                      <Select
+                        value={form.paisOrigen || undefined}
+                        disabled={cargandoPaises}
+                        onValueChange={(val) => setForm({ ...form, paisOrigen: val })}
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            "h-9 text-xs border-slate-300 bg-white",
+                            mostrarErroresEtapa &&
+                              !form.paisOrigen &&
+                              "border-red-400 focus-visible:ring-red-300",
+                          )}
+                        >
+                          <SelectValue
+                            placeholder={cargandoPaises ? "Cargando..." : "Selecciona un país..."}
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200 max-h-64">
+                          {paises.map((p) => (
+                            <SelectItem key={p.id} value={p.clave} className="text-xs">
+                              {p.etiqueta}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-slate-500">
+                        País donde se fabricó la mercancía — puede diferir del país del proveedor.
+                      </p>
+                      {mostrarErroresEtapa && !form.paisOrigen && (
+                        <p className="text-[11px] text-red-600">
+                          El país de origen es obligatorio.
+                        </p>
+                      )}
+                      {errorPaises && (
+                        <p className="text-[11px] text-red-600">
+                          No se pudieron cargar los países: {errorPaises}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">Moneda *</Label>
+                      <Select
+                        value={form.moneda}
+                        onValueChange={(val) => setForm({ ...form, moneda: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200">
+                          {MONEDAS.map((m) => (
+                            <SelectItem key={m} value={m} className="text-xs">
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Tasa de cambio pactada (COP) *
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id={ID_CAMPO_TRM}
+                        {...atributosPrecision(ID_CAMPO_TRM)}
+                        type="number"
+                        step="0.01"
+                        required
+                        value={form.trmPactada}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            trmPactada: Number(e.target.value),
+                            // Editar el valor a mano ya no es "Oficial" — nunca se
+                            // sobrescribe en silencio, pero tampoco se deja una
+                            // fuente desactualizada mostrando lo contrario.
+                            tasaCambioFuente: "Pactada",
+                          })
+                        }
+                        className="h-9 text-xs border-slate-300 aria-invalid:border-red-400 aria-invalid:focus-visible:ring-red-300"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={cargandoTrm}
+                        onClick={handleObtenerTrmOficial}
+                        className="h-9 shrink-0 gap-1.5 text-xs font-semibold"
+                      >
+                        <RefreshCw className={cn("h-3.5 w-3.5", cargandoTrm && "animate-spin")} />
+                        {cargandoTrm ? "Consultando..." : "TRM oficial del día"}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-slate-500">
+                          Fecha de la tasa
+                        </Label>
+                        <Input
+                          type="date"
+                          value={form.tasaCambioFecha}
+                          onChange={(e) => setForm({ ...form, tasaCambioFecha: e.target.value })}
+                          className="h-8 text-[11px] border-slate-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-slate-500">Fuente</Label>
+                        <Select
+                          value={form.tasaCambioFuente || undefined}
+                          onValueChange={(val) =>
+                            setForm({
+                              ...form,
+                              tasaCambioFuente: val as typeof form.tasaCambioFuente,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-[11px] border-slate-300 bg-white">
+                            <SelectValue placeholder="Selecciona..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white border-slate-200">
+                            <SelectItem value="Oficial" className="text-xs">
+                              Oficial
+                            </SelectItem>
+                            <SelectItem value="Pactada" className="text-xs">
+                              Pactada
+                            </SelectItem>
+                            <SelectItem value="Manual" className="text-xs">
+                              Manual
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {trmOficial && (
+                      <p
+                        className={cn(
+                          "flex items-center gap-1 text-[11px]",
+                          trmDifiereMucho ? "text-slate-900 font-semibold" : "text-slate-500",
+                        )}
+                      >
+                        {trmDifiereMucho && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                        TRM oficial vigente: {money(trmOficial.valor, "COP")}
+                        {trmDifiereMucho &&
+                          ` · difiere ${(diferenciaTrm * 100).toFixed(1)}% de la pactada — verifica que sea correcto.`}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">Forma de Pago</Label>
+                      <Select
+                        value={form.formaPago || undefined}
+                        disabled={cargandoFormasPago}
+                        onValueChange={(val) => setForm({ ...form, formaPago: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue
+                            placeholder={cargandoFormasPago ? "Cargando..." : "Selecciona..."}
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200">
+                          {formasPago.map((f) => (
+                            <SelectItem key={f.id} value={f.clave} className="text-xs">
+                              {f.etiqueta}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errorFormasPago && (
+                        <p className="text-[11px] text-red-600">
+                          No se pudieron cargar las formas de pago: {errorFormasPago}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Condición de pago
+                      </Label>
+                      <Input
+                        placeholder="Ej: 50% anticipo / 50% contra BL"
+                        value={form.condicionPago}
+                        onChange={(e) => setForm({ ...form, condicionPago: e.target.value })}
+                        className="h-9 text-xs border-slate-300"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">Detalle de pago</Label>
+                    <Textarea
+                      value={form.detallePago}
+                      onChange={(e) => setForm({ ...form, detallePago: e.target.value })}
+                      className="text-xs border-slate-300"
+                      rows={2}
+                    />
+                  </div>
+                </section>
+              </>
+            )}
+
+            {etapa === 2 && (
+              <>
+                {/* Ítems */}
+                <section className="space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Ítems
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Ítems de la Orden *
+                    </Label>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={() => setItems([...items, { ...itemVacio }])}
+                      className="h-7 text-[11px] font-bold"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Agregar ítem
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    <strong>Cantidad</strong>: cantidad comercial comprada en la unidad seleccionada
+                    (define el subtotal y el costo unitario). <strong>Peso total (Kg)</strong>: peso
+                    físico del ítem completo — un dato aparte que no cambia la cantidad comercial
+                    (ej. "500 SACOS de 25 Kg c/u" es Cantidad = 500, Unidad = SACO25KG, Peso total =
+                    12.500 Kg).
+                  </p>
+                  <div className="rounded-md border border-slate-200 overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow className="hover:bg-slate-50">
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
+                            Referencia
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2">
+                            Descripción
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
+                            Ref. proveedor
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-24">
+                            Unidad comercial
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-20">
+                            Cantidad
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-24">
+                            Peso total (Kg)
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-28">
+                            FOB unitario
+                          </TableHead>
+                          <TableHead className="text-slate-600 font-bold px-2 py-2 w-28 text-right">
+                            Subtotal
+                          </TableHead>
+                          <TableHead className="w-8" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((item, idx) => {
+                          const filaInvalida =
+                            mostrarErroresEtapa &&
+                            (!item.descripcion || !item.unidadMedida || Number(item.cantidad) <= 0);
+                          const subtotal =
+                            Number(item.cantidad || 0) * Number(item.valorUnitarioFob || 0);
+                          return (
+                            <TableRow key={idx}>
+                              <TableCell className="px-2 py-1.5">
+                                <Input
+                                  placeholder="Ej: HUNH1024"
+                                  value={item.referencia ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...items];
+                                    next[idx] = { ...next[idx], referencia: e.target.value };
+                                    setItems(next);
+                                  }}
+                                  className="h-8 text-[11px] border-slate-300"
+                                />
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <ItemDescripcionAutocomplete
+                                    value={item.descripcion}
+                                    invalid={filaInvalida}
+                                    onChange={(texto) => {
+                                      const next = [...items];
+                                      next[idx] = {
+                                        ...next[idx],
+                                        descripcion: texto,
+                                        _origen: "manual",
+                                      };
+                                      setItems(next);
+                                    }}
+                                    onSeleccionar={(op) => {
+                                      const next = [...items];
+                                      next[idx] = {
+                                        ...next[idx],
+                                        descripcion: op.descripcion || next[idx].descripcion,
+                                        referencia: op.referencia || next[idx].referencia,
+                                        unidadMedida:
+                                          mapearUnidadSiesa(
+                                            op.unidadMedida,
+                                            unidadesMedida.map((u) => u.clave),
+                                          ) ?? next[idx].unidadMedida,
+                                        _origen: "siesa",
+                                      };
+                                      setItems(next);
+                                    }}
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Input
+                                  placeholder="Ref. del proveedor"
+                                  value={item.referenciaProveedor ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...items];
+                                    next[idx] = {
+                                      ...next[idx],
+                                      referenciaProveedor: e.target.value,
+                                    };
+                                    setItems(next);
+                                  }}
+                                  className="h-8 text-[11px] border-slate-300"
+                                />
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Select
+                                  value={item.unidadMedida ?? undefined}
+                                  disabled={cargandoUnidadesMedida}
+                                  onValueChange={(val) => {
+                                    const next = [...items];
+                                    next[idx] = { ...next[idx], unidadMedida: val };
+                                    setItems(next);
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className={cn(
+                                      "h-8 text-[11px] border-slate-300 bg-white",
+                                      filaInvalida &&
+                                        !item.unidadMedida &&
+                                        "border-red-400 focus-visible:ring-red-300",
+                                    )}
+                                  >
+                                    <SelectValue
+                                      placeholder={cargandoUnidadesMedida ? "Cargando..." : "—"}
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white border-slate-200">
+                                    {unidadesMedida.map((u) => (
+                                      <SelectItem key={u.id} value={u.clave} className="text-xs">
+                                        {u.clave}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {errorUnidadesMedida && (
+                                  <p className="mt-0.5 text-[10px] text-red-600">
+                                    Error cargando unidades.
+                                  </p>
+                                )}
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Input
+                                  id={idCampoItem(idx, "cantidad")}
+                                  {...atributosPrecision(idCampoItem(idx, "cantidad"))}
+                                  type="number"
+                                  step="0.01"
+                                  required
+                                  value={item.cantidad}
+                                  onChange={(e) => {
+                                    const next = [...items];
+                                    next[idx] = { ...next[idx], cantidad: Number(e.target.value) };
+                                    setItems(next);
+                                  }}
+                                  className={cn(
+                                    "h-8 text-[11px] border-slate-300 aria-invalid:border-red-400 aria-invalid:focus-visible:ring-red-300",
+                                    filaInvalida &&
+                                      Number(item.cantidad) <= 0 &&
+                                      "border-red-400 focus-visible:ring-red-300",
+                                  )}
+                                />
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Input
+                                  id={idCampoItem(idx, "peso")}
+                                  {...atributosPrecision(idCampoItem(idx, "peso"))}
+                                  type="number"
+                                  step="0.01"
+                                  value={item.pesoKg ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...items];
+                                    next[idx] = {
+                                      ...next[idx],
+                                      pesoKg:
+                                        e.target.value === "" ? undefined : Number(e.target.value),
+                                    };
+                                    setItems(next);
+                                  }}
+                                  className="h-8 text-[11px] border-slate-300 aria-invalid:border-red-400 aria-invalid:focus-visible:ring-red-300"
+                                />
+                                {!!item.pesoKg && !!item.cantidad && (
+                                  <p className="mt-0.5 whitespace-nowrap text-[10px] text-slate-400">
+                                    {item.cantidad} {item.unidadMedida || "und."} ={" "}
+                                    {Number(item.pesoKg).toLocaleString("es-CO")} kg
+                                  </p>
+                                )}
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Input
+                                  id={idCampoItem(idx, "fob")}
+                                  {...atributosPrecision(idCampoItem(idx, "fob"))}
+                                  type="number"
+                                  step="0.01"
+                                  required
+                                  value={item.valorUnitarioFob}
+                                  onChange={(e) => {
+                                    const next = [...items];
+                                    next[idx] = {
+                                      ...next[idx],
+                                      valorUnitarioFob: Number(e.target.value),
+                                    };
+                                    setItems(next);
+                                  }}
+                                  className={cn(
+                                    "h-8 text-[11px] border-slate-300 aria-invalid:border-red-400 aria-invalid:focus-visible:ring-red-300",
+                                    mostrarErroresEtapa &&
+                                      Number(item.valorUnitarioFob) < 0 &&
+                                      "border-red-400 focus-visible:ring-red-300",
+                                  )}
+                                />
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-700 whitespace-nowrap">
+                                {money(subtotal, form.moneda)}
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5 text-right">
+                                {items.length > 1 && (
+                                  <button
+                                    type="button"
+                                    aria-label={`Quitar ítem ${idx + 1}`}
+                                    onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                                    className="text-slate-400 hover:text-slate-900"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {etapa === 3 && (
+              <>
+                {/* Logística */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Logística
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Fecha requerida de llegada
+                      </Label>
+                      <Input
+                        type="date"
+                        value={form.fechaRequeridaLlegada}
+                        onChange={(e) =>
+                          setForm({ ...form, fechaRequeridaLlegada: e.target.value })
+                        }
+                        id={ID_CAMPO_FECHA_REQUERIDA}
+                        {...atributosErrorCampo(mostrarErroresEtapa, fechaRequeridaInvalida)}
+                        className="h-9 text-xs border-slate-300 aria-invalid:border-red-400 aria-invalid:focus-visible:ring-red-300"
+                      />
+                      {mostrarErroresEtapa && fechaRequeridaInvalida && (
+                        <p className="text-[11px] text-red-600">
+                          No puede ser anterior a la fecha de la orden.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Responsable de la importación
+                      </Label>
+                      <Select
+                        value={form.responsableId || undefined}
+                        onValueChange={(val) => setForm({ ...form, responsableId: val })}
+                      >
+                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
+                          <SelectValue
+                            placeholder={cargandoResponsables ? "Cargando..." : "Selecciona..."}
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200 max-h-64">
+                          {responsableOpciones.map((u) => (
+                            <SelectItem key={u.id} value={u.id} className="text-xs">
+                              {u.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-slate-500">
+                        No reemplaza a quien crea/audita la orden — solo indica quién la gestiona.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Documentos iniciales */}
+                <section className="space-y-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Documentos Iniciales
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Cotización, Proforma Invoice, oferta comercial u otros documentos de soporte.
+                      Se adjuntan a la orden justo después de registrarla.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {TIPOS_DOCUMENTO_ORDEN_INTL.map(({ tipo, etiqueta }) => (
+                      <div key={tipo} className="rounded-md border border-slate-200 p-2.5">
+                        <p className="text-[10px] uppercase font-bold text-slate-500">{etiqueta}</p>
+                        <input
+                          ref={(el) => {
+                            documentInputRefs.current[tipo] = el;
+                          }}
+                          type="file"
+                          accept="application/pdf,image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleSeleccionarDocumento(tipo, file);
+                            e.target.value = "";
+                          }}
+                        />
+                        {documentosPendientes
+                          .map((d, i) => ({ ...d, index: i }))
+                          .filter((d) => d.tipo === tipo).length === 0 ? (
+                          <p className="mt-1.5 text-[11px] text-slate-400">Sin documentos.</p>
+                        ) : (
+                          <ul className="mt-1.5 space-y-1">
+                            {documentosPendientes
+                              .map((d, i) => ({ ...d, index: i }))
+                              .filter((d) => d.tipo === tipo)
+                              .map((d) => (
+                                <li
+                                  key={d.index}
+                                  className="flex items-center justify-between gap-1.5"
+                                >
+                                  <span
+                                    className="truncate text-[11px] text-slate-700"
+                                    title={d.file.name}
+                                  >
+                                    {d.file.name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    aria-label={`Quitar documento ${d.file.name}`}
+                                    className="shrink-0 text-slate-400 hover:text-red-600"
+                                    onClick={() => handleQuitarDocumentoPendiente(d.index)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          className="mt-1.5 h-7 w-full text-[11px]"
+                          onClick={() => documentInputRefs.current[tipo]?.click()}
+                        >
+                          Adjuntar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Observaciones */}
+                <section className="space-y-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Observaciones
+                  </h3>
+                  <Textarea
+                    value={form.observaciones}
+                    onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
+                    className="text-xs border-slate-300"
+                    rows={2}
+                  />
+                </section>
+              </>
+            )}
+
+            {etapa === ULTIMA_ETAPA && (
+              <section className="space-y-3" aria-label="Revisión de la orden">
+                <p className="text-xs text-slate-600">
+                  Revisa lo pendiente antes de guardar. Al registrar se crea la orden y recién
+                  entonces se asigna el número definitivo.
+                </p>
+                {errores.length > 0 ? (
+                  <BloqueVerificacion
+                    tono="error"
+                    titulo="Falta completar antes de poder registrar:"
+                    items={errores}
+                    renderItem={(e) => (
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span>
+                          • {e.texto}{" "}
+                          <span className="text-red-500">
+                            (Etapa {e.etapa}: {ETAPAS_ORDEN[e.etapa - 1].etiqueta})
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => irAEtapa(e.etapa, e.focoId, true)}
+                          className="font-semibold text-blue-700 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        >
+                          Ir a la etapa
+                        </button>
+                      </span>
+                    )}
+                  />
+                ) : (
+                  <p className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Sin errores
+                    bloqueantes.
+                  </p>
+                )}
+                <BloqueVerificacion
+                  tono="advertencia"
+                  titulo="Advertencias (puedes continuar igual):"
+                  items={advertencias}
+                />
+                <BloqueVerificacion
+                  tono="recomendacion"
+                  titulo="Recomendaciones"
+                  items={recomendaciones}
+                />
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs text-slate-700 sm:grid-cols-2">
+                  <div>
+                    <dt className="inline text-slate-500">Proveedor: </dt>
+                    <dd className="inline font-semibold">{nombreProveedorEfectivo || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-slate-500">País de origen: </dt>
+                    <dd className="inline font-semibold">{form.paisOrigen || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-slate-500">Incoterm: </dt>
+                    <dd className="inline font-semibold">{form.incoterm || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-slate-500">Ítems: </dt>
+                    <dd className="inline font-semibold">{items.length}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-slate-500">Documentos por adjuntar: </dt>
+                    <dd className="inline font-semibold">{documentosPendientes.length}</dd>
+                  </div>
+                </dl>
+              </section>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <Link
+                to="/importaciones"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+                aria-disabled={guardando}
+              >
+                Cancelar
+              </Link>
+              <div className="flex items-center gap-2">
+                {etapa > 1 && (
                   <Button
                     type="button"
-                    size="xs"
                     variant="outline"
-                    className="mt-1.5 h-7 w-full text-[11px]"
-                    onClick={() => documentInputRefs.current[tipo]?.click()}
+                    size="sm"
+                    onClick={() => irAEtapa((etapa - 1) as NumeroEtapa)}
                   >
-                    Adjuntar
+                    Atrás
                   </Button>
-                </div>
-              ))}
+                )}
+                {etapa < ULTIMA_ETAPA ? (
+                  <Button type="submit" size="sm">
+                    Siguiente
+                  </Button>
+                ) : (
+                  <Button type="submit" size="sm" disabled={guardando} className="gap-2">
+                    <Ship className="h-4 w-4" />
+                    {guardando ? "Guardando..." : "Registrar Orden"}
+                  </Button>
+                )}
+              </div>
             </div>
-          </section>
+          </form>
 
-          {/* Observaciones */}
-          <section className="space-y-1">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Observaciones
-            </h3>
-            <Textarea
-              value={form.observaciones}
-              onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
-              className="text-xs border-slate-300"
-              rows={2}
-            />
-          </section>
-
-          {/* Resumen */}
-          <section className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Resumen</h3>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                FOB total: <strong className="ml-1">{money(fobTotal, form.moneda)}</strong>
-              </Badge>
-              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
-                Estimado en COP: <strong className="ml-1">{money(estimadoCop, "COP")}</strong>
-              </Badge>
-              <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                Peso total:{" "}
-                <strong className="ml-1">{pesoTotalKg.toLocaleString("es-CO")} Kg</strong>
-              </Badge>
-              <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                Ítems: <strong className="ml-1">{items.length}</strong>
-              </Badge>
-            </div>
-            <p className="text-[11px] text-slate-500">
+          {/* Resumen lateral: reutiliza los cálculos existentes (FOB, peso, estimado COP). */}
+          <aside
+            aria-label="Resumen de la orden"
+            className="panel rounded-lg border border-slate-200 bg-white shadow-2xs lg:sticky lg:top-4"
+          >
+            <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900">
+              Resumen de la orden
+            </h2>
+            <dl className="space-y-3 px-4 py-3 text-xs">
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-600">FOB total</dt>
+                <dd className="font-bold text-slate-900">{money(fobTotal, form.moneda)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-600">Peso total</dt>
+                <dd className="font-bold text-slate-900">
+                  {pesoTotalKg.toLocaleString("es-CO")} Kg
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-600">Estimado COP</dt>
+                <dd className="font-bold text-blue-800">{money(estimadoCop, "COP")}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-600">Ítems</dt>
+                <dd className="font-bold text-slate-900">{items.length}</dd>
+              </div>
+            </dl>
+            <p className="border-t border-slate-200 px-4 py-3 text-[11px] text-slate-500">
               Estimado en COP = FOB total × tasa de cambio pactada, sin flete, seguro, arancel ni
               nacionalización todavía (eso se calcula al liquidar cada lote).
             </p>
-          </section>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Link
-              to="/importaciones"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-              aria-disabled={guardando}
-            >
-              Cancelar
-            </Link>
-            <Button type="submit" size="sm" disabled={guardando} className="gap-2">
-              <Ship className="h-4 w-4" />
-              {guardando ? "Guardando..." : "Registrar Orden"}
-            </Button>
-          </div>
-        </form>
+          </aside>
+        </div>
       </div>
 
       {/* Pre-flight check */}
@@ -1298,51 +1661,28 @@ function NuevaOrdenIntlPage() {
 
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {errores.length > 0 ? (
-              <div className="space-y-1 rounded-md border border-red-200 bg-red-50 p-3">
-                <p className="text-xs font-bold text-red-700">
-                  No se puede registrar — corrige lo siguiente:
-                </p>
-                <ul className="space-y-0.5">
-                  {errores.map((e, i) => (
-                    <li key={i} className="text-xs text-red-700">
-                      • {e.texto}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <BloqueVerificacion
+                tono="error"
+                titulo="No se puede registrar — corrige lo siguiente:"
+                items={errores}
+              />
             ) : (
               <p className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Sin errores bloqueantes.
               </p>
             )}
 
-            {advertencias.length > 0 && (
-              <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3">
-                <p className="text-xs font-bold text-amber-800">
-                  Advertencias (puedes continuar igual):
-                </p>
-                <ul className="space-y-0.5">
-                  {advertencias.map((a, i) => (
-                    <li key={i} className="text-xs text-amber-800">
-                      • {a.texto}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <BloqueVerificacion
+              tono="advertencia"
+              titulo="Advertencias (puedes continuar igual):"
+              items={advertencias}
+            />
 
-            {recomendaciones.length > 0 && (
-              <div className="space-y-1 rounded-md border border-slate-200 p-3">
-                <p className="text-xs font-bold text-slate-500">Recomendaciones</p>
-                <ul className="space-y-0.5">
-                  {recomendaciones.map((r, i) => (
-                    <li key={i} className="text-xs text-slate-500">
-                      • {r.texto}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <BloqueVerificacion
+              tono="recomendacion"
+              titulo="Recomendaciones"
+              items={recomendaciones}
+            />
 
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 space-y-1">
               <p>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Anchor,
@@ -12,7 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HitosLotePanel } from "@/components/importaciones/hitos-lote-panel";
+import { OrdenCreadaAviso } from "@/components/importaciones/orden-creada-aviso";
+import { esMarcaOrdenCreada, sinMarcaOrdenCreada } from "@/components/importaciones/orden-creada";
 import {
   ImportacionHeader,
   ImportacionResumen,
@@ -229,6 +231,37 @@ function DetalleOrdenIntl() {
   );
   const puedeRecibir = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_RECIBIR);
   const puedeLiquidar = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_LIQUIDAR);
+
+  // Confirmación tras crear la orden: el formulario de creación redirige aquí con
+  // state.ordenCreadaId = id de la orden creada. El aviso solo se muestra si ese
+  // id coincide con el de la ruta y se consume una sola vez del historial con
+  // replace (no reaparece al recargar, con Atrás/Adelante ni en otra orden).
+  // El número mostrado es el definitivo (orden.codigo, devuelto por el servidor).
+  const navigate = useNavigate();
+  const llegoDeCrear = useLocation({ select: (l) => esMarcaOrdenCreada(l.state, id) });
+  const [avisoParaId, setAvisoParaId] = useState<string | null>(llegoDeCrear ? id : null);
+  useEffect(() => {
+    if (!llegoDeCrear) return;
+    setAvisoParaId(id);
+    void navigate({
+      to: "/importaciones/$id",
+      params: { id },
+      replace: true,
+      state: (prev) => sinMarcaOrdenCreada(prev),
+    });
+  }, [llegoDeCrear, navigate, id]);
+  const avisoCreadaVisible = avisoParaId === id;
+  const [pestanaActiva, setPestanaActiva] = useState("resumen");
+  // Lleva al contenido de la pestaña: la activa, con scroll y foco en su panel
+  // (los paneles de Radix son enfocables, tabIndex=0).
+  const irAPestana = (valor: string) => {
+    setPestanaActiva(valor);
+    requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]');
+      panel?.scrollIntoView({ block: "start", behavior: "smooth" });
+      panel?.focus({ preventScroll: true });
+    });
+  };
 
   const [modalLoteOpen, setModalLoteOpen] = useState(false);
   const [loteForm, setLoteForm] = useState<CrearLoteInput>({ ...loteVacio });
@@ -465,11 +498,23 @@ function DetalleOrdenIntl() {
         </>
       }
     >
+      {avisoCreadaVisible && (
+        <OrdenCreadaAviso
+          codigo={orden.codigo}
+          onCerrar={() => setAvisoParaId(null)}
+          onAdjuntarDocumentos={puedeCrear ? () => irAPestana("documentos") : undefined}
+          onCrearLotes={
+            puedeCrear && orden.estado !== "Anulada" && orden.estado !== "Cerrada"
+              ? () => irAPestana("embarques")
+              : undefined
+          }
+        />
+      )}
       {/* 1. Header / centro de control — siempre visible, sin importar la pestaña activa. */}
       <ImportacionHeader orden={orden} />
 
       {/* 5. Navegación por pestañas — reubica el contenido ya existente sin duplicarlo. */}
-      <Tabs defaultValue="resumen" className="mt-4">
+      <Tabs value={pestanaActiva} onValueChange={setPestanaActiva} className="mt-4">
         <TabsList className="flex h-auto flex-wrap justify-start gap-1 bg-slate-100 p-1">
           <TabsTrigger value="resumen" className="text-xs">
             Resumen

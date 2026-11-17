@@ -31,6 +31,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  clasificarEstadoIndicador,
+  ID_DEFINICIONES_ANALITICA,
+  type EstadoIndicador,
+} from "@/components/importaciones/estado-indicador";
+import { EstadoVacioIndicador } from "@/components/importaciones/estado-vacio-indicador";
 import { useCatalogo } from "@/hooks/use-catalogos";
 import { useProveedorBusqueda } from "@/hooks/use-proveedores";
 import {
@@ -105,22 +111,44 @@ function TarjetaKpi({
   variacionPorcentual,
   cantidadAnalizada,
   cantidadExcluida,
+  estado,
+  exclusiones,
+  estadosIncluidos,
 }: {
   titulo: string;
   valor: string;
   variacionPorcentual: number | null;
   cantidadAnalizada: number;
   cantidadExcluida: number;
+  estado: EstadoIndicador;
+  /** Motivo → cantidad, tal como lo informa metadatos.indicadores[x].exclusiones. */
+  exclusiones: Record<string, number>;
+  estadosIncluidos: string[];
 }) {
+  const detalleExclusiones = Object.entries(exclusiones)
+    .map(([motivo, n]) => `${n} ${MOTIVOS_EXCLUSION[motivo] ?? motivo}`)
+    .join("; ");
   return (
     <div className="panel p-5 bg-white border-slate-200 shadow-2xs flex flex-col gap-1">
       <span className="text-xs font-medium text-slate-500">{titulo}</span>
-      <span className="text-2xl font-semibold text-slate-900">{valor}</span>
-      <VariacionBadge variacionPorcentual={variacionPorcentual} />
-      <span className="text-[11px] text-slate-400">
-        {cantidadAnalizada} operación(es) analizada(s)
-        {cantidadExcluida > 0 ? ` · ${cantidadExcluida} excluida(s) por datos insuficientes` : ""}
-      </span>
+      {estado === "con-datos" ? (
+        <>
+          <span className="text-2xl font-semibold text-slate-900">{valor}</span>
+          <VariacionBadge variacionPorcentual={variacionPorcentual} />
+        </>
+      ) : (
+        <EstadoVacioIndicador
+          estado={estado}
+          detalleExclusiones={detalleExclusiones}
+          estadosIncluidos={estadosIncluidos}
+        />
+      )}
+      {estado !== "sin-operaciones" && (
+        <span className="text-[11px] text-slate-400">
+          {cantidadAnalizada} operación(es) analizada(s)
+          {cantidadExcluida > 0 ? ` · ${cantidadExcluida} excluida(s) por datos insuficientes` : ""}
+        </span>
+      )}
     </div>
   );
 }
@@ -253,7 +281,10 @@ function PanelDefiniciones({
     ["Variación TRM", indicadores.variacionTrm],
   ];
   return (
-    <div className="panel p-5 bg-white border-slate-200 shadow-2xs">
+    <div
+      id={ID_DEFINICIONES_ANALITICA}
+      className="panel p-5 bg-white border-slate-200 shadow-2xs scroll-mt-4"
+    >
       <h2 className="text-sm font-medium text-slate-700 mb-1">
         Definiciones, periodo y exclusiones
       </h2>
@@ -504,6 +535,12 @@ function ImportacionesAnaliticaPage() {
                 variacionPorcentual={resumen.leadTime.tendencia.variacionPorcentual}
                 cantidadAnalizada={resumen.leadTime.agregado.cantidadAnalizada}
                 cantidadExcluida={resumen.leadTime.agregado.cantidadExcluida}
+                estado={clasificarEstadoIndicador(
+                  resumen.leadTime.agregado,
+                  resumen.totalOperacionesConsideradas,
+                )}
+                exclusiones={resumen.metadatos.indicadores.leadTime.exclusiones}
+                estadosIncluidos={resumen.metadatos.periodo.estadosIncluidos}
               />
               <TarjetaKpi
                 titulo="Tiempo de desaduanamiento"
@@ -511,6 +548,12 @@ function ImportacionesAnaliticaPage() {
                 variacionPorcentual={resumen.tiempoDesaduanamiento.tendencia.variacionPorcentual}
                 cantidadAnalizada={resumen.tiempoDesaduanamiento.agregado.cantidadAnalizada}
                 cantidadExcluida={resumen.tiempoDesaduanamiento.agregado.cantidadExcluida}
+                estado={clasificarEstadoIndicador(
+                  resumen.tiempoDesaduanamiento.agregado,
+                  resumen.totalOperacionesConsideradas,
+                )}
+                exclusiones={resumen.metadatos.indicadores.tiempoDesaduanamiento.exclusiones}
+                estadosIncluidos={resumen.metadatos.periodo.estadosIncluidos}
               />
               <TarjetaKpi
                 titulo="Factor de incremento logístico"
@@ -520,6 +563,12 @@ function ImportacionesAnaliticaPage() {
                 }
                 cantidadAnalizada={resumen.factorIncrementoLogistico.agregado.cantidadAnalizada}
                 cantidadExcluida={resumen.factorIncrementoLogistico.agregado.cantidadExcluida}
+                estado={clasificarEstadoIndicador(
+                  resumen.factorIncrementoLogistico.agregado,
+                  resumen.totalOperacionesConsideradas,
+                )}
+                exclusiones={resumen.metadatos.indicadores.factorIncrementoLogistico.exclusiones}
+                estadosIncluidos={resumen.metadatos.periodo.estadosIncluidos}
               />
               <TarjetaKpi
                 titulo="Variación TRM (pactada → liquidada)"
@@ -527,6 +576,12 @@ function ImportacionesAnaliticaPage() {
                 variacionPorcentual={resumen.variacionTrm.tendencia.variacionPorcentual}
                 cantidadAnalizada={resumen.variacionTrm.agregado.cantidadAnalizada}
                 cantidadExcluida={resumen.variacionTrm.agregado.cantidadExcluida}
+                estado={clasificarEstadoIndicador(
+                  resumen.variacionTrm.agregado,
+                  resumen.totalOperacionesConsideradas,
+                )}
+                exclusiones={resumen.metadatos.indicadores.variacionTrm.exclusiones}
+                estadosIncluidos={resumen.metadatos.periodo.estadosIncluidos}
               />
             </div>
 
