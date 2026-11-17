@@ -508,16 +508,11 @@ function NuevaOrdenIntlPage() {
                 <Input
                   readOnly
                   disabled
-                  aria-describedby="numero-orden-ayuda"
                   value={
                     cargandoConsecutivo ? "Calculando…" : numeroEstimado || "Se asigna al guardar"
                   }
                   className="h-9 text-xs border-slate-300 bg-slate-50 font-semibold"
                 />
-                <p id="numero-orden-ayuda" className="text-[11px] text-slate-500">
-                  Número estimado. Se confirma al guardar: si otra persona registra una orden antes,
-                  el número final puede ser distinto.
-                </p>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Fecha de Orden *</Label>
@@ -575,10 +570,6 @@ function NuevaOrdenIntlPage() {
                 }))}
                 className="h-9"
               />
-              <p className="text-[11px] text-slate-500">
-                Ya en el catálogo (Siesa/RicoSoft) — el nombre de la orden se toma directamente de
-                aquí, no se puede editar por separado.
-              </p>
             </div>
 
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
@@ -628,10 +619,6 @@ function NuevaOrdenIntlPage() {
                       "border-red-400 focus-visible:ring-red-300",
                   )}
                 />
-                <p className="text-[11px] text-slate-500">
-                  Se guarda como texto (snapshot) en la orden — NO crea un registro nuevo en el
-                  catálogo de proveedores.
-                </p>
               </div>
             )}
           </section>
@@ -674,9 +661,6 @@ function NuevaOrdenIntlPage() {
                   onChange={(e) => setForm({ ...form, lugarPactado: e.target.value })}
                   className="h-9 text-xs border-slate-300"
                 />
-                <p className="text-[11px] text-slate-500">
-                  No se infiere automáticamente del Incoterm ni del país de origen.
-                </p>
               </div>
             </div>
 
@@ -710,9 +694,6 @@ function NuevaOrdenIntlPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-slate-500">
-                  País donde se fabricó la mercancía — puede diferir del país del proveedor.
-                </p>
                 {intentoGuardar && !form.paisOrigen && (
                   <p className="text-[11px] text-red-600">El país de origen es obligatorio.</p>
                 )}
