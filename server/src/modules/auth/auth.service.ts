@@ -12,6 +12,12 @@ import { esDominioCorporativoValido, obtenerTenantPorCorreo } from "../../lib/do
 import { validarPasswordSegura } from "../../lib/password";
 import { resolverNombreUsuario } from "../../lib/nombre-persona";
 import { whereAlcance } from "../../lib/alcance";
+import { AuthError } from "./auth.errors";
+import {
+  asegurarEnvioCorreoDisponible,
+  crearYEnviarCodigo,
+  verificacionCorreoHabilitada,
+} from "./verificacion-correo.service";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -24,21 +30,11 @@ interface SelectionTokenPayload {
   purpose: "select-tenant";
 }
 
-// --- 1. REGISTRO DE USUARIO ---
-/**
- * Error CONTROLADO de autenticación: su mensaje está pensado para el usuario
- * (credenciales inválidas, cuenta inactiva, dominio no autorizado...) y el
- * controller puede devolverlo tal cual. Cualquier OTRO error (Prisma, red, base
- * de datos, bugs) es inesperado: el controller lo registra en el log interno y
- * responde un mensaje genérico, sin filtrar detalles de infraestructura.
- */
-export class AuthError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AuthError";
-  }
-}
+// AuthError vive en auth.errors.ts (lo comparten este servicio y el de
+// verificación de correo); se re-exporta aquí para no cambiar los imports existentes.
+export { AuthError };
 
+// --- 1. REGISTRO DE USUARIO ---
 export const registerUserService = async (data: {
   nombre?: string;
   nombres?: string;
@@ -82,9 +78,27 @@ export const registerUserService = async (data: {
     where: { email: emailLimpio },
   });
 
+  const verificarCorreo = verificacionCorreoHabilitada();
+
   if (usuarioExistente) {
+    // Registro anterior que nunca verificó su correo: se le ofrece pedir otro
+    // código (409) en vez de dejarlo sin salida. No se sobrescribe la cuenta.
+    if (
+      verificarCorreo &&
+      usuarioExistente.emailVerificacionPendiente &&
+      !usuarioExistente.activo
+    ) {
+      throw new AuthError(
+        "Ya hay un registro pendiente de verificar con este correo. Escribe el código que te enviamos o pide uno nuevo.",
+        409,
+      );
+    }
     throw new AuthError("El correo electrónico ya se encuentra registrado.");
   }
+
+  // Con la verificación activa, sin proveedor de correo no se crea la cuenta:
+  // quedaría un registro que nadie puede verificar.
+  if (verificarCorreo) asegurarEnvioCorreoDisponible();
 
   // Encriptar la contraseña
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -133,9 +147,11 @@ export const registerUserService = async (data: {
       departamentoId: departamento.id,
       rol: "USER",
       // La cuenta nace INACTIVA: queda pendiente de aprobación explícita de un
-      // administrador (no hay verificación de correo). Alineado con el mensaje
-      // del registro y con loginUserService, que rechaza cuentas inactivas.
+      // administrador. Alineado con el mensaje del registro y con
+      // loginUserService, que rechaza cuentas inactivas. Con la verificación de
+      // correo activa, además no se puede activar hasta verificar el correo.
       activo: false,
+      emailVerificacionPendiente: verificarCorreo,
     },
     select: {
       id: true,
@@ -158,7 +174,11 @@ export const registerUserService = async (data: {
     },
   });
 
-  return nuevoUsuario;
+  // Si el envío falla, la cuenta ya quedó creada y pendiente: la persona puede
+  // pedir otro código con "Reenviar código".
+  const correoEnviado = verificarCorreo ? await crearYEnviarCodigo(nuevoUsuario) : false;
+
+  return { usuario: nuevoUsuario, requiereVerificacion: verificarCorreo, correoEnviado };
 };
 
 /**

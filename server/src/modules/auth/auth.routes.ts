@@ -7,6 +7,8 @@ import {
   meController,
   tenantsAccesiblesController,
   switchTenantController,
+  verificarCorreoController,
+  reenviarCodigoController,
 } from "./auth.controller";
 import { authenticateJWT } from "../../middleware/auth.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
@@ -15,6 +17,8 @@ import {
   loginSchema,
   selectTenantSchema,
   switchTenantSchema,
+  verificarCorreoSchema,
+  reenviarCodigoSchema,
 } from "./auth.schemas";
 
 const router = Router();
@@ -34,6 +38,21 @@ const authLimiter = rateLimit({
 
 // Endpoint de registro: POST /api/auth/register
 router.post("/register", authLimiter, validarBody(registerSchema), registerController);
+
+// Verificación del correo del autoregistro (solo con REGISTRO_VERIFICACION_CORREO_ENABLED):
+// POST /api/auth/register/verificar-correo y POST /api/auth/register/reenviar-codigo
+router.post(
+  "/register/verificar-correo",
+  authLimiter,
+  validarBody(verificarCorreoSchema),
+  verificarCorreoController,
+);
+router.post(
+  "/register/reenviar-codigo",
+  authLimiter,
+  validarBody(reenviarCodigoSchema),
+  reenviarCodigoController,
+);
 
 // Endpoint de login: POST /api/auth/login
 router.post("/login", authLimiter, validarBody(loginSchema), loginController);

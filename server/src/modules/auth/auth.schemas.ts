@@ -38,6 +38,24 @@ export const loginSchema = z.object({
     .min(1, "La contraseña es obligatoria."),
 });
 
+export const verificarCorreoSchema = z.object({
+  email: z
+    .string(textoObligatorio("El correo es obligatorio."))
+    .trim()
+    .min(1, "El correo es obligatorio."),
+  codigo: z
+    .string(textoObligatorio("Escribe el código de 6 dígitos."))
+    .trim()
+    .regex(/^\d{6}$/, "El código debe tener 6 dígitos."),
+});
+
+export const reenviarCodigoSchema = z.object({
+  email: z
+    .string(textoObligatorio("El correo es obligatorio."))
+    .trim()
+    .min(1, "El correo es obligatorio."),
+});
+
 export const selectTenantSchema = z.object({
   selectionToken: z
     .string(textoObligatorio("Falta el token de selección."))

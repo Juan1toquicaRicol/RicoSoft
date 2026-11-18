@@ -6,6 +6,10 @@ import {
   switchTenantService,
   AuthError,
 } from "./auth.service";
+import {
+  reenviarCodigoCorreoService,
+  verificarCodigoCorreoService,
+} from "./verificacion-correo.service";
 import { listarTenantsAccesibles } from "../../lib/permissions";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
@@ -26,7 +30,7 @@ function responderErrorAuth(
   contexto: string,
 ) {
   if (error instanceof AuthError) {
-    return res.status(statusControlado).json({ message: error.message });
+    return res.status(error.status ?? statusControlado).json({ message: error.message });
   }
   console.error(`Error inesperado en ${contexto}:`, error);
   return res.status(500).json({ message: MENSAJE_AUTH_INESPERADO });
@@ -38,7 +42,7 @@ export const registerController = async (req: Request, res: Response) => {
     // middleware validarBody(registerSchema) en la ruta.
     const { nombre, nombres, apellidos, email, password, departamentoId } = req.body;
 
-    const nuevoUsuario = await registerUserService({
+    const { usuario, requiereVerificacion, correoEnviado } = await registerUserService({
       nombre,
       nombres,
       apellidos,
@@ -47,13 +51,44 @@ export const registerController = async (req: Request, res: Response) => {
       departamentoId,
     });
 
-    return res.status(201).json({
-      message:
-        "Registro recibido. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
-      user: nuevoUsuario,
-    });
+    let message =
+      "Registro recibido. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.";
+    if (requiereVerificacion) {
+      message = correoEnviado
+        ? "Te enviamos un código de 6 dígitos a tu correo. Escríbelo para verificarlo; después tu cuenta quedará pendiente de aprobación por un administrador."
+        : 'Tu cuenta se creó, pero no pudimos enviar el código de verificación. Usa "Reenviar código" en unos minutos.';
+    }
+
+    return res.status(201).json({ message, requiereVerificacion, user: usuario });
   } catch (error) {
     return responderErrorAuth(res, error, 400, "el registro");
+  }
+};
+
+// --- VERIFICACIÓN DEL CORREO DEL AUTOREGISTRO (código de 6 dígitos) ---
+export const verificarCorreoController = async (req: Request, res: Response) => {
+  try {
+    const { email, codigo } = req.body;
+    await verificarCodigoCorreoService({ email, codigo });
+    return res.status(200).json({
+      message:
+        "Correo verificado. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
+    });
+  } catch (error) {
+    return responderErrorAuth(res, error, 400, "la verificación del correo");
+  }
+};
+
+export const reenviarCodigoController = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    await reenviarCodigoCorreoService({ email });
+    // Misma respuesta exista o no un registro pendiente con ese correo.
+    return res.status(200).json({
+      message: "Si hay un registro pendiente con ese correo, te enviamos un código nuevo.",
+    });
+  } catch (error) {
+    return responderErrorAuth(res, error, 400, "el reenvío del código");
   }
 };
 

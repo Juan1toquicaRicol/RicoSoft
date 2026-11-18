@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { fetchApi } from "@/config/api"; // Tu cliente de API
+import { ApiError, fetchApi } from "@/config/api"; // Tu cliente de API
 import { esDominioCorporativoValido } from "@/lib/dominios";
 import { validarPasswordSegura } from "@/lib/password";
 import {
@@ -179,6 +179,69 @@ function Login() {
   } | null>(null);
   const [tenantSeleccionando, setTenantSeleccionando] = useState<string | null>(null);
 
+  // Verificación del correo del autoregistro: solo aparece si el backend la
+  // pide (REGISTRO_VERIFICACION_CORREO_ENABLED). Guarda el correo al que se
+  // envió el código; mientras exista se muestra la pantalla del código.
+  const [verificacion, setVerificacion] = useState<{ email: string } | null>(null);
+  const [codigo, setCodigo] = useState("");
+  const [avisoVerificacion, setAvisoVerificacion] = useState("");
+  const [verificando, setVerificando] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+
+  const iniciarVerificacion = (correo: string, aviso: string) => {
+    setVerificacion({ email: correo.trim().toLowerCase() });
+    setCodigo("");
+    setAvisoVerificacion(aviso);
+    setError("");
+    setSuccessMessage("");
+  };
+
+  const handleVerificarCodigo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificacion) return;
+    setError("");
+    if (!/^\d{6}$/.test(codigo.trim())) {
+      setError("El código debe tener 6 dígitos.");
+      return;
+    }
+    setVerificando(true);
+    try {
+      const response = await fetchApi("/auth/register/verificar-correo", {
+        method: "POST",
+        body: JSON.stringify({ email: verificacion.email, codigo: codigo.trim() }),
+      });
+      setVerificacion(null);
+      setCodigo("");
+      setAvisoVerificacion("");
+      setIsRegistering(false);
+      setSuccessMessage(
+        response?.message ??
+          "Correo verificado. Tu cuenta queda pendiente de aprobación por un administrador.",
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No se pudo verificar el código.");
+    } finally {
+      setVerificando(false);
+    }
+  };
+
+  const handleReenviarCodigo = async () => {
+    if (!verificacion) return;
+    setError("");
+    setReenviando(true);
+    try {
+      const response = await fetchApi("/auth/register/reenviar-codigo", {
+        method: "POST",
+        body: JSON.stringify({ email: verificacion.email }),
+      });
+      setAvisoVerificacion(response?.message ?? "Te enviamos un código nuevo.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "No se pudo reenviar el código.");
+    } finally {
+      setReenviando(false);
+    }
+  };
+
   const finalizarSesion = async (response: { token: string; user: SessionUser }) => {
     setToken(response.token);
 
@@ -248,20 +311,33 @@ function Login() {
 
       try {
         // Enviar registro al Backend
-        await fetchApi("/auth/register", {
+        const response = await fetchApi("/auth/register", {
           method: "POST",
           body: JSON.stringify({ nombres, apellidos, email, password, departamentoId }),
         });
+
+        setNombres("");
+        setApellidos("");
+        setPassword("");
+        setDepartamentoId("");
+
+        if (response?.requiereVerificacion) {
+          iniciarVerificacion(email, response.message);
+          return;
+        }
 
         setSuccessMessage(
           "Cuenta registrada. Queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
         );
         setIsRegistering(false);
-        setNombres("");
-        setApellidos("");
-        setPassword("");
-        setDepartamentoId("");
       } catch (err: unknown) {
+        // 409: ya hay un registro con este correo pendiente de verificar; se
+        // pasa a la pantalla del código para que lo escriba o pida otro.
+        if (err instanceof ApiError && err.status === 409) {
+          setPassword("");
+          iniciarVerificacion(email, err.message);
+          return;
+        }
         setError(
           err instanceof Error ? err.message : "Ocurrió un error al intentar registrar la cuenta.",
         );
@@ -301,6 +377,103 @@ function Login() {
     setError("");
     setSuccessMessage("");
   };
+
+  if (verificacion) {
+    return (
+      <div className="min-h-screen bg-white flex">
+        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-white px-6 py-10 sm:px-10 lg:w-1/2 lg:flex-none lg:px-14">
+          <div className="w-full max-w-[400px]">
+            <div className="mb-8">
+              <span className="text-[2.25rem] font-extrabold tracking-tight text-blue-950">
+                RicoSoft
+              </span>
+            </div>
+
+            <div className="mb-7">
+              <h1 className="text-[1.7rem] font-bold tracking-tight text-slate-900">
+                Verifica tu correo
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Escribe el código de 6 dígitos que enviamos a{" "}
+                <span className="font-semibold text-slate-700">{verificacion.email}</span>.
+              </p>
+            </div>
+
+            {avisoVerificacion && !error && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5 text-xs text-emerald-800 font-semibold">
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-700" />
+                <span>{avisoVerificacion}</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700 font-semibold">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleVerificarCodigo} className="space-y-6">
+              <CampoContorno id="codigo-verificacion" label="Código de verificación">
+                <Input
+                  id="codigo-verificacion"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  placeholder="000000"
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className={`${CLASE_CONTROL} tracking-[0.5em] text-center text-lg font-semibold`}
+                />
+              </CampoContorno>
+
+              <Button
+                type="submit"
+                disabled={verificando}
+                className="h-14 w-full rounded-md bg-blue-500 text-base font-semibold text-white shadow-none transition-colors hover:bg-blue-600 disabled:bg-slate-400"
+              >
+                {verificando ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Verificando...
+                  </span>
+                ) : (
+                  "Verificar correo"
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setVerificacion(null);
+                  setCodigo("");
+                  setAvisoVerificacion("");
+                  setError("");
+                }}
+                className="font-semibold text-slate-500 hover:text-slate-700 hover:underline"
+              >
+                ← Volver
+              </button>
+              <button
+                type="button"
+                onClick={handleReenviarCodigo}
+                disabled={reenviando}
+                className="flex items-center gap-1.5 font-semibold text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-60"
+              >
+                {reenviando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Reenviar código
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <PanelMarca />
+      </div>
+    );
+  }
 
   if (tenantSelection) {
     // Preferencia de UX únicamente: prioriza visualmente la última empresa

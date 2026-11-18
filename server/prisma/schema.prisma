@@ -115,6 +115,13 @@ model User {
   /// contraseña para invalidar de inmediato cualquier token emitido antes
   /// (robado o de otra sesión), sin esperar a que expire por tiempo.
   tokenVersion                     Int                        @default(0)
+  /// Verificación del correo en el autoregistro (REGISTRO_VERIFICACION_CORREO_ENABLED).
+  /// emailVerificacionPendiente=true: la cuenta se autoregistró con la verificación
+  /// activa y aún no escribió el código; mientras tanto no se puede activar.
+  /// Las cuentas existentes y las creadas por un administrador quedan en false/NULL.
+  emailVerificacionPendiente       Boolean                    @default(false)
+  emailVerificadoAt                DateTime?
+  codigosVerificacionCorreo        CodigoVerificacionCorreo[]
   permisosDirectos                 PermisoUsuario[]
   membresias                       Membresia[]
   solicitudesResueltas             SolicitudCompra[]          @relation("SolicitudResueltaPor")
@@ -144,6 +151,23 @@ model User {
 
   @@index([tenantId, activo])
   @@index([tenantId, email])
+}
+
+/// Código de 6 dígitos enviado al correo en el autoregistro. Nunca se guarda el
+/// código en claro: codigoHash = HMAC-SHA256. Vence (expiraEn), sirve una sola vez
+/// (usadoEn) y admite un número máximo de intentos. Solo el más reciente de cada
+/// usuario es válido. Ver modules/auth/verificacion-correo.service.ts.
+model CodigoVerificacionCorreo {
+  id         String    @id @default(uuid()) @db.UniqueIdentifier
+  userId     String    @db.UniqueIdentifier
+  codigoHash String    @db.VarChar(64)
+  expiraEn   DateTime
+  intentos   Int       @default(0)
+  usadoEn    DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId, createdAt])
 }
 
 /// tenantId = NULL significa alcance GENERAL (disponible para asignar en

@@ -8,6 +8,7 @@ import { validarPasswordSegura } from "../../lib/password";
 import { esDominioCorporativoValido } from "../../lib/dominios";
 import { parseRolPermisos, primerPermisoQueExcedeAlActor } from "../../lib/permissions";
 import { datosActualizacionNombre, resolverNombreUsuario } from "../../lib/nombre-persona";
+import { verificacionCorreoHabilitada } from "../auth/verificacion-correo.service";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -421,6 +422,15 @@ export const cambiarEstadoUsuario = async (req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ message: "Usuario no encontrado." });
     }
 
+    // Autoregistro con verificación de correo activa: no se puede aprobar una
+    // cuenta cuyo correo aún no se verificó (decisión 2026-11-18).
+    if (activo && usuario.emailVerificacionPendiente && verificacionCorreoHabilitada()) {
+      return res.status(409).json({
+        message:
+          "No se puede activar: el usuario aún no ha verificado su correo con el código que se le envió al registrarse.",
+      });
+    }
+
     if (!activo && usuario.isSuperadmin) {
       const superadminsActivos = await prisma.user.count({
         where: { tenantId, isSuperadmin: true, activo: true },
@@ -819,6 +829,7 @@ export const eliminarUsuario = async (req: AuthenticatedRequest, res: Response) 
         prisma.notificacion.deleteMany({ where: { usuarioId: id } }),
         prisma.analisisGuardado.deleteMany({ where: { usuarioId: id } }),
         prisma.usuarioPerfilFuncional.deleteMany({ where: { userId: id } }),
+        prisma.codigoVerificacionCorreo.deleteMany({ where: { userId: id } }),
         prisma.user.delete({ where: { id } }),
         // Auditoría DENTRO de la transacción: si falla, se revierte el borrado.
         prisma.auditoria.create({

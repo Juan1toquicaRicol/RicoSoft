@@ -5,20 +5,28 @@ const mocks = vi.hoisted(() => ({
   loginUserService: vi.fn(),
   selectTenantService: vi.fn(),
   switchTenantService: vi.fn(),
+  verificarCodigoCorreoService: vi.fn(),
+  reenviarCodigoCorreoService: vi.fn(),
 }));
 
 vi.mock("./auth.service", async (importOriginal) => {
   const original = await importOriginal<typeof import("./auth.service")>();
   return { ...original, ...mocks };
 });
+vi.mock("./verificacion-correo.service", () => ({
+  verificarCodigoCorreoService: mocks.verificarCodigoCorreoService,
+  reenviarCodigoCorreoService: mocks.reenviarCodigoCorreoService,
+}));
 vi.mock("../../lib/permissions", () => ({ listarTenantsAccesibles: vi.fn() }));
 
 import {
   MENSAJE_AUTH_INESPERADO,
   loginController,
   registerController,
+  reenviarCodigoController,
   selectTenantController,
   switchTenantController,
+  verificarCorreoController,
 } from "./auth.controller";
 import { AuthError } from "./auth.service";
 
@@ -68,6 +76,18 @@ const controladores = [
     servicio: mocks.switchTenantService,
     statusControlado: 403,
   },
+  {
+    nombre: "verificar correo",
+    fn: verificarCorreoController,
+    servicio: mocks.verificarCodigoCorreoService,
+    statusControlado: 400,
+  },
+  {
+    nombre: "reenviar código",
+    fn: reenviarCodigoController,
+    servicio: mocks.reenviarCodigoCorreoService,
+    statusControlado: 400,
+  },
 ];
 
 describe("controladores de autenticación — saneamiento de errores", () => {
@@ -111,6 +131,16 @@ describe("controladores de autenticación — saneamiento de errores", () => {
       expect(res.statusCode).toBe(statusControlado);
       expect(res.body).toEqual({ message: "Credenciales inválidas." });
       expect(console.error).not.toHaveBeenCalled();
+    });
+
+    it("AuthError con status propio (p. ej. 429) usa ese status en vez del del endpoint", async () => {
+      servicio.mockRejectedValue(new AuthError("Espera un minuto.", 429));
+      const res = crearRes();
+
+      await fn(req, res as never);
+
+      expect(res.statusCode).toBe(429);
+      expect(res.body).toEqual({ message: "Espera un minuto." });
     });
   });
 

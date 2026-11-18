@@ -8,10 +8,23 @@ import { iniciarSchedulerServiciosRenovacion } from "./jobs/servicios-renovacion
 import { iniciarSchedulerIngestaCorreos } from "./modules/importaciones/importaciones-bandeja-ingesta.job";
 import { iniciarSchedulerProcesamientoCorreos } from "./modules/importaciones/importaciones-bandeja-procesamiento.job";
 import { iniciarSchedulerTrackingEmbarques } from "./modules/importaciones/embarques-tracking.job";
+import { configurarProveedorCorreoSaliente } from "./lib/correo-saliente";
+import { crearProveedorCorreoSalienteDesdeEntorno } from "./integrations/email/google-workspace-correo-saliente";
 
 if (!process.env.JWT_SECRET) {
   throw new Error(
     "JWT_SECRET no está definido. Configúralo en server/.env antes de iniciar el servidor.",
+  );
+}
+
+// Proveedor de envío de correo (código de verificación del registro). Sin
+// CORREO_SALIENTE_* completo no hay proveedor y la verificación de correo, si se
+// activara, rechazaría el registro en vez de simular un envío.
+const proveedorCorreoSaliente = crearProveedorCorreoSalienteDesdeEntorno();
+configurarProveedorCorreoSaliente(proveedorCorreoSaliente);
+if (process.env.REGISTRO_VERIFICACION_CORREO_ENABLED === "true" && !proveedorCorreoSaliente) {
+  console.warn(
+    "⚠️  REGISTRO_VERIFICACION_CORREO_ENABLED=true pero falta CORREO_SALIENTE_*: los registros se rechazarán hasta configurarlo.",
   );
 }
 

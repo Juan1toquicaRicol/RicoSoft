@@ -52,6 +52,7 @@ vi.mock("../../config/prisma", () => {
     notificacion: modelo(),
     analisisGuardado: modelo(),
     usuarioPerfilFuncional: modelo(),
+    codigoVerificacionCorreo: modelo(),
     // Transacción simulada: ejecuta el lote y, si algo falla, restaura el
     // estado previo (rollback) y propaga el error.
     $transaction: async (ops: Array<() => Promise<unknown>>) => {
