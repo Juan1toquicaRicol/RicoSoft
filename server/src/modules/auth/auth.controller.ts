@@ -55,7 +55,7 @@ export const registerController = async (req: Request, res: Response) => {
       "Registro recibido. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.";
     if (requiereVerificacion) {
       message = correoEnviado
-        ? "Te enviamos un código de 6 dígitos a tu correo. Escríbelo para verificarlo; después tu cuenta quedará pendiente de aprobación por un administrador."
+        ? "Te enviamos un código de 6 dígitos a tu correo. Escríbelo para verificarlo; al hacerlo tu cuenta quedará activa."
         : 'Tu cuenta se creó, pero no pudimos enviar el código de verificación. Usa "Reenviar código" en unos minutos.';
     }
 
@@ -72,7 +72,7 @@ export const verificarCorreoController = async (req: Request, res: Response) => 
     await verificarCodigoCorreoService({ email, codigo });
     return res.status(200).json({
       message:
-        "Correo verificado. Tu cuenta queda pendiente de aprobación por un administrador antes de poder iniciar sesión.",
+        "Correo verificado. Tu cuenta ya está activa: inicia sesión con tu correo y contraseña.",
     });
   } catch (error) {
     return responderErrorAuth(res, error, 400, "la verificación del correo");

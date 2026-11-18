@@ -216,7 +216,7 @@ function Login() {
       setIsRegistering(false);
       setSuccessMessage(
         response?.message ??
-          "Correo verificado. Tu cuenta queda pendiente de aprobación por un administrador.",
+          "Correo verificado. Tu cuenta ya está activa: inicia sesión con tu correo y contraseña.",
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "No se pudo verificar el código.");

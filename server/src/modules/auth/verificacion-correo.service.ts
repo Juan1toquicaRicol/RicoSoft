@@ -154,7 +154,11 @@ export async function verificarCodigoCorreoService(data: {
     throw new AuthError(MENSAJE_CODIGO_INCORRECTO);
   }
 
-  // Marcar el código como usado, el correo como verificado y auditar: todo o nada.
+  // Marcar el código como usado, verificar el correo, ACTIVAR la cuenta y auditar:
+  // todo o nada. Decisión del responsable (2026-11-18): verificar el correo activa
+  // la cuenta sin esperar al administrador. La cuenta sigue naciendo con rol USER
+  // y cero permisos (ver registerUserService), así que no accede a nada hasta que
+  // se le asigne un rol. Solo llega aquí una cuenta con verificación pendiente.
   await prisma.$transaction(async (tx) => {
     const { count } = await tx.codigoVerificacionCorreo.updateMany({
       where: { id: ultimo.id, usadoEn: null },
@@ -164,7 +168,7 @@ export async function verificarCodigoCorreoService(data: {
 
     await tx.user.update({
       where: { id: usuario.id },
-      data: { emailVerificacionPendiente: false, emailVerificadoAt: new Date() },
+      data: { emailVerificacionPendiente: false, emailVerificadoAt: new Date(), activo: true },
     });
     await tx.auditoria.create({
       data: {
@@ -175,6 +179,19 @@ export async function verificarCodigoCorreoService(data: {
         detalle: `${usuario.email} verificó su correo con el código enviado al registrarse.`,
         entidadTipo: "User",
         entidadId: usuario.id,
+      },
+    });
+    await tx.auditoria.create({
+      data: {
+        tenantId: usuario.tenantId,
+        usuarioId: usuario.id,
+        usuarioAfectado: usuario.email,
+        accion: "USUARIO_ACTIVADO",
+        detalle: `La cuenta de ${usuario.email} se activó automáticamente al verificar su correo.`,
+        entidadTipo: "User",
+        entidadId: usuario.id,
+        datosAnteriores: JSON.stringify({ activo: false }),
+        datosNuevos: JSON.stringify({ activo: true }),
       },
     });
   });

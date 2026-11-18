@@ -237,7 +237,7 @@ describe("verificarCodigoCorreoService", () => {
     expect(db.userUpdate).not.toHaveBeenCalled();
   });
 
-  it("código correcto: lo marca usado, verifica el correo y audita, en una transacción", async () => {
+  it("código correcto: lo marca usado, verifica el correo, ACTIVA la cuenta y audita ambos hechos, en una transacción", async () => {
     db.userFindUnique.mockResolvedValue(USUARIO_PENDIENTE);
     db.codigoFindFirst.mockResolvedValue(codigoGuardado("123456"));
 
@@ -248,10 +248,40 @@ describe("verificarCodigoCorreoService", () => {
     expect(update.where).toEqual({ id: "u1" });
     expect(update.data.emailVerificacionPendiente).toBe(false);
     expect(update.data.emailVerificadoAt).toBeInstanceOf(Date);
-    expect(db.auditoriaCreate.mock.calls[0][0].data).toMatchObject({
+    expect(update.data.activo).toBe(true);
+    // No toca rol ni permisos: la cuenta sigue sin acceso hasta que le asignen un rol.
+    expect(Object.keys(update.data).sort()).toEqual([
+      "activo",
+      "emailVerificacionPendiente",
+      "emailVerificadoAt",
+    ]);
+
+    const acciones = db.auditoriaCreate.mock.calls.map((c) => c[0].data);
+    expect(acciones.map((a) => a.accion)).toEqual([
+      "USUARIO_CORREO_VERIFICADO",
+      "USUARIO_ACTIVADO",
+    ]);
+    expect(acciones[1]).toMatchObject({
       tenantId: "t1",
-      accion: "USUARIO_CORREO_VERIFICADO",
+      usuarioId: "u1",
+      datosAnteriores: JSON.stringify({ activo: false }),
+      datosNuevos: JSON.stringify({ activo: true }),
     });
+  });
+
+  it("código incorrecto o vencido NO activa la cuenta", async () => {
+    db.userFindUnique.mockResolvedValue(USUARIO_PENDIENTE);
+    db.codigoFindFirst.mockResolvedValue(codigoGuardado("123456"));
+    await verificarCodigoCorreoService({ email: USUARIO_PENDIENTE.email, codigo: "000000" }).catch(
+      () => {},
+    );
+    db.codigoFindFirst.mockResolvedValue(
+      codigoGuardado("123456", { expiraEn: new Date(Date.now() - 1) }),
+    );
+    await verificarCodigoCorreoService({ email: USUARIO_PENDIENTE.email, codigo: "123456" }).catch(
+      () => {},
+    );
+    expect(db.userUpdate).not.toHaveBeenCalled();
   });
 
   it("si el código se usó en paralelo (carrera), no verifica dos veces", async () => {
