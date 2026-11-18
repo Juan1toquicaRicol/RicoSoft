@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -12,8 +13,12 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { requirePermisoGuard } from "@/lib/route-guards";
+import { requireAnyPermisoGuard } from "@/lib/route-guards";
 import { PERMISOS_SISTEMA } from "@/lib/auth-permissions";
+import { fetchAuth, hasPermission } from "@/lib/session";
+import { useSession } from "@/lib/session-context";
+import { BiometricoPanel } from "@/components/gestion-humana/biometrico-panel";
+import type { EmpleadoOption } from "@/components/gestion-humana/biometrico-fuentes-panel";
 import {
   useMonitoreoJobs,
   useMonitoreoSiesa,
@@ -36,7 +41,10 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/configuracion/monitoreo")({
-  beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.INTEGRACION_SIESA_VER),
+  beforeLoad: requireAnyPermisoGuard([
+    PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,
+    PERMISOS_SISTEMA.BIOMETRICO_VER,
+  ]),
   component: MonitoreoPage,
 });
 
@@ -358,7 +366,73 @@ function SeccionJobs() {
   );
 }
 
+function SeccionBiometrico() {
+  const { user } = useSession();
+  const puedeConfigurar = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR);
+  const puedeAsociar = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR);
+  const puedeSincronizar = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_SINCRONIZAR);
+  const puedeVerEmpleados = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_VER);
+  const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
+  const [empleadosCargando, setEmpleadosCargando] = useState(puedeVerEmpleados);
+  const [errorEmpleados, setErrorEmpleados] = useState("");
+
+  useEffect(() => {
+    if (!puedeVerEmpleados) {
+      setEmpleados([]);
+      setEmpleadosCargando(false);
+      return;
+    }
+
+    let vigente = true;
+    setEmpleadosCargando(true);
+    setErrorEmpleados("");
+    fetchAuth("/gestion-humana/empleados")
+      .then((resultado: EmpleadoOption[]) => {
+        if (vigente) setEmpleados(Array.isArray(resultado) ? resultado : []);
+      })
+      .catch((error: unknown) => {
+        if (vigente) {
+          setErrorEmpleados(
+            error instanceof Error ? error.message : "No se pudieron cargar los colaboradores.",
+          );
+        }
+      })
+      .finally(() => {
+        if (vigente) setEmpleadosCargando(false);
+      });
+
+    return () => {
+      vigente = false;
+    };
+  }, [puedeVerEmpleados]);
+
+  return (
+    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-2xs">
+      <div>
+        <h2 className="text-lg font-bold text-slate-800">Biométrico CrossChex</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Administra la fuente, los vínculos con colaboradores y las corridas de sincronización.
+        </p>
+      </div>
+      <BiometricoPanel
+        visibleVistas={["fuentes", "sincronizaciones"]}
+        puedeSincronizar={puedeSincronizar}
+        puedeConfigurar={puedeConfigurar}
+        puedeAsociar={puedeAsociar}
+        puedeVerEmpleados={puedeVerEmpleados}
+        empleados={empleados}
+        empleadosCargando={empleadosCargando}
+        errorEmpleados={errorEmpleados}
+      />
+    </section>
+  );
+}
+
 function MonitoreoPage() {
+  const { user } = useSession();
+  const puedeVerSiesa = hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER);
+  const puedeVerBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER);
+
   return (
     <div className="space-y-6">
       <div>
@@ -367,13 +441,13 @@ function MonitoreoPage() {
           Monitoreo de integraciones y operación
         </h1>
         <p className="text-sm text-slate-500 max-w-2xl">
-          Salud de la conexión con Siesa y la VPN, y estado de los procesos en background. Solo
-          lectura: RicoSoft observa esta infraestructura, no la administra desde aquí.
+          Estado de las integraciones y procesos conectados al servidor, según tus permisos.
         </p>
       </div>
 
-      <SeccionSiesa />
-      <SeccionJobs />
+      {puedeVerSiesa && <SeccionSiesa />}
+      {puedeVerSiesa && <SeccionJobs />}
+      {puedeVerBiometrico && <SeccionBiometrico />}
     </div>
   );
 }

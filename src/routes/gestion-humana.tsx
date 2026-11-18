@@ -66,7 +66,7 @@ import { useGestionHumana } from "@/hooks/use-gestion-humana";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useCargosOpciones } from "@/hooks/use-cargos";
 import { GestionInformacionPanel } from "@/components/gestion-humana/gestion-informacion-panel";
-import { BiometricoPanel } from "@/components/gestion-humana/biometrico-panel";
+import { BiometricoMarcacionesPanel } from "@/components/gestion-humana/biometrico-marcaciones-panel";
 import { SelectorArchivo } from "@/components/gestion-humana/selector-archivo";
 import { validarArchivoAdjunto } from "@/lib/archivo-adjunto";
 import { DetallePersonalCampos } from "@/components/gestion-humana/detalle-personal-campos";
@@ -139,9 +139,6 @@ function GestionHumana() {
   const puedeGestionarCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_GESTIONAR);
   const puedeVerInformacion = hasPermission(user, PERMISOS_SISTEMA.GESTION_INFORMACION_VER);
   const puedeVerBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER);
-  const puedeConfigurarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_CONFIGURAR);
-  const puedeAsociarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_ASOCIAR);
-  const puedeSincronizarBiometrico = hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_SINCRONIZAR);
   const puedeGestionarInformacion = hasPermission(
     user,
     PERMISOS_SISTEMA.GESTION_INFORMACION_GESTIONAR,
@@ -171,7 +168,7 @@ function GestionHumana() {
   );
 
   const [activeTab, setActiveTab] = useState<
-    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos" | "biometrico"
+    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos" | "marcaciones"
   >("expediente");
   const [detallesEmpleadoId, setDetallesEmpleadoId] = useState<string | null>(null);
 
@@ -616,14 +613,14 @@ function GestionHumana() {
         )}
         {puedeVerBiometrico && (
           <button
-            onClick={() => setActiveTab("biometrico")}
+            onClick={() => setActiveTab("marcaciones")}
             className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-              activeTab === "biometrico"
+              activeTab === "marcaciones"
                 ? "border-blue-800 text-blue-800"
                 : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
           >
-            <Fingerprint className="h-4 w-4" /> Biométrico
+            <Fingerprint className="h-4 w-4" /> Marcaciones biométricas
           </button>
         )}
         <button
@@ -648,14 +645,7 @@ function GestionHumana() {
         />
       )}
 
-      {activeTab === "biometrico" && puedeVerBiometrico && (
-        <BiometricoPanel
-          puedeSincronizar={puedeSincronizarBiometrico}
-          puedeConfigurar={puedeConfigurarBiometrico}
-          puedeAsociar={puedeAsociarBiometrico}
-          empleados={empleados}
-        />
-      )}
+      {activeTab === "marcaciones" && puedeVerBiometrico && <BiometricoMarcacionesPanel />}
 
       {/* TAB 1: EXPEDIENTES */}
       {activeTab === "expediente" && (

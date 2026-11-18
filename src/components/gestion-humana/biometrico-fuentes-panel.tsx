@@ -39,7 +39,7 @@ interface FuenteBiometrica {
   } | null;
 }
 
-interface EmpleadoOption {
+export interface EmpleadoOption {
   id: string;
   nombres: string;
   apellidos: string;
@@ -75,10 +75,16 @@ const BASE_URL = "/gestion-humana/biometrico/fuentes";
 export function BiometricoFuentesPanel({
   puedeConfigurar,
   puedeAsociar,
+  puedeVerEmpleados = true,
+  empleadosCargando = false,
+  errorEmpleados = "",
   empleados,
 }: {
   puedeConfigurar: boolean;
   puedeAsociar: boolean;
+  puedeVerEmpleados?: boolean;
+  empleadosCargando?: boolean;
+  errorEmpleados?: string;
   empleados: EmpleadoOption[];
 }) {
   const [fuentes, setFuentes] = useState<FuenteBiometrica[]>([]);
@@ -167,7 +173,7 @@ export function BiometricoFuentesPanel({
   // Usuarios registrados en el biométrico (para elegir el ID sin tener que teclearlo).
   // Si no se pueden leer, el campo sigue funcionando como texto libre.
   useEffect(() => {
-    if (!puedeAsociar || !fuenteSeleccionadaId) {
+    if (!puedeAsociar || !puedeVerEmpleados || !fuenteSeleccionadaId) {
       setUsuariosBiometrico([]);
       return;
     }
@@ -182,7 +188,7 @@ export function BiometricoFuentesPanel({
     return () => {
       activo = false;
     };
-  }, [puedeAsociar, fuenteSeleccionadaId, asociaciones.length]);
+  }, [puedeAsociar, puedeVerEmpleados, fuenteSeleccionadaId, asociaciones.length]);
 
   const crearFuente = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -473,90 +479,110 @@ export function BiometricoFuentesPanel({
             </header>
 
             <div className="space-y-4 p-4">
-              {puedeAsociar && empleados.length > 0 && (
-                <form
-                  onSubmit={crearAsociacion}
-                  className="grid gap-3 md:grid-cols-[1fr_2fr_auto] md:items-end"
-                >
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="crosschex-user-id"
-                      className="text-xs font-semibold text-slate-700"
-                    >
-                      ID de usuario CrossChex
-                    </Label>
-                    <Input
-                      id="crosschex-user-id"
-                      value={externalUserId}
-                      maxLength={50}
-                      onChange={(event) => setExternalUserId(event.target.value)}
-                      placeholder="Ej. 14"
-                      className="h-9 border-slate-300 text-xs"
-                      list="crosschex-usuarios"
-                      required
-                    />
-                    <datalist id="crosschex-usuarios">
-                      {usuariosBiometrico
-                        .filter((u) => !u.asociado)
-                        .map((u) => (
-                          <option key={u.userid} value={u.userid}>
-                            {u.nombre ?? "Sin nombre"}
-                            {u.codigo ? ` · ${u.codigo}` : ""}
-                          </option>
-                        ))}
-                    </datalist>
-                    <p className="text-[11px] text-slate-500">
-                      {usuariosBiometrico.length > 0
-                        ? "Elige un usuario del biométrico que aún no esté asociado, o escribe su ID."
-                        : "Escribe el ID tal como aparece en CrossChex."}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Colaborador de la empresa activa
-                    </Label>
-                    <Select value={empleadoId} onValueChange={setEmpleadoId}>
-                      <SelectTrigger className="h-9 border-slate-300 text-xs">
-                        <SelectValue placeholder="Selecciona el colaborador" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {empleados.map((empleado) => (
-                          <SelectItem key={empleado.id} value={empleado.id}>
-                            {empleado.nombres} {empleado.apellidos} · {empleado.documento}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    className="gap-2"
-                    disabled={creandoAsociacion || !externalUserId.trim() || !empleadoId}
-                  >
-                    {creandoAsociacion ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Plus className="h-4 w-4" />
-                    )}
-                    Asociar
-                  </Button>
-                </form>
-              )}
-
-              {puedeAsociar && empleados.length === 0 && (
-                <Alert className="border-amber-200 bg-amber-50 text-amber-950">
-                  <AlertDescription className="text-xs">
-                    No hay colaboradores disponibles en la empresa activa. Verifica el tenant y
-                    registra los colaboradores en Gestión Humana antes de asociar IDs.
-                  </AlertDescription>
+              {errorEmpleados && (
+                <Alert variant="destructive">
+                  <AlertDescription className="text-xs">{errorEmpleados}</AlertDescription>
                 </Alert>
               )}
 
-              {!puedeAsociar && (
+              {puedeAsociar && puedeVerEmpleados && empleadosCargando && (
+                <p role="status" className="flex items-center gap-2 py-3 text-xs text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Cargando colaboradores…
+                </p>
+              )}
+
+              {puedeAsociar &&
+                puedeVerEmpleados &&
+                !empleadosCargando &&
+                !errorEmpleados &&
+                empleados.length > 0 && (
+                  <form
+                    onSubmit={crearAsociacion}
+                    className="grid gap-3 md:grid-cols-[1fr_2fr_auto] md:items-end"
+                  >
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="crosschex-user-id"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        ID de usuario CrossChex
+                      </Label>
+                      <Input
+                        id="crosschex-user-id"
+                        value={externalUserId}
+                        maxLength={50}
+                        onChange={(event) => setExternalUserId(event.target.value)}
+                        placeholder="Ej. 14"
+                        className="h-9 border-slate-300 text-xs"
+                        list="crosschex-usuarios"
+                        required
+                      />
+                      <datalist id="crosschex-usuarios">
+                        {usuariosBiometrico
+                          .filter((u) => !u.asociado)
+                          .map((u) => (
+                            <option key={u.userid} value={u.userid}>
+                              {u.nombre ?? "Sin nombre"}
+                              {u.codigo ? ` · ${u.codigo}` : ""}
+                            </option>
+                          ))}
+                      </datalist>
+                      <p className="text-[11px] text-slate-500">
+                        {usuariosBiometrico.length > 0
+                          ? "Elige un usuario del biométrico que aún no esté asociado, o escribe su ID."
+                          : "Escribe el ID tal como aparece en CrossChex."}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Colaborador de la empresa activa
+                      </Label>
+                      <Select value={empleadoId} onValueChange={setEmpleadoId}>
+                        <SelectTrigger className="h-9 border-slate-300 text-xs">
+                          <SelectValue placeholder="Selecciona el colaborador" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {empleados.map((empleado) => (
+                            <SelectItem key={empleado.id} value={empleado.id}>
+                              {empleado.nombres} {empleado.apellidos} · {empleado.documento}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="gap-2"
+                      disabled={creandoAsociacion || !externalUserId.trim() || !empleadoId}
+                    >
+                      {creandoAsociacion ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      Asociar
+                    </Button>
+                  </form>
+                )}
+
+              {puedeAsociar &&
+                puedeVerEmpleados &&
+                !empleadosCargando &&
+                !errorEmpleados &&
+                empleados.length === 0 && (
+                  <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+                    <AlertDescription className="text-xs">
+                      No hay colaboradores activos disponibles para asociar. Regístralos o verifica
+                      que pertenezcan a esta empresa antes de vincular IDs.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+              {(!puedeAsociar || !puedeVerEmpleados) && (
                 <p className="text-xs text-slate-500">
-                  Tienes acceso de consulta. Para crear o modificar asociaciones solicita el permiso
-                  biometrico.asociar.
+                  Para crear o modificar asociaciones se requieren los permisos biometrico.asociar y
+                  empleados.ver.
                 </p>
               )}
 
@@ -593,7 +619,7 @@ export function BiometricoFuentesPanel({
                         <TableHead className={TH}>Usuario del biométrico</TableHead>
                         <TableHead className={TH}>Colaborador en RicoSoft</TableHead>
                         <TableHead className={TH}>Estado</TableHead>
-                        {puedeAsociar && (
+                        {puedeAsociar && puedeVerEmpleados && (
                           <TableHead className={`${TH} text-right`}>Activa</TableHead>
                         )}
                       </TableRow>
@@ -630,7 +656,7 @@ export function BiometricoFuentesPanel({
                               {asociacion.activo ? "Activa" : "Inactiva"}
                             </Badge>
                           </TableCell>
-                          {puedeAsociar && (
+                          {puedeAsociar && puedeVerEmpleados && (
                             <TableCell className="px-4 py-3 text-right">
                               <Switch
                                 aria-label={`${asociacion.activo ? "Desactivar" : "Activar"} asociación ${asociacion.externalUserId}`}

@@ -146,7 +146,9 @@ function Configuracion() {
       label: "Monitoreo",
       icon: Activity,
       exact: false,
-      show: hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER),
+      show:
+        hasPermission(user, PERMISOS_SISTEMA.INTEGRACION_SIESA_VER) ||
+        hasPermission(user, PERMISOS_SISTEMA.BIOMETRICO_VER),
     },
   ] as const;
 

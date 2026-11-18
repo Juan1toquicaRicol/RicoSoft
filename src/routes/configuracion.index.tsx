@@ -36,7 +36,11 @@ const ORDEN_PESTANAS = [
   },
   { to: "/configuracion/integraciones-siesa", permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER },
   { to: "/configuracion/auditoria", permiso: PERMISOS_SISTEMA.AUDITORIA_VER },
-  { to: "/configuracion/monitoreo", permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER },
+  {
+    to: "/configuracion/monitoreo",
+    permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,
+    o: PERMISOS_SISTEMA.BIOMETRICO_VER,
+  },
 ] as const;
 
 export const Route = createFileRoute("/configuracion/")({
