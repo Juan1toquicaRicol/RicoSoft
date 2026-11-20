@@ -281,6 +281,29 @@ en lugar de introducir API/agent innecesario.
 No asumir que todos los usuarios de CrossChex son empleados que marcan asistencia;
 existen gerentes, jefes y coordinadores sin marcaciones.
 
+Cadena real de datos (verificada 2026-11-20):
+
+reloj Anviz (TCP/IP en la LAN, configurado en la tabla FingerClient del MDB)
+-> CrossChex Standard (aplicación de escritorio) -> CrossChex.mdb -> RicoSoft (ODBC, cada minuto).
+
+- RicoSoft NO se comunica con el reloj. Si CrossChex Standard está cerrado, o abierto
+  sin "control en tiempo real" activo para el dispositivo, las marcaciones se quedan en
+  el reloj y RicoSoft reporta corridas COMPLETADO con 0 leídas (no es un fallo de RicoSoft).
+- CrossChex no está en el inicio automático de Windows; tras cada reinicio (actualizaciones
+  de Windows) hay que abrirlo y activar el tiempo real. Antes del 2026-11-20 las descargas
+  eran manuales (tabla OPLog: "Descargar nuevos registros"), por eso llegaban en ráfagas
+  con días de retraso.
+- Mientras CrossChex descarga del reloj puede bloquear el MDB en exclusiva unos minutos;
+  RicoSoft registra FALLIDO ("bloqueado exclusivamente") y se recupera solo.
+- Las marcaciones pueden llegar al MDB días después de su CheckTime y fuera de orden
+  cronológico; por eso el cursor es Logid y nunca CheckTime. Los Logid tienen huecos
+  (~36 %), compatibles con descargas repetidas de "todos los registros".
+- Catálogo oficial del MDB (tabla Status): 0=Entrada, 1=Salida, 2=Break, 3=FueraTiempo.
+  En el uso real, 3 se marca al final de los turnos. El mapper de RicoSoft sigue mapeando
+  1 como "OTRO"; cualquier cambio de interpretación requiere decisión explícita.
+- Decisión 2026-11-20: el responsable NO quiere una alerta automática por "sin
+  marcaciones nuevas"; no implementarla sin nueva solicitud.
+
 ## 12. Auditoría y seguridad histórica
 
 Auditoría previa del sistema encontró:
