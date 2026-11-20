@@ -168,12 +168,11 @@ function GestionHumana() {
   );
 
   const [activeTab, setActiveTab] = useState<
-    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos" | "marcaciones"
+    "expediente" | "permisos" | "faltas" | "comunicados" | "cargos" | "marcaciones" | "alta"
   >("expediente");
   const [detallesEmpleadoId, setDetallesEmpleadoId] = useState<string | null>(null);
 
   // Modales
-  const [modalEmpleadoOpen, setModalEmpleadoOpen] = useState(false);
   const [modalSalarioOpen, setModalSalarioOpen] = useState(false);
   const [modalPermisoOpen, setModalPermisoOpen] = useState(false);
   const [modalFaltaOpen, setModalFaltaOpen] = useState(false);
@@ -412,7 +411,7 @@ function GestionHumana() {
 
     if (altaCreadaId) toast.success("Detalles pendientes guardados.");
     reiniciarFormularioAlta();
-    setModalEmpleadoOpen(false);
+    setActiveTab("expediente");
   };
 
   const crearApiDetallesAlta = (empleadoId: string): ApiDetallesAlta => {
@@ -477,7 +476,7 @@ function GestionHumana() {
   const solicitarCierreAlta = () => {
     const decision = resolverCierreAlta(altaTieneCambios, guardandoEmpleado);
     if (decision === "confirmar") setConfirmarDescarteAlta(true);
-    else if (decision === "cerrar") setModalEmpleadoOpen(false);
+    else if (decision === "cerrar") setActiveTab("expediente");
   };
 
   const handleSaveSalario = async (e: React.FormEvent) => {
@@ -539,7 +538,7 @@ function GestionHumana() {
       actions={
         <div className="flex gap-2">
           {activeTab === "expediente" && puedeCrearEmpleado && (
-            <Button onClick={() => setModalEmpleadoOpen(true)} size="sm" className="gap-2">
+            <Button onClick={() => setActiveTab("alta")} size="sm" className="gap-2">
               <UserPlus className="h-4 w-4" /> Registrar Colaborador
             </Button>
           )}
@@ -567,7 +566,11 @@ function GestionHumana() {
       }
     >
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 mb-6 bg-white rounded-t-lg px-2 shadow-2xs">
+      <div
+        className={`flex border-b border-slate-200 mb-6 bg-white rounded-t-lg px-2 shadow-2xs ${
+          activeTab === "alta" ? "hidden" : ""
+        }`}
+      >
         <button
           onClick={() => setActiveTab("expediente")}
           className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
@@ -811,7 +814,7 @@ function GestionHumana() {
                           puedeCrearEmpleado ? (
                             <Button
                               size="sm"
-                              onClick={() => setModalEmpleadoOpen(true)}
+                              onClick={() => setActiveTab("alta")}
                               className="gap-2"
                             >
                               <UserPlus className="h-4 w-4" /> Registrar Colaborador
@@ -1127,21 +1130,35 @@ function GestionHumana() {
         onEditarCargoCorreo={editarEmpleado}
       />
 
-      {/* MODAL 1: REGISTRAR COLABORADOR */}
-      <Dialog
-        open={modalEmpleadoOpen}
-        onOpenChange={(abierto) => (abierto ? setModalEmpleadoOpen(true) : solicitarCierreAlta())}
-      >
-        <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-white border-slate-200">
-          <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold">
-              Registrar Nuevo Colaborador
-            </DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Expediente de contratación de Gestión Humana.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSaveEmpleado} className="space-y-4 py-2">
+      {activeTab === "alta" && (
+        <section className="mx-auto w-full max-w-5xl space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="mb-2 text-xs text-slate-500">
+                Gestión Humana <span className="px-1">›</span> Expediente del Colaborador{" "}
+                <span className="px-1">›</span>{" "}
+                <span className="font-semibold">Nuevo colaborador</span>
+              </p>
+              <h2 className="text-xl font-bold text-slate-900">Registrar nuevo colaborador</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Completa el expediente inicial de contratación para la empresa activa.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={solicitarCierreAlta}>
+              ← Volver a expedientes
+            </Button>
+          </div>
+
+          <form
+            onSubmit={handleSaveEmpleado}
+            className="panel space-y-4 overflow-hidden rounded-lg border-slate-200 bg-white p-4 shadow-2xs"
+          >
+            <div className="-mx-4 -mt-4 border-b border-slate-200 bg-slate-50/80 p-4">
+              <h3 className="text-sm font-bold text-slate-900">Datos de contratación</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Información necesaria para crear el expediente laboral.
+              </p>
+            </div>
             <Tabs
               value={puedeCapturarDetalles ? tabRegistro : "datos"}
               onValueChange={(v) => setTabRegistro(v as "datos" | "detalles")}
@@ -1620,17 +1637,17 @@ function GestionHumana() {
               </TabsContent>
             </Tabs>
 
-            <DialogFooter className="mt-4">
+            <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-200 pt-4 sm:flex-row">
               <Button type="button" variant="outline" size="sm" onClick={solicitarCierreAlta}>
                 Cancelar
               </Button>
               <Button type="submit" size="sm" disabled={guardandoEmpleado}>
                 {altaCreadaId ? "Reintentar pendientes" : "Guardar Colaborador"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </section>
+      )}
 
       <AlertDialog open={confirmarDescarteAlta} onOpenChange={setConfirmarDescarteAlta}>
         <AlertDialogContent>
@@ -1647,7 +1664,7 @@ function GestionHumana() {
             <AlertDialogAction
               onClick={() => {
                 reiniciarFormularioAlta();
-                setModalEmpleadoOpen(false);
+                setActiveTab("expediente");
               }}
             >
               Descartar
