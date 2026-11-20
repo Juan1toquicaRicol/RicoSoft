@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Clock, Loader2, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -54,7 +52,7 @@ const TIPO: Record<string, string> = {
 
 export function BiometricoMarcacionesPanel() {
   const [pagina, setPagina] = useState(1);
-  const [soloSinAsociar, setSoloSinAsociar] = useState(false);
+  const [tipoMarcacion, setTipoMarcacion] = useState<"" | "ENTRADA">("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [datos, setDatos] = useState<PaginaMarcaciones | null>(null);
@@ -65,7 +63,7 @@ export function BiometricoMarcacionesPanel() {
     setCargando(true);
     try {
       const params = new URLSearchParams({ page: String(pagina), limit: String(POR_PAGINA) });
-      if (soloSinAsociar) params.set("soloNoAsociados", "true");
+      if (tipoMarcacion === "ENTRADA") params.set("checkType", "0");
       if (desde) params.set("fechaDesde", desde);
       if (hasta) params.set("fechaHasta", hasta);
       const resultado = await fetchAuth(`/gestion-humana/biometrico/marcaciones?${params}`);
@@ -76,7 +74,7 @@ export function BiometricoMarcacionesPanel() {
     } finally {
       setCargando(false);
     }
-  }, [pagina, soloSinAsociar, desde, hasta]);
+  }, [pagina, tipoMarcacion, desde, hasta]);
 
   useEffect(() => {
     void cargar();
@@ -144,18 +142,22 @@ export function BiometricoMarcacionesPanel() {
               className="h-9 w-40 border-slate-300 text-xs"
             />
           </div>
-          <div className="flex items-center gap-2 pb-2">
-            <Switch
-              id="marc-sin-asociar"
-              checked={soloSinAsociar}
-              onCheckedChange={(v) => {
-                setSoloSinAsociar(v);
+          <div className="space-y-1">
+            <Label htmlFor="marc-tipo" className="text-xs font-semibold text-slate-700">
+              Tipo de marcación
+            </Label>
+            <select
+              id="marc-tipo"
+              value={tipoMarcacion}
+              onChange={(e) => {
+                setTipoMarcacion(e.target.value as "" | "ENTRADA");
                 setPagina(1);
               }}
-            />
-            <Label htmlFor="marc-sin-asociar" className="text-xs font-semibold text-slate-700">
-              Solo sin asociar a un empleado
-            </Label>
+              className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs"
+            >
+              <option value="">Todas</option>
+              <option value="ENTRADA">Entrada</option>
+            </select>
           </div>
           <Button
             type="button"
@@ -171,7 +173,7 @@ export function BiometricoMarcacionesPanel() {
           >
             Hoy
           </Button>
-          {(desde || hasta || soloSinAsociar) && (
+          {(desde || hasta || tipoMarcacion) && (
             <Button
               type="button"
               size="sm"
@@ -180,7 +182,7 @@ export function BiometricoMarcacionesPanel() {
               onClick={() => {
                 setDesde("");
                 setHasta("");
-                setSoloSinAsociar(false);
+                setTipoMarcacion("");
                 setPagina(1);
               }}
             >
@@ -226,7 +228,6 @@ export function BiometricoMarcacionesPanel() {
                   <TableRow className="hover:bg-slate-100/80">
                     <TableHead className={TH}>Hora del reloj</TableHead>
                     <TableHead className={TH}>Usuario del biométrico</TableHead>
-                    <TableHead className={TH}>Empleado en RicoSoft</TableHead>
                     <TableHead className={TH}>Tipo</TableHead>
                     <TableHead className={TH}>Dispositivo</TableHead>
                     <TableHead className={TH}>Fuente</TableHead>
@@ -248,20 +249,6 @@ export function BiometricoMarcacionesPanel() {
                             ? ` · Código ${m.usuarioBiometrico.codigo}`
                             : ""}
                         </span>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-xs">
-                        {m.empleado ? (
-                          <span className="font-semibold text-slate-900">
-                            {m.empleado.nombres} {m.empleado.apellidos}
-                          </span>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-200 bg-amber-50 text-amber-800 font-bold"
-                          >
-                            Sin asociar
-                          </Badge>
-                        )}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-xs text-slate-600">
                         {TIPO[m.tipoMarcacion] ?? m.tipoMarcacion}
