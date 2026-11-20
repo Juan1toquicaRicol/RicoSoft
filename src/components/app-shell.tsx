@@ -353,7 +353,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
                   <button
                     type="button"
                     disabled={cambiandoTenant}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
+                    className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 disabled:opacity-60"
                   >
                     <Building2 className="h-3.5 w-3.5" />
                     {cambiandoTenant
@@ -379,7 +379,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
               </DropdownMenu>
             ) : (
               !cargandoTenants && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
                   <Building2 className="h-3.5 w-3.5" /> Estás en{" "}
                   {abreviarNombreTenant(user.tenantNombre)}
                 </span>
