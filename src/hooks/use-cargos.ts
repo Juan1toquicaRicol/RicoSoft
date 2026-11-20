@@ -36,6 +36,12 @@ export function useCargosOpciones(habilitado: boolean) {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!habilitado) return;
+    window.addEventListener("cargos:actualizados", refresh);
+    return () => window.removeEventListener("cargos:actualizados", refresh);
+  }, [habilitado, refresh]);
+
   return { cargos, loading, refresh };
 }
 
@@ -63,9 +69,14 @@ export function useCargosAdmin(habilitado: boolean) {
   }, [refresh]);
 
   const crear = useCallback(
-    async (data: { nombre: string; correoCorporativoRequerido: boolean }) => {
+    async (data: {
+      nombre: string;
+      correoCorporativoRequerido: boolean;
+      departamentoId: string | null;
+    }) => {
       await fetchAuth("/gestion-humana/cargos", { method: "POST", body: JSON.stringify(data) });
       await refresh();
+      window.dispatchEvent(new Event("cargos:actualizados"));
     },
     [refresh],
   );
@@ -73,13 +84,19 @@ export function useCargosAdmin(habilitado: boolean) {
   const actualizar = useCallback(
     async (
       id: string,
-      data: { nombre?: string; activo?: boolean; correoCorporativoRequerido?: boolean },
+      data: {
+        nombre?: string;
+        activo?: boolean;
+        correoCorporativoRequerido?: boolean;
+        departamentoId?: string | null;
+      },
     ) => {
       await fetchAuth(`/gestion-humana/cargos/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       });
       await refresh();
+      window.dispatchEvent(new Event("cargos:actualizados"));
     },
     [refresh],
   );

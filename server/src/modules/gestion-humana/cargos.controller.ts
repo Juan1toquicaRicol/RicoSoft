@@ -20,6 +20,8 @@ function serializar(c: {
   nombre: string;
   activo: boolean;
   correoCorporativoRequerido: boolean;
+  departamentoId: string | null;
+  departamento?: { nombre: string } | null;
   _count?: { empleados: number };
 }) {
   return {
@@ -27,6 +29,8 @@ function serializar(c: {
     nombre: c.nombre,
     activo: c.activo,
     correoCorporativoRequerido: c.correoCorporativoRequerido,
+    departamentoId: c.departamentoId,
+    departamentoNombre: c.departamento?.nombre ?? null,
     colaboradoresAsignados: c._count?.empleados ?? 0,
   };
 }
@@ -37,7 +41,10 @@ export const listarCargos = async (req: AuthenticatedRequest, res: Response) => 
     const tenantId = req.user!.tenantId;
     const cargos = await prisma.cargoColaborador.findMany({
       where: { tenantId },
-      include: { _count: { select: { empleados: CONTEO_COLABORADORES } } },
+      include: {
+        departamento: { select: { nombre: true } },
+        _count: { select: { empleados: CONTEO_COLABORADORES } },
+      },
       orderBy: { nombre: "asc" },
     });
     return res.json(cargos.map(serializar));
@@ -57,7 +64,13 @@ export const listarCargosOpciones = async (req: AuthenticatedRequest, res: Respo
     const tenantId = req.user!.tenantId;
     const cargos = await prisma.cargoColaborador.findMany({
       where: { tenantId, activo: true },
-      select: { id: true, nombre: true, correoCorporativoRequerido: true },
+      select: {
+        id: true,
+        nombre: true,
+        correoCorporativoRequerido: true,
+        departamentoId: true,
+        departamento: { select: { nombre: true } },
+      },
       orderBy: { nombre: "asc" },
     });
     return res.json(cargos);
@@ -80,7 +93,7 @@ function validarNombre(valor: unknown): { nombre: string; normalizado: string } 
 export const crearCargo = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const { nombre: nombreBody, correoCorporativoRequerido } = req.body ?? {};
+    const { nombre: nombreBody, correoCorporativoRequerido, departamentoId } = req.body ?? {};
 
     const validado = validarNombre(nombreBody);
     if (typeof validado === "string") return res.status(400).json({ message: validado });
@@ -89,6 +102,21 @@ export const crearCargo = async (req: AuthenticatedRequest, res: Response) => {
       typeof correoCorporativoRequerido !== "boolean"
     ) {
       return res.status(400).json({ message: "correoCorporativoRequerido debe ser booleano." });
+    }
+    if (
+      departamentoId !== undefined &&
+      departamentoId !== null &&
+      typeof departamentoId !== "string"
+    ) {
+      return res.status(400).json({ message: "El departamento seleccionado no es válido." });
+    }
+    if (typeof departamentoId === "string") {
+      const departamento = await prisma.departamento.findFirst({
+        where: { id: departamentoId, activo: true, OR: [{ tenantId }, { tenantId: null }] },
+        select: { id: true },
+      });
+      if (!departamento)
+        return res.status(400).json({ message: "El departamento seleccionado no es válido." });
     }
 
     const existente = await prisma.cargoColaborador.findFirst({
@@ -108,7 +136,9 @@ export const crearCargo = async (req: AuthenticatedRequest, res: Response) => {
           nombre: validado.nombre,
           nombreNormalizado: validado.normalizado,
           correoCorporativoRequerido: correoCorporativoRequerido ?? true,
+          departamentoId: departamentoId ?? null,
         },
+        include: { departamento: { select: { nombre: true } } },
       });
       await tx.auditoria.create({
         data: {
@@ -139,13 +169,41 @@ export const actualizarCargo = async (req: AuthenticatedRequest, res: Response) 
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
-    const { nombre: nombreBody, activo, correoCorporativoRequerido } = req.body ?? {};
+    const {
+      nombre: nombreBody,
+      activo,
+      correoCorporativoRequerido,
+      departamentoId,
+    } = req.body ?? {};
 
-    const existente = await prisma.cargoColaborador.findFirst({ where: { id, tenantId } });
+    const existente = await prisma.cargoColaborador.findFirst({
+      where: { id, tenantId },
+      include: { departamento: { select: { nombre: true } } },
+    });
     if (!existente) return res.status(404).json({ message: "Cargo no encontrado." });
 
     const data: Prisma.CargoColaboradorUpdateInput = {};
     const cambios: string[] = [];
+
+    if (departamentoId !== undefined) {
+      if (departamentoId !== null && typeof departamentoId !== "string") {
+        return res.status(400).json({ message: "El departamento seleccionado no es válido." });
+      }
+      if (typeof departamentoId === "string") {
+        const departamento = await prisma.departamento.findFirst({
+          where: { id: departamentoId, activo: true, OR: [{ tenantId }, { tenantId: null }] },
+          select: { id: true },
+        });
+        if (!departamento)
+          return res.status(400).json({ message: "El departamento seleccionado no es válido." });
+      }
+      if (departamentoId !== existente.departamentoId) {
+        data.departamento = departamentoId
+          ? { connect: { id: departamentoId } }
+          : { disconnect: true };
+        cambios.push("departamento");
+      }
+    }
 
     if (nombreBody !== undefined) {
       const validado = validarNombre(nombreBody);
@@ -192,7 +250,10 @@ export const actualizarCargo = async (req: AuthenticatedRequest, res: Response) 
       const c = await tx.cargoColaborador.update({
         where: { id },
         data,
-        include: { _count: { select: { empleados: CONTEO_COLABORADORES } } },
+        include: {
+          departamento: { select: { nombre: true } },
+          _count: { select: { empleados: CONTEO_COLABORADORES } },
+        },
       });
       await tx.auditoria.create({
         data: {

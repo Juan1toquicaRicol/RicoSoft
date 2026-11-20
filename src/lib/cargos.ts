@@ -8,6 +8,8 @@ export interface CargoOpcion {
   id: string;
   nombre: string;
   correoCorporativoRequerido: boolean;
+  departamentoId?: string | null;
+  departamentoNombre?: string | null;
 }
 
 /**

@@ -322,6 +322,7 @@ model Departamento {
   activo              Boolean           @default(true)
   esSistemas          Boolean           @default(false)
   colaboradores       Colaborador[]
+  cargosColaborador   CargoColaborador[]
   modulos             Modulo[]
   usuarios            User[]
   membresias          Membresia[]
@@ -1524,13 +1525,16 @@ model CargoColaborador {
   nombreNormalizado          String     @db.VarChar(255)
   activo                     Boolean    @default(true)
   correoCorporativoRequerido Boolean    @default(true)
+  departamentoId             String?    @db.UniqueIdentifier
   createdAt                  DateTime   @default(now())
   updatedAt                  DateTime   @updatedAt
   tenant                     Tenant     @relation(fields: [tenantId], references: [id], onUpdate: NoAction)
   empleados                  Empleado[]
+  departamento               Departamento? @relation(fields: [departamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenantId, nombreNormalizado])
   @@index([tenantId])
+  @@index([departamentoId])
 }
 
 /// Catálogo por tenant de EPS, ARL y fondos de pensiones (Gestión de

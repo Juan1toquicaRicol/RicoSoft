@@ -16,6 +16,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCargosAdmin } from "@/hooks/use-cargos";
+import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const TH = "text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 py-3.5";
 
@@ -27,7 +35,9 @@ const TH = "text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 p
  */
 export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
   const { cargos, loading, error, crear, actualizar } = useCargosAdmin(true);
+  const { departamentos } = useDepartamentosPublico();
   const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoDepartamentoId, setNuevoDepartamentoId] = useState("");
   const [nuevoCorreoRequerido, setNuevoCorreoRequerido] = useState(true);
   const [creando, setCreando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -42,9 +52,11 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
       await crear({
         nombre: nuevoNombre.trim(),
         correoCorporativoRequerido: nuevoCorreoRequerido,
+        departamentoId: nuevoDepartamentoId || null,
       });
       setNuevoNombre("");
       setNuevoCorreoRequerido(true);
+      setNuevoDepartamentoId("");
       toast.success("Cargo creado.");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al crear el cargo.");
@@ -55,7 +67,12 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
 
   const aplicar = async (
     id: string,
-    data: { nombre?: string; activo?: boolean; correoCorporativoRequerido?: boolean },
+    data: {
+      nombre?: string;
+      activo?: boolean;
+      correoCorporativoRequerido?: boolean;
+      departamentoId?: string | null;
+    },
   ) => {
     setOcupadoId(id);
     try {
@@ -74,9 +91,9 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
       <div className="p-4 border-b border-slate-200 bg-slate-50/80">
         <h3 className="text-sm font-bold text-slate-900">Catálogo de cargos</h3>
         <p className="text-xs text-slate-500 font-medium">
-          Define los cargos de la empresa y si el correo corporativo es obligatorio para cada uno.
-          Un cargo desactivado no se puede elegir para nuevos colaboradores, pero se conserva en los
-          ya asignados.
+          Define los cargos de la empresa, el departamento asociado y si el correo corporativo es
+          obligatorio para cada uno. Un cargo desactivado no se puede elegir para nuevos
+          colaboradores, pero se conserva en los ya asignados.
         </p>
       </div>
 
@@ -108,6 +125,35 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
               Correo corporativo obligatorio
             </Label>
           </div>
+          <div className="space-y-1 min-w-48">
+            <Label
+              htmlFor="cargo-nuevo-departamento"
+              className="text-xs font-semibold text-slate-700"
+            >
+              Departamento
+            </Label>
+            <Select
+              value={nuevoDepartamentoId || "ninguno"}
+              onValueChange={(v) => setNuevoDepartamentoId(v === "ninguno" ? "" : v)}
+            >
+              <SelectTrigger
+                id="cargo-nuevo-departamento"
+                className="h-9 text-xs border-slate-300 bg-white"
+              >
+                <SelectValue placeholder="Sin departamento" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200">
+                <SelectItem value="ninguno" className="text-xs">
+                  Sin departamento
+                </SelectItem>
+                {departamentos.map((d) => (
+                  <SelectItem key={d.id} value={d.id} className="text-xs">
+                    {d.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             type="submit"
             size="sm"
@@ -133,6 +179,7 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
           <TableRow className="hover:bg-slate-100/80">
             <TableHead className={TH}>Cargo</TableHead>
             <TableHead className={TH}>Correo corporativo</TableHead>
+            <TableHead className={TH}>Departamento</TableHead>
             <TableHead className={`${TH} text-center`}>Colaboradores</TableHead>
             <TableHead className={TH}>Estado</TableHead>
             {puedeGestionar && <TableHead className={`${TH} text-right`}>Acciones</TableHead>}
@@ -196,6 +243,36 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
                   "Opcional"
                 )}
               </TableCell>
+              <TableCell className="px-4 py-3 text-xs">
+                {puedeGestionar ? (
+                  <Select
+                    value={c.departamentoId ?? "ninguno"}
+                    onValueChange={(v) =>
+                      aplicar(c.id, { departamentoId: v === "ninguno" ? null : v })
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label={`Departamento para ${c.nombre}`}
+                      className="h-8 min-w-40 text-xs border-slate-300 bg-white"
+                      disabled={ocupadoId === c.id}
+                    >
+                      <SelectValue placeholder="Sin departamento" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200">
+                      <SelectItem value="ninguno" className="text-xs">
+                        Sin departamento
+                      </SelectItem>
+                      {departamentos.map((d) => (
+                        <SelectItem key={d.id} value={d.id} className="text-xs">
+                          {d.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  (c.departamentoNombre ?? "—")
+                )}
+              </TableCell>
               <TableCell className="px-4 py-3 text-center text-xs text-slate-600">
                 {c.colaboradoresAsignados}
               </TableCell>
@@ -242,7 +319,7 @@ export function CargosPanel({ puedeGestionar }: { puedeGestionar: boolean }) {
           {cargos.length === 0 && (
             <TableRow className="hover:bg-transparent">
               <TableCell
-                colSpan={puedeGestionar ? 5 : 4}
+                colSpan={puedeGestionar ? 6 : 5}
                 className="px-4 py-8 text-center text-xs text-slate-500"
               >
                 {loading ? "Cargando cargos..." : "Aún no hay cargos configurados."}

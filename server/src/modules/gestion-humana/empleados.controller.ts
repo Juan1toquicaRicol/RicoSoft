@@ -46,7 +46,13 @@ export const listarEmpleados = async (req: AuthenticatedRequest, res: Response) 
   }
 };
 
-type CargoResuelto = { id: string; nombre: string; correoCorporativoRequerido: boolean };
+type CargoResuelto = {
+  id: string;
+  nombre: string;
+  correoCorporativoRequerido: boolean;
+  departamentoId: string | null;
+  departamento: { nombre: string } | null;
+};
 
 /**
  * Resuelve un cargo SOLO dentro del tenant autenticado: un id de otro tenant
@@ -60,7 +66,14 @@ async function resolverCargoDelTenant(
 ): Promise<{ cargo: CargoResuelto } | { error: string }> {
   const cargo = await prisma.cargoColaborador.findFirst({
     where: { id: cargoId, tenantId },
-    select: { id: true, nombre: true, activo: true, correoCorporativoRequerido: true },
+    select: {
+      id: true,
+      nombre: true,
+      activo: true,
+      correoCorporativoRequerido: true,
+      departamentoId: true,
+      departamento: { select: { nombre: true } },
+    },
   });
   if (!cargo) return { error: "El cargo seleccionado no es válido." };
   if (!cargo.activo && !permitirInactivo) {
@@ -166,7 +179,7 @@ export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) =>
           cargo: nombreCargo,
           cargoId: cargoCatalogo?.id ?? null,
           tipoContrato: tipoContratoNombre,
-          area: area || "Operaciones",
+          area: (cargoCatalogo?.departamento?.nombre ?? area) || "Operaciones",
           fechaContratacion: new Date(fechaContratacion),
           salarioActual: salario,
           historicoSalario: {

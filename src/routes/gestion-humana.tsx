@@ -1275,7 +1275,16 @@ function GestionHumana() {
                         id="cargo"
                         options={cargosOpciones.map((c) => ({ value: c.id, label: c.nombre }))}
                         value={empForm.cargoId}
-                        onValueChange={(val) => setEmpForm({ ...empForm, cargoId: val })}
+                        onValueChange={(val) => {
+                          const cargoSeleccionado = cargosOpciones.find((c) => c.id === val);
+                          setEmpForm((actual) => ({
+                            ...actual,
+                            cargoId: val,
+                            ...(cargoSeleccionado?.departamentoNombre
+                              ? { area: cargoSeleccionado.departamentoNombre }
+                              : {}),
+                          }));
+                        }}
                         placeholder="Selecciona un cargo"
                         searchPlaceholder="Buscar cargo..."
                         emptyText="No hay cargos activos."
