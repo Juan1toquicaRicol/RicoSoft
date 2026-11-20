@@ -46,13 +46,13 @@ const TH = "text-[11px] uppercase tracking-wider text-slate-600 font-bold px-4 p
 const TIPO: Record<string, string> = {
   ENTRADA: "Entrada",
   BREAK: "Break",
-  FUERATIEMPO: "Fuera de tiempo",
+  FUERATIEMPO: "Salida",
   OTRO: "Otro",
 };
 
 export function BiometricoMarcacionesPanel() {
   const [pagina, setPagina] = useState(1);
-  const [tipoMarcacion, setTipoMarcacion] = useState<"" | "ENTRADA">("");
+  const [tipoMarcacion, setTipoMarcacion] = useState<"" | "ENTRADA" | "SALIDA">("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [datos, setDatos] = useState<PaginaMarcaciones | null>(null);
@@ -64,6 +64,7 @@ export function BiometricoMarcacionesPanel() {
     try {
       const params = new URLSearchParams({ page: String(pagina), limit: String(POR_PAGINA) });
       if (tipoMarcacion === "ENTRADA") params.set("checkType", "0");
+      if (tipoMarcacion === "SALIDA") params.set("checkType", "3");
       if (desde) params.set("fechaDesde", desde);
       if (hasta) params.set("fechaHasta", hasta);
       const resultado = await fetchAuth(`/gestion-humana/biometrico/marcaciones?${params}`);
@@ -143,20 +144,21 @@ export function BiometricoMarcacionesPanel() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="marc-tipo" className="text-xs font-semibold text-slate-700">
+            <Label htmlFor="marc-tipo" className="block text-xs font-semibold text-slate-700">
               Tipo de marcación
             </Label>
             <select
               id="marc-tipo"
               value={tipoMarcacion}
               onChange={(e) => {
-                setTipoMarcacion(e.target.value as "" | "ENTRADA");
+                setTipoMarcacion(e.target.value as "" | "ENTRADA" | "SALIDA");
                 setPagina(1);
               }}
-              className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs"
+              className="block h-9 w-40 rounded-md border border-slate-300 bg-white px-3 text-xs"
             >
               <option value="">Todas</option>
               <option value="ENTRADA">Entrada</option>
+              <option value="SALIDA">Salida</option>
             </select>
           </div>
           <Button
