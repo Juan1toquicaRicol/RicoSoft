@@ -39,14 +39,19 @@ export interface BorradorDetallesAlta {
 
 export const SALARIO_INICIAL_ALTA = 2000000;
 
-/** Valores iniciales del alta (también los de un formulario recién descartado o guardado). */
+/**
+ * Valores iniciales del alta (también los de un formulario recién descartado o
+ * guardado). La empresa es la del TENANT activo (`empresaIdDeTenant`), nunca un
+ * valor por defecto de otra empresa: si no se puede identificar queda vacía y el
+ * servidor, que es quien la fija, responde con el motivo.
+ */
 export function empFormInicial(
-  empresaActiva: string,
+  empresaDelTenant: string | null,
   areaPorDefecto: string,
   fechaHoyISO: string,
 ): EmpFormAlta {
   return {
-    empresaId: empresaActiva === "ALL" ? "RC" : empresaActiva,
+    empresaId: empresaDelTenant ?? "",
     documento: "",
     nombres: "",
     apellidos: "",

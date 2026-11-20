@@ -61,7 +61,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTenant } from "@/lib/tenant-context";
+import { empresaIdDeTenant, useTenant } from "@/lib/tenant-context";
 import { useGestionHumana } from "@/hooks/use-gestion-humana";
 import { useDepartamentosPublico } from "@/hooks/use-departamentos-publico";
 import { useCargosOpciones } from "@/hooks/use-cargos";
@@ -96,6 +96,10 @@ import {
   SelectorAgrupacion,
 } from "@/components/ui/selector-agrupacion";
 import { agruparFilas } from "@/lib/agrupar";
+import {
+  AVISO_PERMISO_COLABORADOR_NO_VIGENTE,
+  puedeAprobarPermiso,
+} from "@/lib/gestion-humana-permisos";
 
 export const Route = createFileRoute("/gestion-humana")({
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.EMPLEADOS_VER),
@@ -133,6 +137,9 @@ function GestionHumana() {
   } = useGestionHumana();
   const { departamentos } = useDepartamentosPublico();
   const { user } = useSession();
+  // Empresa del grupo del tenant activo: la del colaborador nuevo (el servidor la
+  // fija igual a partir del tenant; aquí solo se muestra y guía el dominio del correo).
+  const empresaDelTenant = empresaIdDeTenant(user?.tenantNombre);
   const puedeEliminarEmpleado = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_ELIMINAR);
   const puedeCrearEmpleado = hasPermission(user, PERMISOS_SISTEMA.EMPLEADOS_CREAR);
   const puedeVerCargos = hasPermission(user, PERMISOS_SISTEMA.CARGOS_VER);
@@ -217,9 +224,16 @@ function GestionHumana() {
   // Forms states
   const areaPorDefecto = departamentos[0]?.nombre ?? "";
   const [empForm, setEmpForm] = useState<EmpFormAlta>(() =>
-    empFormInicial(empresaActiva, "", hoyLocalISO()),
+    empFormInicial(empresaDelTenant, "", hoyLocalISO()),
   );
   const correoRequerido = correoRequeridoParaCargo(cargosOpciones, empForm.cargoId || null);
+  // Si la sesión termina de cargar después del primer render, la empresa del
+  // tenant se refleja en el formulario (no es editable: la fija el servidor).
+  useEffect(() => {
+    setEmpForm((f) =>
+      f.empresaId === (empresaDelTenant ?? "") ? f : { ...f, empresaId: empresaDelTenant ?? "" },
+    );
+  }, [empresaDelTenant]);
 
   // Pestaña "Detalles" del registro: se guarda DESPUÉS de crear el colaborador
   // (necesita su id). Solo se muestra con detalles_ver + detalles_editar.
@@ -450,12 +464,12 @@ function GestionHumana() {
     setAltaCreadaId(null);
     setAltaResultado(null);
     setConfirmarDescarteAlta(false);
-    setEmpForm(empFormInicial(empresaActiva, areaPorDefecto, hoyLocalISO()));
+    setEmpForm(empFormInicial(empresaDelTenant, areaPorDefecto, hoyLocalISO()));
   };
 
   const altaBase = useMemo(
-    () => empFormInicial(empresaActiva, areaPorDefecto, hoyLocalISO()),
-    [empresaActiva, areaPorDefecto],
+    () => empFormInicial(empresaDelTenant, areaPorDefecto, hoyLocalISO()),
+    [empresaDelTenant, areaPorDefecto],
   );
   const altaTieneCambios = hayCambiosPendientesAlta({
     empForm,
@@ -907,49 +921,67 @@ function GestionHumana() {
                       </TableCell>
                       <TableCell className="px-4 py-3 text-right">
                         {p.estado === "Pendiente" && (
-                          <div className="flex justify-end gap-1.5">
-                            <Button
-                              size="xs"
-                              variant="success"
-                              disabled={accionPermisoId === p.id}
-                              onClick={async () => {
-                                setAccionPermisoId(p.id);
-                                try {
-                                  await updateEstadoPermiso(p.id, "Aprobado");
-                                } catch (err: unknown) {
-                                  toast.error(
-                                    err instanceof Error ? err.message : "Error al aprobar.",
-                                  );
-                                } finally {
-                                  setAccionPermisoId(null);
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex justify-end gap-1.5">
+                              {/* D-04: deshabilitado (no oculto) si el colaborador ya no está
+                                vigente; el span lleva el tooltip porque un botón deshabilitado
+                                no recibe el puntero. */}
+                              <span
+                                title={
+                                  puedeAprobarPermiso(p)
+                                    ? undefined
+                                    : AVISO_PERMISO_COLABORADOR_NO_VIGENTE
                                 }
-                              }}
-                              className="h-7 text-[11px]"
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1" />{" "}
-                              {accionPermisoId === p.id ? "..." : "Aprobar"}
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="destructive"
-                              disabled={accionPermisoId === p.id}
-                              onClick={async () => {
-                                setAccionPermisoId(p.id);
-                                try {
-                                  await updateEstadoPermiso(p.id, "Rechazado");
-                                } catch (err: unknown) {
-                                  toast.error(
-                                    err instanceof Error ? err.message : "Error al rechazar.",
-                                  );
-                                } finally {
-                                  setAccionPermisoId(null);
-                                }
-                              }}
-                              className="h-7 text-[11px]"
-                            >
-                              <XCircle className="h-3 w-3 mr-1" />{" "}
-                              {accionPermisoId === p.id ? "..." : "Rechazar"}
-                            </Button>
+                              >
+                                <Button
+                                  size="xs"
+                                  variant="success"
+                                  disabled={accionPermisoId === p.id || !puedeAprobarPermiso(p)}
+                                  onClick={async () => {
+                                    setAccionPermisoId(p.id);
+                                    try {
+                                      await updateEstadoPermiso(p.id, "Aprobado");
+                                    } catch (err: unknown) {
+                                      toast.error(
+                                        err instanceof Error ? err.message : "Error al aprobar.",
+                                      );
+                                    } finally {
+                                      setAccionPermisoId(null);
+                                    }
+                                  }}
+                                  className="h-7 text-[11px]"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />{" "}
+                                  {accionPermisoId === p.id ? "..." : "Aprobar"}
+                                </Button>
+                              </span>
+                              <Button
+                                size="xs"
+                                variant="destructive"
+                                disabled={accionPermisoId === p.id}
+                                onClick={async () => {
+                                  setAccionPermisoId(p.id);
+                                  try {
+                                    await updateEstadoPermiso(p.id, "Rechazado");
+                                  } catch (err: unknown) {
+                                    toast.error(
+                                      err instanceof Error ? err.message : "Error al rechazar.",
+                                    );
+                                  } finally {
+                                    setAccionPermisoId(null);
+                                  }
+                                }}
+                                className="h-7 text-[11px]"
+                              >
+                                <XCircle className="h-3 w-3 mr-1" />{" "}
+                                {accionPermisoId === p.id ? "..." : "Rechazar"}
+                              </Button>
+                            </div>
+                            {!puedeAprobarPermiso(p) && (
+                              <span className="text-[10px] text-slate-500">
+                                {AVISO_PERMISO_COLABORADOR_NO_VIGENTE}
+                              </span>
+                            )}
                           </div>
                         )}
                       </TableCell>
@@ -1186,21 +1218,23 @@ function GestionHumana() {
                       <Label htmlFor="empresaId" className="text-xs font-semibold text-slate-700">
                         Empresa
                       </Label>
-                      <Select
-                        value={empForm.empresaId}
-                        onValueChange={(val) => setEmpForm({ ...empForm, empresaId: val })}
-                      >
-                        <SelectTrigger className="h-9 text-xs border-slate-300 bg-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white border-slate-200">
-                          {empresas.map((e) => (
-                            <SelectItem key={e.id} value={e.id} className="text-xs">
-                              {e.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {/* La empresa la fija el servidor a partir de la empresa activa:
+                          no se puede registrar un colaborador en otra. */}
+                      <Input
+                        id="empresaId"
+                        readOnly
+                        value={
+                          empresas.find((e) => e.id === empForm.empresaId)?.nombre ??
+                          "No identificada"
+                        }
+                        className="h-9 text-xs border-slate-300 bg-slate-50 text-slate-700"
+                      />
+                      {!empForm.empresaId && (
+                        <p className="text-[11px] text-amber-700">
+                          No se pudo identificar la empresa activa. Si el registro falla, pide a un
+                          administrador que configure su dominio corporativo.
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="documento" className="text-xs font-semibold text-slate-700">

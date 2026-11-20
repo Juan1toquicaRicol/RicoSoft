@@ -7,6 +7,7 @@ const cargoFindFirstMock = vi.fn();
 const cargoCreateMock = vi.fn();
 const cargoUpdateMock = vi.fn();
 const auditoriaCreateMock = vi.fn();
+const departamentoFindFirstMock = vi.fn();
 
 class PrismaClientKnownRequestErrorFake extends Error {
   code: string;
@@ -29,6 +30,7 @@ vi.mock("../../config/prisma", () => {
       update: (...a: unknown[]) => cargoUpdateMock(...a),
     },
     auditoria: { create: (...a: unknown[]) => auditoriaCreateMock(...a) },
+    departamento: { findFirst: (...a: unknown[]) => departamentoFindFirstMock(...a) },
   };
   return {
     prisma: { ...modelos, $transaction: (fn: (tx: typeof modelos) => unknown) => fn(modelos) },
@@ -66,6 +68,8 @@ const CARGO_A = {
   nombreNormalizado: "analista",
   activo: true,
   correoCorporativoRequerido: true,
+  departamentoId: null,
+  departamento: null,
   _count: { empleados: 2 },
 };
 
@@ -77,6 +81,7 @@ describe("cargos.controller", () => {
       cargoCreateMock,
       cargoUpdateMock,
       auditoriaCreateMock,
+      departamentoFindFirstMock,
     ].forEach((m) => m.mockReset());
     auditoriaCreateMock.mockResolvedValue({});
   });
@@ -90,6 +95,7 @@ describe("cargos.controller", () => {
       expect(cargoFindManyMock.mock.calls[0][0].where).toEqual({ tenantId: "tenant-A" });
       // El conteo excluye los colaboradores eliminados (soft-delete).
       expect(cargoFindManyMock.mock.calls[0][0].include).toEqual({
+        departamento: { select: { nombre: true } },
         _count: { select: { empleados: { where: { eliminado: false } } } },
       });
       expect(res.json).toHaveBeenCalledWith([
@@ -98,6 +104,8 @@ describe("cargos.controller", () => {
           nombre: "Analista",
           activo: true,
           correoCorporativoRequerido: true,
+          departamentoId: null,
+          departamentoNombre: null,
           colaboradoresAsignados: 2,
         },
       ]);
@@ -139,6 +147,7 @@ describe("cargos.controller", () => {
         nombre: "Jefe de Nómina",
         nombreNormalizado: "jefe de nomina",
         correoCorporativoRequerido: true,
+        departamentoId: null,
       });
       expect(auditoriaCreateMock).toHaveBeenCalledTimes(1);
       expect(auditoriaCreateMock.mock.calls[0][0].data).toMatchObject({
@@ -298,6 +307,82 @@ describe("cargos.controller", () => {
         await actualizarCargo(fakeReq({ params: { id: "cargo-1" }, body }), res);
         expect(res.status).toHaveBeenCalledWith(400);
       }
+    });
+  });
+
+  describe("departamento del cargo", () => {
+    it("al crear, valida el departamento contra el tenant de la sesión o GENERAL y activo", async () => {
+      const { crearCargo } = await import("./cargos.controller");
+      departamentoFindFirstMock.mockResolvedValue({ id: "dep-1" });
+      cargoFindFirstMock.mockResolvedValue(null);
+      cargoCreateMock.mockResolvedValue({
+        ...CARGO_A,
+        departamentoId: "dep-1",
+        departamento: { nombre: "Producción" },
+      });
+      const res = fakeRes();
+      await crearCargo(fakeReq({ body: { nombre: "Operario", departamentoId: "dep-1" } }), res);
+      expect(departamentoFindFirstMock.mock.calls[0][0].where).toEqual({
+        id: "dep-1",
+        activo: true,
+        OR: [{ tenantId: "tenant-A" }, { tenantId: null }],
+      });
+      expect(cargoCreateMock.mock.calls[0][0].data.departamentoId).toBe("dep-1");
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json.mock.calls[0][0]).toMatchObject({
+        departamentoId: "dep-1",
+        departamentoNombre: "Producción",
+      });
+    });
+
+    it("al crear, un departamento de otro tenant o inactivo (no encontrado) → 400 sin crear", async () => {
+      const { crearCargo } = await import("./cargos.controller");
+      departamentoFindFirstMock.mockResolvedValue(null);
+      const res = fakeRes();
+      await crearCargo(fakeReq({ body: { nombre: "Operario", departamentoId: "dep-B" } }), res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(cargoCreateMock).not.toHaveBeenCalled();
+    });
+
+    it("departamentoId que no es string → 400", async () => {
+      const { crearCargo, actualizarCargo } = await import("./cargos.controller");
+      const resCrear = fakeRes();
+      await crearCargo(fakeReq({ body: { nombre: "Operario", departamentoId: 5 } }), resCrear);
+      expect(resCrear.status).toHaveBeenCalledWith(400);
+
+      cargoFindFirstMock.mockResolvedValue(CARGO_A);
+      const resEditar = fakeRes();
+      await actualizarCargo(
+        fakeReq({ params: { id: "cargo-1" }, body: { departamentoId: { id: "x" } } }),
+        resEditar,
+      );
+      expect(resEditar.status).toHaveBeenCalledWith(400);
+      expect(cargoUpdateMock).not.toHaveBeenCalled();
+    });
+
+    it("al editar, vincula y desvincula el departamento y lo audita", async () => {
+      const { actualizarCargo } = await import("./cargos.controller");
+      cargoFindFirstMock.mockResolvedValue(CARGO_A);
+      departamentoFindFirstMock.mockResolvedValue({ id: "dep-1" });
+      cargoUpdateMock.mockResolvedValue({ ...CARGO_A, departamentoId: "dep-1" });
+      await actualizarCargo(
+        fakeReq({ params: { id: "cargo-1" }, body: { departamentoId: "dep-1" } }),
+        fakeRes(),
+      );
+      expect(cargoUpdateMock.mock.calls[0][0].data).toEqual({
+        departamento: { connect: { id: "dep-1" } },
+      });
+      expect(auditoriaCreateMock.mock.calls[0][0].data.detalle).toContain("departamento");
+
+      cargoFindFirstMock.mockResolvedValue({ ...CARGO_A, departamentoId: "dep-1" });
+      cargoUpdateMock.mockResolvedValue(CARGO_A);
+      await actualizarCargo(
+        fakeReq({ params: { id: "cargo-1" }, body: { departamentoId: null } }),
+        fakeRes(),
+      );
+      expect(cargoUpdateMock.mock.calls[1][0].data).toEqual({
+        departamento: { disconnect: true },
+      });
     });
   });
 });

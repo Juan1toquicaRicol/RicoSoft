@@ -2,8 +2,17 @@ import { Response } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { MENSAJE_COLABORADOR_LIQUIDADO } from "./empleados.controller";
 
 const ESTADOS_VALIDOS = ["Pendiente", "Aprobado", "Rechazado"];
+
+export const MENSAJE_PERMISO_COLABORADOR_NO_VIGENTE =
+  'El colaborador está liquidado o eliminado: su permiso no se puede aprobar ni reabrir, solo marcar como "Rechazado".';
+
+/** Vigente = ni eliminado ni liquidado (D-04). Misma regla para la lista y el cambio de estado. */
+function esColaboradorVigente(empleado: { estado: string; eliminado: boolean }): boolean {
+  return !empleado.eliminado && empleado.estado !== "Liquidado";
+}
 
 export const listarPermisosLaborales = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -14,15 +23,20 @@ export const listarPermisosLaborales = async (req: AuthenticatedRequest, res: Re
 
     const permisos = await prisma.permisoLaboral.findMany({
       where,
-      include: { empleado: { select: { nombres: true, apellidos: true } } },
+      include: {
+        empleado: { select: { nombres: true, apellidos: true, estado: true, eliminado: true } },
+      },
       orderBy: { fechaSolicitud: "desc" },
       take: 1000, // límite de seguridad temporal; falta paginación real (ver auditoría)
     });
     return res.json(
-      permisos.map((p) => ({
+      permisos.map(({ empleado, ...p }) => ({
         ...p,
-        nombreEmpleado: `${p.empleado.nombres} ${p.empleado.apellidos}`,
+        empleado: { nombres: empleado.nombres, apellidos: empleado.apellidos },
+        nombreEmpleado: `${empleado.nombres} ${empleado.apellidos}`,
         empleadoId: p.empleadoId,
+        // D-04: la UI no ofrece aprobar si el colaborador ya no está vigente.
+        colaboradorVigente: esColaboradorVigente(empleado),
       })),
     );
   } catch (error) {
@@ -40,8 +54,15 @@ export const crearPermisoLaboral = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ message: "Faltan campos obligatorios del permiso." });
     }
 
-    const empleado = await prisma.empleado.findFirst({ where: { id: empleadoId, tenantId } });
+    // Un colaborador eliminado no existe para esta operación (404) y uno liquidado
+    // conserva su historial pero no recibe permisos laborales nuevos (409).
+    const empleado = await prisma.empleado.findFirst({
+      where: { id: empleadoId, tenantId, eliminado: false },
+    });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
+    if (empleado.estado === "Liquidado") {
+      return res.status(409).json({ message: MENSAJE_COLABORADOR_LIQUIDADO });
+    }
 
     const diasNum = Number(dias);
     if (!Number.isFinite(diasNum) || diasNum <= 0) {
@@ -103,9 +124,18 @@ export const actualizarEstadoPermisoLaboral = async (req: AuthenticatedRequest, 
 
     const permiso = await prisma.permisoLaboral.findFirst({
       where: { id, tenantId },
-      include: { empleado: { select: { nombres: true, apellidos: true } } },
+      include: {
+        empleado: { select: { nombres: true, apellidos: true, estado: true, eliminado: true } },
+      },
     });
     if (!permiso) return res.status(404).json({ message: "Permiso no encontrado." });
+
+    // D-04: el permiso de un colaborador liquidado o eliminado no se aprueba ni
+    // se reabre; solo puede quedar "Rechazado" (cubre también pendientes
+    // anteriores a que liquidar/eliminar los cerrara automáticamente).
+    if (!esColaboradorVigente(permiso.empleado) && estado !== "Rechazado") {
+      return res.status(409).json({ message: MENSAJE_PERMISO_COLABORADOR_NO_VIGENTE });
+    }
 
     const actualizado = await prisma.permisoLaboral.update({ where: { id }, data: { estado } });
 

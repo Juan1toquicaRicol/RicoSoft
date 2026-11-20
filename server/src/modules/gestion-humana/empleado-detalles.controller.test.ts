@@ -23,6 +23,8 @@ const documentoDeleteMock = vi.fn();
 const documentoDeleteManyMock = vi.fn();
 const auditoriaCreateMock = vi.fn();
 const catalogoFindFirstMock = vi.fn();
+// Profundidad de $transaction en curso: permite afirmar que una operación ocurrió DENTRO de la transacción.
+const estadoTx = { profundidad: 0 };
 
 vi.mock("../../config/prisma", () => {
   const modelos = {
@@ -54,7 +56,17 @@ vi.mock("../../config/prisma", () => {
     auditoria: { create: (...a: unknown[]) => auditoriaCreateMock(...a) },
   };
   return {
-    prisma: { ...modelos, $transaction: (fn: (tx: typeof modelos) => unknown) => fn(modelos) },
+    prisma: {
+      ...modelos,
+      $transaction: async (fn: (tx: typeof modelos) => unknown) => {
+        estadoTx.profundidad++;
+        try {
+          return await fn(modelos);
+        } finally {
+          estadoTx.profundidad--;
+        }
+      },
+    },
   };
 });
 
@@ -69,7 +81,14 @@ import {
   subirDocumentoEmpleado,
   descargarDocumentoEmpleado,
   eliminarDocumentoEmpleado,
+  MENSAJE_ESTUDIO_CON_SOPORTES_SIN_PERMISO,
 } from "./empleado-detalles.controller";
+import { permisosRequeridos } from "../../lib/catalogo-permisos";
+
+// Lo que da la ruta de eliminar estudio (editarDetalles) y, aparte, lo que
+// añade gestionar documentos con sus prerrequisitos (D-03).
+const SOLO_DETALLES = ["empleados.ver", "empleados.detalles_ver", "empleados.detalles_editar"];
+const CON_DOCUMENTOS = [...SOLO_DETALLES, ...permisosRequeridos("empleados.documentos_gestionar")];
 
 type ResFake = Response & {
   status: ReturnType<typeof vi.fn>;
@@ -560,6 +579,125 @@ describe("subirDocumentoEmpleado", () => {
       res,
     );
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it("error inesperado ANTES de mover (p. ej. BD al buscar el colaborador) => 500 y se borra el temporal", async () => {
+    empleadoFindFirstMock.mockRejectedValue(new Error("BD caída"));
+    const file = archivoTemporal("tmp-antes.pdf");
+    const res = fakeRes();
+    await subirDocumentoEmpleado(
+      fakeReq({
+        params: { id: "emp-1" },
+        body: { tipo: "CERTIFICADO_BANCARIO" },
+        file,
+      } as never),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(fs.existsSync(file.path)).toBe(false);
+  });
+});
+
+describe("eliminarEstudio con soportes", () => {
+  it("D-03: con soportes y sin documentos_gestionar => 403 y no borra nada", async () => {
+    empleadoFindFirstMock.mockResolvedValue(EMPLEADO);
+    estudioFindFirstMock.mockResolvedValue({ id: "est-1" });
+    documentoFindManyMock.mockResolvedValue([{ id: "doc-1", archivoRuta: "emp-1/a.pdf" }]);
+    const unlink = vi.spyOn(fs, "unlink");
+    const res = fakeRes();
+    await eliminarEstudio(
+      fakeReq({ params: { id: "emp-1", estudioId: "est-1" } }, SOLO_DETALLES),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ message: MENSAJE_ESTUDIO_CON_SOPORTES_SIN_PERMISO });
+    expect(documentoDeleteManyMock).not.toHaveBeenCalled();
+    expect(estudioDeleteMock).not.toHaveBeenCalled();
+    expect(auditoriaCreateMock).not.toHaveBeenCalled();
+    expect(unlink).not.toHaveBeenCalled();
+    unlink.mockRestore();
+  });
+
+  it("D-03: sin soportes basta detalles_editar; la auditoría no menciona soportes", async () => {
+    empleadoFindFirstMock.mockResolvedValue(EMPLEADO);
+    estudioFindFirstMock.mockResolvedValue({ id: "est-1" });
+    documentoFindManyMock.mockResolvedValue([]);
+    const res = fakeRes();
+    await eliminarEstudio(
+      fakeReq({ params: { id: "emp-1", estudioId: "est-1" } }, SOLO_DETALLES),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(documentoDeleteManyMock).not.toHaveBeenCalled();
+    expect(estudioDeleteMock).toHaveBeenCalledWith({ where: { id: "est-1" } });
+    expect(auditoriaCreateMock.mock.calls[0][0].data.detalle).not.toMatch(/soporte/);
+  });
+
+  it("D-03: la auditoría registra la cantidad de soportes, sin sus nombres", async () => {
+    empleadoFindFirstMock.mockResolvedValue(EMPLEADO);
+    estudioFindFirstMock.mockResolvedValue({ id: "est-1" });
+    documentoFindManyMock.mockResolvedValue([
+      { id: "doc-1", archivoRuta: "emp-1/diploma-secreto.pdf" },
+      { id: "doc-2", archivoRuta: "emp-1/acta.pdf" },
+    ]);
+    const res = fakeRes();
+    await eliminarEstudio(
+      fakeReq({ params: { id: "emp-1", estudioId: "est-1" } }, CON_DOCUMENTOS),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(204);
+    const { data } = auditoriaCreateMock.mock.calls[0][0];
+    expect(data.accion).toBe("EMPLEADO_ESTUDIO_ELIMINADO");
+    expect(data.detalle).toContain("sus 2 soportes");
+    expect(data.detalle).not.toMatch(/diploma|acta|\.pdf/);
+  });
+
+  it("lee los soportes dentro de la transacción y los borra por id, acotado al tenant", async () => {
+    empleadoFindFirstMock.mockResolvedValue(EMPLEADO);
+    estudioFindFirstMock.mockResolvedValue({ id: "est-1" });
+    const lecturaDentroDeTx: boolean[] = [];
+    documentoFindManyMock.mockImplementation(async () => {
+      lecturaDentroDeTx.push(estadoTx.profundidad > 0);
+      return [
+        { id: "doc-1", archivoRuta: "emp-1/a.pdf" },
+        { id: "doc-2", archivoRuta: "emp-1/b.pdf" },
+      ];
+    });
+    const res = fakeRes();
+    await eliminarEstudio(
+      fakeReq({ params: { id: "emp-1", estudioId: "est-1" } }, CON_DOCUMENTOS),
+      res,
+    );
+    // Con el código anterior la lectura de soportes ocurría fuera de la transacción.
+    expect(lecturaDentroDeTx).toEqual([true]);
+    expect(documentoFindManyMock.mock.calls[0][0].where).toEqual({
+      estudioId: "est-1",
+      ...TENANT_Y_EMPLEADO,
+    });
+    expect(documentoDeleteManyMock.mock.calls[0][0].where).toEqual({
+      id: { in: ["doc-1", "doc-2"] },
+      tenantId: "tenant-A",
+    });
+    expect(estudioDeleteMock).toHaveBeenCalledWith({ where: { id: "est-1" } });
+    expect(res.status).toHaveBeenCalledWith(204);
+  });
+
+  it("si entretanto se adjuntó otro soporte (FK P2003 al borrar el estudio) => 409", async () => {
+    empleadoFindFirstMock.mockResolvedValue(EMPLEADO);
+    estudioFindFirstMock.mockResolvedValue({ id: "est-1" });
+    documentoFindManyMock.mockResolvedValue([{ id: "doc-1", archivoRuta: "emp-1/a.pdf" }]);
+    estudioDeleteMock.mockRejectedValue(Object.assign(new Error("FK"), { code: "P2003" }));
+    const unlink = vi.spyOn(fs, "unlink");
+    const res = fakeRes();
+    await eliminarEstudio(
+      fakeReq({ params: { id: "emp-1", estudioId: "est-1" } }, CON_DOCUMENTOS),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(409);
+    // La transacción se revirtió: no se borra ningún archivo de soporte.
+    expect(unlink).not.toHaveBeenCalled();
+    unlink.mockRestore();
   });
 });
 

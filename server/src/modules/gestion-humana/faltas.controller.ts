@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
+import { MENSAJE_COLABORADOR_LIQUIDADO } from "./empleados.controller";
 
 const GRAVEDADES_VALIDAS = ["Leve", "Grave", "Muy Grave"];
 
@@ -42,8 +43,15 @@ export const crearFalta = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ message: "Gravedad no válida." });
     }
 
-    const empleado = await prisma.empleado.findFirst({ where: { id: empleadoId, tenantId } });
+    // Un colaborador eliminado no existe para esta operación (404) y uno liquidado
+    // conserva su historial pero no recibe faltas nuevos (409).
+    const empleado = await prisma.empleado.findFirst({
+      where: { id: empleadoId, tenantId, eliminado: false },
+    });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
+    if (empleado.estado === "Liquidado") {
+      return res.status(409).json({ message: MENSAJE_COLABORADOR_LIQUIDADO });
+    }
 
     const falta = await prisma.faltaStrike.create({
       data: {

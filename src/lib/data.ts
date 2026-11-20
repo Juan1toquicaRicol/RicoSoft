@@ -114,6 +114,8 @@ export interface Permiso {
   observaciones: string;
   estado: EstadoPermiso;
   fechaSolicitud: string;
+  /** false si el colaborador está liquidado o eliminado (D-04): no se ofrece aprobar. */
+  colaboradorVigente?: boolean;
 }
 
 export type GravedadStrike = "Leve" | "Grave" | "Muy Grave";

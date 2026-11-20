@@ -106,6 +106,14 @@ export async function obtenerFuenteBiometrica(req: AuthenticatedRequest, res: Re
 const MENSAJE_FUENTE_ACTIVA_UNICA =
   "Ya hay una fuente biométrica activa en esta instalación. Con la configuración actual (un solo archivo CrossChex.mdb) solo puede haber una; desactívala antes de activar otra.";
 
+/**
+ * El nombre de la fuente es único en TODA la instalación (SEC-13, pendiente de
+ * decisión), así que el 409 no puede evitar que se note que el nombre está
+ * tomado; al menos no afirma que exista una fuente ni da pistas de quién es.
+ */
+const MENSAJE_NOMBRE_NO_DISPONIBLE =
+  "No se puede usar ese nombre para la fuente biométrica. Elige otro nombre.";
+
 const MENSAJE_SINCRONIZACION_EN_CURSO =
   "Hay una sincronización biométrica en curso. Espera a que termine antes de crear o activar una fuente.";
 
@@ -152,7 +160,7 @@ export async function crearFuenteBiometrica(req: AuthenticatedRequest, res: Resp
     return res.status(201).json(serializarFuente({ ...fuente, sincronizaciones: [] }));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return res.status(409).json({ message: "Ya existe una fuente biométrica con ese nombre." });
+      return res.status(409).json({ message: MENSAJE_NOMBRE_NO_DISPONIBLE });
     }
     console.error("Error al crear fuente biométrica:", error);
     return res.status(500).json({ message: "Error al crear la fuente biométrica." });
@@ -216,7 +224,7 @@ export async function actualizarFuenteBiometrica(req: AuthenticatedRequest, res:
     return res.json(serializarFuente({ ...actualizada, sincronizaciones: [] }));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return res.status(409).json({ message: "Ya existe una fuente biométrica con ese nombre." });
+      return res.status(409).json({ message: MENSAJE_NOMBRE_NO_DISPONIBLE });
     }
     console.error("Error al actualizar fuente biométrica:", error);
     return res.status(500).json({ message: "Error al actualizar la fuente biométrica." });

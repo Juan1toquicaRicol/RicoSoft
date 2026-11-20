@@ -29,11 +29,30 @@ vi.mock("../config/prisma", () => ({
 const sincronizarFuenteBiometricaMock = vi.fn();
 
 class SincronizacionEnCursoErrorFake extends Error {}
+class FuenteBiometricaSinPropietarioErrorFake extends Error {}
+
+const idsActivasMock = vi.fn();
 
 vi.mock("../modules/gestion-humana/biometrico-import.service", () => ({
   sincronizarFuenteBiometrica: (...args: unknown[]) => sincronizarFuenteBiometricaMock(...args),
   SincronizacionEnCursoError: SincronizacionEnCursoErrorFake,
+  idsCorridasBiometricoActivasEnProceso: () => idsActivasMock(),
+  FuenteBiometricaSinPropietarioError: FuenteBiometricaSinPropietarioErrorFake,
 }));
+
+const recuperarMock = vi.fn();
+vi.mock("./crosschex-recovery", () => ({
+  recuperarSincronizacionesBiometricoInterrumpidas: (...args: unknown[]) => recuperarMock(...args),
+}));
+
+const reportarFalloMock = vi.fn();
+vi.mock("../lib/job-registry", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../lib/job-registry")>();
+  return {
+    ...real,
+    reportarFalloEnCorrida: (...args: unknown[]) => reportarFalloMock(...args),
+  };
+});
 
 const REPORTE_OK = (overrides: Partial<Record<string, unknown>> = {}) => ({
   fuenteNombre: "fuente-1",
@@ -57,6 +76,11 @@ describe("crosschex-sync.job", () => {
     stopMock.mockReset();
     fuenteFindManyMock.mockReset();
     sincronizarFuenteBiometricaMock.mockReset();
+    idsActivasMock.mockReset();
+    idsActivasMock.mockReturnValue([]);
+    recuperarMock.mockReset();
+    recuperarMock.mockResolvedValue(0);
+    reportarFalloMock.mockReset();
     process.env = { ...envOriginal };
     delete process.env.CROSSCHEX_SYNC_ENABLED;
     delete process.env.CROSSCHEX_SYNC_CRON;
@@ -179,6 +203,23 @@ describe("crosschex-sync.job", () => {
       expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(1);
     });
 
+    it("D-01: sin propietario configurado no sincroniza, no lanza y lo deja visible en Monitoreo con un mensaje genérico", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockRejectedValueOnce(
+        new FuenteBiometricaSinPropietarioErrorFake("sin propietario"),
+      );
+
+      const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
+      await expect(ejecutarCicloSincronizacionCrossChex()).resolves.toBeUndefined();
+
+      expect(reportarFalloMock).toHaveBeenCalledTimes(1);
+      const mensaje = String(reportarFalloMock.mock.calls[0][1]);
+      expect(mensaje).toContain("CROSSCHEX_TENANT_PROPIETARIO_ID");
+      expect(mensaje).not.toContain("sede-a");
+      error.mockRestore();
+    });
+
     it("un error inesperado en la fuente no lanza: queda en el log del proceso", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
       fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
@@ -209,6 +250,60 @@ describe("crosschex-sync.job", () => {
       await ejecutarCicloSincronizacionCrossChex();
 
       expect(sincronizarFuenteBiometricaMock).not.toHaveBeenCalled();
+    });
+
+    it("en cada ciclo libera candados EN_CURSO huérfanos, sin tocar las corridas vivas de este proceso, y lo reporta a Monitoreo", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      idsActivasMock.mockReturnValue(["log-vivo"]);
+      recuperarMock.mockResolvedValue(1);
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockResolvedValue(REPORTE_OK());
+
+      const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
+      await ejecutarCicloSincronizacionCrossChex();
+
+      expect(recuperarMock).toHaveBeenCalledWith({ excluirIds: ["log-vivo"], momento: "ciclo" });
+      // La recuperación va ANTES de intentar sincronizar: el candado ya quedó libre.
+      expect(recuperarMock.mock.invocationCallOrder[0]).toBeLessThan(
+        sincronizarFuenteBiometricaMock.mock.invocationCallOrder[0],
+      );
+      expect(reportarFalloMock).toHaveBeenCalledTimes(1);
+      expect(String(reportarFalloMock.mock.calls[0][1])).not.toContain("sede-a");
+      error.mockRestore();
+    });
+
+    it("si la recuperación falla, el ciclo sigue y sincroniza igual", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      recuperarMock.mockRejectedValue(new Error("BD no disponible"));
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockResolvedValue(REPORTE_OK());
+
+      const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
+      await expect(ejecutarCicloSincronizacionCrossChex()).resolves.toBeUndefined();
+      expect(sincronizarFuenteBiometricaMock).toHaveBeenCalledTimes(1);
+      error.mockRestore();
+    });
+
+    it("lo que va a Monitoreo (estado global, visible para otros tenants) no lleva el nombre de la fuente ni el error técnico", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      fuenteFindManyMock.mockResolvedValue([{ nombre: "sede-a" }]);
+      sincronizarFuenteBiometricaMock.mockResolvedValueOnce(
+        REPORTE_OK({ estado: "FALLIDO", mensajeError: "No se encontró C:\\ruta\\CrossChex.mdb" }),
+      );
+      const { ejecutarCicloSincronizacionCrossChex } = await import("./crosschex-sync.job");
+      await ejecutarCicloSincronizacionCrossChex();
+
+      sincronizarFuenteBiometricaMock.mockRejectedValueOnce(
+        new Error("ODBC: C:\\ruta\\CrossChex.mdb bloqueado"),
+      );
+      await ejecutarCicloSincronizacionCrossChex();
+
+      expect(reportarFalloMock).toHaveBeenCalledTimes(2);
+      for (const [, mensaje] of reportarFalloMock.mock.calls) {
+        expect(String(mensaje)).not.toContain("sede-a");
+        expect(String(mensaje)).not.toContain("CrossChex.mdb");
+      }
+      error.mockRestore();
     });
 
     it("una corrida sin marcaciones nuevas (leidos=0) se procesa igual, sin error", async () => {

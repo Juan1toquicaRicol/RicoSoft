@@ -86,8 +86,13 @@ describe("hayCambiosPendientesAlta / resolverCierreAlta (descarte)", () => {
   });
 
   it("el estado inicial usa el departamento por defecto (no vuelve a area vacía)", () => {
-    expect(empFormInicial("ALL", "Ventas", HOY)).toMatchObject({ empresaId: "RC", area: "Ventas" });
-    expect(empFormInicial("FP", "", HOY).empresaId).toBe("FP");
+    expect(empFormInicial("GR", "Ventas", HOY)).toMatchObject({ empresaId: "GR", area: "Ventas" });
+  });
+
+  it("la empresa es la del tenant: nunca Ricol por defecto", () => {
+    expect(empFormInicial("FL", "", HOY).empresaId).toBe("FL");
+    // Tenant no identificable: vacía (el servidor la fija o rechaza), no "RC".
+    expect(empFormInicial(null, "", HOY).empresaId).toBe("");
   });
 });
 

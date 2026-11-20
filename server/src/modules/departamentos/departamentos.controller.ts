@@ -11,6 +11,7 @@ const CONTEOS_BLOQUEO = {
   modulos: true,
   proveedores: true,
   perfilesFuncionales: true,
+  cargosColaborador: true,
 } as const;
 
 function serializar(d: {
@@ -26,6 +27,7 @@ function serializar(d: {
     modulos?: number;
     proveedores?: number;
     perfilesFuncionales?: number;
+    cargosColaborador?: number;
   };
 }) {
   const c = d._count;
@@ -38,7 +40,8 @@ function serializar(d: {
     (c?.colaboradores ?? 0) +
     (c?.modulos ?? 0) +
     (c?.proveedores ?? 0) +
-    (c?.perfilesFuncionales ?? 0);
+    (c?.perfilesFuncionales ?? 0) +
+    (c?.cargosColaborador ?? 0);
   return {
     id: d.id,
     nombre: d.nombre,
@@ -237,6 +240,17 @@ export const actualizarDepartamento = async (req: AuthenticatedRequest, res: Res
               "No se puede convertir a exclusivo de esta empresa: hay usuarios o membresías de otras empresas usando este departamento.",
           });
         }
+        // Igual con los cargos de Gestión Humana: un cargo de otra empresa
+        // quedaría apuntando a un departamento que esa empresa ya no ve.
+        const cargosDeOtroTenant = await prisma.cargoColaborador.count({
+          where: { departamentoId: id, tenantId: { not: tenantId } },
+        });
+        if (cargosDeOtroTenant > 0) {
+          return res.status(409).json({
+            message:
+              "No se puede convertir a exclusivo de esta empresa: hay cargos de Gestión Humana de otras empresas asociados a este departamento.",
+          });
+        }
         nuevoTenantId = tenantId;
       } else if (!eraGeneral && seraGeneral) {
         nuevoTenantId = null; // TENANT -> GENERAL siempre es seguro (amplía, no restringe)
@@ -290,6 +304,7 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
             modulos: true,
             proveedores: true,
             perfilesFuncionales: true,
+            cargosColaborador: true,
           },
         },
       },
@@ -328,6 +343,9 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
     if (departamento._count.perfilesFuncionales > 0) {
       bloqueos.push(`${departamento._count.perfilesFuncionales} perfil(es) funcional(es)`);
     }
+    if (departamento._count.cargosColaborador > 0) {
+      bloqueos.push(`${departamento._count.cargosColaborador} cargo(s) de Gestión Humana`);
+    }
     if (bloqueos.length > 0) {
       return res.status(409).json({
         message: `No se puede eliminar: tiene ${bloqueos.join(", ")} asignados a este departamento.`,
@@ -342,6 +360,7 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
         usadoModulos,
         usadoProveedores,
         usadoPerfiles,
+        usadoCargos,
       ] = await Promise.all([
         prisma.user.count({ where: { departamentoId: id } }),
         prisma.membresia.count({ where: { departamentoId: id } }),
@@ -349,6 +368,7 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
         prisma.modulo.count({ where: { departamentoId: id } }),
         prisma.proveedor.count({ where: { departamentoId: id } }),
         prisma.perfilFuncional.count({ where: { departamentoId: id } }),
+        prisma.cargoColaborador.count({ where: { departamentoId: id } }),
       ]);
       if (
         usadoUsuarios > 0 ||
@@ -356,7 +376,8 @@ export const eliminarDepartamento = async (req: AuthenticatedRequest, res: Respo
         usadoColaboradores > 0 ||
         usadoModulos > 0 ||
         usadoProveedores > 0 ||
-        usadoPerfiles > 0
+        usadoPerfiles > 0 ||
+        usadoCargos > 0
       ) {
         return res.status(409).json({
           message:

@@ -29,10 +29,17 @@ vi.mock("../../config/prisma", () => ({
   },
 }));
 
+class FuenteBiometricaInactivaErrorFake extends Error {}
+class VariasFuentesBiometricasActivasErrorFake extends Error {}
+class FuenteBiometricaSinPropietarioErrorFake extends Error {}
+
 vi.mock("./biometrico-import.service", () => ({
   sincronizarFuenteBiometrica: (...args: unknown[]) => sincronizarFuenteBiometricaMock(...args),
   SincronizacionEnCursoError: SincronizacionEnCursoErrorFake,
   FuenteBiometricaNoEncontradaError: FuenteBiometricaNoEncontradaErrorFake,
+  FuenteBiometricaInactivaError: FuenteBiometricaInactivaErrorFake,
+  VariasFuentesBiometricasActivasError: VariasFuentesBiometricasActivasErrorFake,
+  FuenteBiometricaSinPropietarioError: FuenteBiometricaSinPropietarioErrorFake,
 }));
 
 vi.mock("../../jobs/crosschex-sync.job", () => ({
@@ -248,6 +255,22 @@ describe("biometrico-sincronizaciones.controller", () => {
       await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
 
       expect(res.status).toHaveBeenCalledWith(409);
+    });
+
+    it("si el service rechaza por fuente inactiva, varias activas o sin propietario configurado (D-01), responde 409, no 500", async () => {
+      const { sincronizarFuenteBiometricaManual } =
+        await import("./biometrico-sincronizaciones.controller");
+      for (const error of [
+        new FuenteBiometricaInactivaErrorFake("inactiva"),
+        new VariasFuentesBiometricasActivasErrorFake("varias"),
+        new FuenteBiometricaSinPropietarioErrorFake("sin propietario"),
+      ]) {
+        fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
+        sincronizarFuenteBiometricaMock.mockRejectedValueOnce(error);
+        const res = fakeRes();
+        await sincronizarFuenteBiometricaManual(fakeReq({ params: { id: "fuente-1" } }), res);
+        expect(res.status).toHaveBeenCalledWith(409);
+      }
     });
 
     it("un fallo inesperado del service responde 500 de forma consistente con el resto del proyecto", async () => {

@@ -6,6 +6,9 @@ import {
   sincronizarFuenteBiometrica,
   SincronizacionEnCursoError,
   FuenteBiometricaNoEncontradaError,
+  FuenteBiometricaInactivaError,
+  VariasFuentesBiometricasActivasError,
+  FuenteBiometricaSinPropietarioError,
 } from "./biometrico-import.service";
 import { leerConfigSchedulerCrossChex } from "../../jobs/crosschex-sync.job";
 
@@ -187,6 +190,15 @@ export async function sincronizarFuenteBiometricaManual(req: AuthenticatedReques
     }
     if (error instanceof FuenteBiometricaNoEncontradaError) {
       return res.status(404).json({ message: error.message });
+    }
+    // Carrera: la fuente se desactivó u otra se activó entre la validación de
+    // arriba y la corrida (el servicio vuelve a aplicar ambas reglas).
+    if (
+      error instanceof FuenteBiometricaInactivaError ||
+      error instanceof VariasFuentesBiometricasActivasError ||
+      error instanceof FuenteBiometricaSinPropietarioError
+    ) {
+      return res.status(409).json({ message: error.message });
     }
     console.error("Error al ejecutar sincronización manual biométrica:", error);
     return res.status(500).json({ message: "Error al ejecutar la sincronización." });

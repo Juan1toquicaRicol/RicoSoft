@@ -58,6 +58,8 @@ interface Props {
   ) => Promise<void>;
 }
 
+const AVISO_ESTUDIO_CON_SOPORTES =
+  "Este estudio tiene soportes: eliminarlo requiere el permiso de gestionar documentos.";
 const SECCION = "space-y-3 rounded-md border border-slate-200 p-3";
 const TITULO = "text-xs font-bold uppercase tracking-wider text-slate-700";
 const INPUT = "h-9 text-xs border-slate-300";
@@ -479,22 +481,37 @@ export function EmpleadoDetallesDialog({
                                 )}
                               </span>
                               {permisos.editarDetalles && (
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  aria-label={`Eliminar estudio ${e.titulo}`}
-                                  onClick={() =>
-                                    ejecutar(
-                                      () =>
-                                        fetchAuth(`${base}/estudios/${e.id}`, {
-                                          method: "DELETE",
-                                        }),
-                                      "Error al eliminar el estudio.",
-                                    )
+                                // D-03: con soportes también hace falta gestionar documentos. El
+                                // tooltip va en el span: un botón deshabilitado no recibe el puntero.
+                                <span
+                                  title={
+                                    soportes.length > 0 && !permisos.gestionarDocumentos
+                                      ? AVISO_ESTUDIO_CON_SOPORTES
+                                      : undefined
                                   }
                                 >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+                                  <Button
+                                    size="xs"
+                                    variant="ghost"
+                                    aria-label={
+                                      soportes.length > 0 && !permisos.gestionarDocumentos
+                                        ? `Eliminar estudio ${e.titulo}: ${AVISO_ESTUDIO_CON_SOPORTES}`
+                                        : `Eliminar estudio ${e.titulo}`
+                                    }
+                                    disabled={soportes.length > 0 && !permisos.gestionarDocumentos}
+                                    onClick={() =>
+                                      ejecutar(
+                                        () =>
+                                          fetchAuth(`${base}/estudios/${e.id}`, {
+                                            method: "DELETE",
+                                          }),
+                                        "Error al eliminar el estudio.",
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </span>
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 pl-2">

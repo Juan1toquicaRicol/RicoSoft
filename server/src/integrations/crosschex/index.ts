@@ -2,6 +2,8 @@ export {
   leerConfigCrossChex,
   construirConnectionString,
   CrossChexConfigError,
+  leerTenantPropietarioCrossChex,
+  esTenantPropietarioCrossChex,
 } from "./crosschex.config";
 export type { CrossChexConfig } from "./crosschex.config";
 export { verificarConexion, ejecutarConsulta, conCrossChex } from "./crosschex.client";
