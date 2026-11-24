@@ -147,3 +147,23 @@ cuenta de servicio ni ningún secreto. Los jobs (`iniciarSchedulerIngestaCorreos
 `iniciarSchedulerProcesamientoCorreos`) se registran en `src/index.ts`
 junto a los demás schedulers existentes (Siesa, servicios de renovación)
 y respetan el mismo patrón `noOverlap: true` + flag de entorno.
+
+
+## Panel de Sistemas y piloto con etiqueta
+
+Configuración → Monitoreo → Correo de Importaciones permite probar la conexión,
+seleccionar una etiqueta de usuario de Gmail, ajustar frecuencia y límites y
+pausar o activar la lectura y el procesamiento. Sistemas crea la etiqueta en Gmail
+y la aplica a los mensajes de prueba. El panel obtiene su ID al probar la conexión.
+
+Aplicar la migración de configuración. En el servidor, definir el buzón autorizado
+y la credencial de lectura existentes, IMPORTACIONES_SISTEMAS_TENANT_ID (UUID de la
+empresa administradora) e IMPORTACIONES_SISTEMAS_USUARIOS (UUID de los operadores
+designados separados por comas). El operador debe iniciar sesión en esa empresa
+con el permiso importaciones.correos_configurar. La clave se aprovisiona fuera de la interfaz.
+
+El piloto inicia pausado. Los ajustes guardados son globales a la instalación.
+Al guardar, el proceso atiende el cambio y los demás procesos vuelven a leer la
+configuración cada 30 segundos. El filtro de Gmail usa el ID de etiqueta y permite
+incorporar mensajes antiguos recién etiquetados. El procesamiento del piloto toma
+los correos pendientes ingresados con la etiqueta seleccionada.

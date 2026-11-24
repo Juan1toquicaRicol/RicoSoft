@@ -7,7 +7,8 @@ import {
   type EmailProvider,
   type ListNewMessagesResult,
 } from "./email-provider";
-import { leerConfigEmailImportaciones } from "./config";
+import { prisma } from "../../config/prisma";
+import { etiquetaPiloto, leerConfigEmailImportaciones } from "./config";
 
 /**
  * Gmail API vía cuenta de servicio + Domain-Wide Delegation — el mecanismo
@@ -76,7 +77,22 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
     return this.gmail;
   }
 
+  async probarConexion() {
+    const gmail = await this.obtenerCliente();
+    const perfil = await gmail.users.getProfile({ userId: "me", fields: "emailAddress" });
+    if (
+      perfil.data.emailAddress?.toLowerCase() !==
+      leerConfigEmailImportaciones().mailboxEmail.toLowerCase()
+    )
+      throw new EmailProviderError("El perfil no coincide con el buzón autorizado.");
+    const labels = await gmail.users.labels.list({ userId: "me", fields: "labels(id,name,type)" });
+    return (labels.data.labels ?? [])
+      .filter((x) => x.type === "user" && x.id && x.name)
+      .map((x) => ({ id: x.id!, nombre: x.name! }));
+  }
+
   async listNewMessages(cursor: string | null, maxResults: number): Promise<ListNewMessagesResult> {
+    const etiqueta = etiquetaPiloto();
     const gmail = await this.obtenerCliente();
 
     // cursor = internalDate (ms epoch) del correo más reciente ya
@@ -95,6 +111,7 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
     // TODAS las páginas (con tope) y se toman los `maxResults` más ANTIGUOS:
     // así el cursor (fecha máxima ingerida) nunca salta por encima de
     // mensajes que quedaron sin traer cuando hay más mensajes que el límite.
+
     const idsTodos: string[] = [];
     let pageToken: string | undefined;
     let paginas = 0;
@@ -103,7 +120,8 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
         const respuesta = await gmail.users.messages.list({
           userId: "me",
           maxResults: 100,
-          q: query,
+          q: etiqueta ? undefined : query,
+          ...(etiqueta ? { labelIds: [etiqueta] } : {}),
           pageToken,
         });
         for (const m of respuesta.data.messages ?? []) {
@@ -121,11 +139,25 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
       );
     }
 
-    const ids = idsTodos.reverse().slice(0, maxResults);
+    const ids = idsTodos.reverse();
+    const conocidos = new Set<string>();
+    if (etiqueta) {
+      for (let i = 0; i < ids.length; i += 500) {
+        const filas = await prisma.importacionCorreo.findMany({
+          where: { gmailId: { in: ids.slice(i, i + 500) } },
+          select: { gmailId: true },
+        });
+        for (const fila of filas) if (fila.gmailId) conocidos.add(fila.gmailId);
+      }
+    }
+    if (!etiqueta) ids.splice(maxResults);
+
     const mensajes: EmailMessage[] = [];
     let cursorMasReciente = cursor ? Number(cursor) : 0;
 
     for (const id of ids) {
+      if (mensajes.length >= maxResults) break;
+      if (conocidos.has(id)) continue;
       let detalle: gmail_v1.Schema$Message;
       try {
         const respuesta = await gmail.users.messages.get({ userId: "me", id, format: "full" });
@@ -134,7 +166,15 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
         throw new EmailProviderError(`Error al obtener el mensaje Gmail ${id}.`, error);
       }
       const mensaje = mapearMensajeGmail(detalle);
-      if (mensaje) {
+      if (mensaje && (!etiqueta || detalle.labelIds?.includes(etiqueta))) {
+        if (
+          etiqueta &&
+          (await prisma.importacionCorreo.findUnique({
+            where: { messageId: mensaje.messageId },
+            select: { id: true },
+          }))
+        )
+          continue;
         mensajes.push(mensaje);
         const internalDate = Number(detalle.internalDate ?? 0);
         if (internalDate > cursorMasReciente) cursorMasReciente = internalDate;

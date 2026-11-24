@@ -1,3 +1,4 @@
+import { PanelCorreo } from "@/components/importaciones/panel-correo";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/configuracion/monitoreo")({
   beforeLoad: requireAnyPermisoGuard([
     PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,
     PERMISOS_SISTEMA.BIOMETRICO_VER,
+    PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR,
   ]),
   component: MonitoreoPage,
 });
@@ -445,6 +447,9 @@ function MonitoreoPage() {
         </p>
       </div>
 
+      {hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR) && (
+        <PanelCorreo key={user?.id + "/" + user?.tenantId} />
+      )}
       {puedeVerSiesa && <SeccionSiesa />}
       {puedeVerSiesa && <SeccionJobs />}
       {puedeVerBiometrico && <SeccionBiometrico />}

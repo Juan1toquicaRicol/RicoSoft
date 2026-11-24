@@ -1,3 +1,9 @@
+import { aplicarPiloto, pilotoInicial } from "./config";
+vi.mock("../../config/prisma", () => ({
+  prisma: {
+    importacionCorreo: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
+  },
+}));
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
@@ -251,4 +257,27 @@ describe("GoogleWorkspaceEmailProvider", () => {
       EmailProviderError,
     );
   });
+});
+
+it("filtra por ID de etiqueta incluso sin cursor y descarta mensajes que pierden la etiqueta", async () => {
+  aplicarPiloto({ ...pilotoInicial, lectura: true, etiqueta: "Label_qa" });
+  vi.stubEnv("IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON", SERVICE_ACCOUNT_JSON);
+  vi.stubEnv("IMPORTACIONES_EMAIL_MAILBOX", "prueba@example.com");
+  try {
+    usersMessagesList.mockResolvedValue({ data: { messages: [{ id: "uno" }] } });
+    usersMessagesGet.mockResolvedValue({ data: { ...mensajeGmailFalso(), labelIds: ["INBOX"] } });
+    const respuesta = await new GoogleWorkspaceEmailProvider().listNewMessages("1700000000000", 25);
+    expect(usersMessagesList).toHaveBeenCalledWith(
+      expect.objectContaining({ labelIds: ["Label_qa"], q: undefined }),
+    );
+    expect(respuesta.messages).toHaveLength(0);
+    usersMessagesGet.mockResolvedValue({
+      data: { ...mensajeGmailFalso(), labelIds: ["Label_qa"] },
+    });
+    const incluido = await new GoogleWorkspaceEmailProvider().listNewMessages(null, 25);
+    expect(incluido.messages).toHaveLength(1);
+  } finally {
+    aplicarPiloto(null);
+    vi.unstubAllEnvs();
+  }
 });

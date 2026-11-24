@@ -41,6 +41,7 @@ const ORDEN_PESTANAS = [
     permiso: PERMISOS_SISTEMA.INTEGRACION_SIESA_VER,
     o: PERMISOS_SISTEMA.BIOMETRICO_VER,
   },
+  { to: "/configuracion/monitoreo", permiso: PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR },
 ] as const;
 
 export const Route = createFileRoute("/configuracion/")({

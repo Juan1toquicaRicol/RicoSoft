@@ -2,11 +2,17 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { schedule, type ScheduledTask } from "node-cron";
-import { ejecutarRegistrado, quitarScheduler, registrarScheduler } from "../../lib/job-registry";
+import {
+  ejecutarRegistrado,
+  quitarScheduler,
+  registrarScheduler,
+  reportarFalloEnCorrida,
+} from "../../lib/job-registry";
 import { prisma } from "../../config/prisma";
 import { GoogleWorkspaceEmailProvider } from "../../integrations/email/google-workspace-email-provider";
 import { EmailProviderError, type EmailProvider } from "../../integrations/email/email-provider";
 import {
+  etiquetaPiloto,
   leerConfigEmailImportaciones,
   leerConfigProcesamientoImportaciones,
 } from "../../integrations/email/config";
@@ -44,19 +50,25 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
   const config = leerConfigEmailImportaciones();
   if (!config.habilitado) return;
 
-  const cursorActual = await obtenerCursorActual();
+  const etiqueta = etiquetaPiloto();
+  const cursorActual = etiqueta ? null : await obtenerCursorActual();
 
   let resultado;
   try {
     resultado = await provider.listNewMessages(cursorActual, config.maxEmailsPerRun);
   } catch (error) {
-    console.error("[bandeja-ingesta] Error al listar mensajes nuevos:", error);
+    reportarFalloEnCorrida("bandeja-ingesta", "No se pudo leer la bandeja de Gmail.");
+    console.error(
+      "[bandeja-ingesta] Error al listar mensajes nuevos:",
+      error instanceof Error ? error.message : "Error de Gmail",
+    );
     return;
   }
 
   // Los mensajes llegan del más antiguo al más nuevo (ver el proveedor): si
   // la corrida se corta, el cursor (fecha máxima persistida) nunca queda por
   // encima de un mensaje que no se llegó a guardar.
+  if (etiqueta !== etiquetaPiloto() || !leerConfigEmailImportaciones().habilitado) return;
   let adjuntosDeLaCorrida = 0;
   for (const mensaje of resultado.messages) {
     try {
@@ -76,6 +88,7 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
 
       const correo = await prisma.importacionCorreo.create({
         data: {
+          ...(etiqueta ? { etiquetaPiloto: etiqueta, gmailId: mensaje.providerMessageId } : {}),
           messageId: mensaje.messageId,
           remitente: mensaje.from,
           destinatarios: mensaje.to.join(", "),
@@ -122,6 +135,7 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
       }
 
       if (adjuntosFallidos.length > 0) {
+        reportarFalloEnCorrida("bandeja-ingesta", "Falló la descarga de un adjunto.");
         // El correo queda guardado pero NO se procesa como si estuviera
         // completo: pasa a ERROR con la lista de adjuntos que faltan, visible
         // para una persona, en vez de omitirse en silencio en la siguiente
@@ -141,6 +155,7 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
     } catch (error) {
       // Fallo al persistir el correo mismo: se corta la corrida. Continuar
       // con mensajes más nuevos dejaría el cursor por encima de este.
+      reportarFalloEnCorrida("bandeja-ingesta", "Falló el guardado del correo.");
       console.error(`[bandeja-ingesta] Error al persistir el correo ${mensaje.messageId}:`, error);
       break;
     }
@@ -193,6 +208,7 @@ function guardarAdjuntoEnDisco(
 }
 
 let tareaProgramada: ScheduledTask | null = null;
+let cicloEnCurso = false;
 
 export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
   const configEmail = leerConfigEmailImportaciones();
@@ -207,10 +223,16 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
 
   tareaProgramada = schedule(
     configProcesamiento.cronIngesta,
-    () => {
-      ejecutarRegistrado("bandeja-ingesta", () => ejecutarCicloIngestaCorreos()).catch((error) => {
-        console.error("[bandeja-ingesta] Error inesperado en el ciclo de ingesta:", error);
-      });
+    async () => {
+      if (cicloEnCurso) return;
+      cicloEnCurso = true;
+      try {
+        await ejecutarRegistrado("bandeja-ingesta", ejecutarCicloIngestaCorreos);
+      } catch {
+        console.error("Falló el ciclo de ingesta de correos.");
+      } finally {
+        cicloEnCurso = false;
+      }
     },
     { noOverlap: true, name: "bandeja-ingesta-correos" },
   );

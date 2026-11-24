@@ -6,6 +6,30 @@
  * negocio.
  */
 
+export interface AjustesBandeja {
+  lectura: boolean;
+  procesamiento: boolean;
+  etiqueta: string;
+  minutos: number;
+  correos: number;
+  adjuntos: number;
+}
+export const pilotoInicial: AjustesBandeja = {
+  lectura: false,
+  procesamiento: false,
+  etiqueta: "",
+  minutos: 5,
+  correos: 25,
+  adjuntos: 50,
+};
+let piloto: AjustesBandeja | null = null;
+export function aplicarPiloto(valor: AjustesBandeja | null) {
+  piloto = valor;
+}
+export function etiquetaPiloto() {
+  return piloto?.etiqueta || undefined;
+}
+
 export interface ConfigEmailImportaciones {
   habilitado: boolean;
   /** Dirección del buzón a impersonar (ej. "importaciones@ricol.com.co") —
@@ -25,11 +49,13 @@ export interface ConfigEmailImportaciones {
 
 export function leerConfigEmailImportaciones(): ConfigEmailImportaciones {
   return {
-    habilitado: process.env.IMPORTACIONES_EMAIL_SYNC_ENABLED === "true",
+    habilitado: piloto?.lectura ?? process.env.IMPORTACIONES_EMAIL_SYNC_ENABLED === "true",
     mailboxEmail: process.env.IMPORTACIONES_EMAIL_MAILBOX || "",
     serviceAccountJson: process.env.IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON || null,
-    maxEmailsPerRun: Number(process.env.IMPORTACIONES_MAX_EMAILS_PER_RUN) || 25,
-    maxAttachmentsPerRun: Number(process.env.IMPORTACIONES_MAX_ATTACHMENTS_PER_RUN) || 50,
+    maxEmailsPerRun:
+      piloto?.correos ?? (Number(process.env.IMPORTACIONES_MAX_EMAILS_PER_RUN) || 25),
+    maxAttachmentsPerRun:
+      piloto?.adjuntos ?? (Number(process.env.IMPORTACIONES_MAX_ATTACHMENTS_PER_RUN) || 50),
   };
 }
 
@@ -41,8 +67,12 @@ export interface ConfigProcesamientoImportaciones {
 
 export function leerConfigProcesamientoImportaciones(): ConfigProcesamientoImportaciones {
   return {
-    habilitado: process.env.IMPORTACIONES_PROCESSING_ENABLED === "true",
-    cronIngesta: process.env.IMPORTACIONES_EMAIL_SYNC_CRON || "*/5 * * * *",
-    cronProcesamiento: process.env.IMPORTACIONES_PROCESSING_CRON || "*/5 * * * *",
+    habilitado: piloto?.procesamiento ?? process.env.IMPORTACIONES_PROCESSING_ENABLED === "true",
+    cronIngesta: piloto
+      ? "*/" + piloto.minutos + " * * * *"
+      : process.env.IMPORTACIONES_EMAIL_SYNC_CRON || "*/5 * * * *",
+    cronProcesamiento: piloto
+      ? "*/" + piloto.minutos + " * * * *"
+      : process.env.IMPORTACIONES_PROCESSING_CRON || "*/5 * * * *",
   };
 }

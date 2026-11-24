@@ -1,12 +1,11 @@
 import "dotenv/config";
+import { actualizarProgramacionBandeja } from "./modules/importaciones/bandeja-operacion";
 import { createApp } from "./app";
 import { prisma } from "./config/prisma";
 import { cerrarSiesaPool } from "./config/siesa";
 import { recuperarSincronizacionesBiometricoInterrumpidas } from "./jobs/crosschex-recovery";
 import { iniciarSchedulerCrossChex } from "./jobs/crosschex-sync.job";
 import { iniciarSchedulerServiciosRenovacion } from "./jobs/servicios-renovacion.job";
-import { iniciarSchedulerIngestaCorreos } from "./modules/importaciones/importaciones-bandeja-ingesta.job";
-import { iniciarSchedulerProcesamientoCorreos } from "./modules/importaciones/importaciones-bandeja-procesamiento.job";
 import { iniciarSchedulerTrackingEmbarques } from "./modules/importaciones/embarques-tracking.job";
 import { configurarProveedorCorreoSaliente } from "./lib/correo-saliente";
 import { crearProveedorCorreoSalienteDesdeEntorno } from "./integrations/email/google-workspace-correo-saliente";
@@ -153,8 +152,12 @@ Promise.all([
   // ocurre en el siguiente tick del cron, no hay ejecución duplicada.
   iniciarSchedulerCrossChex();
   iniciarSchedulerServiciosRenovacion();
-  iniciarSchedulerIngestaCorreos();
-  iniciarSchedulerProcesamientoCorreos();
+  const actualizarBandeja = () =>
+    actualizarProgramacionBandeja().catch(() =>
+      console.error("No se pudo cargar la programación de la Bandeja."),
+    );
+  void actualizarBandeja();
+  setInterval(actualizarBandeja, 30000).unref();
   iniciarSchedulerTrackingEmbarques();
   server = app.listen(PORT, () => {
     console.log(`🚀 Servidor listo en http://localhost:${PORT}`);

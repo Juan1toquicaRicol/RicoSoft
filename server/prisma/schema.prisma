@@ -2134,7 +2134,19 @@ model RequisitoProveedorImportacion {
 /// independientemente de a qué tenant termine atribuyéndose. Reingerir el
 /// mismo correo (reintento del job de ingesta, entrega duplicada) nunca crea
 /// una segunda fila.
+model ConfigCorreoImportaciones {
+  id Int @id
+  lectura Boolean
+  procesamiento Boolean
+  etiqueta String @db.VarChar(128)
+  minutos Int
+  correos Int
+  adjuntos Int
+}
+
 model ImportacionCorreo {
+  etiquetaPiloto String? @db.VarChar(128)
+  gmailId String? @db.VarChar(128)
   id                  String                     @id @default(uuid()) @db.UniqueIdentifier
   tenantId            String?                    @db.UniqueIdentifier
   /// Message-ID real del proveedor de correo (RFC 5322/Gmail id) — clave de

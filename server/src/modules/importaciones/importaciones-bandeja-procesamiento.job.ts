@@ -7,7 +7,10 @@ import { getTenantPrisma } from "../../lib/tenant-prisma";
 import { resolverDestinatarios } from "../../lib/motor-destinatarios";
 import { crearNotificacion } from "../../lib/notificaciones";
 import { crearItemDeTrabajo } from "../../lib/inbox";
-import { leerConfigProcesamientoImportaciones } from "../../integrations/email/config";
+import {
+  etiquetaPiloto,
+  leerConfigProcesamientoImportaciones,
+} from "../../integrations/email/config";
 import { RegexDocumentExtractionProvider } from "../../integrations/document-extraction/regex-extraction-provider";
 import type { DocumentExtractionProvider } from "../../integrations/document-extraction/extraction-provider";
 import { clasificarCorreo } from "./importaciones-bandeja-clasificacion.service";
@@ -40,7 +43,10 @@ export async function ejecutarCicloProcesamientoCorreos(): Promise<void> {
   if (!config.habilitado) return;
 
   const pendientes = await prisma.importacionCorreo.findMany({
-    where: { estadoProcesamiento: "PENDIENTE" },
+    where: {
+      estadoProcesamiento: "PENDIENTE",
+      ...(etiquetaPiloto() ? { etiquetaPiloto: etiquetaPiloto() } : {}),
+    },
     include: { adjuntos: true },
     orderBy: { fechaRecibido: "asc" },
     take: LIMITE_CORREOS_POR_CORRIDA,
@@ -367,6 +373,7 @@ async function marcarRequiereRevision(
 }
 
 let tareaProgramada: ScheduledTask | null = null;
+let cicloEnCurso = false;
 
 export function iniciarSchedulerProcesamientoCorreos(): ScheduledTask | null {
   const config = leerConfigProcesamientoImportaciones();
@@ -380,15 +387,16 @@ export function iniciarSchedulerProcesamientoCorreos(): ScheduledTask | null {
 
   tareaProgramada = schedule(
     config.cronProcesamiento,
-    () => {
-      ejecutarRegistrado("bandeja-procesamiento", () => ejecutarCicloProcesamientoCorreos()).catch(
-        (error) => {
-          console.error(
-            "[bandeja-procesamiento] Error inesperado en el ciclo de procesamiento:",
-            error,
-          );
-        },
-      );
+    async () => {
+      if (cicloEnCurso) return;
+      cicloEnCurso = true;
+      try {
+        await ejecutarRegistrado("bandeja-procesamiento", ejecutarCicloProcesamientoCorreos);
+      } catch {
+        console.error("Falló el ciclo de procesamiento de correos.");
+      } finally {
+        cicloEnCurso = false;
+      }
     },
     { noOverlap: true, name: "bandeja-procesamiento-correos" },
   );

@@ -1,3 +1,4 @@
+import { operacionBandeja } from "./bandeja-operacion";
 import { Router } from "express";
 import { authenticateJWT, requirePermission } from "../../middleware/auth.middleware";
 import { validarBody } from "../../middleware/validate.middleware";
@@ -25,6 +26,7 @@ import {
 const router = Router();
 
 router.use(authenticateJWT);
+router.use("/operacion", operacionBandeja);
 
 // Triage cross-tenant (correos sin proveedor identificado): DENEGADO para
 // todos, incluido isSuperadmin (flag por tenant, no de plataforma). Va antes
