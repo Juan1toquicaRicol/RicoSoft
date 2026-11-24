@@ -1,9 +1,13 @@
+import { extraerIdentidadProveedor } from "../../integrations/document-extraction/regex-extraction-provider";
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
 import { getTenantPrisma } from "../../lib/tenant-prisma";
+import { z } from "zod";
+import { ConflictoVinculoCorreo, vincularOrdenCorreo } from "./importaciones-bandeja-vinculo";
+import { sugerirProveedores } from "./importaciones-bandeja-matching.service";
 import { resolverItemDeTrabajo } from "../../lib/inbox";
 import {
   leerConfigEmailImportaciones,
@@ -26,8 +30,7 @@ const EVENTO_REVISION = "IMPORTACION_CORREO_REQUIERE_REVISION";
  * importaciones.controller.ts: `prisma` directo + `where: { tenantId }`
  * explícito en cada consulta, nunca confiando en req.body/params.tenantId).
  * Los dos endpoints que operan sobre correos SIN tenant resuelto todavía
- * (PROVEEDOR_NO_IDENTIFICADO) están al final y exigen requireSuperadmin —
- * ver justificación en schema.prisma.
+ * (PROVEEDOR_NO_IDENTIFICADO) quedan fuera de las rutas de cada empresa.
  */
 
 export const listarCorreosBandeja = async (req: AuthenticatedRequest, res: Response) => {
@@ -93,12 +96,26 @@ export const obtenerCorreoBandeja = async (req: AuthenticatedRequest, res: Respo
             },
           },
         },
-        excepciones: { orderBy: { createdAt: "desc" } },
+        excepciones: { where: { tenantId }, orderBy: { createdAt: "desc" } },
       },
     });
     if (!correo) return res.status(404).json({ message: "Correo no encontrado." });
 
-    return res.json(correo);
+    const sugerencias = correo.proveedorId
+      ? []
+      : await sugerirProveedores(tenantId, {
+          remitenteEmail: correo.remitente,
+          campos: [
+            ...extraerIdentidadProveedor(correo.cuerpoTexto),
+            ...correo.adjuntos.flatMap((a) =>
+              a.extracciones.map((c) => ({ campo: c.campo, valor: c.valorExtraido })),
+            ),
+          ],
+        });
+    return res.json({
+      ...correo,
+      sugerenciasProveedor: sugerencias.map(({ id, nombre, señales }) => ({ id, nombre, señales })),
+    });
   } catch (error) {
     console.error("Error al obtener el correo de la Bandeja:", error);
     return res.status(500).json({ message: "Error al obtener el correo." });
@@ -108,6 +125,45 @@ export const obtenerCorreoBandeja = async (req: AuthenticatedRequest, res: Respo
 /** Sirve el contenido del adjunto — NUNCA una URL pública/estática: valida
  * tenant del correo dueño del adjunto antes de leer el archivo del disco,
  * mismo patrón que obtenerDocumentoExpedienteAduanero. */
+export const buscarOrdenesVinculables = async (req: AuthenticatedRequest, res: Response) => {
+  const parametros = z
+    .object({ id: z.string().uuid(), q: z.string().trim().max(50).optional() })
+    .safeParse({ id: req.params.id, q: req.query.q });
+  if (!parametros.success) return res.status(400).json({ message: "Búsqueda inválida." });
+  try {
+    const tenantId = req.user!.tenantId;
+    const correo = await prisma.importacionCorreo.findFirst({
+      where: { id: parametros.data.id, tenantId },
+      select: { proveedorId: true, ordenCompraId: true, estadoProcesamiento: true },
+    });
+    if (!correo) return res.status(404).json({ message: "Correo no encontrado." });
+    if (
+      !correo.proveedorId ||
+      correo.ordenCompraId ||
+      correo.estadoProcesamiento !== "REQUIERE_REVISION"
+    ) {
+      return res.json([]);
+    }
+    return res.json(
+      await prisma.ordenCompraIntl.findMany({
+        where: {
+          tenantId,
+          proveedorId: correo.proveedorId,
+          eliminado: false,
+          estado: { not: "Anulada" },
+          ...(parametros.data.q ? { numeroOrden: { contains: parametros.data.q } } : {}),
+        },
+        select: { id: true, numeroOrden: true, estado: true },
+        orderBy: { fechaOrden: "desc" },
+        take: 25,
+      }),
+    );
+  } catch (error) {
+    console.error("Error al buscar órdenes vinculables:", error);
+    return res.status(500).json({ message: "Error al buscar órdenes." });
+  }
+};
+
 export const obtenerAdjuntoBandeja = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -150,6 +206,29 @@ export const obtenerAdjuntoBandeja = async (req: AuthenticatedRequest, res: Resp
  */
 const ACCIONES_EXCEPCION_VALIDAS = ["SELECCIONAR_PROVEEDOR", "SELECCIONAR_ORDEN", "DESCARTAR"];
 
+/** Datos del evento IMPORTACION_EXCEPCION_RESUELTA: un único formato para
+ * todas las acciones, del que dependen los reportes de auditoría. */
+function auditoriaExcepcionResuelta(datos: {
+  tenantId: string;
+  usuarioId: string;
+  nombreUsuario: string;
+  excepcion: { id: string; tipo: string; estado: string };
+  asuntoCorreo: string;
+  accion: string;
+}) {
+  const estadoNuevo = datos.accion === "DESCARTAR" ? "DESCARTADA" : "RESUELTA";
+  return {
+    tenantId: datos.tenantId,
+    usuarioId: datos.usuarioId,
+    accion: "IMPORTACION_EXCEPCION_RESUELTA",
+    detalle: `${datos.nombreUsuario} resolvió la excepción "${datos.excepcion.tipo}" del correo "${datos.asuntoCorreo}" (${datos.accion}).`,
+    entidadTipo: "ImportacionExcepcion",
+    entidadId: datos.excepcion.id,
+    datosAnteriores: JSON.stringify({ estado: datos.excepcion.estado }),
+    datosNuevos: JSON.stringify({ estado: estadoNuevo, accion: datos.accion }),
+  };
+}
+
 export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -172,7 +251,15 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
       return res.status(400).json({ message: "Acción de resolución no válida." });
     }
 
-    const dataCorreo: { proveedorId?: string; ordenCompraId?: string } = {};
+    const datosAuditoria = auditoriaExcepcionResuelta({
+      tenantId,
+      usuarioId,
+      nombreUsuario: req.user!.nombre,
+      excepcion,
+      asuntoCorreo: correo.asunto,
+      accion,
+    });
+    const dataCorreo: { proveedorId?: string } = {};
 
     if (accion === "SELECCIONAR_PROVEEDOR") {
       if (excepcion.tipo !== "PROVEEDOR_NO_IDENTIFICADO") {
@@ -183,7 +270,9 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
       if (typeof proveedorId !== "string" || !proveedorId) {
         return res.status(400).json({ message: "Falta proveedorId." });
       }
-      const proveedor = await prisma.proveedor.findFirst({ where: { id: proveedorId, tenantId } });
+      const proveedor = await prisma.proveedor.findFirst({
+        where: { id: proveedorId, tenantId, activo: true },
+      });
       if (!proveedor) return res.status(404).json({ message: "Proveedor no encontrado." });
       dataCorreo.proveedorId = proveedorId;
     } else if (accion === "SELECCIONAR_ORDEN") {
@@ -201,7 +290,7 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
           .json({ message: "El correo no tiene un proveedor asociado; asígnalo primero." });
       }
       const orden = await prisma.ordenCompraIntl.findFirst({
-        where: { id: ordenCompraId, tenantId, eliminado: false },
+        where: { id: ordenCompraId, tenantId, eliminado: false, estado: { not: "Anulada" } },
       });
       if (!orden) return res.status(404).json({ message: "Orden no encontrada." });
       if (orden.proveedorId !== correo.proveedorId) {
@@ -209,7 +298,22 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
           .status(409)
           .json({ message: "La orden seleccionada no pertenece al proveedor de este correo." });
       }
-      dataCorreo.ordenCompraId = ordenCompraId;
+      const proveedorConfirmado = correo.proveedorId;
+      // Vínculo, resolución de la excepción y sus dos eventos de auditoría
+      // (IMPORTACION_CORREO_ORDEN_VINCULADA e IMPORTACION_EXCEPCION_RESUELTA)
+      // se confirman o se revierten juntos.
+      await prisma.$transaction(async (tx) => {
+        await vincularOrdenCorreo(tx, {
+          correoId: correo.id,
+          tenantId,
+          proveedorId: proveedorConfirmado,
+          ordenId: orden.id,
+          usuarioId,
+          excepcionId: excepcion.id,
+        });
+        await tx.auditoria.create({ data: datosAuditoria });
+      });
+      return res.status(204).send();
     }
     // DESCARTAR no toca el correo, solo cierra la excepción.
     const reanudaProcesamiento = Object.keys(dataCorreo).length > 0;
@@ -233,21 +337,7 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
             }),
           ]
         : []),
-      prisma.auditoria.create({
-        data: {
-          tenantId,
-          usuarioId,
-          accion: "IMPORTACION_EXCEPCION_RESUELTA",
-          detalle: `${req.user!.nombre} resolvió la excepción "${excepcion.tipo}" del correo "${correo.asunto}" (${accion}).`,
-          entidadTipo: "ImportacionExcepcion",
-          entidadId: excepcion.id,
-          datosAnteriores: JSON.stringify({ estado: excepcion.estado }),
-          datosNuevos: JSON.stringify({
-            estado: accion === "DESCARTAR" ? "DESCARTADA" : "RESUELTA",
-            accion,
-          }),
-        },
-      }),
+      prisma.auditoria.create({ data: datosAuditoria }),
     ]);
 
     // Si ya no quedan excepciones abiertas para este correo, se resuelve el
@@ -273,6 +363,8 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
 
     return res.status(204).send();
   } catch (error) {
+    if (error instanceof ConflictoVinculoCorreo)
+      return res.status(409).json({ message: error.message });
     console.error("Error al resolver excepción de la Bandeja:", error);
     return res.status(500).json({ message: "Error al resolver la excepción." });
   }

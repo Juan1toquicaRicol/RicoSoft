@@ -1,7 +1,9 @@
+import { asignacionEmbarqueSchema, guardarAsignacionEmbarque, vincularItemHistorico, vinculoItemSiesaSchema } from "./importaciones-disponibilidad";
 import { Router } from "express";
 import {
   authenticateJWT,
   requireAnyPermission,
+  requireAllPermissions,
   requirePermission,
 } from "../../middleware/auth.middleware";
 import { attachTenantPrisma } from "../../middleware/tenant-prisma.middleware";
@@ -189,10 +191,16 @@ router.get(
   listarResponsablesImportacion,
 );
 router.get("/:id", requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_VER), obtenerOrdenCompraIntl);
+const permisoVincularCorreo = requireAllPermissions([
+  PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER,
+  PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER,
+]);
+
 router.post(
   "/",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
   validarBody(crearOrdenCompraIntlSchema),
+  (req, res, next) => (req.body.correoOrigenId ? permisoVincularCorreo(req, res, next) : next()),
   crearOrdenCompraIntl,
 );
 router.delete(
@@ -228,6 +236,18 @@ router.post(
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
   validarBody(crearLoteImportacionSchema),
   crearLoteImportacion,
+);
+router.put(
+  "/items/:itemId/vinculo-siesa",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
+  validarBody(vinculoItemSiesaSchema),
+  vincularItemHistorico,
+);
+router.put(
+  "/lotes/:id/asignaciones/:itemId",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_GESTIONAR_TRANSITO),
+  validarBody(asignacionEmbarqueSchema),
+  guardarAsignacionEmbarque,
 );
 router.patch(
   "/lotes/:id/estado",

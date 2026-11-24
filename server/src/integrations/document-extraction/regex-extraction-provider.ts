@@ -51,7 +51,21 @@ const FIN_VALOR = String.raw`(?=\s+(?:${ETIQUETAS_SIGUIENTES})\b|\s*[.;|\n]|\s*$
 // como ejemplo obligatorio (PO, ETA, Incoterm, contenedor) más los campos
 // logísticos/comerciales de mayor valor operativo inmediato. Ampliar esta
 // lista no requiere tocar el resto del pipeline.
+const REGLAS_PROVEEDOR: ReglaExtraccion[] = [
+  {
+    campo: "nombreProveedor",
+    patron:
+      /(?:^|\n)[ \t]*(?:Proveedor(?:[ \t]+de[ \t]+referencia)?|Supplier|Vendor)[ \t]*(?::|\r?\n)[ \t]*([^\r\n:]{3,140})/im,
+  },
+  {
+    campo: "nitProveedor",
+    patron:
+      /(?:^|\n)[ \t]*(?:NIT[ \t]+(?:del[ \t]+)?proveedor|Supplier[ \t]+Tax[ \t]+ID|Vendor[ \t]+Tax[ \t]+ID)[ \t]*:[ \t]*([A-Z0-9][A-Z0-9.\- ]{3,39})/im,
+  },
+];
+
 const REGLAS: ReglaExtraccion[] = [
+  ...REGLAS_PROVEEDOR,
   {
     campo: "numeroOrdenProveedor",
     patron: /\bP\.?O\.?[\s:#-]*(\d{3,10})\b/i,
@@ -168,32 +182,40 @@ function paginaDelFragmento(paginas: string[], fragmento: string): number | unde
   return idx >= 0 ? idx + 1 : undefined;
 }
 
-function extraerDeTexto(texto: string, paginas: string[]): CampoExtraido[] {
+function extraerDeTexto(texto: string, paginas: string[], reglas = REGLAS): CampoExtraido[] {
   const encontrados: CampoExtraido[] = [];
   const camposYaEncontrados = new Set<string>();
 
-  for (const regla of REGLAS) {
+  for (const regla of reglas) {
     if (camposYaEncontrados.has(regla.campo)) continue; // primera coincidencia gana por campo
-    const match = texto.match(regla.patron);
-    if (!match) continue;
-
-    const valor = (regla.formatear ? regla.formatear(match) : match[1])?.trim();
-    if (!valor) continue;
-
-    const evidencia = contextoAlrededorDe(texto, match.index ?? 0, match[0].length);
-    encontrados.push({
-      campo: regla.campo,
-      valor,
-      pagina: paginaDelFragmento(paginas, match[0]),
-      confianza: 1,
-      evidencia,
-    });
-    camposYaEncontrados.add(regla.campo);
+    const coincidencias =
+      regla.campo === "numeroOrdenProveedor"
+        ? texto.matchAll(new RegExp(regla.patron.source, regla.patron.flags + "g"))
+        : [texto.match(regla.patron)];
+    const valores = new Set<string>();
+    for (const match of coincidencias) {
+      if (!match) continue;
+      const valor = (regla.formatear ? regla.formatear(match) : match[1])?.trim();
+      if (!valor || valores.has(valor)) continue;
+      valores.add(valor);
+      encontrados.push({
+        campo: regla.campo,
+        valor,
+        pagina: paginaDelFragmento(paginas, match[0]),
+        confianza: 1,
+        evidencia: contextoAlrededorDe(texto, match.index ?? 0, match[0].length),
+      });
+      camposYaEncontrados.add(regla.campo);
+    }
   }
 
-  encontrados.push(...extraerCantidadYPeso(texto, paginas));
+  if (reglas === REGLAS) encontrados.push(...extraerCantidadYPeso(texto, paginas));
 
   return encontrados;
+}
+
+export function extraerIdentidadProveedor(texto: string | null | undefined): CampoExtraido[] {
+  return extraerDeTexto(texto?.slice(0, 20000) ?? "", [], REGLAS_PROVEEDOR);
 }
 
 /**

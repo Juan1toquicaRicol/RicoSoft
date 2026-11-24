@@ -1,3 +1,9 @@
+import {
+  avisarCorreosDesvinculados,
+  ConflictoVinculoCorreo,
+  desvincularCorreosDeOrden,
+  vincularOrdenCorreo,
+} from "./importaciones-bandeja-vinculo";
 import fs from "fs";
 import path from "path";
 import { Response } from "express";
@@ -35,7 +41,7 @@ import {
   type TipoHitoLote,
 } from "../../domain/importaciones/hitos-lote";
 import { obtenerTrmOficial } from "../../integrations/trm/trm.service";
-import { buscarItemsSiesa } from "../integraciones-siesa/siesa-inventario.service";
+import { buscarItemsSiesa, listarItemsMaestroSiesa } from "../integraciones-siesa/siesa-inventario.service";
 import { obtenerClavesActivasCatalogo } from "../catalogos/catalogos.controller";
 import { buscarItemsOrdenSchema } from "./importaciones.schemas";
 import { aplicarNovedadAutomatica } from "./importaciones-novedades-automaticas";
@@ -278,6 +284,7 @@ type ContenedorLote = Prisma.ContenedorLoteGetPayload<Record<string, never>>;
 type HitoLote = Prisma.LoteImportacionHitoGetPayload<Record<string, never>>;
 type DocumentoLote = Prisma.LoteImportacionDocumentoGetPayload<Record<string, never>>;
 type LoteConDetalle = Prisma.LoteImportacionGetPayload<Record<string, never>> & {
+  asignacionesEmbarque?: Prisma.ImportacionAsignacionEmbarqueGetPayload<Record<string, never>>[];
   expediente?: ExpedienteConVistosBuenos | null;
   costeos?: CosteoDetalle[];
   contenedores?: ContenedorLote[];
@@ -383,6 +390,7 @@ const serializarItem = (item: ItemConSubpartida) => ({
       }
     : null,
   referencia: item.referencia,
+  itemRowId: item.itemRowId,
   referenciaProveedor: item.referenciaProveedor,
   unidadMedida: item.unidadMedida,
   cantidad: numero(item.cantidad),
@@ -541,6 +549,9 @@ const serializarLote = (l: LoteConDetalle) => {
       : null;
 
   return {
+    asignacionesEmbarque: l.asignacionesEmbarque?.map((a) => ({
+      ...a, cantidad: Number(a.cantidad), recibida: Number(a.recibida), conciliada: Number(a.conciliada),
+    })) ?? [],
     id: l.id,
     ordenCompraId: l.ordenCompraId,
     blAwb: l.blAwb,
@@ -686,6 +697,7 @@ const INCLUDE_ORDEN_DETALLE = {
   items: { include: { subpartida: true } },
   lotes: {
     include: {
+      asignacionesEmbarque: true,
       expediente: { include: { vistosBuenos: true } },
       costeos: { orderBy: { fechaLiquidacion: "desc" as const } },
       contenedores: { orderBy: { numero: "asc" as const } },
@@ -939,6 +951,7 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
     // numeroOrden NO se lee del cliente: el servidor asigna codigo y
     // numeroOrden (mismo valor IMP-<año>-<n>) dentro de la transacción de creación.
     const {
+      correoOrigenId,
       fechaOrden,
       incoterm,
       lugarPactado,
@@ -1105,6 +1118,32 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
       calcularCantidadValida(numero(item.cantidad), item.descripcion);
     }
 
+    const itemsVinculados = (items as ItemOrdenBody[]).filter((item) => item.itemRowId != null);
+    let companiaItems: number | null = null;
+    if (itemsVinculados.length) {
+      companiaItems = await resolverCiaSiesa(tenantId);
+      if (!companiaItems) return res.status(409).json({ message: "Configura la compañía de Siesa." });
+      const ids = [...new Set(itemsVinculados.map((item) => item.itemRowId!))];
+      try {
+        const { items: maestro } = await listarItemsMaestroSiesa(companiaItems, {
+          page: 1, pageSize: ids.length, itemRowIdsFiltro: { modo: "incluir", ids },
+        });
+        const porId = new Map(maestro.map((item) => [item.itemRowId, item]));
+        for (const item of itemsVinculados) {
+          const siesa = porId.get(item.itemRowId!);
+          if (!siesa || siesa.unidadMedida?.toUpperCase() !== item.unidadMedida?.toUpperCase()) {
+            return res.status(400).json({
+              message: `Verifica el ítem Siesa y su unidad de inventario para "${item.descripcion}".`,
+            });
+          }
+          item.referencia = siesa.referencia;
+        }
+      } catch (error) {
+        console.error("Error al verificar ítems de la orden en Siesa:", error);
+        return res.status(503).json({ message: "No se pudieron verificar los ítems en Siesa." });
+      }
+    }
+
     const subpartidaIds = [
       ...new Set(items.map((i: ItemOrdenBody) => i.subpartidaArancelariaId).filter(Boolean)),
     ] as string[];
@@ -1126,12 +1165,31 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
       valorEstimadoTotal += fobCop + fobCop * (tarifa / 100);
     }
 
+    if (correoOrigenId) {
+      const correo = await prisma.importacionCorreo.findFirst({
+        where: { id: correoOrigenId, tenantId },
+        select: { proveedorId: true, ordenCompraId: true, estadoProcesamiento: true },
+      });
+      if (!correo) return res.status(404).json({ message: "Correo no encontrado." });
+      if (
+        !proveedorSeleccionado ||
+        correo.proveedorId !== proveedorSeleccionado.id ||
+        correo.ordenCompraId ||
+        correo.estadoProcesamiento !== "REQUIERE_REVISION"
+      ) {
+        return res.status(409).json({
+          message:
+            "El correo debe estar en revisión, sin orden vinculada y con el mismo proveedor confirmado.",
+        });
+      }
+    }
+
     const anioSerie = anioActualImportaciones();
     const crearOrdenConConsecutivo = () =>
       prisma.$transaction(
         async (tx) => {
           const { codigo } = await reservarConsecutivo(tx, tenantId, anioSerie);
-          return tx.ordenCompraIntl.create({
+          const creada = await tx.ordenCompraIntl.create({
             data: {
               tenantId,
               codigo,
@@ -1158,6 +1216,8 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
                 create: items.map((item: ItemOrdenBody) => ({
                   descripcion: item.descripcion,
                   referencia: item.referencia ?? null,
+                  itemRowId: item.itemRowId ?? null,
+                  siesaCiaId: item.itemRowId ? companiaItems : null,
                   referenciaProveedor: item.referenciaProveedor ?? null,
                   unidadMedida: item.unidadMedida ?? null,
                   subpartidaArancelariaId: item.subpartidaArancelariaId ?? null,
@@ -1195,9 +1255,16 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
             },
             include: INCLUDE_ORDEN_DETALLE,
           });
-          // La orden crea ítems + actividad + historial en un solo viaje; se deja
-          // margen sobre el límite por defecto (5 s) para no expirar con la
-          // base lenta o bajo carga: expirar aquí revertiría y reintentaría.
+          if (correoOrigenId && proveedorSeleccionado) {
+            await vincularOrdenCorreo(tx, {
+              correoId: correoOrigenId,
+              tenantId,
+              proveedorId: proveedorSeleccionado.id,
+              ordenId: creada.id,
+              usuarioId: req.user!.id,
+            });
+          }
+          return creada;
         },
         { maxWait: 10000, timeout: 20000 },
       );
@@ -1224,6 +1291,8 @@ export const crearOrdenCompraIntl = async (req: AuthenticatedRequest, res: Respo
 
     return res.status(201).json(serializarOrden(orden!));
   } catch (error) {
+    if (error instanceof ConflictoVinculoCorreo)
+      return res.status(409).json({ message: error.message });
     console.error("Error al crear orden de compra internacional:", error);
     const message =
       error instanceof Error ? error.message : "Error al crear la orden de compra internacional.";
@@ -1947,6 +2016,8 @@ export const liquidarCosteoImportacion = async (req: AuthenticatedRequest, res: 
  * mal con un lote nacionalizado, la vía correcta es registrar una novedad
  * (Dano/Faltante/ProblemaAduanero/etc.), no anular el expediente completo.
  */
+class OrdenYaNoAnulableError extends Error {}
+
 export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -1976,21 +2047,42 @@ export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
 
     const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
 
-    await prisma.$transaction([
-      prisma.ordenCompraIntl.update({
-        where: { id: orden.id },
+    // Anulación, historial y desvinculación de los correos de la Bandeja de
+    // ESTA empresa que apuntaban a la orden, en una sola transacción. El cambio
+    // de estado es condicional: una anulación o un cierre simultáneos ganan.
+    const correosDesvinculados = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.ordenCompraIntl.updateMany({
+        where: {
+          id: orden.id,
+          tenantId,
+          eliminado: false,
+          estado: { notIn: ["Anulada", "Cerrada"] },
+        },
         data: { estado: "Anulada", eliminado: true },
-      }),
-      prisma.importacionHistorial.create({
+      });
+      if (count !== 1) throw new OrdenYaNoAnulableError();
+      const correoIds = await desvincularCorreosDeOrden(tx, {
+        tenantId,
+        ordenId: orden.id,
+        numeroOrden: orden.codigo ?? orden.numeroOrden,
+        usuarioId: req.user!.id,
+        motivo: "ORDEN_ANULADA",
+      });
+      const avisoCorreos = correoIds.length
+        ? `${correoIds.length} correo(s) de la Bandeja quedaron en revisión para elegir otra orden.`
+        : "";
+      await tx.importacionHistorial.create({
         data: {
           ordenCompraId: orden.id,
           actor: req.user!.nombre,
           accion: "Orden anulada",
-          detalle: motivo || null,
+          detalle: [motivo, avisoCorreos].filter(Boolean).join(" ") || null,
           etapa: "Cierre",
         },
-      }),
-    ]);
+      });
+      return correoIds;
+    });
+    await avisarCorreosDesvinculados(tenantId, correosDesvinculados);
 
     await notificarEventoImportacion({
       tenantId,
@@ -2011,6 +2103,9 @@ export const anularOrdenCompraIntl = async (req: AuthenticatedRequest, res: Resp
 
     return res.status(204).send();
   } catch (error) {
+    if (error instanceof OrdenYaNoAnulableError) {
+      return res.status(409).json({ message: "La orden cambió de estado. Actualiza la página." });
+    }
     console.error("Error al anular orden de compra internacional:", error);
     return res.status(500).json({ message: "Error al anular la orden de compra internacional." });
   }

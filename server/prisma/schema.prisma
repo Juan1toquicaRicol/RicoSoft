@@ -2021,6 +2021,9 @@ model ItemOrdenCompraIntl {
   /// para el arancel, no el código comercial del ítem). Nullable: texto
   /// libre, sin catálogo — no todo ítem tiene un código Siesa todavía.
   referencia              String?                         @db.VarChar(100)
+  itemRowId               Int?
+  siesaCiaId              Int?
+  asignacionesEmbarque    ImportacionAsignacionEmbarque[]
   /// Unidad de medida de `cantidad` (ej. "KG", "TON", "SACO25KG", "UND") —
   /// validada en código contra UNIDADES_MEDIDA_VALIDAS
   /// (importaciones.controller.ts). Nullable porque los ítems creados antes
@@ -2042,6 +2045,7 @@ model ItemOrdenCompraIntl {
   costeos                 CosteoImportacionDetalle[]
 
   @@index([ordenCompraId])
+  @@index([siesaCiaId, itemRowId])
 }
 
 /// Documento inicial adjuntado directamente a la OrdenCompraIntl (Cotización,
@@ -2344,6 +2348,8 @@ model LoteImportacion {
   contenedores                 ContenedorLote[]
   hitos                        LoteImportacionHito[]
   documentos                   LoteImportacionDocumento[]
+
+  asignacionesEmbarque ImportacionAsignacionEmbarque[]
 
   @@index([tenantId, estado])
   @@index([ordenCompraId])
@@ -3115,4 +3121,22 @@ model PedidoComercialItem {
   pedido         PedidoComercial @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
   @@index([pedidoId])
+}
+
+
+model ImportacionAsignacionEmbarque {
+  loteId              String @db.UniqueIdentifier
+  itemId              String @db.UniqueIdentifier
+  cantidad            Decimal @db.Decimal(18, 4)
+  recibida            Decimal @db.Decimal(18, 4)
+  conciliada          Decimal @db.Decimal(18, 4)
+  documentoSiesa      String? @db.NVarChar(255)
+  fechaDisponibilidad String? @db.Char(10)
+  evidenciaFecha      String? @db.NVarChar(255)
+  actualizadoEn       DateTime @updatedAt
+  lote LoteImportacion @relation(fields: [loteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  item ItemOrdenCompraIntl @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([loteId, itemId])
+  @@index([itemId])
 }

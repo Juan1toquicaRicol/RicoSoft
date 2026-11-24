@@ -124,3 +124,14 @@ describe("RegexDocumentExtractionProvider", () => {
     expect(resultado.campos).toEqual([]);
   });
 });
+
+it("lee la razón social y el NIT etiquetados en el texto sin tomar el NIT del comprador", async () => {
+  const { extraerIdentidadProveedor } = await import("./regex-extraction-provider");
+  const campos = extraerIdentidadProveedor(
+    "Proveedor: Viet Nam Hanotech\nNIT comprador: 987654\nNIT proveedor: 0104635981\nPO-26112401",
+  );
+  expect(campos.map(({ campo, valor }) => [campo, valor])).toEqual([
+    ["nombreProveedor", "Viet Nam Hanotech"],
+    ["nitProveedor", "0104635981"],
+  ]);
+});

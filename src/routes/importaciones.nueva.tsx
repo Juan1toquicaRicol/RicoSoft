@@ -1,3 +1,6 @@
+import { hasPermission } from "@/lib/session";
+import { useCorreoBandeja, type CorreoBandejaDetalle } from "@/hooks/use-importaciones-bandeja";
+import { useSession } from "@/lib/session-context";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -87,6 +90,8 @@ import { requirePermisoGuard } from "@/lib/route-guards";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/importaciones/nueva")({
+  validateSearch: (search: Record<string, unknown>): { correoOrigenId?: string } =>
+    typeof search.correoOrigenId === "string" ? { correoOrigenId: search.correoOrigenId } : {},
   beforeLoad: requirePermisoGuard(PERMISOS_SISTEMA.IMPORTACIONES_CREAR),
   head: () => ({
     meta: [
@@ -97,7 +102,7 @@ export const Route = createFileRoute("/importaciones/nueva")({
       },
     ],
   }),
-  component: NuevaOrdenIntlPage,
+  component: EntradaNuevaOrden,
 });
 
 const MONEDAS = ["USD", "EUR", "CNY", "GBP", "JPY"];
@@ -242,7 +247,67 @@ interface Verificacion {
   focoId?: string;
 }
 
-function NuevaOrdenIntlPage() {
+function EntradaNuevaOrden() {
+  const { correoOrigenId } = Route.useSearch();
+  const { user, loading } = useSession();
+  if (!correoOrigenId) return <NuevaOrdenIntlPage />;
+  if (loading)
+    return (
+      <AppShell title="Nueva orden desde correo">
+        <p>Cargando sesión…</p>
+      </AppShell>
+    );
+  if (
+    !hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER) ||
+    !hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER)
+  ) {
+    return (
+      <AppShell title="Nueva orden desde correo">
+        <p role="alert">Tu cuenta no tiene acceso para consultar y vincular el correo.</p>
+        <Link to="/importaciones">Volver a Importaciones</Link>
+      </AppShell>
+    );
+  }
+  return <NuevaOrdenDesdeCorreo key={correoOrigenId + "/" + user?.tenantId} id={correoOrigenId} />;
+}
+
+function NuevaOrdenDesdeCorreo({ id }: { id: string }) {
+  const { correo, loading, error } = useCorreoBandeja(id);
+  if (loading)
+    return (
+      <AppShell title="Nueva orden desde correo">
+        <p>Cargando correo…</p>
+      </AppShell>
+    );
+  if (
+    !correo?.proveedor ||
+    correo.ordenCompra ||
+    correo.estadoProcesamiento !== "REQUIERE_REVISION"
+  ) {
+    return (
+      <AppShell title="Nueva orden desde correo">
+        <p role="alert">
+          {error || "El correo debe estar en revisión y tener un proveedor confirmado."}
+        </p>
+        <Link to="/importaciones/bandeja">Volver a la Bandeja</Link>
+      </AppShell>
+    );
+  }
+  return <NuevaOrdenIntlPage origenCorreo={correo} />;
+}
+
+function sugerenciaCampo(correo: CorreoBandejaDetalle | undefined, campo: string) {
+  const valores = new Set(
+    correo?.adjuntos
+      .flatMap((a) => a.extracciones)
+      .filter((e) => e.campo === campo)
+      .map((e) => e.valorExtraido.trim())
+      .filter(Boolean),
+  );
+  return valores.size === 1 ? [...valores][0] : undefined;
+}
+
+function NuevaOrdenIntlPage({ origenCorreo }: { origenCorreo?: CorreoBandejaDetalle }) {
   const navigate = useNavigate();
   const { addOrden } = useImportaciones();
   const {
@@ -295,13 +360,13 @@ function NuevaOrdenIntlPage() {
   const [proveedorNoCatalogado, setProveedorNoCatalogado] = useState(false);
   const [form, setForm] = useState({
     fechaOrden: hoyISO(),
-    incoterm: "FOB",
+    incoterm: sugerenciaCampo(origenCorreo, "incoterm") ?? "FOB",
     lugarPactado: "",
-    proveedorId: "",
+    proveedorId: origenCorreo?.proveedor?.id ?? "",
     proveedorExtranjero: "",
-    proveedorNombreCatalogado: "",
-    paisOrigen: "",
-    moneda: "USD",
+    proveedorNombreCatalogado: origenCorreo?.proveedor?.nombre ?? "",
+    paisOrigen: sugerenciaCampo(origenCorreo, "paisOrigen") ?? "",
+    moneda: sugerenciaCampo(origenCorreo, "moneda") ?? "USD",
     trmPactada: 4000,
     tasaCambioFecha: hoyISO(),
     tasaCambioFuente: "" as "" | "Oficial" | "Pactada" | "Manual",
@@ -552,6 +617,7 @@ function NuevaOrdenIntlPage() {
     setGuardando(true);
     try {
       const creada = await addOrden({
+        correoOrigenId: origenCorreo?.id,
         fechaOrden: form.fechaOrden,
         incoterm: form.incoterm,
         lugarPactado: form.lugarPactado || null,
@@ -637,6 +703,19 @@ function NuevaOrdenIntlPage() {
       }
     >
       <div>
+        {origenCorreo && (
+          <p className="mb-4 text-sm text-slate-700">
+            Desde el correo{" "}
+            <Link
+              to="/importaciones/bandeja/$id"
+              params={{ id: origenCorreo.id }}
+              className="underline"
+            >
+              {origenCorreo.asunto}
+            </Link>
+            . Revisa los datos sugeridos antes de guardar.
+          </p>
+        )}
         <div className="mb-4">
           <EtapasOrdenNav
             etapaActual={etapa}
@@ -758,7 +837,7 @@ function NuevaOrdenIntlPage() {
                           ? form.proveedorNombreCatalogado || undefined
                           : undefined
                       }
-                      disabled={proveedorNoCatalogado}
+                      disabled={proveedorNoCatalogado || !!origenCorreo}
                       options={proveedorOpciones.map((p) => ({
                         value: p.id,
                         label: `${p.nombre} (NIT ${p.nit})`,
@@ -771,6 +850,7 @@ function NuevaOrdenIntlPage() {
                     <input
                       type="checkbox"
                       checked={proveedorNoCatalogado}
+                      disabled={!!origenCorreo}
                       onChange={(e) => {
                         const marcado = e.target.checked;
                         setProveedorNoCatalogado(marcado);
@@ -1139,7 +1219,7 @@ function NuevaOrdenIntlPage() {
                                   value={item.referencia ?? ""}
                                   onChange={(e) => {
                                     const next = [...items];
-                                    next[idx] = { ...next[idx], referencia: e.target.value };
+                                    next[idx] = { ...next[idx], referencia: e.target.value, itemRowId: null };
                                     setItems(next);
                                   }}
                                   className="h-8 text-[11px] border-slate-300"
@@ -1155,21 +1235,23 @@ function NuevaOrdenIntlPage() {
                                       next[idx] = {
                                         ...next[idx],
                                         descripcion: texto,
+                                        itemRowId: null,
                                         _origen: "manual",
                                       };
                                       setItems(next);
                                     }}
                                     onSeleccionar={(op) => {
+                                      const unidad = mapearUnidadSiesa(
+                                        op.unidadMedida,
+                                        unidadesMedida.map((opcion) => opcion.clave),
+                                      );
                                       const next = [...items];
                                       next[idx] = {
                                         ...next[idx],
                                         descripcion: op.descripcion || next[idx].descripcion,
-                                        referencia: op.referencia || next[idx].referencia,
-                                        unidadMedida:
-                                          mapearUnidadSiesa(
-                                            op.unidadMedida,
-                                            unidadesMedida.map((u) => u.clave),
-                                          ) ?? next[idx].unidadMedida,
+                                        referencia: op.referencia ?? "",
+                                        itemRowId: unidad ? op.itemRowId : null,
+                                        unidadMedida: unidad ?? next[idx].unidadMedida,
                                         _origen: "siesa",
                                       };
                                       setItems(next);
@@ -1198,7 +1280,7 @@ function NuevaOrdenIntlPage() {
                                   disabled={cargandoUnidadesMedida}
                                   onValueChange={(val) => {
                                     const next = [...items];
-                                    next[idx] = { ...next[idx], unidadMedida: val };
+                                    next[idx] = { ...next[idx], unidadMedida: val, itemRowId: null };
                                     setItems(next);
                                   }}
                                 >
@@ -1539,13 +1621,24 @@ function NuevaOrdenIntlPage() {
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-              <Link
-                to="/importaciones"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                aria-disabled={guardando}
-              >
-                Cancelar
-              </Link>
+              {origenCorreo ? (
+                <Link
+                  to="/importaciones/bandeja/$id"
+                  params={{ id: origenCorreo.id }}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  aria-disabled={guardando}
+                >
+                  Cancelar
+                </Link>
+              ) : (
+                <Link
+                  to="/importaciones"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  aria-disabled={guardando}
+                >
+                  Cancelar
+                </Link>
+              )}
               <div className="flex items-center gap-2">
                 {etapa > 1 && (
                   <Button

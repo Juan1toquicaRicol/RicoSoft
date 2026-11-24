@@ -30,7 +30,21 @@ export async function extraerTextoPdf(buffer: Buffer): Promise<TextoPdf> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pagerender: async (pageData: any) => {
       const contenido = await pageData.getTextContent();
-      const texto = contenido.items.map((item: { str: string }) => item.str).join(" ");
+      const lineas: string[][] = [];
+      let alturaAnterior: number | undefined;
+      for (const item of contenido.items as { str: string; transform?: number[] }[]) {
+        if (!item.str.trim()) continue;
+        const altura = item.transform?.[5];
+        if (
+          !lineas.length ||
+          (altura != null && alturaAnterior != null && Math.abs(altura - alturaAnterior) >= 1)
+        ) {
+          lineas.push([]);
+        }
+        lineas[lineas.length - 1].push(item.str);
+        alturaAnterior = altura;
+      }
+      const texto = lineas.map((linea) => linea.join(" ")).join("\n");
       paginas.push(texto);
       return texto;
     },

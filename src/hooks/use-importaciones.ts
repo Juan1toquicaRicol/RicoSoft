@@ -7,6 +7,7 @@ export type EstadoLoteImportacion =
 
 export interface ItemOrdenCompraIntl {
   id: string;
+  itemRowId?: number | null;
   descripcion: string;
   referencia: string | null;
   /** Código con el que el proveedor identifica el ítem en su cotización —
@@ -170,7 +171,19 @@ export interface TrackingLote {
   } | null;
 }
 
+export interface AsignacionEmbarque {
+  itemId: string;
+  cantidad: number;
+  recibida: number;
+  conciliada: number;
+  documentoSiesa: string | null;
+  fechaDisponibilidad: string | null;
+  evidenciaFecha: string | null;
+  actualizadoEn: string | null;
+}
+
 export interface LoteImportacion {
+  asignacionesEmbarque?: AsignacionEmbarque[];
   id: string;
   ordenCompraId: string;
   blAwb: string;
@@ -388,6 +401,7 @@ export interface OrdenCompraIntl {
 }
 
 export interface ItemOrdenInput {
+  itemRowId?: number | null;
   descripcion: string;
   referencia?: string | null;
   referenciaProveedor?: string | null;
@@ -400,6 +414,7 @@ export interface ItemOrdenInput {
 }
 
 export interface CrearOrdenInput {
+  correoOrigenId?: string;
   // El número (codigo = numeroOrden, IMP-<año>-<n>) lo asigna el servidor al guardar.
   fechaOrden?: string;
   incoterm: string;

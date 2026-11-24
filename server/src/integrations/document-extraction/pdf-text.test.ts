@@ -3,8 +3,11 @@ import { extraerTextoPdf } from "./pdf-text";
 
 /** PDF mínimo válido de una página con una sola línea de texto y tabla xref
  * exacta (offsets calculados, no hardcodeados). */
-function construirPdf(texto: string): Buffer {
-  const stream = `BT /F1 12 Tf 50 700 Td (${texto}) Tj ET`;
+function construirPdf(texto: string, segundaLinea?: string): Buffer {
+  const renglones = segundaLinea
+    ? "(" + texto + ") Tj 0 -18 Td (" + segundaLinea + ") Tj"
+    : "(" + texto + ") Tj";
+  const stream = "BT /F1 12 Tf 50 700 Td " + renglones + " ET";
   const objetos = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -45,4 +48,11 @@ describe("extraerTextoPdf", () => {
     const resultado = await extraerTextoPdf(vista);
     expect(resultado.textoCompleto).toContain("Incoterm FOB");
   });
+});
+
+it("conserva el cambio de renglón entre la etiqueta y la razón social de un PDF", async () => {
+  const resultado = await extraerTextoPdf(
+    construirPdf("Proveedor de referencia", "VIET NAM HANOTECH"),
+  );
+  expect(resultado.textoCompleto).toBe("Proveedor de referencia\nVIET NAM HANOTECH");
 });

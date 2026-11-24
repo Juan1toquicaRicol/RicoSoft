@@ -13,6 +13,7 @@ export const buscarItemsOrdenSchema = z.object({
 export const itemOrdenSchema = z.object({
   descripcion: z.string(textoObligatorio("La descripción del ítem es obligatoria.")),
   referencia: z.string().nullish(),
+  itemRowId: z.number().int().positive().max(2147483647).nullish(),
   // Código con el que EL PROVEEDOR identifica el ítem en su cotización —
   // distinto de `referencia` (interna/Siesa). Uso futuro: Bandeja
   // Inteligente. Texto libre, nunca obligatorio.
@@ -29,6 +30,7 @@ export const itemOrdenSchema = z.object({
 });
 
 export const crearOrdenCompraIntlSchema = z.object({
+  correoOrigenId: z.string().uuid().optional(),
   // Ignorado: el servidor asigna el número (codigo = numeroOrden = IMP-<año>-<n>).
   // Se acepta por compatibilidad con clientes anteriores, sin usarlo.
   numeroOrden: z.string().nullish(),

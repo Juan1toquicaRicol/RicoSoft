@@ -740,3 +740,30 @@ Restricciones: no encender el interruptor sin un proveedor de correo saliente re
 Sistemas controla el buzón central. El piloto usa una etiqueta Gmail y comienza pausado.
 La administración requiere el permiso canónico de correo, la empresa administradora activa
 y una cuenta designada en el servidor. El JSON delegado de solo lectura permanece en el servidor.
+
+
+### 2026-11-24 — Bandeja de Importaciones y órdenes desde correo
+
+- Se definieron dos acciones para la Bandeja: vincular un correo a una orden
+  existente y crear una orden internacional desde el correo. La creación
+  requiere revisión humana y conserva el formulario y el consecutivo
+  `IMP` existentes. Implementados localmente el selector y la creación con
+  vínculo y auditoría atómicos.
+- Las sugerencias por razón social, identificador fiscal y remitente
+  registran la evidencia y requieren confirmación humana. La referencia
+  explícita que difiere o resulta ambigua mantiene el correo en revisión.
+  El acceso a correos sin empresa sigue denegado. El permiso específico
+  de RicoSoft para revisarlos queda como opción futura sin alcance aprobado.
+- Cuando el correo exacto del remitente identifica a un proveedor, la
+  razón social y el NIT que trae el documento se contrastan solo con los
+  proveedores de la empresa de ese proveedor. Un homónimo de otra empresa no bloquea el
+  correo ni queda como candidato. La regla vive en la función pura
+  `hayConflictoIdentidadProveedor` del servicio de matching.
+- `SELECCIONAR_ORDEN` registra `IMPORTACION_EXCEPCION_RESUELTA`, con el
+  formato que usan los reportes, e `IMPORTACION_CORREO_ORDEN_VINCULADA`.
+  Ambos eventos se escriben en la misma transacción que el vínculo.
+- El piloto controlado por etiqueta validó conexión, ingesta y extracción
+  de PDF en producción. La asociación positiva con una orden sigue pendiente.
+  Ricol no tiene un ambiente de pruebas consolidado.
+- Ruta de ejecución y criterios de aceptación en
+  `server/docs/bandeja-importaciones.md`.

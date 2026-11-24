@@ -65,6 +65,11 @@ export interface CorreoBandejaDetalle {
   ultimoError: string | null;
   proveedor: { id: string; nombre: string; nit: string } | null;
   ordenCompra: { id: string; numeroOrden: string; estado: string } | null;
+  sugerenciasProveedor?: {
+    id: string;
+    nombre: string;
+    señales: { campo: string; detalle: string }[];
+  }[];
   adjuntos: AdjuntoBandeja[];
   excepciones: ExcepcionBandeja[];
 }

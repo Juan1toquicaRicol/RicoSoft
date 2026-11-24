@@ -1,3 +1,4 @@
+import { consultarIngresosImportacion } from "../importaciones/importaciones-disponibilidad";
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/prisma";
@@ -86,7 +87,10 @@ export const obtenerDisponibilidadComercial = async (req: AuthenticatedRequest, 
       existencias,
       bom,
     );
-    return res.json({ disponible: true, resultado });
+    const ingresosImportacion = await consultarIngresosImportacion(
+      tenantId, siesaCiaId, resultado.itemRowId, resultado.unidadMedida,
+    );
+    return res.json({ disponible: true, resultado: { ...resultado, ingresosImportacion } });
   } catch (error) {
     console.error("Error al calcular disponibilidad comercial desde Siesa:", error);
     return res.json({

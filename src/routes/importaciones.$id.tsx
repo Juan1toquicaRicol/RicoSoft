@@ -1,3 +1,4 @@
+import { AsignacionesEmbarque, VincularItemSiesa } from "@/components/importaciones/asignaciones-embarque";
 import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -176,6 +177,11 @@ const liquidacionVacia: LiquidarCosteoInput = {
 
 function DetalleOrdenIntl() {
   const { id } = Route.useParams();
+  const { user } = useSession();
+  return <DetalleOrdenIntlContenido key={(user?.tenantId ?? "sin-empresa") + "/" + id} id={id} />;
+}
+
+function DetalleOrdenIntlContenido({ id }: { id: string }) {
   const {
     data: motivosNovedad,
     isLoading: cargandoMotivosNovedad,
@@ -640,7 +646,12 @@ function DetalleOrdenIntl() {
               <TableBody className="text-slate-800 font-medium">
                 {orden.items.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="px-4 py-2.5">{item.descripcion}</TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      {item.descripcion}
+                      {puedeCrear && orden.estado !== "Anulada" && !item.itemRowId && item.unidadMedida && (
+                        <VincularItemSiesa item={item} onGuardado={() => refresh({ silencioso: true })} />
+                      )}
+                    </TableCell>
                     <TableCell className="px-4 py-2.5 text-slate-500">
                       {item.referenciaProveedor ?? "—"}
                     </TableCell>
@@ -756,6 +767,14 @@ function DetalleOrdenIntl() {
                           )}
                       </div>
                     </div>
+
+                    <AsignacionesEmbarque
+                      lote={lote}
+                      items={orden.items}
+                      puedeEditar={puedeGestionarTransito && orden.estado !== "Anulada"}
+                      puedeRecibir={puedeRecibir}
+                      onGuardado={() => refresh({ silencioso: true })}
+                    />
 
                     <div className="flex flex-wrap gap-1.5">
                       {puedeGestionarTransito &&

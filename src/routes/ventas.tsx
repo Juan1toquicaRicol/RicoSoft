@@ -26,6 +26,7 @@ import {
 } from "@/hooks/use-ventas";
 import { compact, formatCantidad, money } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/session-context";
 
 export const Route = createFileRoute("/ventas")({
   head: () => ({
@@ -220,18 +221,21 @@ function PanelDisponibilidad() {
   const { consultar, loading } = useDisponibilidadComercial();
   const { consultar: consultarContexto } = useContextoProducto();
   const [itemSeleccionado, setItemSeleccionado] = useState<ItemBusqueda | null>(null);
+  const itemActual = useRef<number | null>(null);
   const [contexto, setContexto] = useState<ContextoProducto | null>(null);
   const [cantidad, setCantidad] = useState("");
   const [resultado, setResultado] = useState<DisponibilidadComercial | null>(null);
   const [motivo, setMotivo] = useState<string | null>(null);
 
   const handleSeleccionar = async (item: ItemBusqueda | null) => {
+    itemActual.current = item?.itemRowId ?? null;
     setItemSeleccionado(item);
+    setMotivo(null);
     setResultado(null);
     setContexto(null);
     if (item) {
       const ctx = await consultarContexto(item.itemRowId);
-      setContexto(ctx);
+      if (itemActual.current === item.itemRowId) setContexto(ctx);
     }
   };
 
@@ -241,13 +245,16 @@ function PanelDisponibilidad() {
     setResultado(null);
     try {
       const res = await consultar(itemSeleccionado.itemRowId, Number(cantidad));
+      if (itemActual.current !== itemSeleccionado.itemRowId) return;
       if (!res.disponible) {
         setMotivo(res.motivo ?? "No disponible.");
       } else {
         setResultado(res.resultado ?? null);
       }
-    } catch {
-      // el hook ya deja el error en su propio estado; nada más que hacer aquí.
+    } catch (error) {
+      if (itemActual.current === itemSeleccionado.itemRowId) {
+        setMotivo(error instanceof Error ? error.message : "No se pudo consultar la disponibilidad.");
+      }
     }
   };
 
@@ -318,7 +325,7 @@ function PanelDisponibilidad() {
               </span>
             </span>
             <span>
-              Disponible libre:{" "}
+              Disponible libre en Siesa:{" "}
               <span className="num font-semibold">
                 {formatCantidad(resultado.disponibleLibre, resultado.unidadMedida)}
               </span>
@@ -346,6 +353,23 @@ function PanelDisponibilidad() {
               </span>
             )}
           </div>
+
+          <section className="mt-3 space-y-2" aria-label="Próximos ingresos de importación">
+            <h3 className="text-xs font-bold">Próximos ingresos de importación</h3>
+            {resultado.ingresosImportacion?.length ? resultado.ingresosImportacion.map((fila) => (
+              <div key={fila.loteId + fila.itemId} className="rounded-md bg-white/70 p-2 text-xs">
+                <p className="font-semibold">{fila.orden} · {fila.embarque}</p>
+                <p>Por recibir {formatCantidad(fila.porRecibir, resultado.unidadMedida)}
+                  {" · "}Recibido pendiente de registrar en Siesa {formatCantidad(fila.recibidaSinConciliar, resultado.unidadMedida)}
+                </p>
+                <p>{fila.fechaDisponibilidad
+                  ? `Disponible estimado el ${fila.fechaDisponibilidad} · ${fila.evidenciaFecha}`
+                  : "Fecha de disponibilidad por confirmar"}</p>
+                {fila.etaPuerto && <p>ETA puerto {new Date(fila.etaPuerto).toLocaleDateString("es-CO", { timeZone: "UTC" })} · {fila.fuenteEta}</p>}
+                <p>Actualizado {new Date(fila.actualizadoEn).toLocaleString("es-CO", { timeZone: "America/Bogota" })}</p>
+              </div>
+            )) : <p className="text-xs">Sin ingresos pendientes registrados para este producto.</p>}
+          </section>
 
           {resultado.necesidadesCompra.length > 0 && (
             <div className="mt-3 space-y-1">
@@ -392,6 +416,7 @@ function PanelDisponibilidad() {
 }
 
 function Ventas() {
+  const { user } = useSession();
   const { centro, loading } = useCentroComercial();
 
   return (
@@ -399,7 +424,7 @@ function Ventas() {
       title="Ventas"
       description="Centro Operativo Comercial — qué puedo vender, qué no puedo comprometer y qué cliente requiere atención hoy"
     >
-      <PanelDisponibilidad />
+      <PanelDisponibilidad key={user?.tenantId ?? "sin-empresa"} />
 
       {loading && <p className="mt-4 text-xs text-slate-500">Cargando...</p>}
 

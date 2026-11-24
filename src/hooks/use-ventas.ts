@@ -28,6 +28,12 @@ export interface DisponibilidadComercial {
   materialLimitante: string | null;
   deficitProductivo: number;
   necesidadesCompra: NecesidadCompraDisponibilidad[];
+  ingresosImportacion?: Array<{
+    loteId: string; itemId: string; orden: string; embarque: string;
+    fechaDisponibilidad: string | null; evidenciaFecha: string | null;
+    etaPuerto: string | null; fuenteEta: string | null; actualizadoEn: string;
+    cantidadPendiente: number; porRecibir: number; recibidaSinConciliar: number;
+  }>;
 }
 
 export interface RespuestaDisponibilidad {

@@ -70,7 +70,12 @@ function whereBase(tenantId: string | null) {
  */
 export async function identificarProveedor(
   tenantId: string | null,
-  datos: { remitenteEmail: string; nitExtraido?: string; nombreExtraido?: string },
+  datos: {
+    remitenteEmail: string;
+    nitExtraido?: string;
+    nombreExtraido?: string;
+    soloCorreoExacto?: boolean;
+  },
 ): Promise<ResultadoMatching<ProveedorCandidato>> {
   const seleccionar = { id: true, tenantId: true, nombre: true, nit: true } as const;
 
@@ -91,7 +96,9 @@ export async function identificarProveedor(
     if (porEmail.length > 0) return resolverCandidatos(porEmail);
   }
 
-  const dominio = extraerDominio(datos.remitenteEmail);
+  if (datos.soloCorreoExacto) return { tipo: "NINGUNO" };
+
+  const dominio = extraerDominio(remitenteLimpio);
   if (dominio) {
     const candidatosConEmail = await prisma.proveedor.findMany({
       where: { ...whereBase(tenantId), email: { not: null } },
@@ -119,6 +126,165 @@ export async function identificarProveedor(
 function resolverCandidatos<T>(candidatos: T[]): ResultadoMatching<T> {
   if (candidatos.length === 1) return { tipo: "UNICO", valor: candidatos[0] };
   return { tipo: "AMBIGUO", candidatos };
+}
+
+type CampoProveedor = { campo: string; valor: string };
+
+export type TipoSeñalProveedor =
+  "NIT_EXACTO" | "CORREO_EXACTO" | "DOMINIO" | "NOMBRE_EXACTO" | "NOMBRE_PARECIDO" | "NIT_DISTINTO";
+
+export interface SeñalProveedor {
+  tipo: TipoSeñalProveedor;
+  campo: string;
+  detalle: string;
+}
+
+export interface SugerenciaProveedor {
+  id: string;
+  tenantId: string;
+  nombre: string;
+  señales: SeñalProveedor[];
+}
+
+/** Señales del documento que, por sí solas, identifican a un proveedor. */
+const SEÑALES_FUERTES_DEL_DOCUMENTO: ReadonlySet<TipoSeñalProveedor> = new Set([
+  "NIT_EXACTO",
+  "NOMBRE_EXACTO",
+]);
+
+/**
+ * Indica si el documento contradice al proveedor identificado por el correo
+ * exacto del remitente. Hay conflicto cuando su NIT difiere del registrado o
+ * cuando el NIT o la razón social exactos del documento corresponden a otro
+ * proveedor y no a ese. Solo compara proveedores de la empresa del remitente:
+ * un registro de otra empresa, aunque sea el mismo proveedor, no bloquea.
+ * Función pura.
+ */
+export function hayConflictoIdentidadProveedor(
+  remitente: { id: string; tenantId: string },
+  sugerencias: readonly Pick<SugerenciaProveedor, "id" | "tenantId" | "señales">[],
+): boolean {
+  const mismaEmpresa = sugerencias.filter((s) => s.tenantId === remitente.tenantId);
+  const tieneSeñalFuerte = (s: Pick<SugerenciaProveedor, "señales">) =>
+    s.señales.some((señal) => SEÑALES_FUERTES_DEL_DOCUMENTO.has(señal.tipo));
+  const propio = mismaEmpresa.find((s) => s.id === remitente.id);
+  if (propio?.señales.some((señal) => señal.tipo === "NIT_DISTINTO")) return true;
+  if (propio && tieneSeñalFuerte(propio)) return false;
+  return mismaEmpresa.some((s) => s.id !== remitente.id && tieneSeñalFuerte(s));
+}
+
+const TERMINOS_GENERALES = new Set([
+  "sas",
+  "ltda",
+  "company",
+  "joint",
+  "stock",
+  "limited",
+  "corp",
+  "corporation",
+  "inc",
+  "the",
+  "del",
+  "and",
+]);
+const palabrasDistintivas = (nombre: string) =>
+  new Set(
+    normalizarNombre(nombre)
+      .split(" ")
+      .filter((p) => p.length >= 3 && !TERMINOS_GENERALES.has(p)),
+  );
+const normalizarIdentificador = (valor: string) => valor.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+export async function sugerirProveedores(
+  tenantId: string | null,
+  datos: { remitenteEmail: string; campos: CampoProveedor[] },
+): Promise<SugerenciaProveedor[]> {
+  const email = extraerEmail(datos.remitenteEmail);
+  const dominio = extraerDominio(email);
+  const nombres = datos.campos
+    .filter((x) => x.campo === "nombreProveedor")
+    .map((x) => ({
+      texto: normalizarNombre(x.valor),
+      palabras: palabrasDistintivas(x.valor),
+    }));
+  const identificadores = new Set(
+    datos.campos
+      .filter((x) => x.campo === "nitProveedor")
+      .map((x) => normalizarIdentificador(x.valor))
+      .filter((x) => x.length >= 5),
+  );
+  if (!dominio && !nombres.length && !identificadores.size) return [];
+
+  const proveedores = await prisma.proveedor.findMany({
+    where: {
+      ...whereBase(tenantId),
+      ...(!nombres.length && !identificadores.size ? { email: { not: null } } : {}),
+    },
+    select: { id: true, tenantId: true, nombre: true, nit: true, email: true },
+  });
+
+  return proveedores
+    .flatMap((p) => {
+      const señales: SeñalProveedor[] = [];
+      let peso = 0;
+      const nit = normalizarIdentificador(p.nit);
+      if (identificadores.has(nit)) {
+        peso += 100;
+        señales.push({
+          tipo: "NIT_EXACTO",
+          campo: "Identificador fiscal",
+          detalle: "Coincide con el identificador del documento",
+        });
+      }
+      const emailRegistrado = p.email ? extraerEmail(p.email) : null;
+      if (email && email === emailRegistrado) {
+        peso += 90;
+        señales.push({
+          tipo: "CORREO_EXACTO",
+          campo: "Remitente",
+          detalle: "Coincide con el correo registrado",
+        });
+      } else if (dominio && emailRegistrado && dominio === extraerDominio(emailRegistrado)) {
+        peso += 20;
+        señales.push({ tipo: "DOMINIO", campo: "Dominio", detalle: dominio });
+      }
+      const nombre = normalizarNombre(p.nombre);
+      const palabras = palabrasDistintivas(p.nombre);
+      const exacto = nombres.some((d) => d.texto === nombre);
+      const parecido =
+        palabras.size >= 2 &&
+        nombres.some((d) => {
+          const coincidencias = [...palabras].filter((palabra) => d.palabras.has(palabra)).length;
+          return (
+            coincidencias >= 2 && coincidencias / Math.max(palabras.size, d.palabras.size) >= 0.7
+          );
+        });
+      if (exacto || parecido) {
+        peso += exacto ? 40 : 25;
+        señales.push({
+          tipo: exacto ? "NOMBRE_EXACTO" : "NOMBRE_PARECIDO",
+          campo: "Razón social",
+          detalle: exacto
+            ? "Coincide con el nombre del documento"
+            : "Nombre parecido al del documento",
+        });
+      }
+      if (!peso) return [];
+      if (nit && identificadores.size > 0 && !identificadores.has(nit)) {
+        señales.push({
+          tipo: "NIT_DISTINTO",
+          campo: "Identificador fiscal",
+          detalle: "El identificador del documento difiere del registrado",
+        });
+      }
+      return [{ id: p.id, tenantId: p.tenantId, nombre: p.nombre, peso, señales }];
+    })
+    .sort(
+      (a, b) =>
+        b.peso - a.peso || a.nombre.localeCompare(b.nombre, "es") || a.id.localeCompare(b.id),
+    )
+    .slice(0, 5)
+    .map(({ peso: _peso, ...sugerencia }) => sugerencia);
 }
 
 export interface OrdenCandidata {
@@ -150,11 +316,15 @@ export async function identificarOrden(
         tenantId,
         proveedorId,
         eliminado: false,
+        estado: { not: "Anulada" },
         numeroOrden: { contains: numeroOrdenProveedor },
       },
       select: seleccionar,
     });
-    if (porNumero.length > 0) return resolverCandidatos(porNumero);
+    const referencia = numeroOrdenProveedor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patron = new RegExp("(^|[^A-Za-z0-9])" + referencia + "(?=[^A-Za-z0-9]|$)", "i");
+    const coincidencias = porNumero.filter((orden) => patron.test(orden.numeroOrden));
+    return coincidencias.length ? resolverCandidatos(coincidencias) : { tipo: "NINGUNO" };
   }
 
   const abiertas = await prisma.ordenCompraIntl.findMany({

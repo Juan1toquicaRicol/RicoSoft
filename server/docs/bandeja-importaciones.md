@@ -9,12 +9,10 @@ sin reemplazar el juicio humano en decisiones críticas (ver §6).
 
 ## 2. Buzón V1
 
-**`importaciones@ricol.com.co` es el único buzón que usa la Bandeja en
-V1.** Es un buzón central compartido por todos los tenants del
-despliegue (Comercio Exterior, Logística, Gerencia tienen acceso humano
-directo desde Gmail además de lo que el sistema procesa). No hay un
-buzón por tenant — el sistema determina a qué tenant pertenece un correo
-recién después de identificar al proveedor remitente (ver §5).
+La Bandeja usa un buzón central por instalación. Sistemas administra el
+piloto en producción con `departamento.sistemas@ricol.com.co` y la
+etiqueta `RicoSoft-Piloto-Importaciones`. El buzón definitivo de operación
+queda por confirmar con Comercio Exterior.
 
 ## 3. Autenticación con Google Workspace
 
@@ -41,7 +39,7 @@ navegador ni dependencia de una sesión personal de Gmail — ver
 | Variable | Default | Propósito |
 |---|---|---|
 | `IMPORTACIONES_EMAIL_SYNC_ENABLED` | `false` (cualquier valor distinto de `"true"`) | Activa el job de ingesta. **Debe quedar apagado en desarrollo/tests.** |
-| `IMPORTACIONES_EMAIL_MAILBOX` | — | Buzón a impersonar (`importaciones@ricol.com.co`). |
+| `IMPORTACIONES_EMAIL_MAILBOX` | — | Buzón central autorizado para la instalación. |
 | `IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON` | — | JSON completo de la cuenta de servicio, como string. Secreto — nunca en el repo. |
 | `IMPORTACIONES_MAX_EMAILS_PER_RUN` | `25` | Tope de correos listados por corrida de ingesta. |
 | `IMPORTACIONES_MAX_ATTACHMENTS_PER_RUN` | `50` | Tope de adjuntos descargados por corrida. |
@@ -62,14 +60,16 @@ tenant-scoped de la aplicación con esta excepción además de
    nunca se sabe a cuál tenant pertenece antes de identificarlo.
 2. **Procesamiento** (`importaciones-bandeja-procesamiento.job.ts`):
    clasifica el correo, extrae datos, e identifica al proveedor
-   buscando en **todos los tenants** (NIT exacto → email exacto →
-   dominio → nombre normalizado). Recién ahí se conoce el `tenantId`
-   (el del proveedor encontrado) y se actualiza el correo.
-3. Si no se identifica un proveedor único, se crea una
-   `ImportacionExcepcion` con `tenantId: null` y el correo queda
-   visible solo en el triage cross-tenant
-   (`GET /importaciones/bandeja/sin-asignar`), exclusivo de
-   superadmin, para asignación manual.
+   usando el correo exacto del remitente en el catálogo de proveedores.
+   El dominio, la razón social y el identificador fiscal del adjunto
+   aportan candidatos para revisión. Una discrepancia de identidad
+   detectada impide la asociación automática. Con remitente exacto, la
+   discrepancia se evalúa solo contra los proveedores de la empresa de ese
+   proveedor (`hayConflictoIdentidadProveedor`).
+3. Si el proveedor no se identifica de forma única, el correo queda en
+   `REQUIERE_REVISION` con la excepción `PROVEEDOR_NO_IDENTIFICADO`.
+   El correo sigue sin empresa y queda fuera de las bandejas de empresa.
+   Las rutas `/api/importaciones/bandeja/sin-asignar*` devuelven 403.
 
 `ImportacionCorreo` e `ImportacionExcepcion` están explícitamente
 excluidos de `MODELOS_TENANT_SCOPED` en `tenant-prisma.ts` — el
@@ -127,16 +127,15 @@ retención de datos del proveedor de IA, etc.) antes de habilitarse.
 - Los adjuntos se sirven solo tras validar que el correo dueño
   pertenece al tenant del usuario (`obtenerAdjuntoBandeja`) — nunca
   hay una URL pública permanente, siempre streaming autenticado.
-- Todas las rutas de `/api/importaciones/bandeja` exigen JWT y el
-  permiso puntual (`importaciones.correos_ver/procesar/resolver/configurar`),
-  excepto el triage cross-tenant (`/sin-asignar*`), exclusivo de
-  superadmin porque cruza tenants por diseño.
-- `Auditoria` registra únicamente acciones humanas (resolver excepción,
-  reprocesar, asignar proveedor manualmente) — nunca eventos
-  automáticos del job, que usan el propio `estadoProcesamiento`/
-  `ultimoError`/provenance como registro técnico
-  (`Auditoria.usuarioId` es `NOT NULL`, no puede representar un evento
-  sin usuario).
+- La Bandeja valida JWT y el permiso correspondiente. El acceso a correos
+  sin empresa está denegado, incluso para superadministradores de empresa.
+- La auditoría registra acciones humanas como la resolución de excepciones
+  y los cambios de configuración. El procesamiento automático registra su
+  resultado mediante el estado del correo y las excepciones.
+- Vincular una orden (`SELECCIONAR_ORDEN`) registra
+  `IMPORTACION_EXCEPCION_RESUELTA` e `IMPORTACION_CORREO_ORDEN_VINCULADA`
+  en la misma transacción que el vínculo. Crear una orden desde el correo
+  registra el vínculo en la transacción que reserva el `IMP`.
 
 ## 10. Configuración operativa
 
@@ -167,3 +166,123 @@ Al guardar, el proceso atiende el cambio y los demás procesos vuelven a leer la
 configuración cada 30 segundos. El filtro de Gmail usa el ID de etiqueta y permite
 incorporar mensajes antiguos recién etiquetados. El procesamiento del piloto toma
 los correos pendientes ingresados con la etiqueta seleccionada.
+
+
+## Evidencia del piloto
+
+- En SQL Server local se verificó la ingesta de un correo y su adjunto y
+  la deduplicación al repetir la ingesta. Ricol no tiene un ambiente de
+  pruebas consolidado.
+- En producción se verificaron la conexión de Gmail, la ingesta acotada por
+  etiqueta y el procesamiento de un remitente interno. El PDF simulado
+  `PO-26112401` produjo referencia de compra, Incoterm FOB, moneda USD,
+  origen Vietnam, ETD y ETA. El correo conservó una excepción abierta por
+  proveedor desconocido y quedó sin empresa, proveedor ni orden.
+- Un ejercicio local con órdenes ficticias mostró que, al fallar la
+  comparación con el consecutivo interno, el comparador devuelve la única
+  orden abierta del proveedor o un resultado ambiguo si hay varias.
+  La asociación positiva con un correo autorizado de proveedor sigue pendiente.
+
+## Plan de implementación
+
+El vínculo manual, la creación desde correo y las sugerencias quedan
+implementados en el checkout local. El despliegue del piloto sigue
+acotado a la etiqueta. El acceso a correos sin empresa y la ampliación
+del piloto quedan pendientes.
+
+### 1. Vincular a una orden existente
+
+- En el detalle del correo, agregar el selector por consecutivo `IMP`
+  para la excepción de orden no identificada. Reutilizar `SELECCIONAR_ORDEN`
+  y el permiso de resolución existente.
+- Buscar solo órdenes elegibles de la empresa activa y del proveedor
+  confirmado. Validar los mismos límites al guardar. Registrar actor,
+  correo, orden y resolución mediante la auditoría existente. Conservar el
+  vínculo confirmado al reprocesar.
+- Aceptación: una selección válida queda trazada. Una orden de otra empresa
+  o proveedor se rechaza. Dos acciones simultáneas conservan un solo vínculo.
+
+### 2. Crear una orden desde el correo
+
+- Abrir `/importaciones/nueva` desde la Bandeja y cargar por ID el
+  correo de origen dentro de la empresa activa. Reutilizar el formulario y
+  el flujo de alta existentes. Mostrar como sugerencias editables el
+  proveedor confirmado y los campos extraídos compatibles.
+- Exigir autorización para consultar el correo, crear la orden y vincularla.
+  En el guardado, volver a validar correo, proveedor y empresa. Crear la orden,
+  asignar el `IMP`, vincular el correo y registrar la auditoría en una sola
+  transacción. Hacer el vínculo condicional para evitar una segunda orden al
+  reintentar o guardar en paralelo.
+- Aceptación: guardar produce una orden y deja el vínculo al correo.
+  Cancelar conserva el correo disponible. Un error de vínculo revierte la
+  creación y su consecutivo.
+
+### 3. Sugerir proveedores y resolver casos pendientes
+
+- Reutilizar la normalización y el catálogo actuales. Incorporar el
+  identificador fiscal y la razón social cuando puedan extraerse con
+  evidencia del correo o adjunto. Evaluar correo exacto e identificador
+  exacto como señales fuertes. Usar dominio y similitud del nombre como
+  candidatos para confirmación humana. Mostrar la evidencia y los conflictos.
+- Para correos con empresa conocida, consultar candidatos dentro de esa
+  empresa. El acceso a correos sin empresa sigue diferido. Antes de
+  habilitarlo, acordar quién puede ver esos correos, el alcance por empresa
+  y la forma de asignar el futuro permiso en RicoSoft.
+- Aceptación: Hanotech se sugiere en la simulación con el PDF del
+  carbonato y se espera confirmación. Verificar nombres parecidos,
+  remitentes compartidos y señales contradictorias.
+- Cuando el documento trae una referencia explícita que difiere o
+  resulta ambigua, la Bandeja deja el correo en revisión. Comercio
+  Exterior aún debe definir cómo registrar la referencia externa en la orden.
+
+### 4. Validar el flujo completo antes de ampliar el piloto
+
+Validar con Comercio Exterior una orden conocida y una creada desde la
+Bandeja. Luego recorrer expediente, embarque, recepción y liquidación.
+Ejecutar regresiones con datos ficticios en una base local desechable o
+en CI y mantener las pruebas en producción limitadas a mensajes
+controlados por la etiqueta.
+
+
+### Evidencia de la implementación local
+
+- En navegador, una cuenta ficticia vinculó un correo de prueba a
+  `IMP-2026-001`. Otro correo abrió el formulario con Hanotech,
+  Vietnam, USD e Incoterm CIF precargados y quedó vinculado a la orden
+  `IMP-2026-002` al guardarla. Ambos vínculos se comprobaron en SQL
+  Server local desechable.
+- La suite de integración cubre autorización, aislamiento entre empresas,
+  vínculos y altas concurrentes, auditoría y sugerencias con evidencia.
+- Una prueba determinista fuerza el fallo del vínculo después de crear la
+  orden y reservar el `IMP` dentro de la transacción. Comprueba que se
+  revierten la orden, el consecutivo y la auditoría, y que el reintento
+  recibe el mismo `IMP`.
+- Otra prueba registra el mismo proveedor en dos empresas. Con remitente
+  exacto de una de ellas, el registro de la otra no bloquea el correo ni
+  aparece entre sus candidatos.
+- Los dos PDF ficticios de Hanotech devolvieron razón social, PO, Incoterm,
+  moneda, origen, ETD y ETA al pasarlos por el extractor real.
+- Pendiente: validar la extracción con PDF reales de proveedores cuando
+  existan muestras autorizadas.
+
+
+### Disponibilidad comercial de importaciones
+
+En el detalle de la orden, vincula el ítem de Siesa. El formulario de creación
+también conserva el vínculo cuando seleccionas un resultado compatible. Los
+ítems históricos mantienen su referencia y se vinculan desde el detalle.
+
+En cada embarque, abre **Cantidades y disponibilidad del embarque**. Registra
+la cantidad asignada en la misma unidad del inventario Siesa. La suma de los
+embarques no puede exceder lo comprado. Registra la recepción parcial cuando
+ocurra. Para informar cuánto se registró en Siesa, indica el documento de
+ingreso. La conciliación es manual y requiere permiso de recepción.
+
+En **Ventas → ¿Puedo vender esto?**, el disponible libre se calcula con
+existencia y compromisos de Siesa. Los ingresos de importación aparecen por
+embarque, con las cantidades por recibir y recibidas pendientes de registrar.
+Una fecha prevista de venta requiere fuente. Una ETA de puerto se muestra
+por separado. Los ingresos conciliados se excluyen de la proyección.
+
+Antes de arrancar este código, aplica la migración
+`20261124180000_disponibilidad_importaciones` y regenera Prisma Client.

@@ -3,12 +3,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const m = vi.hoisted(() => ({
   correoFindFirst: vi.fn(),
   correoUpdate: vi.fn(),
+  correoUpdateMany: vi.fn(),
+  excepcionUpdateMany: vi.fn(),
   excepcionFindFirst: vi.fn(),
   excepcionUpdate: vi.fn(),
   excepcionCount: vi.fn(),
   proveedorFindFirst: vi.fn(),
   ordenFindFirst: vi.fn(),
   auditoriaCreate: vi.fn(),
+  // auditoria.create del cliente de la transacción interactiva (distinto del
+  // de `prisma`, para comprobar qué se escribe dentro de la transacción).
+  txAuditoriaCreate: vi.fn(),
+  txOrdenCount: vi.fn(),
+  txBloquearOrden: vi.fn(),
   transaction: vi.fn(),
 }));
 
@@ -69,7 +76,21 @@ describe("resolverExcepcionBandeja: validaciones", () => {
       estado: "ABIERTA",
     });
     m.excepcionCount.mockResolvedValue(0);
-    m.transaction.mockResolvedValue([]);
+    m.correoUpdateMany.mockResolvedValue({ count: 1 });
+    m.excepcionUpdateMany.mockResolvedValue({ count: 1 });
+    m.txOrdenCount.mockResolvedValue(1);
+    m.txBloquearOrden.mockResolvedValue([{ id: "ord-1" }]);
+    m.transaction.mockImplementation(async (fn) =>
+      typeof fn === "function"
+        ? fn({
+            $queryRaw: m.txBloquearOrden,
+            ordenCompraIntl: { count: m.txOrdenCount },
+            importacionCorreo: { updateMany: m.correoUpdateMany },
+            importacionExcepcion: { updateMany: m.excepcionUpdateMany },
+            auditoria: { create: m.txAuditoriaCreate },
+          })
+        : [],
+    );
   });
 
   it("rechaza una acción desconocida en vez de marcar la excepción como resuelta", async () => {
@@ -112,12 +133,88 @@ describe("resolverExcepcionBandeja: validaciones", () => {
       res as never,
     );
     expect(res.statusCode).toBe(204);
-    expect(m.correoUpdate).toHaveBeenCalledWith({
-      where: { id: "c1" },
+    expect(m.correoUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "c1", tenantId: "ten-1", ordenCompraId: null }),
       data: expect.objectContaining({ ordenCompraId: "ord-1", estadoProcesamiento: "PENDIENTE" }),
     });
-    const estados = m.correoUpdate.mock.calls.map((c) => c[0].data.estadoProcesamiento);
+    // El paso a RESUELTO del controlador usa importacionCorreo.update, fuera
+    // del vínculo: no debe ocurrir al vincular una orden.
+    const estados = [...m.correoUpdateMany.mock.calls, ...m.correoUpdate.mock.calls].map(
+      (c) => c[0].data.estadoProcesamiento,
+    );
     expect(estados).not.toContain("RESUELTO");
+    expect(m.correoUpdate).not.toHaveBeenCalled();
+  });
+
+  it("SELECCIONAR_ORDEN registra la resolución y el vínculo dentro de la transacción del vínculo", async () => {
+    m.ordenFindFirst.mockResolvedValue({ id: "ord-1", proveedorId: "prov-1" });
+    const res = respuesta();
+    await resolverExcepcionBandeja(
+      peticion({ accion: "SELECCIONAR_ORDEN", ordenCompraId: "ord-1" }),
+      res as never,
+    );
+    expect(res.statusCode).toBe(204);
+    expect(m.transaction).toHaveBeenCalledTimes(1);
+    expect(m.txAuditoriaCreate.mock.calls.map((c) => c[0].data.accion).sort()).toEqual([
+      "IMPORTACION_CORREO_ORDEN_VINCULADA",
+      "IMPORTACION_EXCEPCION_RESUELTA",
+    ]);
+    // Mismo formato que el resto de resoluciones (reportes de auditoría).
+    expect(m.txAuditoriaCreate).toHaveBeenCalledWith({
+      data: {
+        tenantId: "ten-1",
+        usuarioId: "u1",
+        accion: "IMPORTACION_EXCEPCION_RESUELTA",
+        detalle:
+          'Ana resolvió la excepción "ORDEN_NO_IDENTIFICADA" del correo "x" (SELECCIONAR_ORDEN).',
+        entidadTipo: "ImportacionExcepcion",
+        entidadId: "e1",
+        datosAnteriores: JSON.stringify({ estado: "ABIERTA" }),
+        datosNuevos: JSON.stringify({ estado: "RESUELTA", accion: "SELECCIONAR_ORDEN" }),
+      },
+    });
+    expect(m.auditoriaCreate).not.toHaveBeenCalled();
+  });
+
+  it("si el vínculo condicional falla, responde 409 sin registrar la resolución", async () => {
+    m.ordenFindFirst.mockResolvedValue({ id: "ord-1", proveedorId: "prov-1" });
+    m.correoUpdateMany.mockResolvedValue({ count: 0 });
+    const res = respuesta();
+    await resolverExcepcionBandeja(
+      peticion({ accion: "SELECCIONAR_ORDEN", ordenCompraId: "ord-1" }),
+      res as never,
+    );
+    expect(res.statusCode).toBe(409);
+    expect(m.txAuditoriaCreate).not.toHaveBeenCalled();
+    expect(m.auditoriaCreate).not.toHaveBeenCalled();
+  });
+
+  it("una orden anulada entre la validación y el vínculo responde 409 sin tocar el correo", async () => {
+    m.ordenFindFirst.mockResolvedValue({ id: "ord-1", proveedorId: "prov-1" });
+    m.txBloquearOrden.mockResolvedValue([]);
+    const res = respuesta();
+    await resolverExcepcionBandeja(
+      peticion({ accion: "SELECCIONAR_ORDEN", ordenCompraId: "ord-1" }),
+      res as never,
+    );
+    expect(res.statusCode).toBe(409);
+    expect(m.txBloquearOrden).toHaveBeenCalledWith(expect.any(Array), "ord-1", "ten-1");
+    expect(m.txOrdenCount).not.toHaveBeenCalled();
+    expect(m.correoUpdateMany).not.toHaveBeenCalled();
+    expect(m.txAuditoriaCreate).not.toHaveBeenCalled();
+  });
+
+  it("DESCARTAR conserva el evento IMPORTACION_EXCEPCION_RESUELTA con el formato existente", async () => {
+    const res = respuesta();
+    await resolverExcepcionBandeja(peticion({ accion: "DESCARTAR" }), res as never);
+    expect(res.statusCode).toBe(204);
+    expect(m.auditoriaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        accion: "IMPORTACION_EXCEPCION_RESUELTA",
+        entidadId: "e1",
+        datosNuevos: JSON.stringify({ estado: "DESCARTADA", accion: "DESCARTAR" }),
+      }),
+    });
   });
 });
 

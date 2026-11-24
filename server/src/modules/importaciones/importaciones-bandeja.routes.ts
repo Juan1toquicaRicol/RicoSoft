@@ -7,6 +7,7 @@ import { resolverExcepcionSchema } from "./importaciones-bandeja.schemas";
 import {
   listarCorreosBandeja,
   obtenerCorreoBandeja,
+  buscarOrdenesVinculables,
   obtenerAdjuntoBandeja,
   resolverExcepcionBandeja,
   reprocesarCorreoBandeja,
@@ -42,6 +43,11 @@ router.get(
   "/correos/:id",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER),
   obtenerCorreoBandeja,
+);
+router.get(
+  "/correos/:id/ordenes",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER),
+  buscarOrdenesVinculables,
 );
 router.get(
   "/correos/:id/adjuntos/:adjuntoId",
