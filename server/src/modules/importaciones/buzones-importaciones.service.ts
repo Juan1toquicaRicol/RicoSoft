@@ -115,7 +115,10 @@ export async function registrarBuzon(
   }
   const existente = await prisma.buzonImportaciones.findUnique({ where: { direccion: direccion.direccion } });
   if (existente) {
-    return { ok: false, error: { codigo: "CONFLICTO", mensaje: "Ese buzón ya está registrado." } };
+    const mensaje = existente.tenantId === actor.tenantId && existente.estado === "RETIRADO"
+      ? "Ese buzón está retirado. Puedes restaurarlo desde Buzones retirados."
+      : "Ese buzón ya está registrado.";
+    return { ok: false, error: { codigo: "CONFLICTO", mensaje } };
   }
 
   const buzon = await prisma.$transaction(async (tx) => {
@@ -257,11 +260,32 @@ export async function pausarBuzon(buzon: BuzonImportaciones, actor: ActorBuzon):
   return cambiarEstado(buzon, actor, "PAUSADO", {}, "IMPORTACION_BUZON_PAUSADO");
 }
 
+export async function retirarBuzon(buzon: BuzonImportaciones, actor: ActorBuzon): Promise<ResultadoBuzon> {
+  if (buzon.estado === "RETIRADO") {
+    return { ok: false, error: errorEstado("El buzón ya está retirado.") };
+  }
+  return cambiarEstado(buzon, actor, "RETIRADO", {}, "IMPORTACION_BUZON_RETIRADO");
+}
+
+export async function restaurarBuzon(buzon: BuzonImportaciones, actor: ActorBuzon): Promise<ResultadoBuzon> {
+  if (buzon.estado !== "RETIRADO") {
+    return { ok: false, error: errorEstado("Solo se restauran buzones retirados.") };
+  }
+  return cambiarEstado(buzon, actor, "REGISTRADO", {
+    aprobadoPorId: null,
+    etiquetaId: null,
+    etiquetaNombre: null,
+  }, "IMPORTACION_BUZON_RESTAURADO");
+}
+
 export async function cambiarResponsableBuzon(
   buzon: BuzonImportaciones,
   actor: ActorBuzon,
   usuarioId: string | null,
 ): Promise<ResultadoBuzon> {
+  if (buzon.estado === "RETIRADO") {
+    return { ok: false, error: errorEstado("Restaura el buzón antes de cambiar su responsable.") };
+  }
   if (usuarioId && !(await responsableValido(actor.tenantId, usuarioId))) {
     return {
       ok: false,

@@ -295,6 +295,46 @@ describe("buzones de la Bandeja (base real)", () => {
     expect(prueba.llamadas.conexion).toBe(1);
   });
 
+  it("retirar un buzón conserva su origen, impide nuevas lecturas y exige aprobación al restaurarlo", async () => {
+    const app = createApp();
+    const admin = await auth(responsableGisela, tenantRicolId);
+    const ajeno = await auth(usuarioAjeno, tenantOtroId);
+    const sinPermiso = await auth(responsableCompras, tenantRicolId);
+    const ejemplo = mensaje("antes-de-retirar");
+    const proveedor = falso([ejemplo]);
+    _establecerFabricaProveedorParaTests((direccion) =>
+      direccion === dir("logistica") ? proveedor.proveedor : falso([]).proveedor,
+    );
+    await ejecutarCicloIngestaCorreos();
+    const id = buzonIds.logistica;
+    const base = api + "/operacion/buzones";
+    const ruta = base + "/" + id;
+    expect((await request(app).post(ruta + "/retirar").set("Authorization", ajeno)).status).toBe(403);
+    expect((await request(app).post(ruta + "/retirar").set("Authorization", sinPermiso)).status).toBe(403);
+    const retirado = await request(app).post(ruta + "/retirar").set("Authorization", admin);
+    expect(retirado.status).toBe(200);
+    expect(retirado.body.buzon.estado).toBe("RETIRADO");
+    await ejecutarCicloIngestaCorreos();
+    expect(proveedor.llamadas.listados).toBe(1);
+    expect((await request(app).post(ruta + "/conexion").set("Authorization", admin)).status).toBe(409);
+    expect((await request(app).post(ruta + "/activar").set("Authorization", admin)).status).toBe(409);
+    const origen = await prisma.importacionCorreoOrigen.findFirst({
+      where: { buzonId: id, correo: { messageId: ejemplo.messageId } },
+    });
+    expect(origen).not.toBeNull();
+    const listado = await request(app).get(base).set("Authorization", admin);
+    expect(listado.body.buzones).toContainEqual(expect.objectContaining({ id, estado: "RETIRADO" }));
+
+    const restaurado = await request(app).post(ruta + "/restaurar").set("Authorization", admin);
+    expect(restaurado.status).toBe(200);
+    expect(restaurado.body.buzon).toMatchObject({ id, estado: "REGISTRADO", etiquetaId: null });
+    expect((await request(app).post(ruta + "/conexion").set("Authorization", admin)).status).toBe(409);
+    expect(await prisma.importacionCorreoOrigen.count({ where: { buzonId: id } })).toBe(1);
+    expect(await prisma.auditoria.count({
+      where: { tenantId: tenantRicolId, accion: { in: ["IMPORTACION_BUZON_RETIRADO", "IMPORTACION_BUZON_RESTAURADO"] } },
+    })).toBe(2);
+  });
+
   it("reprocesa manualmente un correo histórico de Ricol y permite reasignarlo", async () => {
     const app = createApp();
     const admin = await auth(responsableGisela, tenantRicolId);

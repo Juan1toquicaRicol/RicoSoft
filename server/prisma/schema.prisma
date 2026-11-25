@@ -2162,7 +2162,7 @@ model BuzonImportaciones {
   /// ID y nombre de la etiqueta Gmail de este buzón; null mientras no se elija.
   etiquetaId           String?                   @db.VarChar(128)
   etiquetaNombre       String?                   @db.VarChar(255)
-  /// REGISTRADO | APROBADO | ACTIVO | PAUSADO — validado en código.
+  /// REGISTRADO | APROBADO | ACTIVO | PAUSADO | RETIRADO — validado en código.
   estado               String                    @default("REGISTRADO") @db.VarChar(20)
   /// Empresa dueña de los correos de este buzón (Ricol). Obligatoria.
   tenantId             String                    @db.UniqueIdentifier

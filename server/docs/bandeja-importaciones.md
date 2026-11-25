@@ -127,7 +127,10 @@ retención de datos del proveedor de IA, etc.) antes de habilitarse.
 En **Configuración → Monitoreo → Correo de Importaciones**, Sistemas registra
 el buzón, lo aprueba, prueba la conexión, guarda la etiqueta de esa cuenta,
 selecciona el responsable y la activa. Se pueden activar o pausar cuentas
-individuales. El panel muestra la última ejecución y el error por buzón.
+individuales. En **Gestionar → Retirar buzón** se saca una cuenta de la lista
+operativa y se conservan sus correos y orígenes. Desde **Buzones retirados**
+puedes restaurarla. La cuenta vuelve a requerir aprobación y etiqueta antes
+de activarla. El panel muestra la última ejecución y el error por buzón.
 La programación general permite activar lectura y procesamiento y elegir
 la frecuencia. Los valores iniciales por buzón son 25 correos, 50 adjuntos
 y 120 segundos por ciclo. Un disparo del cron se omite si otro sigue activo.

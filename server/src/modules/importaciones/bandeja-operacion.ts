@@ -26,6 +26,8 @@ import {
   pausarBuzon,
   probarConexionBuzon,
   registrarBuzon,
+  retirarBuzon,
+  restaurarBuzon,
   filtroResponsableBuzon,
   type ErrorBuzon,
 } from "./buzones-importaciones.service";
@@ -294,6 +296,23 @@ operacionBandeja.post("/buzones/:id/pausar", async (req: AuthenticatedRequest, r
     next(e);
   }
 });
+
+for (const [accion, cambiar] of [
+  ["retirar", retirarBuzon],
+  ["restaurar", restaurarBuzon],
+] as const) {
+  operacionBandeja.post("/buzones/:id/" + accion, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const buzon = await cargarBuzonDelOperador(req, res);
+      if (!buzon) return;
+      const resultado = await cambiar(buzon, { id: req.user!.id, tenantId: req.user!.tenantId });
+      if (!resultado.ok) return responderErrorBuzon(res, resultado.error);
+      res.json({ buzon: vistaBuzon(resultado.buzon) });
+    } catch (error) {
+      next(error);
+    }
+  });
+}
 
 operacionBandeja.put("/buzones/:id/responsable", async (req: AuthenticatedRequest, res, next) => {
   const cuerpo = z

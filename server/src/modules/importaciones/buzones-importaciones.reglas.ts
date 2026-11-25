@@ -8,7 +8,7 @@
  * sin aprobación no se consulta Gmail ni para probar la conexión.
  */
 
-export const ESTADOS_BUZON = ["REGISTRADO", "APROBADO", "ACTIVO", "PAUSADO"] as const;
+export const ESTADOS_BUZON = ["REGISTRADO", "APROBADO", "ACTIVO", "PAUSADO", "RETIRADO"] as const;
 export type EstadoBuzon = (typeof ESTADOS_BUZON)[number];
 
 /** Dominio al que deben pertenecer las direcciones de buzón. */
