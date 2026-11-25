@@ -99,7 +99,7 @@ function FilaBuzon({
   usuarios: ResponsableCorreo[];
   onBuzon: (buzon: Buzon) => void;
 }) {
-  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([]);
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[] | null>(null);
   const [etiqueta, setEtiqueta] = useState(buzon.etiquetaId ?? "");
   const [responsable, setResponsable] = useState(buzon.responsableUsuarioId ?? "");
   const [ocupado, setOcupado] = useState(false);
@@ -108,15 +108,21 @@ function FilaBuzon({
   async function ejecutar(accion: string, cuerpo?: object) {
     setOcupado(true);
     setMensaje("");
+    if (accion === "conexion") setEtiquetas(null);
     try {
       const data = await fetchAuth(rutaOperacionCorreo + "/buzones/" + buzon.id + "/" + accion, {
         method: cuerpo ? "PUT" : "POST",
         ...(cuerpo ? { body: JSON.stringify(cuerpo) } : {}),
       });
       if (data.buzon) onBuzon(data.buzon);
+      if (accion === "etiqueta") setMensaje("Etiqueta guardada.");
       if (data.etiquetas) {
-        setEtiquetas(data.etiquetas);
-        setMensaje("Conexión verificada con Gmail.");
+        const opciones: Etiqueta[] = data.etiquetas;
+        setEtiquetas(opciones);
+        setEtiqueta((actual) =>
+          opciones.some((opcion) => opcion.id === actual) ? actual : (buzon.etiquetaId ?? ""),
+        );
+        if (data.etiquetas.length > 0) setMensaje("Etiquetas de Gmail cargadas.");
       }
     } catch (error) {
       setMensaje(error instanceof Error ? error.message : "No se pudo actualizar el buzón.");
@@ -126,6 +132,9 @@ function FilaBuzon({
   }
 
   const estado = estados[buzon.estado];
+  const editable = buzon.estado === "APROBADO" || buzon.estado === "PAUSADO";
+  const etiquetaSeleccionada = etiquetas?.some((opcion) => opcion.id === etiqueta);
+  const etiquetaGuardadaEnLista = etiquetas?.some((opcion) => opcion.id === buzon.etiquetaId);
   const nombreResponsable = buzon.responsableUsuarioId
     ? (usuarios.find((u) => u.id === buzon.responsableUsuarioId)?.nombre ?? "Responsable anterior")
     : "Sin asignar";
@@ -164,19 +173,15 @@ function FilaBuzon({
           )}
         </div>
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-slate-600">
-          <span className="hidden sm:inline">Gestionar</span>
+          <span>Gestionar</span>
           <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
         </span>
       </summary>
       <fieldset disabled={ocupado} className="space-y-4 border-t border-slate-200 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {buzon.estado === "REGISTRADO" ? (
+          {buzon.estado === "REGISTRADO" && (
             <Button size="sm" onClick={() => ejecutar("aprobar")}>
               Aprobar buzón
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => ejecutar("conexion")}>
-              Probar conexión
             </Button>
           )}
           {buzon.estado === "ACTIVO" ? (
@@ -191,33 +196,61 @@ function FilaBuzon({
             )
           )}
         </div>
-        {buzon.estado !== "ACTIVO" && etiquetas.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex flex-wrap items-center gap-2 text-sm">
-              Etiqueta de Gmail
-              <select
-                className={estiloSelector}
-                value={etiqueta}
-                onChange={(e) => setEtiqueta(e.target.value)}
-              >
-                <option value="">Selecciona una etiqueta</option>
-                {etiquetas.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!etiqueta || etiqueta === buzon.etiquetaId}
-              onClick={() => ejecutar("etiqueta", { etiquetaId: etiqueta })}
-            >
-              Guardar etiqueta
-            </Button>
-          </div>
-        )}
+        <section aria-label="Etiqueta de Gmail" className="space-y-2 rounded-md bg-slate-50 p-3">
+          {buzon.estado === "REGISTRADO" ? (
+            <p className="text-sm text-slate-600">
+              Aprueba el buzón para consultar sus etiquetas de Gmail.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium text-slate-700">
+                Etiqueta de Gmail
+                <select
+                  className={estiloSelector}
+                  value={editable ? etiqueta : (buzon.etiquetaId ?? "")}
+                  disabled={!editable || !etiquetas?.length}
+                  onChange={(e) => setEtiqueta(e.target.value)}
+                >
+                  <option value="">Selecciona una etiqueta</option>
+                  {buzon.etiquetaId && !etiquetaGuardadaEnLista && (
+                    <option value={buzon.etiquetaId}>
+                      {buzon.etiquetaNombre ?? buzon.etiquetaId}
+                    </option>
+                  )}
+                  {etiquetas?.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button size="sm" variant="outline" onClick={() => ejecutar("conexion")}>
+                {etiquetas ? "Actualizar etiquetas" : "Cargar etiquetas"}
+              </Button>
+              {editable && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!etiquetaSeleccionada || etiqueta === buzon.etiquetaId}
+                  onClick={() => ejecutar("etiqueta", { etiquetaId: etiqueta })}
+                >
+                  Guardar etiqueta
+                </Button>
+              )}
+            </div>
+          )}
+          {buzon.estado === "ACTIVO" && (
+            <p className="text-xs text-slate-600">
+              Pausa el buzón para cambiar la etiqueta de lectura.
+            </p>
+          )}
+          {etiquetas?.length === 0 && (
+            <p role="status" className="text-sm text-slate-700">
+              Gmail respondió y este buzón no tiene etiquetas personalizadas. Crea una etiqueta en
+              Gmail y actualiza la lista aquí.
+            </p>
+          )}
+        </section>
         <div className="flex flex-wrap items-center gap-2">
           <SelectorResponsable usuarios={usuarios} valor={responsable} onChange={setResponsable} />
           <Button
