@@ -75,3 +75,26 @@ export function leerConfigCrossChex(): CrossChexConfig {
 export function construirConnectionString(config: CrossChexConfig): string {
   return `Driver={${config.driverName}};Dbq=${config.mdbPath};ConnectTimeout=${config.connectTimeoutSeconds};`;
 }
+
+/**
+ * Propietario EXPLÍCITO del CrossChex.mdb (decisión D-01, 2026-11-20). Hay un
+ * solo .mdb por instalación y RicoSoft no puede deducir a qué empresa pertenece:
+ * el tenant dueño se declara en el servidor con CROSSCHEX_TENANT_PROPIETARIO_ID
+ * (id del Tenant). Nunca se toma del cliente ni se asume por ser la única fuente
+ * activa o por tener el permiso `biometrico.configurar`.
+ *
+ * Devuelve null si no está configurado: en ese caso la sincronización (job,
+ * manual y CLI de importación), el dry-run, los nombres de usuarios que ve un
+ * tenant y el script de diagnóstico scripts/explore-crosschex.ts (SEG-01, que
+ * además exige que el id sea un Tenant existente) fallan cerrados.
+ */
+export function leerTenantPropietarioCrossChex(): string | null {
+  const valor = process.env.CROSSCHEX_TENANT_PROPIETARIO_ID?.trim();
+  return valor ? valor : null;
+}
+
+/** true solo si hay propietario configurado y coincide con `tenantId`. */
+export function esTenantPropietarioCrossChex(tenantId: string): boolean {
+  const propietario = leerTenantPropietarioCrossChex();
+  return propietario !== null && propietario.toLowerCase() === tenantId.toLowerCase();
+}

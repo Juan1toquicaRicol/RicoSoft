@@ -324,6 +324,82 @@ describe("biometrico-asociaciones.controller", () => {
         expect.objectContaining({ where: { id: "assoc-1" }, data: { activo: false } }),
       );
     });
+
+    it("reactivar exige que el colaborador siga vigente (no eliminado ni liquidado): si no, 409 sin actualizar", async () => {
+      empleadoBiometricoFindFirstMock.mockResolvedValue({
+        id: "assoc-1",
+        tenantId: "tenant-A",
+        empleadoId: "empleado-1",
+        externalUserId: "33",
+        activo: false,
+      });
+      empleadoFindFirstMock.mockResolvedValue(null);
+
+      const { actualizarAsociacionBiometrica } =
+        await import("./biometrico-asociaciones.controller");
+      const res = fakeRes();
+      await actualizarAsociacionBiometrica(
+        fakeReq({ params: { id: "assoc-1" }, body: { activo: true } }),
+        res,
+      );
+
+      expect(empleadoFindFirstMock.mock.calls[0][0].where).toEqual({
+        id: "empleado-1",
+        tenantId: "tenant-A",
+        eliminado: false,
+        estado: { not: "Liquidado" },
+      });
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(empleadoBiometricoUpdateMock).not.toHaveBeenCalled();
+    });
+
+    it("reactivar con el colaborador vigente sí actualiza", async () => {
+      empleadoBiometricoFindFirstMock.mockResolvedValue({
+        id: "assoc-1",
+        tenantId: "tenant-A",
+        empleadoId: "empleado-1",
+        externalUserId: "33",
+        activo: false,
+      });
+      empleadoFindFirstMock.mockResolvedValue({ id: "empleado-1" });
+      empleadoBiometricoUpdateMock.mockResolvedValue({
+        id: "assoc-1",
+        proveedor: "anviz",
+        externalUserId: "33",
+        activo: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        empleado: null,
+      });
+
+      const { actualizarAsociacionBiometrica } =
+        await import("./biometrico-asociaciones.controller");
+      const res = fakeRes();
+      await actualizarAsociacionBiometrica(
+        fakeReq({ params: { id: "assoc-1" }, body: { activo: true } }),
+        res,
+      );
+
+      expect(empleadoBiometricoUpdateMock).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalledWith(409);
+    });
+  });
+
+  describe("crearAsociacionBiometrica con colaborador liquidado", () => {
+    it("409 sin crear la asociación", async () => {
+      fuenteFindFirstMock.mockResolvedValue(FUENTE_A);
+      empleadoFindFirstMock.mockResolvedValue({ ...EMPLEADO_A, estado: "Liquidado" });
+      const { crearAsociacionBiometrica } = await import("./biometrico-asociaciones.controller");
+      const res = fakeRes();
+      await crearAsociacionBiometrica(
+        fakeReq({
+          body: { fuenteId: "fuente-1", externalUserId: "33", empleadoId: "empleado-1" },
+        }),
+        res,
+      );
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(empleadoBiometricoCreateMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("eliminarAsociacionBiometrica", () => {

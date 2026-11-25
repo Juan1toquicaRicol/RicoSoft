@@ -81,3 +81,28 @@ describe("construirConnectionString", () => {
     );
   });
 });
+
+describe("propietario explícito del CrossChex.mdb (D-01)", () => {
+  const envOriginal = { ...process.env };
+  afterEach(() => {
+    process.env = { ...envOriginal };
+  });
+
+  it("sin CROSSCHEX_TENANT_PROPIETARIO_ID (o vacío) no hay propietario: nadie es dueño", async () => {
+    const { leerTenantPropietarioCrossChex, esTenantPropietarioCrossChex } =
+      await import("./crosschex.config");
+    for (const valor of [undefined, "", "   "]) {
+      if (valor === undefined) delete process.env.CROSSCHEX_TENANT_PROPIETARIO_ID;
+      else process.env.CROSSCHEX_TENANT_PROPIETARIO_ID = valor;
+      expect(leerTenantPropietarioCrossChex()).toBeNull();
+      expect(esTenantPropietarioCrossChex("tenant-A")).toBe(false);
+    }
+  });
+
+  it("solo el tenant configurado es propietario (sin distinguir mayúsculas del UUID)", async () => {
+    const { esTenantPropietarioCrossChex } = await import("./crosschex.config");
+    process.env.CROSSCHEX_TENANT_PROPIETARIO_ID = " AAAA-1111 ";
+    expect(esTenantPropietarioCrossChex("aaaa-1111")).toBe(true);
+    expect(esTenantPropietarioCrossChex("bbbb-2222")).toBe(false);
+  });
+});

@@ -297,7 +297,7 @@ function DepartamentosConfigPage() {
                       (d.enUso ? (
                         <span
                           className="p-1.5 inline-block text-slate-300 cursor-not-allowed align-middle"
-                          title="No se puede eliminar: tiene usuarios, membresías, módulos, colaboradores, proveedores o perfiles funcionales asignados"
+                          title="No se puede eliminar: tiene usuarios, membresías, módulos, colaboradores, proveedores, perfiles funcionales o cargos de Gestión Humana asignados"
                         >
                           <Trash2 className="h-3.5 w-3.5 inline" />
                         </span>

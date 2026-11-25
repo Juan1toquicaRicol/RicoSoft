@@ -7,9 +7,26 @@ import {
 } from "../lib/job-registry";
 import { prisma } from "../config/prisma";
 import {
+  FuenteBiometricaSinPropietarioError,
+  idsCorridasBiometricoActivasEnProceso,
   sincronizarFuenteBiometrica,
   SincronizacionEnCursoError,
 } from "../modules/gestion-humana/biometrico-import.service";
+import { recuperarSincronizacionesBiometricoInterrumpidas } from "./crosschex-recovery";
+
+/**
+ * Mensajes que van al estado GLOBAL del job (/api/monitoreo/jobs, visible para
+ * cualquier tenant con acceso a Monitoreo): nunca llevan el nombre de la fuente
+ * ni el texto técnico del error (puede incluir la ruta del .mdb). El detalle
+ * queda en la consola del servidor y en el historial de sincronizaciones de la
+ * fuente, que solo ve su tenant.
+ */
+const MENSAJE_MONITOREO_FALLO =
+  "La sincronización biométrica falló. Revisa el historial de sincronizaciones de la fuente.";
+const MENSAJE_MONITOREO_SIN_PROPIETARIO =
+  "La sincronización biométrica está detenida: el servidor no tiene autorizado al propietario del archivo CrossChex (CROSSCHEX_TENANT_PROPIETARIO_ID).";
+const MENSAJE_MONITOREO_RECUPERADA =
+  "Se liberó una sincronización biométrica que había quedado EN_CURSO más tiempo del permitido.";
 
 /**
  * Scheduler in-process con node-cron (Fase 5). Solo dispara el intento de
@@ -54,6 +71,25 @@ export function leerConfigSchedulerCrossChex(): ConfigSchedulerCrossChex {
 export async function ejecutarCicloSincronizacionCrossChex(
   tamanoLote = TAMANO_LOTE_DEFAULT,
 ): Promise<void> {
+  // Libera candados EN_CURSO huérfanos (más viejos que el umbral) en cada ciclo,
+  // no solo al arrancar: si no, una corrida que quedó EN_CURSO con menos del
+  // umbral al arrancar, o cuyo cierre falló, bloquearía la fuente para siempre
+  // mientras Monitoreo muestra OK. Las corridas vivas de este proceso no se tocan.
+  try {
+    const recuperadas = await recuperarSincronizacionesBiometricoInterrumpidas({
+      excluirIds: idsCorridasBiometricoActivasEnProceso(),
+      momento: "ciclo",
+    });
+    if (recuperadas > 0) {
+      console.error(
+        `[crosschex-sync] ${recuperadas} sincronización(es) EN_CURSO huérfana(s) marcada(s) como FALLIDO.`,
+      );
+      reportarFalloEnCorrida("crosschex-sync", MENSAJE_MONITOREO_RECUPERADA);
+    }
+  } catch (error) {
+    console.error("[crosschex-sync] Error recuperando sincronizaciones huérfanas:", error);
+  }
+
   const fuentes = await prisma.fuenteBiometrica.findMany({
     where: { activa: true },
     select: { nombre: true },
@@ -77,7 +113,7 @@ export async function ejecutarCicloSincronizacionCrossChex(
         console.error(
           `[crosschex-sync] "${fuente.nombre}" terminó FALLIDA: ${reporte.mensajeError}`,
         );
-        reportarFalloEnCorrida("crosschex-sync", `"${fuente.nombre}": ${reporte.mensajeError}`);
+        reportarFalloEnCorrida("crosschex-sync", MENSAJE_MONITOREO_FALLO);
       } else if (reporte.leidos > 0) {
         console.log(
           `[crosschex-sync] "${fuente.nombre}": ${reporte.leidos} leídas, ${reporte.insertados} insertadas, ` +
@@ -87,7 +123,12 @@ export async function ejecutarCicloSincronizacionCrossChex(
       // reporte.leidos === 0 y estado COMPLETADO: no hay nada nuevo, no se
       // loguea nada para no llenar la consola cada minuto sin novedad.
     } catch (error) {
-      if (error instanceof SincronizacionEnCursoError) {
+      if (error instanceof FuenteBiometricaSinPropietarioError) {
+        // D-01: falla cerrado. Se avisa cada ciclo hasta que se configure el
+        // propietario explícito; no se lee el .mdb.
+        console.error(`[crosschex-sync] Omitida: ${error.message}`);
+        reportarFalloEnCorrida("crosschex-sync", MENSAJE_MONITOREO_SIN_PROPIETARIO);
+      } else if (error instanceof SincronizacionEnCursoError) {
         // Esperado bajo concurrencia (rule 11: una corrida que tarda más de
         // un minuto hace que el siguiente tick encuentre el lock ocupado).
         // No es un error de la aplicación, solo se deja constancia en info.
@@ -96,10 +137,7 @@ export async function ejecutarCicloSincronizacionCrossChex(
         );
       } else {
         console.error(`[crosschex-sync] Error inesperado sincronizando "${fuente.nombre}":`, error);
-        reportarFalloEnCorrida(
-          "crosschex-sync",
-          `"${fuente.nombre}": ${error instanceof Error ? error.message : String(error)}`,
-        );
+        reportarFalloEnCorrida("crosschex-sync", MENSAJE_MONITOREO_FALLO);
       }
     }
   }

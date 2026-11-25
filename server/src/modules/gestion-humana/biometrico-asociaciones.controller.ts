@@ -18,6 +18,9 @@ import { usuariosDelBiometrico, type UsuarioBiometrico } from "./biometrico-usua
  * `proveedor` derivado de él) al construir el registro y al filtrar.
  */
 
+const MENSAJE_ASOCIACION_COLABORADOR_NO_VIGENTE =
+  "El colaborador está liquidado o eliminado: no se le puede asociar ni reactivar un usuario biométrico.";
+
 type AsociacionConRelaciones = EmpleadoBiometrico & {
   empleado: { id: string; nombres: string; apellidos: string; documento: string } | null;
 };
@@ -145,6 +148,9 @@ export async function crearAsociacionBiometrica(req: AuthenticatedRequest, res: 
       where: { id: empleadoId, tenantId, eliminado: false },
     });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
+    if (empleado.estado === "Liquidado") {
+      return res.status(409).json({ message: MENSAJE_ASOCIACION_COLABORADOR_NO_VIGENTE });
+    }
 
     const asociacion = await prisma.empleadoBiometrico.create({
       data: {
@@ -217,6 +223,23 @@ export async function actualizarAsociacionBiometrica(req: AuthenticatedRequest, 
     const asociacion = await prisma.empleadoBiometrico.findFirst({ where: { id, tenantId } });
     if (!asociacion)
       return res.status(404).json({ message: "Asociación biométrica no encontrada." });
+
+    // Reactivar solo si el colaborador sigue vigente: liquidar o eliminar
+    // desactiva sus vínculos y no deben volver a recibir marcaciones.
+    if (activo && !asociacion.activo) {
+      const vigente = await prisma.empleado.findFirst({
+        where: {
+          id: asociacion.empleadoId,
+          tenantId,
+          eliminado: false,
+          estado: { not: "Liquidado" },
+        },
+        select: { id: true },
+      });
+      if (!vigente) {
+        return res.status(409).json({ message: MENSAJE_ASOCIACION_COLABORADOR_NO_VIGENTE });
+      }
+    }
 
     const actualizada = await prisma.empleadoBiometrico.update({
       where: { id },

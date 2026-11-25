@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import {
+  esTenantPropietarioCrossChex,
+  leerTenantPropietarioCrossChex,
   obtenerMarcacionesDesde,
   mapearTipoMarcacion,
   normalizarBit,
@@ -58,6 +60,106 @@ export class FuenteBiometricaNoEncontradaError extends Error {
   }
 }
 
+/** La fuente existe pero está desactivada: no se sincroniza (ni por el job, ni a
+ * mano, ni desde el CLI). Para importar, primero hay que activarla. */
+export class FuenteBiometricaInactivaError extends Error {
+  constructor(fuenteNombre: string) {
+    super(
+      `La fuente biométrica "${fuenteNombre}" está desactivada. Actívala antes de sincronizar o importar.`,
+    );
+    this.name = "FuenteBiometricaInactivaError";
+  }
+}
+
+/** Hay más de una fuente activa en la instalación (un único CrossChex.mdb): se
+ * falla cerrado. El mensaje no revela nombres ni tenants. */
+export class VariasFuentesBiometricasActivasError extends Error {
+  constructor(activas: number) {
+    super(
+      `Hay ${activas} fuentes biométricas activas y solo se admite una por instalación (un único CrossChex.mdb). No se sincronizó ninguna; desactiva las sobrantes.`,
+    );
+    this.name = "VariasFuentesBiometricasActivasError";
+  }
+}
+
+/**
+ * D-01: el .mdb solo se lee para la fuente cuyo tenant esté declarado en el
+ * servidor como propietario (CROSSCHEX_TENANT_PROPIETARIO_ID). Sin propietario
+ * configurado, o si la fuente es de otro tenant, se falla cerrado ANTES de crear
+ * el log o abrir el .mdb. El mensaje no revela quién es el propietario.
+ */
+export class FuenteBiometricaSinPropietarioError extends Error {
+  readonly propietarioConfigurado: boolean;
+  constructor(propietarioConfigurado: boolean) {
+    super(
+      propietarioConfigurado
+        ? "Esta fuente biométrica no está autorizada en el servidor para leer el archivo CrossChex. No se sincronizó nada."
+        : "El servidor no tiene configurado el propietario del archivo CrossChex (CROSSCHEX_TENANT_PROPIETARIO_ID). No se sincronizó nada.",
+    );
+    this.name = "FuenteBiometricaSinPropietarioError";
+    this.propietarioConfigurado = propietarioConfigurado;
+  }
+}
+
+function exigirPropietarioCrossChex(fuente: { tenantId: string }): void {
+  if (!esTenantPropietarioCrossChex(fuente.tenantId)) {
+    throw new FuenteBiometricaSinPropietarioError(leerTenantPropietarioCrossChex() !== null);
+  }
+}
+
+/** El script de diagnóstico de consola no puede leer el .mdb (SEG-01). */
+export class LecturaCrossChexNoAutorizadaError extends Error {
+  constructor(motivo: "sin-propietario" | "propietario-inexistente") {
+    super(
+      motivo === "sin-propietario"
+        ? "El servidor no tiene configurado el propietario del archivo CrossChex (CROSSCHEX_TENANT_PROPIETARIO_ID). No se leyó el archivo."
+        : "CROSSCHEX_TENANT_PROPIETARIO_ID no corresponde a ninguna empresa registrada. No se leyó el archivo.",
+    );
+    this.name = "LecturaCrossChexNoAutorizadaError";
+  }
+}
+
+const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * SEG-01 (decisión 2026-11-20): el script de diagnóstico local
+ * (scripts/explore-crosschex.ts) tampoco abre el .mdb sin un propietario
+ * explícito, y ese propietario debe ser un Tenant existente. La consola no es
+ * una vía para saltarse D-01.
+ */
+export async function exigirPropietarioCrossChexConfigurado(): Promise<void> {
+  const propietario = leerTenantPropietarioCrossChex();
+  if (propietario === null) throw new LecturaCrossChexNoAutorizadaError("sin-propietario");
+  // Un valor que no es un uuid ni siquiera se consulta (SQL Server rechazaría la conversión).
+  const tenant = FORMATO_UUID.test(propietario)
+    ? await prisma.tenant.findUnique({ where: { id: propietario }, select: { id: true } })
+    : null;
+  if (!tenant) throw new LecturaCrossChexNoAutorizadaError("propietario-inexistente");
+}
+
+/** La corrida fue liberada (marcada FALLIDO) por la recuperación de corridas
+ * huérfanas mientras seguía viva: se detiene antes de escribir el siguiente lote
+ * para no correr en paralelo con la corrida que tomó el candado después. */
+export class CorridaBiometricaLiberadaError extends Error {
+  constructor() {
+    super(
+      "La corrida fue liberada por la recuperación de sincronizaciones interrumpidas; se detuvo sin escribir más lotes.",
+    );
+    this.name = "CorridaBiometricaLiberadaError";
+  }
+}
+
+/**
+ * Ids de SincronizacionBiometricoLog que ESTE proceso está ejecutando. La
+ * recuperación periódica (crosschex-recovery.ts) no las toca aunque superen el
+ * umbral: una importación histórica larga sigue viva y no es huérfana.
+ */
+const corridasActivasEnProceso = new Set<string>();
+
+export function idsCorridasBiometricoActivasEnProceso(): string[] {
+  return [...corridasActivasEnProceso];
+}
+
 async function obtenerFuenteOrThrow(fuenteNombre: string) {
   const fuente = await prisma.fuenteBiometrica.findUnique({ where: { nombre: fuenteNombre } });
   if (!fuente) throw new FuenteBiometricaNoEncontradaError(fuenteNombre);
@@ -87,6 +189,8 @@ export async function dryRunImportacionHistorica(
   tamanoLote = TAMANO_LOTE_DEFAULT,
 ): Promise<ReporteDryRunBiometrico> {
   const fuente = await obtenerFuenteOrThrow(fuenteNombre);
+  // El dry-run también lee el .mdb (userids): misma regla de propietario.
+  exigirPropietarioCrossChex(fuente);
 
   let cursor = fuente.lastProcessedLogId;
   let totalMarcacionesEncontradas = 0;
@@ -190,6 +294,14 @@ export async function sincronizarFuenteBiometrica(
   const tamanoLote = opciones.tamanoLote ?? TAMANO_LOTE_DEFAULT;
   const fuente = await obtenerFuenteOrThrow(fuenteNombre);
 
+  // Las mismas reglas que aplican el job y el endpoint manual viven aquí, para
+  // que ningún llamador (incluido el CLI) pueda saltárselas: solo se sincroniza
+  // una fuente activa y solo si es la única activa de la instalación.
+  if (!fuente.activa) throw new FuenteBiometricaInactivaError(fuenteNombre);
+  exigirPropietarioCrossChex(fuente);
+  const activas = await prisma.fuenteBiometrica.count({ where: { activa: true } });
+  if (activas > 1) throw new VariasFuentesBiometricasActivasError(activas);
+
   const enCursoEnOtraFuente = await prisma.sincronizacionBiometricoLog.count({
     where: { estado: "EN_CURSO", fuenteId: { not: fuente.id } },
   });
@@ -211,6 +323,7 @@ export async function sincronizarFuenteBiometrica(
     }
     throw error;
   }
+  corridasActivasEnProceso.add(log.id);
 
   let cursor = fuente.lastProcessedLogId;
   let leidos = 0;
@@ -234,6 +347,10 @@ export async function sincronizarFuenteBiometrica(
           proveedor: fuente.proveedor,
           externalUserId: { in: idsUnicos },
           activo: true,
+          // Un colaborador eliminado o liquidado no recibe marcaciones nuevas
+          // aunque su vínculo haya quedado activo (datos anteriores a que
+          // liquidar/eliminar desactivaran los vínculos): quedan sin empleado.
+          empleado: { eliminado: false, estado: { not: "Liquidado" } },
         },
         select: {
           externalUserId: true,
@@ -277,6 +394,17 @@ export async function sincronizarFuenteBiometrica(
       // para no reintentar duplicados a propósito en cada re-corrida (más
       // rápido que dejar que el motor rechace uno por uno).
       await prisma.$transaction(async (tx) => {
+        // Si la recuperación liberó esta corrida (la marcó FALLIDO), otra puede
+        // haber tomado ya el candado: no se escribe este lote ni se mueve el cursor.
+        // Es una ESCRITURA (progreso), no una lectura: deja la fila del log
+        // bloqueada hasta el commit del lote, así la recuperación espera a que
+        // el lote termine y no puede liberar la corrida a mitad de él.
+        const { count: sigueEnCurso } = await tx.sincronizacionBiometricoLog.updateMany({
+          where: { id: log.id, estado: "EN_CURSO" },
+          data: { leidos: leidos + lote.length },
+        });
+        if (sigueEnCurso === 0) throw new CorridaBiometricaLiberadaError();
+
         const yaExistentes = await tx.marcacionBiometrica.findMany({
           where: {
             fuenteId: fuente.id,
@@ -308,8 +436,10 @@ export async function sincronizarFuenteBiometrica(
       if (lote.length < tamanoLote) break;
     }
 
-    await prisma.sincronizacionBiometricoLog.update({
-      where: { id: log.id },
+    // updateMany acotado a EN_CURSO: si la recuperación ya la liberó, no se
+    // reescribe el FALLIDO que dejó.
+    const { count: cerrada } = await prisma.sincronizacionBiometricoLog.updateMany({
+      where: { id: log.id, estado: "EN_CURSO" },
       data: {
         estado: "COMPLETADO",
         finalizadoEn: new Date(),
@@ -320,6 +450,23 @@ export async function sincronizarFuenteBiometrica(
         sinEmpleado,
       },
     });
+    if (cerrada === 0) {
+      // Liberada por la recuperación después del último lote: lo importado y el
+      // cursor sí quedaron guardados, pero la corrida no puede informar
+      // COMPLETADO si su log dice FALLIDO.
+      return {
+        fuenteNombre,
+        logIdDesde: log.logIdDesde,
+        logIdHasta: ultimoLogid,
+        leidos,
+        insertados,
+        duplicados,
+        sinEmpleado,
+        erroresCount: 1,
+        estado: "FALLIDO",
+        mensajeError: new CorridaBiometricaLiberadaError().message,
+      };
+    }
 
     return {
       fuenteNombre,
@@ -334,8 +481,8 @@ export async function sincronizarFuenteBiometrica(
     };
   } catch (error) {
     const mensajeError = (error as Error)?.message ?? "Error desconocido";
-    await prisma.sincronizacionBiometricoLog.update({
-      where: { id: log.id },
+    await prisma.sincronizacionBiometricoLog.updateMany({
+      where: { id: log.id, estado: "EN_CURSO" },
       data: {
         estado: "FALLIDO",
         finalizadoEn: new Date(),
@@ -361,6 +508,10 @@ export async function sincronizarFuenteBiometrica(
       estado: "FALLIDO",
       mensajeError,
     };
+  } finally {
+    // Si los updates de cierre fallaron y la fila quedó EN_CURSO, deja de estar
+    // protegida: la recuperación periódica la libera al superar el umbral.
+    corridasActivasEnProceso.delete(log.id);
   }
 }
 

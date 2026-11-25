@@ -59,3 +59,22 @@ export async function obtenerTenantPorCorreo(correo: string): Promise<TenantPorD
   if (!dominio) return null;
   return obtenerTenantPorDominio(dominio);
 }
+
+/**
+ * Empresa del grupo (RC/FL/GR) del tenant autenticado, derivada en el SERVIDOR:
+ * Tenant.dominioCorporativo (la misma fuente de verdad que decide a qué tenant
+ * pertenece un dominio en el autoregistro) cruzado con DOMINIO_POR_EMPRESA.
+ * Devuelve null si el tenant no tiene dominio corporativo o si su dominio no es
+ * de ninguna empresa del grupo: el llamador debe fallar cerrado, nunca suponer
+ * una empresa por defecto (ni aceptar la que mande el cliente).
+ */
+export async function empresaIdDelTenant(tenantId: string): Promise<string | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { dominioCorporativo: true },
+  });
+  const dominio = tenant?.dominioCorporativo?.trim().toLowerCase();
+  if (!dominio) return null;
+  const empresa = Object.entries(DOMINIO_POR_EMPRESA).find(([, d]) => d === dominio);
+  return empresa?.[0] ?? null;
+}

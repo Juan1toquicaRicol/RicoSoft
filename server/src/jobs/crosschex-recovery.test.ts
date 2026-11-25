@@ -82,4 +82,28 @@ describe("recuperarSincronizacionesBiometricoInterrumpidas", () => {
     expect(args.data.finalizadoEn).toBeInstanceOf(Date);
     expect(args.data.mensajeError).toMatch(/EN_CURSO/);
   });
+
+  it("excluye las corridas que el proceso sigue ejecutando (no son huérfanas) y lo indica en el mensaje del ciclo", async () => {
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
+
+    await recuperarSincronizacionesBiometricoInterrumpidas({
+      excluirIds: ["log-vivo"],
+      momento: "ciclo",
+    });
+
+    const args = updateManyMock.mock.calls[0][0];
+    expect(args.where.id).toEqual({ notIn: ["log-vivo"] });
+    expect(args.where.estado).toBe("EN_CURSO");
+    expect(args.data.mensajeError).toMatch(/ciclo posterior/);
+  });
+
+  it("sin exclusiones no agrega filtro por id (al arrancar no hay corridas vivas)", async () => {
+    const { recuperarSincronizacionesBiometricoInterrumpidas } =
+      await import("./crosschex-recovery");
+
+    await recuperarSincronizacionesBiometricoInterrumpidas();
+
+    expect(updateManyMock.mock.calls[0][0].where.id).toBeUndefined();
+  });
 });

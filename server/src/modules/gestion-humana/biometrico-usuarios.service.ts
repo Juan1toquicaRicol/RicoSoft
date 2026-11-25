@@ -1,5 +1,5 @@
 import { prisma } from "../../config/prisma";
-import { obtenerUsuarios } from "../../integrations/crosschex";
+import { esTenantPropietarioCrossChex, obtenerUsuarios } from "../../integrations/crosschex";
 
 /**
  * Usuarios registrados EN EL BIOMÉTRICO (CrossChex `Userinfo`), no empleados de
@@ -52,8 +52,16 @@ function texto(valor: unknown): string | null {
 }
 
 export async function usuariosDelBiometrico(tenantId: string): Promise<UsuariosBiometrico> {
+  // D-01: solo el tenant declarado en el servidor como propietario del .mdb ve
+  // nombres; sin propietario configurado, nadie (tampoco desde la caché).
+  if (!esTenantPropietarioCrossChex(tenantId)) return VACIO;
   const fuentesActivas = await prisma.fuenteBiometrica.count({ where: { tenantId, activa: true } });
   if (fuentesActivas === 0) return VACIO;
+  // Misma regla que la sincronización: con más de una fuente activa en la
+  // instalación (un único .mdb) no se sabe de qué tenant son los usuarios, así
+  // que no se entrega ningún nombre (tampoco lo que haya en caché).
+  const activasInstalacion = await prisma.fuenteBiometrica.count({ where: { activa: true } });
+  if (activasInstalacion > 1) return VACIO;
 
   if (cache && Date.now() - cache.en < TTL_MS) return cache.datos;
 

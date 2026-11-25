@@ -9,6 +9,7 @@ import {
   nombreArchivoUtf8,
 } from "../../middleware/upload.middleware";
 import { PERMISOS_SISTEMA } from "../../lib/permissions";
+import { permisosRequeridos } from "../../lib/catalogo-permisos";
 import { normalizarNombreCargo } from "../../lib/cargos";
 
 /**
@@ -467,6 +468,31 @@ export const agregarEstudio = async (req: AuthenticatedRequest, res: Response) =
   }
 };
 
+export const MENSAJE_ESTUDIO_CON_SOPORTES_SIN_PERMISO =
+  "Este estudio tiene soportes adjuntos. Para eliminarlo necesitas también el permiso de gestionar documentos del colaborador.";
+
+/** El estudio tiene soportes y el actor no puede gestionar documentos (D-03):
+ * se lanza DENTRO de la transacción para que no se borre nada. */
+class EstudioConSoportesSinPermisoError extends Error {}
+
+function puedeGestionarDocumentos(req: AuthenticatedRequest): boolean {
+  if (req.user!.isSuperadmin) return true;
+  return permisosRequeridos(PERMISOS_SISTEMA.EMPLEADOS_DOCUMENTOS_GESTIONAR).every((p) =>
+    req.user!.permisos.includes(p),
+  );
+}
+
+function textoSoportes(cantidad: number): string {
+  if (cantidad === 0) return "";
+  return cantidad === 1 ? " y su soporte" : ` y sus ${cantidad} soportes`;
+}
+
+/**
+ * Elimina un estudio. Decisión D-03 (2026-11-20): sin soportes basta
+ * empleados.detalles_editar (ruta); con soportes se exige además
+ * empleados.documentos_gestionar, o responde 403 sin borrar nada. La auditoría
+ * registra solo la cantidad de soportes borrados, nunca sus nombres.
+ */
 export const eliminarEstudio = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -480,26 +506,37 @@ export const eliminarEstudio = async (req: AuthenticatedRequest, res: Response) 
     });
     if (!estudio) return res.status(404).json({ message: "Estudio no encontrado." });
 
-    const documentos = await prisma.empleadoDocumento.findMany({
-      where: { estudioId, empleadoId: id, tenantId },
-      select: { archivoRuta: true },
-    });
-
     // Los soportes del estudio se borran con él (fila + archivo): un soporte
-    // sin su estudio no tendría a qué asociarse.
-    await prisma.$transaction(async (tx) => {
-      await tx.empleadoDocumento.deleteMany({ where: { estudioId, empleadoId: id, tenantId } });
+    // sin su estudio no tendría a qué asociarse. Se leen DENTRO de la
+    // transacción y se borran por id: si entretanto se sube otro soporte, la FK
+    // (NoAction) hace fallar el borrado del estudio y todo se revierte (409),
+    // en vez de borrar la fila de un soporte cuyo archivo no se eliminaría.
+    // El permiso de documentos se evalúa sobre esa misma lectura (D-03).
+    const documentos = await prisma.$transaction(async (tx) => {
+      const docs = await tx.empleadoDocumento.findMany({
+        where: { estudioId, empleadoId: id, tenantId },
+        select: { id: true, archivoRuta: true },
+      });
+      if (docs.length > 0 && !puedeGestionarDocumentos(req)) {
+        throw new EstudioConSoportesSinPermisoError();
+      }
+      if (docs.length > 0) {
+        await tx.empleadoDocumento.deleteMany({
+          where: { id: { in: docs.map((d) => d.id) }, tenantId },
+        });
+      }
       await tx.empleadoEstudio.delete({ where: { id: estudioId } });
       await tx.auditoria.create({
         data: {
           tenantId,
           usuarioId: req.user!.id,
           accion: "EMPLEADO_ESTUDIO_ELIMINADO",
-          detalle: `${req.user!.nombre} eliminó un estudio del colaborador "${empleado.nombres} ${empleado.apellidos}"`,
+          detalle: `${req.user!.nombre} eliminó un estudio${textoSoportes(docs.length)} del colaborador "${empleado.nombres} ${empleado.apellidos}"`,
           entidadTipo: "Empleado",
           entidadId: id,
         },
       });
+      return docs;
     });
     for (const d of documentos) {
       borrarArchivoSilencioso(rutaAbsolutaSegura(d.archivoRuta));
@@ -507,6 +544,14 @@ export const eliminarEstudio = async (req: AuthenticatedRequest, res: Response) 
 
     return res.status(204).send();
   } catch (error) {
+    if (error instanceof EstudioConSoportesSinPermisoError) {
+      return res.status(403).json({ message: MENSAJE_ESTUDIO_CON_SOPORTES_SIN_PERMISO });
+    }
+    if ((error as { code?: unknown })?.code === "P2003") {
+      return res.status(409).json({
+        message: "Se adjuntó un soporte a este estudio mientras se eliminaba. Vuelve a intentarlo.",
+      });
+    }
     console.error("Error al eliminar estudio:", error);
     return res.status(500).json({ message: "Error al eliminar el estudio." });
   }
@@ -520,6 +565,8 @@ export const eliminarEstudio = async (req: AuthenticatedRequest, res: Response) 
  */
 export const subirDocumentoEmpleado = async (req: AuthenticatedRequest, res: Response) => {
   const archivo = (req as Request & { file?: Express.Multer.File }).file;
+  // Mientras el archivo siga en la carpeta temporal, cualquier error lo borra.
+  let movido = false;
   try {
     const tenantId = req.user!.tenantId;
     const { id } = req.params;
@@ -568,6 +615,7 @@ export const subirDocumentoEmpleado = async (req: AuthenticatedRequest, res: Res
 
     // Tenant y estudio ya confirmados: recién ahora el archivo entra a su carpeta.
     const archivoRuta = moverArchivoDefinitivo(UPLOADS_DIR_EMPLEADOS_DOCUMENTOS, archivo, id);
+    movido = true;
     let creado;
     try {
       creado = await prisma.$transaction(async (tx) => {
@@ -611,6 +659,9 @@ export const subirDocumentoEmpleado = async (req: AuthenticatedRequest, res: Res
 
     return res.status(201).json(serializarDocumento(creado));
   } catch (error) {
+    // Error inesperado antes de mover (p. ej. la BD al buscar el colaborador):
+    // no dejar el soporte (posible certificado bancario) en uploads/_tmp.
+    if (archivo && !movido) borrarArchivoSilencioso(archivo.path);
     console.error("Error al subir documento del colaborador:", error);
     return res.status(500).json({ message: "Error al subir el documento." });
   }

@@ -3,6 +3,61 @@ import { Empleado, HistorialSalario, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AuthenticatedRequest } from "../../middleware/auth.middleware";
 import { normalizarNombreCargo, validarCorreoColaborador } from "../../lib/cargos";
+import { empresaIdDelTenant } from "../../lib/dominios";
+
+export const MENSAJE_COLABORADOR_LIQUIDADO =
+  "El colaborador está liquidado: se conserva su historial, pero no admite registros nuevos.";
+
+export const MENSAJE_EMPRESA_NO_CONFIGURADA =
+  "No se puede determinar la empresa del grupo para la empresa activa (falta su dominio corporativo o no corresponde a Ricol, Flexipack ni Green Solutions). Pide a un administrador que lo configure antes de registrar colaboradores.";
+
+/**
+ * Desactiva, dentro de la transacción `tx`, los vínculos biométricos ACTIVOS
+ * del colaborador (al liquidarlo o eliminarlo): deja de recibir marcaciones
+ * nuevas. No se borra nada; las marcaciones ya importadas conservan su vínculo.
+ */
+async function desactivarVinculosBiometricos(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  empleadoId: string,
+): Promise<number> {
+  const { count } = await tx.empleadoBiometrico.updateMany({
+    where: { tenantId, empleadoId, activo: true },
+    data: { activo: false },
+  });
+  return count;
+}
+
+function textoVinculos(count: number): string {
+  return count > 0 ? ` y se desactivaron ${count} vínculo(s) biométrico(s)` : "";
+}
+
+/** Estado existente con el que se cierran los permisos pendientes (D-04). */
+export const ESTADO_PERMISO_CERRADO_POR_BAJA = "Rechazado";
+
+/**
+ * D-04 (2026-11-20): al liquidar o eliminar al colaborador, sus permisos
+ * laborales PENDIENTES se cierran como "Rechazado" (estado ya existente)
+ * dentro de la misma transacción. No se borran; los ya aprobados o
+ * rechazados no se tocan.
+ */
+async function cerrarPermisosPendientes(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  empleadoId: string,
+): Promise<number> {
+  const { count } = await tx.permisoLaboral.updateMany({
+    where: { tenantId, empleadoId, estado: "Pendiente" },
+    data: { estado: ESTADO_PERMISO_CERRADO_POR_BAJA },
+  });
+  return count;
+}
+
+function textoPermisosCerrados(count: number): string {
+  return count > 0
+    ? `; ${count} permiso(s) laboral(es) pendiente(s) quedaron como "${ESTADO_PERMISO_CERRADO_POR_BAJA}"`
+    : "";
+}
 
 type EmpleadoConRelaciones = Empleado & {
   historicoSalario?: HistorialSalario[];
@@ -109,8 +164,9 @@ async function resolverTipoContrato(
 export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
+    // La empresa del colaborador se deriva del tenant autenticado; el
+    // `empresaId` que mande el cliente se ignora (no puede elegir otra empresa).
     const {
-      empresaId,
       documento,
       nombres,
       apellidos,
@@ -123,8 +179,13 @@ export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) =>
       salarioActual,
     } = req.body;
 
-    if (!empresaId || !documento || !nombres || !apellidos || !fechaContratacion) {
+    if (!documento || !nombres || !apellidos || !fechaContratacion) {
       return res.status(400).json({ message: "Faltan campos obligatorios del colaborador." });
+    }
+
+    const empresaId = await empresaIdDelTenant(tenantId);
+    if (!empresaId) {
+      return res.status(409).json({ message: MENSAJE_EMPRESA_NO_CONFIGURADA });
     }
 
     // Regla del correo según el cargo del catálogo. Sin cargo del catálogo
@@ -142,7 +203,7 @@ export const crearEmpleado = async (req: AuthenticatedRequest, res: Response) =>
     const validacionCorreo = validarCorreoColaborador(
       correo,
       cargoCatalogo ? cargoCatalogo.correoCorporativoRequerido : true,
-      typeof empresaId === "string" ? empresaId : null,
+      empresaId,
     );
     if (!validacionCorreo.ok) {
       return res.status(400).json({ message: validacionCorreo.message });
@@ -378,22 +439,28 @@ export const liquidarEmpleado = async (req: AuthenticatedRequest, res: Response)
     const empleado = await prisma.empleado.findFirst({ where: { id, tenantId, eliminado: false } });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
 
-    const actualizado = await prisma.empleado.update({
-      where: { id },
-      data: {
-        estado: "Liquidado",
-        fechaLiquidacion: fechaLiquidacion ? new Date(fechaLiquidacion) : new Date(),
-      },
-      include: { historicoSalario: { orderBy: { fecha: "desc" } } },
-    });
-
-    await prisma.auditoria.create({
-      data: {
-        tenantId,
-        usuarioId: req.user!.id,
-        accion: "EMPLEADO_LIQUIDADO",
-        detalle: `${req.user!.nombre} liquidó a "${empleado.nombres} ${empleado.apellidos}"`,
-      },
+    // Liquidación + desactivación de vínculos biométricos + auditoría, atómicas.
+    // Se conservan los datos e historial del colaborador.
+    const actualizado = await prisma.$transaction(async (tx) => {
+      const e = await tx.empleado.update({
+        where: { id },
+        data: {
+          estado: "Liquidado",
+          fechaLiquidacion: fechaLiquidacion ? new Date(fechaLiquidacion) : new Date(),
+        },
+        include: { historicoSalario: { orderBy: { fecha: "desc" } } },
+      });
+      const vinculos = await desactivarVinculosBiometricos(tx, tenantId, id);
+      const permisosCerrados = await cerrarPermisosPendientes(tx, tenantId, id);
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "EMPLEADO_LIQUIDADO",
+          detalle: `${req.user!.nombre} liquidó a "${empleado.nombres} ${empleado.apellidos}"${textoVinculos(vinculos)}${textoPermisosCerrados(permisosCerrados)}`,
+        },
+      });
+      return e;
     });
 
     return res.json(serializarEmpleado(actualizado));
@@ -416,15 +483,19 @@ export const eliminarEmpleado = async (req: AuthenticatedRequest, res: Response)
     const empleado = await prisma.empleado.findFirst({ where: { id, tenantId, eliminado: false } });
     if (!empleado) return res.status(404).json({ message: "Colaborador no encontrado." });
 
-    await prisma.empleado.update({ where: { id }, data: { eliminado: true } });
-
-    await prisma.auditoria.create({
-      data: {
-        tenantId,
-        usuarioId: req.user!.id,
-        accion: "EMPLEADO_ELIMINADO",
-        detalle: `${req.user!.nombre} eliminó el expediente de "${empleado.nombres} ${empleado.apellidos}"`,
-      },
+    // Soft-delete + desactivación de vínculos biométricos + auditoría, atómicas.
+    await prisma.$transaction(async (tx) => {
+      await tx.empleado.update({ where: { id }, data: { eliminado: true } });
+      const vinculos = await desactivarVinculosBiometricos(tx, tenantId, id);
+      const permisosCerrados = await cerrarPermisosPendientes(tx, tenantId, id);
+      await tx.auditoria.create({
+        data: {
+          tenantId,
+          usuarioId: req.user!.id,
+          accion: "EMPLEADO_ELIMINADO",
+          detalle: `${req.user!.nombre} eliminó el expediente de "${empleado.nombres} ${empleado.apellidos}"${textoVinculos(vinculos)}${textoPermisosCerrados(permisosCerrados)}`,
+        },
+      });
     });
 
     return res.status(204).send();
