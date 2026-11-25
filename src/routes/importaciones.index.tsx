@@ -181,12 +181,6 @@ function ImportacionesPage() {
       description="Órdenes de compra internacional, trazabilidad de lotes por BL/AWB y costeo landed bajo NIC 2/21."
       actions={
         <div className="flex items-center gap-2">
-          <Link
-            to="/importaciones/analitica"
-            className={buttonVariants({ variant: "outline", size: "sm", className: "gap-2" })}
-          >
-            Analítica
-          </Link>
           {hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_VER) && (
             <Link
               to="/importaciones/bandeja"
@@ -200,7 +194,7 @@ function ImportacionesPage() {
               to="/importaciones/nueva"
               className={buttonVariants({ size: "sm", className: "gap-2" })}
             >
-              <Plus className="h-4 w-4" /> Nueva Orden de Compra Internacional
+              <Plus className="h-4 w-4" /> Nueva orden
             </Link>
           )}
         </div>
@@ -412,13 +406,13 @@ function ImportacionesPage() {
                     <EmptyState
                       icon={Ship}
                       title="No hay órdenes registradas para el filtro seleccionado"
-                      description='Haz clic en "Nueva Orden de Compra Internacional" para crear la primera.'
+                      description='Haz clic en "Nueva orden" para crear la primera.'
                       action={
                         <Link
                           to="/importaciones/nueva"
                           className={buttonVariants({ size: "sm", className: "gap-2" })}
                         >
-                          <Plus className="h-4 w-4" /> Nueva Orden de Compra Internacional
+                          <Plus className="h-4 w-4" /> Nueva orden
                         </Link>
                       }
                     />

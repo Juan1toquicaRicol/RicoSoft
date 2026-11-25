@@ -21,6 +21,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
+    importacionCorreoOrigen: { findFirst: async () => ({ id: "origen" }) },
     importacionCorreo: { findFirst: m.correoFindFirst, update: m.correoUpdate },
     importacionExcepcion: {
       findFirst: m.excepcionFindFirst,
@@ -222,21 +223,26 @@ describe("reprocesarCorreoBandeja", () => {
   beforeEach(() => {
     for (const f of Object.values(m)) f.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    m.correoUpdateMany.mockResolvedValue({ count: 1 });
+    m.transaction.mockImplementation((fn) => fn({
+      importacionCorreo: { updateMany: m.correoUpdateMany },
+      auditoria: { create: m.txAuditoriaCreate },
+    }));
   });
 
   it("solo reencola correos en ERROR o REQUIERE_REVISION", async () => {
-    m.correoFindFirst.mockResolvedValue({ id: "c1", asunto: "x", estadoProcesamiento: "RESUELTO" });
+    m.correoFindFirst.mockResolvedValue({ id: "c1", asunto: "x", ingestaCompleta: true, estadoProcesamiento: "RESUELTO" });
     const res = respuesta();
     await reprocesarCorreoBandeja(peticion({}), res as never);
     expect(res.statusCode).toBe(409);
-    expect(m.correoUpdate).not.toHaveBeenCalled();
+    expect(m.correoUpdateMany).not.toHaveBeenCalled();
   });
 
   it("reencola un correo en ERROR", async () => {
-    m.correoFindFirst.mockResolvedValue({ id: "c1", asunto: "x", estadoProcesamiento: "ERROR" });
+    m.correoFindFirst.mockResolvedValue({ id: "c1", asunto: "x", ingestaCompleta: true, estadoProcesamiento: "ERROR" });
     const res = respuesta();
     await reprocesarCorreoBandeja(peticion({}), res as never);
     expect(res.statusCode).toBe(204);
-    expect(m.correoUpdate).toHaveBeenCalled();
+    expect(m.correoUpdateMany).toHaveBeenCalled();
   });
 });

@@ -8,10 +8,7 @@ import { getTenantPrisma } from "../../lib/tenant-prisma";
 import { resolverDestinatarios } from "../../lib/motor-destinatarios";
 import { crearNotificacion } from "../../lib/notificaciones";
 import { crearItemDeTrabajo } from "../../lib/inbox";
-import {
-  etiquetaPiloto,
-  leerConfigProcesamientoImportaciones,
-} from "../../integrations/email/config";
+import { leerConfigProcesamientoImportaciones } from "../../integrations/email/config";
 import {
   extraerIdentidadProveedor,
   RegexDocumentExtractionProvider,
@@ -55,7 +52,15 @@ export async function ejecutarCicloProcesamientoCorreos(): Promise<void> {
   const pendientes = await prisma.importacionCorreo.findMany({
     where: {
       estadoProcesamiento: "PENDIENTE",
-      ...(etiquetaPiloto() ? { etiquetaPiloto: etiquetaPiloto() } : {}),
+      // Solo correos llegados por un buzón registrado (origen anterior no se procesa solo).
+      ingestaCompleta: true,
+      OR: [
+        { origenes: { some: {} } },
+        ...(process.env.IMPORTACIONES_SISTEMAS_TENANT_ID ? [{
+          reprocesoHistorico: true, tenantId: process.env.IMPORTACIONES_SISTEMAS_TENANT_ID,
+          origenes: { none: {} },
+        }] : []),
+      ],
     },
     include: { adjuntos: true },
     orderBy: { fechaRecibido: "asc" },
@@ -98,7 +103,7 @@ async function procesarUnCorreo(correo: CorreoConAdjuntos): Promise<void> {
   const reclamado = await prisma.$transaction(async (tx) => {
     const cambio = await tx.importacionCorreo.updateMany({
       where: { id: correo.id, ordenCompraId: correo.ordenCompraId, estadoProcesamiento: "PENDIENTE" },
-      data: { clasificacion, estadoProcesamiento: "CLASIFICADO" },
+      data: { clasificacion, estadoProcesamiento: "CLASIFICADO", reprocesoHistorico: false },
     });
     if (cambio.count !== 1) return false;
     // Solo quien tomó el correo reemplaza las extracciones y excepciones abiertas.

@@ -10,7 +10,13 @@ export type EstadoCorreoBandeja =
   | "RESUELTO"
   | "ERROR";
 
+interface OrigenCorreo {
+  buzon: { direccion: string };
+}
+
 export interface CorreoBandejaResumen {
+  origenes: OrigenCorreo[];
+  responsable: { id: string; nombre: string } | null;
   id: string;
   remitente: string;
   asunto: string;
@@ -53,6 +59,9 @@ export interface ExcepcionBandeja {
 }
 
 export interface CorreoBandejaDetalle {
+  origenes: OrigenCorreo[];
+  responsable: { id: string; nombre: string } | null;
+  reprocesable: boolean;
   id: string;
   messageId: string;
   remitente: string;

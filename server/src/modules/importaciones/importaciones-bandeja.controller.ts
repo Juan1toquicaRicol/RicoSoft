@@ -1,3 +1,5 @@
+import { operadorBandeja } from "./bandeja-operacion";
+import { responsableValido } from "./buzones-importaciones.service";
 import { extraerIdentidadProveedor } from "../../integrations/document-extraction/regex-extraction-provider";
 import fs from "fs";
 import path from "path";
@@ -33,6 +35,13 @@ const EVENTO_REVISION = "IMPORTACION_CORREO_REQUIERE_REVISION";
  * (PROVEEDOR_NO_IDENTIFICADO) quedan fuera de las rutas de cada empresa.
  */
 
+function correoReprocesable(correo: { estadoProcesamiento: string; ingestaCompleta: boolean; reprocesoHistorico: boolean }, historico: boolean, tenantId: string) {
+  if (!correo.ingestaCompleta || correo.reprocesoHistorico) return false;
+  if (!historico) return ["ERROR", "REQUIERE_REVISION"].includes(correo.estadoProcesamiento);
+  return tenantId === process.env.IMPORTACIONES_SISTEMAS_TENANT_ID
+    && ["PENDIENTE", "ERROR", "REQUIERE_REVISION"].includes(correo.estadoProcesamiento);
+}
+
 export const listarCorreosBandeja = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
@@ -56,6 +65,9 @@ export const listarCorreosBandeja = async (req: AuthenticatedRequest, res: Respo
         clasificacion: true,
         proveedor: { select: { id: true, nombre: true } },
         ordenCompra: { select: { id: true, numeroOrden: true } },
+        responsable: { select: { id: true, nombre: true } },
+        origenes: { where: { buzon: { tenantId } }, select: { buzon: { select: { direccion: true } } },
+          orderBy: { detectadoEn: "asc" } },
         _count: { select: { adjuntos: true, excepciones: true } },
       },
       orderBy: { fechaRecibido: "desc" },
@@ -76,6 +88,9 @@ export const obtenerCorreoBandeja = async (req: AuthenticatedRequest, res: Respo
       include: {
         proveedor: { select: { id: true, nombre: true, nit: true } },
         ordenCompra: { select: { id: true, numeroOrden: true, estado: true } },
+        responsable: { select: { id: true, nombre: true } },
+        origenes: { where: { buzon: { tenantId } }, select: { buzon: { select: { direccion: true } } },
+          orderBy: { detectadoEn: "asc" } },
         adjuntos: {
           select: {
             id: true,
@@ -114,6 +129,7 @@ export const obtenerCorreoBandeja = async (req: AuthenticatedRequest, res: Respo
         });
     return res.json({
       ...correo,
+      reprocesable: correoReprocesable(correo, !correo.origenes?.length, tenantId),
       sugerenciasProveedor: sugerencias.map(({ id, nombre, señales }) => ({ id, nombre, señales })),
     });
   } catch (error) {
@@ -333,7 +349,8 @@ export const resolverExcepcionBandeja = async (req: AuthenticatedRequest, res: R
         ? [
             prisma.importacionCorreo.update({
               where: { id: correo.id },
-              data: { ...dataCorreo, estadoProcesamiento: "PENDIENTE", ultimoError: null },
+              data: { ...dataCorreo, estadoProcesamiento: "PENDIENTE", ultimoError: null,
+                ...(tenantId === process.env.IMPORTACIONES_SISTEMAS_TENANT_ID ? { reprocesoHistorico: true } : {}) },
             }),
           ]
         : []),
@@ -383,19 +400,10 @@ export const obtenerConfiguracionBandeja = async (_req: AuthenticatedRequest, re
   return res.json({
     ingestaHabilitada: configEmail.habilitado,
     procesamientoHabilitado: configProcesamiento.habilitado,
-    buzon: configEmail.mailboxEmail ? enmascararEmail(configEmail.mailboxEmail) : null,
-    maxEmailsPerRun: configEmail.maxEmailsPerRun,
-    maxAttachmentsPerRun: configEmail.maxAttachmentsPerRun,
     cronIngesta: configProcesamiento.cronIngesta,
     cronProcesamiento: configProcesamiento.cronProcesamiento,
   });
 };
-
-function enmascararEmail(email: string): string {
-  const [usuario, dominio] = email.split("@");
-  if (!dominio) return "***";
-  return `${usuario.slice(0, 2)}***@${dominio}`;
-}
 
 /**
  * Reencola manualmente un correo en ERROR/REQUIERE_REVISION para que el
@@ -411,32 +419,70 @@ export const reprocesarCorreoBandeja = async (req: AuthenticatedRequest, res: Re
       where: { id: req.params.id, tenantId },
     });
     if (!correo) return res.status(404).json({ message: "Correo no encontrado." });
-    if (!["ERROR", "REQUIERE_REVISION"].includes(correo.estadoProcesamiento)) {
-      return res.status(409).json({
-        message: `Solo se pueden reprocesar correos en ERROR o REQUIERE_REVISION (estado actual: ${correo.estadoProcesamiento}).`,
-      });
+    const origen = await prisma.importacionCorreoOrigen.findFirst({
+      where: { correoId: correo.id, buzon: { tenantId } }, select: { id: true },
+    });
+    const historico = !origen;
+    if (!correoReprocesable(correo, historico, tenantId)) {
+      return res.status(409).json({ message: "El correo no se puede reprocesar en su estado actual." });
     }
-
-    await prisma.importacionCorreo.update({
-      where: { id: correo.id },
-      data: { estadoProcesamiento: "PENDIENTE", ultimoError: null },
-    });
-
-    await prisma.auditoria.create({
-      data: {
-        tenantId,
-        usuarioId: req.user!.id,
-        accion: "IMPORTACION_CORREO_REPROCESADO",
-        detalle: `${req.user!.nombre} reencoló el correo "${correo.asunto}" para reprocesamiento.`,
-        entidadTipo: "ImportacionCorreo",
+    const cambio = await prisma.$transaction(async (tx) => {
+      const resultado = await tx.importacionCorreo.updateMany({
+        where: { id: correo.id, tenantId, estadoProcesamiento: correo.estadoProcesamiento,
+          reprocesoHistorico: correo.reprocesoHistorico },
+        data: { estadoProcesamiento: "PENDIENTE", ultimoError: null, reprocesoHistorico: historico },
+      });
+      if (!resultado.count) return false;
+      await tx.auditoria.create({ data: {
+        tenantId, usuarioId: req.user!.id, accion: "IMPORTACION_CORREO_REPROCESADO",
+        detalle: "Correo reencolado para reprocesamiento.", entidadTipo: "ImportacionCorreo",
         entidadId: correo.id,
-      },
+      } });
+      return true;
     });
-
+    if (!cambio) return res.status(409).json({ message: "El estado del correo cambió." });
     return res.status(204).send();
   } catch (error) {
     console.error("Error al reencolar el correo para reprocesamiento:", error);
     return res.status(500).json({ message: "Error al reencolar el correo." });
+  }
+};
+
+export const reasignarCorreoBandeja = async (req: AuthenticatedRequest, res: Response) => {
+  const actor = req.user!;
+  if (!operadorBandeja(actor)) return res.sendStatus(403);
+  const entrada = z.object({ responsableUsuarioId: z.string().uuid().nullable() }).strict().safeParse(req.body);
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success || !entrada.success) return res.status(400).json({ message: "Responsable o correo inválido." });
+
+  const { responsableUsuarioId } = entrada.data;
+  try {
+    if (responsableUsuarioId && !(await responsableValido(actor.tenantId, responsableUsuarioId))) {
+      return res.status(400).json({ message: "El responsable debe estar activo en Ricol." });
+    }
+    const resultado = await prisma.$transaction(async (tx) => {
+      const anterior = await tx.importacionCorreo.findFirst({
+        where: { id: id.data, tenantId: actor.tenantId }, select: { responsableUsuarioId: true },
+      });
+      if (!anterior) return 404;
+      if (anterior.responsableUsuarioId === responsableUsuarioId) return 204;
+      const cambio = await tx.importacionCorreo.updateMany({
+        where: { id: id.data, tenantId: actor.tenantId, responsableUsuarioId: anterior.responsableUsuarioId },
+        data: { responsableUsuarioId },
+      });
+      if (!cambio.count) return 409;
+      await tx.auditoria.create({ data: {
+        tenantId: actor.tenantId, usuarioId: actor.id, accion: "IMPORTACION_CORREO_RESPONSABLE_CAMBIADO",
+        entidadTipo: "ImportacionCorreo", entidadId: id.data, detalle: "Responsable del correo actualizado.",
+        datosAnteriores: JSON.stringify(anterior), datosNuevos: JSON.stringify({ responsableUsuarioId }),
+      } });
+      return 204;
+    });
+    if (resultado === 204) return res.status(204).send();
+    return res.status(resultado).json({ message: resultado === 404 ? "Correo no encontrado." : "El responsable cambió." });
+  } catch (error) {
+    console.error("Error al reasignar un correo de Importaciones:", error);
+    return res.status(500).json({ message: "No se pudo reasignar el correo." });
   }
 };
 

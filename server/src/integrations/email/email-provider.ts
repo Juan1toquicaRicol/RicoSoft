@@ -54,11 +54,15 @@ export interface EmailProvider {
    * comentario en GoogleWorkspaceEmailProvider sobre historyId vs. query
    * por fecha).
    */
-  listNewMessages(cursor: string | null, maxResults: number): Promise<ListNewMessagesResult>;
+  listNewMessages(
+    cursor: string | null,
+    maxResults: number,
+    opciones?: { etiqueta?: string; omitirIds?: ReadonlySet<string>; signal?: AbortSignal },
+  ): Promise<ListNewMessagesResult>;
 
   /** Contenido binario (base64 estándar, ya decodificado a Buffer) de un
    * adjunto concreto de un mensaje concreto. */
-  getAttachmentContent(providerMessageId: string, providerAttachmentId: string): Promise<Buffer>;
+  getAttachmentContent(providerMessageId: string, providerAttachmentId: string, signal?: AbortSignal): Promise<Buffer>;
 }
 
 /** Error específico para que el llamador distinga "el proveedor de correo

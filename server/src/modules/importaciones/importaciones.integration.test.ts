@@ -175,6 +175,16 @@ describe.skipIf(!RUN)(
 
     // ---------- Expediente aduanero ----------
 
+    it("retira los endpoints de Analítica y mantiene el listado de órdenes disponible", async () => {
+      const autorizacion = "Bearer " + tokenAAdmin;
+      expect((await request(app).get("/api/importaciones")
+        .set("Authorization", autorizacion)).status).toBe(200);
+      for (const ruta of ["resumen", "operaciones"]) {
+        expect((await request(app).get("/api/importaciones/analitica/" + ruta)
+          .set("Authorization", autorizacion)).status).toBe(404);
+      }
+    });
+
     it("usuario autorizado puede actualizar el expediente de su propio tenant", async () => {
       const res = await request(app)
         .put(`/api/importaciones/lotes/${loteAId}/expediente`)

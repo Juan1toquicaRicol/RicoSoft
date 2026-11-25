@@ -767,3 +767,22 @@ y una cuenta designada en el servidor. El JSON delegado de solo lectura permanec
   Ricol no tiene un ambiente de pruebas consolidado.
 - Ruta de ejecución y criterios de aceptación en
   `server/docs/bandeja-importaciones.md`.
+
+### 2026-11-25 — Varios buzones de Importaciones
+- Ricol opera logistica@ricol.com.co, gisela.salazar@ricol.com.co y
+  auxiliar.compras@ricol.com.co. Sistemas registra, aprueba, verifica y activa
+  cada cuenta en Configuración → Monitoreo. Las direcciones y etiquetas quedan
+  en RicoSoft. La credencial de Gmail de solo lectura se aprovisiona en servidor.
+- El buzón define el tenant del correo desde el alta. La Bandeja de Ricol
+  muestra todos los orígenes de cada caso. El responsable inicial es el del
+  primer buzón que lo ingiere con éxito. Sistemas puede reasignar con auditoría.
+- Un ciclo lee los buzones activos en secuencia con límites y cancelación por
+  buzón. La omisión por conflicto de empresa se guarda por buzón e ID Gmail,
+  sin exponer el caso del otro tenant. El procesador exige una ingesta completa.
+- Los correos del piloto sin origen conservan su historial. Los pendientes,
+  en revisión o con error de Ricol pueden reencolarse por acción explícita
+  con permiso de procesamiento. Los históricos sin empresa conservan el
+  aislamiento anterior.
+- Migraciones aditivas: 20261125120000_buzones_importaciones y
+  20261125150000_ingesta_segura_buzones. Aplicadas en ricosoft_integration local.
+  Pendiente: verificar el UUID de Ricol y registrar los buzones en producción.

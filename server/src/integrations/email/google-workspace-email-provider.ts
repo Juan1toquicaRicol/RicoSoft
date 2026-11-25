@@ -7,8 +7,7 @@ import {
   type EmailProvider,
   type ListNewMessagesResult,
 } from "./email-provider";
-import { prisma } from "../../config/prisma";
-import { etiquetaPiloto, leerConfigEmailImportaciones } from "./config";
+import { leerConfigEmailImportaciones } from "./config";
 
 /**
  * Gmail API vía cuenta de servicio + Domain-Wide Delegation — el mecanismo
@@ -25,7 +24,7 @@ import { etiquetaPiloto, leerConfigEmailImportaciones } from "./config";
  *      "https://www.googleapis.com/auth/gmail.readonly".
  *   3. El JSON de la cuenta de servicio se pasa completo en
  *      IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON; `subject` (a quién
- *      impersonar) es IMPORTACIONES_EMAIL_MAILBOX.
+ *      impersonar) procede de la configuración del buzón.
  *
  * Sincronización incremental: V1 usa polling por `internalDate` (el cursor
  * es el internalDate en ms del último correo procesado, se pide
@@ -40,16 +39,28 @@ import { etiquetaPiloto, leerConfigEmailImportaciones } from "./config";
  */
 const MAX_PAGINAS_LISTADO = 200;
 
+export interface OpcionesListadoGmail {
+  /** ID de etiqueta del buzón. Si no se indica, se usa la del piloto legado. */
+  etiqueta?: string;
+  /** Gmail IDs que el llamador ya tiene para este buzón: se omiten sin pedir su detalle. */
+  omitirIds?: ReadonlySet<string>;
+  signal?: AbortSignal;
+}
+
 export class GoogleWorkspaceEmailProvider implements EmailProvider {
   private gmail: gmail_v1.Gmail | null = null;
+
+  /** Cuenta de Gmail aprobada y elegida en la configuración de RicoSoft. */
+  constructor(private readonly buzon: string) {}
 
   private async obtenerCliente(): Promise<gmail_v1.Gmail> {
     if (this.gmail) return this.gmail;
 
     const config = leerConfigEmailImportaciones();
-    if (!config.serviceAccountJson || !config.mailboxEmail) {
+    const buzon = this.buzon;
+    if (!config.serviceAccountJson || !buzon) {
       throw new EmailProviderError(
-        "IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON o IMPORTACIONES_EMAIL_MAILBOX no están configurados.",
+        "IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON o el buzón a leer no están configurados.",
       );
     }
 
@@ -70,7 +81,7 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
       // "subject": a quién impersona la cuenta de servicio — el buzón
       // central, nunca el usuario que disparó la petición (no hay uno: esto
       // corre desde un job, no desde una request de un humano).
-      subject: config.mailboxEmail,
+      subject: buzon,
     });
 
     this.gmail = google.gmail({ version: "v1", auth });
@@ -82,7 +93,7 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
     const perfil = await gmail.users.getProfile({ userId: "me", fields: "emailAddress" });
     if (
       perfil.data.emailAddress?.toLowerCase() !==
-      leerConfigEmailImportaciones().mailboxEmail.toLowerCase()
+      this.buzon.toLowerCase()
     )
       throw new EmailProviderError("El perfil no coincide con el buzón autorizado.");
     const labels = await gmail.users.labels.list({ userId: "me", fields: "labels(id,name,type)" });
@@ -91,8 +102,15 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
       .map((x) => ({ id: x.id!, nombre: x.name! }));
   }
 
-  async listNewMessages(cursor: string | null, maxResults: number): Promise<ListNewMessagesResult> {
-    const etiqueta = etiquetaPiloto();
+  async listNewMessages(
+    cursor: string | null,
+    maxResults: number,
+    opciones?: OpcionesListadoGmail,
+  ): Promise<ListNewMessagesResult> {
+    const etiqueta = opciones?.etiqueta;
+    const omitirIds = opciones?.omitirIds;
+    const signal = opciones?.signal;
+    signal?.throwIfAborted();
     const gmail = await this.obtenerCliente();
 
     // cursor = internalDate (ms epoch) del correo más reciente ya
@@ -123,7 +141,7 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
           q: etiqueta ? undefined : query,
           ...(etiqueta ? { labelIds: [etiqueta] } : {}),
           pageToken,
-        });
+        }, ...(signal ? [{ signal, retry: false }] : []));
         for (const m of respuesta.data.messages ?? []) {
           if (m.id) idsTodos.push(m.id);
         }
@@ -140,16 +158,7 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
     }
 
     const ids = idsTodos.reverse();
-    const conocidos = new Set<string>();
-    if (etiqueta) {
-      for (let i = 0; i < ids.length; i += 500) {
-        const filas = await prisma.importacionCorreo.findMany({
-          where: { gmailId: { in: ids.slice(i, i + 500) } },
-          select: { gmailId: true },
-        });
-        for (const fila of filas) if (fila.gmailId) conocidos.add(fila.gmailId);
-      }
-    }
+    const conocidos = new Set<string>(omitirIds ?? []);
     if (!etiqueta) ids.splice(maxResults);
 
     const mensajes: EmailMessage[] = [];
@@ -160,21 +169,14 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
       if (conocidos.has(id)) continue;
       let detalle: gmail_v1.Schema$Message;
       try {
-        const respuesta = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+        signal?.throwIfAborted();
+        const respuesta = await gmail.users.messages.get({ userId: "me", id, format: "full" }, ...(signal ? [{ signal, retry: false }] : []));
         detalle = respuesta.data;
       } catch (error) {
         throw new EmailProviderError(`Error al obtener el mensaje Gmail ${id}.`, error);
       }
       const mensaje = mapearMensajeGmail(detalle);
       if (mensaje && (!etiqueta || detalle.labelIds?.includes(etiqueta))) {
-        if (
-          etiqueta &&
-          (await prisma.importacionCorreo.findUnique({
-            where: { messageId: mensaje.messageId },
-            select: { id: true },
-          }))
-        )
-          continue;
         mensajes.push(mensaje);
         const internalDate = Number(detalle.internalDate ?? 0);
         if (internalDate > cursorMasReciente) cursorMasReciente = internalDate;
@@ -192,14 +194,16 @@ export class GoogleWorkspaceEmailProvider implements EmailProvider {
   async getAttachmentContent(
     providerMessageId: string,
     providerAttachmentId: string,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
     const gmail = await this.obtenerCliente();
     try {
+      signal?.throwIfAborted();
       const respuesta = await gmail.users.messages.attachments.get({
         userId: "me",
         messageId: providerMessageId,
         id: providerAttachmentId,
-      });
+      }, ...(signal ? [{ signal, retry: false }] : []));
       const data = respuesta.data.data;
       if (!data) throw new Error("Gmail no devolvió contenido para el adjunto.");
       // Gmail usa base64url (RFC 4648 §5), no base64 estándar.

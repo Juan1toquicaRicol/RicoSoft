@@ -11,6 +11,7 @@ import {
   obtenerAdjuntoBandeja,
   resolverExcepcionBandeja,
   reprocesarCorreoBandeja,
+  reasignarCorreoBandeja,
   obtenerConfiguracionBandeja,
   denegarTriageSinTenant,
 } from "./importaciones-bandeja.controller";
@@ -64,6 +65,11 @@ router.post(
   "/correos/:id/reprocesar",
   requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_PROCESAR),
   reprocesarCorreoBandeja,
+);
+router.put(
+  "/correos/:id/responsable",
+  requirePermission(PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR),
+  reasignarCorreoBandeja,
 );
 router.get(
   "/configuracion",

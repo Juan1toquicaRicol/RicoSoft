@@ -52,7 +52,6 @@ import { Route as FacturasIndexRouteImport } from './routes/facturas.index'
 import { Route as FacturasIdRouteImport } from './routes/facturas.$id'
 import { Route as ImportacionesIndexRouteImport } from './routes/importaciones.index'
 import { Route as ImportacionesIdRouteImport } from './routes/importaciones.$id'
-import { Route as ImportacionesAnaliticaRouteImport } from './routes/importaciones.analitica'
 import { Route as ImportacionesNuevaRouteImport } from './routes/importaciones.nueva'
 import { Route as InventarioComprometidosRouteImport } from './routes/inventario_.comprometidos'
 import { Route as LogisticaCumplimientoRouteImport } from './routes/logistica.cumplimiento'
@@ -291,11 +290,6 @@ const ImportacionesIdRoute = ImportacionesIdRouteImport.update({
   path: '/importaciones/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ImportacionesAnaliticaRoute = ImportacionesAnaliticaRouteImport.update({
-  id: '/importaciones/analitica',
-  path: '/importaciones/analitica',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ImportacionesNuevaRoute = ImportacionesNuevaRouteImport.update({
   id: '/importaciones/nueva',
   path: '/importaciones/nueva',
@@ -416,7 +410,6 @@ export interface FileRoutesByFullPath {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/inventario/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
@@ -476,7 +469,6 @@ export interface FileRoutesByTo {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/inventario/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
@@ -538,7 +530,6 @@ export interface FileRoutesById {
   '/despachos/$id': typeof DespachosIdRoute
   '/facturas/$id': typeof FacturasIdRoute
   '/importaciones/$id': typeof ImportacionesIdRoute
-  '/importaciones/analitica': typeof ImportacionesAnaliticaRoute
   '/importaciones/nueva': typeof ImportacionesNuevaRoute
   '/inventario_/comprometidos': typeof InventarioComprometidosRoute
   '/logistica/cumplimiento': typeof LogisticaCumplimientoRoute
@@ -601,7 +592,6 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/analitica'
     | '/importaciones/nueva'
     | '/inventario/comprometidos'
     | '/logistica/cumplimiento'
@@ -661,7 +651,6 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/analitica'
     | '/importaciones/nueva'
     | '/inventario/comprometidos'
     | '/logistica/cumplimiento'
@@ -722,7 +711,6 @@ export interface FileRouteTypes {
     | '/despachos/$id'
     | '/facturas/$id'
     | '/importaciones/$id'
-    | '/importaciones/analitica'
     | '/importaciones/nueva'
     | '/inventario_/comprometidos'
     | '/logistica/cumplimiento'
@@ -768,7 +756,6 @@ export interface RootRouteChildren {
   ComercialObjetivosRoute: typeof ComercialObjetivosRoute
   FacturasIdRoute: typeof FacturasIdRoute
   ImportacionesIdRoute: typeof ImportacionesIdRoute
-  ImportacionesAnaliticaRoute: typeof ImportacionesAnaliticaRoute
   ImportacionesNuevaRoute: typeof ImportacionesNuevaRoute
   InventarioComprometidosRoute: typeof InventarioComprometidosRoute
   LogisticaCumplimientoRoute: typeof LogisticaCumplimientoRoute
@@ -1089,13 +1076,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacionesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/importaciones/analitica': {
-      id: '/importaciones/analitica'
-      path: '/importaciones/analitica'
-      fullPath: '/importaciones/analitica'
-      preLoaderRoute: typeof ImportacionesAnaliticaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/importaciones/nueva': {
       id: '/importaciones/nueva'
       path: '/importaciones/nueva'
@@ -1306,7 +1286,6 @@ const rootRouteChildren: RootRouteChildren = {
   ComercialObjetivosRoute: ComercialObjetivosRoute,
   FacturasIdRoute: FacturasIdRoute,
   ImportacionesIdRoute: ImportacionesIdRoute,
-  ImportacionesAnaliticaRoute: ImportacionesAnaliticaRoute,
   ImportacionesNuevaRoute: ImportacionesNuevaRoute,
   InventarioComprometidosRoute: InventarioComprometidosRoute,
   LogisticaCumplimientoRoute: LogisticaCumplimientoRoute,

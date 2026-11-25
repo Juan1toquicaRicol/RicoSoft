@@ -89,6 +89,7 @@ model Tenant {
   proformas                      Proforma[]
   cotizacionesComerciales        Cotizacion[]
   pedidosComerciales             PedidoComercial[]
+  buzonesImportaciones           BuzonImportaciones[]
 }
 
 model User {
@@ -123,6 +124,8 @@ model User {
   emailVerificadoAt                DateTime?
   codigosVerificacionCorreo        CodigoVerificacionCorreo[]
   permisosDirectos                 PermisoUsuario[]
+  buzonesResponsable               BuzonImportaciones[]
+  correosResponsable               ImportacionCorreo[]
   membresias                       Membresia[]
   solicitudesResueltas             SolicitudCompra[]          @relation("SolicitudResueltaPor")
   solicitudesCreadas               SolicitudCompra[]          @relation("SolicitudSolicitante")
@@ -2148,7 +2151,69 @@ model ConfigCorreoImportaciones {
   adjuntos Int
 }
 
+/// Buzones de Gmail que alimentan la Bandeja de Importaciones. Es de la
+/// instalación (no de un tenant) y solo la administra Sistemas (permiso
+/// IMPORTACIONES_CORREOS_CONFIGURAR). Cada buzón guarda su propia etiqueta:
+/// los IDs de etiqueta de Gmail solo son válidos dentro de su buzón.
+model BuzonImportaciones {
+  id                   String                    @id @default(uuid()) @db.UniqueIdentifier
+  /// Dirección del buzón; debe pertenecer al dominio permitido (validado en código).
+  direccion            String                    @unique @db.VarChar(320)
+  /// ID y nombre de la etiqueta Gmail de este buzón; null mientras no se elija.
+  etiquetaId           String?                   @db.VarChar(128)
+  etiquetaNombre       String?                   @db.VarChar(255)
+  /// REGISTRADO | APROBADO | ACTIVO | PAUSADO — validado en código.
+  estado               String                    @default("REGISTRADO") @db.VarChar(20)
+  /// Empresa dueña de los correos de este buzón (Ricol). Obligatoria.
+  tenantId             String                    @db.UniqueIdentifier
+  tenant               Tenant                    @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  responsableUsuarioId String?                   @db.UniqueIdentifier
+  registradoPorId      String                    @db.UniqueIdentifier
+  aprobadoPorId        String?                   @db.UniqueIdentifier
+  /// Límites y tiempo de espera propios de cada buzón, por ciclo.
+  correosPorCiclo      Int                       @default(25)
+  adjuntosPorCiclo     Int                       @default(50)
+  timeoutSegundos      Int                       @default(120)
+  ultimaEjecucion      DateTime?
+  ultimoError          String?                   @db.VarChar(500)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  responsable          User?                     @relation(fields: [responsableUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  origenes             ImportacionCorreoOrigen[]
+  mensajesOmitidos     ImportacionMensajeOmitido[]
+
+  @@index([tenantId, estado])
+}
+
+/// Un correo puede llegar por más de un buzón; aquí queda cada origen. Los
+/// correos sin filas aquí son "origen anterior" (ingeridos antes de los buzones).
+model ImportacionCorreoOrigen {
+  id          String             @id @default(uuid()) @db.UniqueIdentifier
+  correoId    String             @db.UniqueIdentifier
+  buzonId     String             @db.UniqueIdentifier
+  gmailId     String?            @db.VarChar(128)
+  etiquetaId  String?            @db.VarChar(128)
+  detectadoEn DateTime           @default(now())
+  correo      ImportacionCorreo  @relation(fields: [correoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  buzon       BuzonImportaciones @relation(fields: [buzonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([correoId, buzonId])
+  @@index([buzonId])
+}
+
+/// Identidad Gmail omitida por conflicto de empresa, con alcance de buzón.
+model ImportacionMensajeOmitido {
+  buzonId String @db.UniqueIdentifier
+  gmailId String @db.VarChar(128)
+  detectadoEn DateTime @default(now())
+  buzon BuzonImportaciones @relation(fields: [buzonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([buzonId, gmailId])
+}
+
 model ImportacionCorreo {
+  ingestaCompleta Boolean @default(true)
+  reprocesoHistorico Boolean @default(false)
   etiquetaPiloto String? @db.VarChar(128)
   gmailId String? @db.VarChar(128)
   id                  String                     @id @default(uuid()) @db.UniqueIdentifier
@@ -2182,6 +2247,10 @@ model ImportacionCorreo {
   ordenCompra         OrdenCompraIntl?           @relation(fields: [ordenCompraId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   adjuntos            ImportacionCorreoAdjunto[]
   excepciones         ImportacionExcepcion[]
+  /// Responsable asignado al correo (inicialmente, el del buzón de origen).
+  responsableUsuarioId String?                   @db.UniqueIdentifier
+  responsable          User?                     @relation(fields: [responsableUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  origenes             ImportacionCorreoOrigen[]
 
   @@unique([messageId])
   @@index([tenantId, estadoProcesamiento])

@@ -50,7 +50,8 @@ export async function vincularOrdenCorreo(
       estadoProcesamiento: "REQUIERE_REVISION",
       proveedor: { activo: true, tenantId },
     },
-    data: { ordenCompraId: ordenId, estadoProcesamiento: "PENDIENTE", ultimoError: null },
+    data: { ordenCompraId: ordenId, estadoProcesamiento: "PENDIENTE", ultimoError: null,
+      ...(tenantId === process.env.IMPORTACIONES_SISTEMAS_TENANT_ID ? { reprocesoHistorico: true } : {}) },
   });
   if (vinculado.count !== 1) {
     throw new ConflictoVinculoCorreo(

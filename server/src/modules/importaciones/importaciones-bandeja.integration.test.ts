@@ -190,6 +190,11 @@ describe.skipIf(!RUN)(
         data: { nombre: `Bandeja B ${sufijo}`, subdomain: `test-bandeja-b-${sufijo}` },
       });
       tenantBId = tenantB.id;
+      await prisma.buzonImportaciones.create({
+        data: { tenantId: tenantAId, direccion: `bandeja-${sufijo}@ricol.com.co`,
+          etiquetaId: "Label_Bandeja", estado: "ACTIVO", registradoPorId: randomUUID() },
+      });
+
 
       await prisma.user.create({
         data: {
@@ -285,6 +290,8 @@ describe.skipIf(!RUN)(
       await prisma.importacionCorreoAdjunto.deleteMany({
         where: { correo: { OR: [{ tenantId: { in: tenantIds } }, { tenantId: null }] } },
       });
+      await prisma.importacionCorreoOrigen.deleteMany({ where: { buzon: { tenantId: tenantAId } } });
+      await prisma.buzonImportaciones.deleteMany({ where: { tenantId: tenantAId } });
       await prisma.importacionCorreo.deleteMany({
         where: { OR: [{ tenantId: { in: tenantIds } }, { tenantId: null }] },
       });
@@ -307,6 +314,7 @@ describe.skipIf(!RUN)(
 
     beforeEach(async () => {
       fakeProvider.mensajes = [];
+      await prisma.importacionCorreoOrigen.deleteMany({ where: { buzon: { tenantId: tenantAId } } });
       await prisma.importacionExtraccion.deleteMany({
         where: { adjunto: { correo: { OR: [{ tenantId: tenantAId }, { tenantId: null }] } } },
       });
@@ -392,7 +400,7 @@ describe.skipIf(!RUN)(
       expect(filas).toHaveLength(1);
     });
 
-    it("3. proveedor no identificado: crea excepción CON tenantId null y el triage cross-tenant está denegado", async () => {
+    it("3. proveedor no identificado: crea excepción en el tenant del buzón y el triage cross-tenant está denegado", async () => {
       fakeProvider.mensajes.push(
         crearMensajeFalso({
           messageId: `<msg-desconocido-${sufijo}@nadie.com>`,
@@ -407,22 +415,20 @@ describe.skipIf(!RUN)(
       const correo = await prisma.importacionCorreo.findUniqueOrThrow({
         where: { messageId: `<msg-desconocido-${sufijo}@nadie.com>` },
       });
-      expect(correo.tenantId).toBeNull();
+      expect(correo.tenantId).toBe(tenantAId);
       expect(correo.estadoProcesamiento).toBe("REQUIERE_REVISION");
 
       const excepcion = await prisma.importacionExcepcion.findFirstOrThrow({
         where: { correoId: correo.id },
       });
       expect(excepcion.tipo).toBe("PROVEEDOR_NO_IDENTIFICADO");
-      expect(excepcion.tenantId).toBeNull();
+      expect(excepcion.tenantId).toBe(tenantAId);
 
-      // Un usuario normal (incluso superadmin de OTRO tenant) no puede verlo
-      // por las rutas normales — no tiene tenant, no hay ruta tenant-scoped
-      // que lo exponga en absoluto.
+      // La empresa del buzón puede resolverlo desde su Bandeja.
       const comoUsuarioNormal = await request(app)
         .get(`/api/importaciones/bandeja/correos/${correo.id}`)
         .set("Authorization", `Bearer ${tokenA}`);
-      expect(comoUsuarioNormal.status).toBe(404);
+      expect(comoUsuarioNormal.status).toBe(200);
 
       // El triage cross-tenant está DENEGADO para todos: isSuperadmin es un
       // flag por tenant, no una identidad de plataforma. Ni un usuario normal
@@ -441,11 +447,11 @@ describe.skipIf(!RUN)(
         expect(asignar.status).toBe(403);
       }
 
-      // El correo sigue sin tenant ni proveedor: nada se reasignó.
+      // La ruta de triage no altera la empresa ni el proveedor.
       const correoIntacto = await prisma.importacionCorreo.findUniqueOrThrow({
         where: { id: correo.id },
       });
-      expect(correoIntacto.tenantId).toBeNull();
+      expect(correoIntacto.tenantId).toBe(tenantAId);
       expect(correoIntacto.proveedorId).toBeNull();
       expect(correoIntacto.estadoProcesamiento).toBe("REQUIERE_REVISION");
     });
@@ -1231,7 +1237,7 @@ describe.skipIf(!RUN)(
       expect(reintento.body.numeroOrden).toBe(dentro!.codigo);
     });
 
-    it("sugiere un proveedor por el adjunto sin asignarlo y protege el correo sin empresa", async () => {
+    it("sugiere un proveedor por el adjunto sin asignarlo dentro de la empresa del buzón", async () => {
       const nombre = "VIET NAM HANOTECH JOINT STOCK COMPANY";
       const candidato = await prisma.proveedor.create({
         data: { tenantId: tenantAId, nombre, nit: randomUUID() },
@@ -1256,23 +1262,12 @@ describe.skipIf(!RUN)(
         include: { excepciones: true },
       });
       expect(correo.estadoProcesamiento).toBe("REQUIERE_REVISION");
-      expect(correo.tenantId).toBeNull();
+      expect(correo.tenantId).toBe(tenantAId);
       expect(correo.proveedorId).toBeNull();
       expect(JSON.parse(correo.excepciones[0].candidatos ?? "[]")).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: candidato.id, nombre })]),
       );
       const endpoint = "/api/importaciones/bandeja/correos/" + correo.id;
-      expect(
-        (
-          await request(app)
-            .get(endpoint)
-            .set("Authorization", "Bearer " + tokenSuperadminA)
-        ).status,
-      ).toBe(404);
-      await prisma.importacionCorreo.update({
-        where: { id: correo.id },
-        data: { tenantId: tenantAId },
-      });
       const detalle = await request(app)
         .get(endpoint)
         .set("Authorization", "Bearer " + tokenA);
@@ -1319,7 +1314,7 @@ describe.skipIf(!RUN)(
         include: { excepciones: true },
       });
       expect(correo.estadoProcesamiento).toBe("REQUIERE_REVISION");
-      expect(correo.tenantId).toBeNull();
+      expect(correo.tenantId).toBe(tenantAId);
       expect(correo.proveedorId).toBeNull();
       expect(
         JSON.parse(correo.excepciones[0].candidatos ?? "[]").map((p: { id: string }) => p.id),
@@ -1404,10 +1399,10 @@ describe.skipIf(!RUN)(
         include: { excepciones: true },
       });
       expect(correo.estadoProcesamiento).toBe("REQUIERE_REVISION");
-      expect(correo.tenantId).toBeNull();
+      expect(correo.tenantId).toBe(tenantAId);
       expect(correo.proveedorId).toBeNull();
       const excepcion = correo.excepciones.find((e) => e.tipo === "PROVEEDOR_NO_IDENTIFICADO");
-      expect(excepcion?.tenantId).toBeNull();
+      expect(excepcion?.tenantId).toBe(tenantAId);
       const candidatos = JSON.parse(excepcion?.candidatos ?? "[]") as {
         id: string;
         tenantId: string;

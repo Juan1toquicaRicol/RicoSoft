@@ -2,17 +2,18 @@
 
 ## 1. Qué es
 
-Ingesta y clasificación automática de correos del buzón central de
+Ingesta y clasificación automática de correos de los buzones autorizados de
 Comercio Exterior, con extracción de datos clave, matching contra
 proveedores/órdenes de compra existentes y verificación de requisitos —
 sin reemplazar el juicio humano en decisiones críticas (ver §6).
 
-## 2. Buzón V1
+## 2. Buzones de Ricol
 
-La Bandeja usa un buzón central por instalación. Sistemas administra el
-piloto en producción con `departamento.sistemas@ricol.com.co` y la
-etiqueta `RicoSoft-Piloto-Importaciones`. El buzón definitivo de operación
-queda por confirmar con Comercio Exterior.
+La operación usa tres cuentas activas: logistica@ricol.com.co,
+gisela.salazar@ricol.com.co y auxiliar.compras@ricol.com.co. Se consultan en
+secuencia en cada ciclo. Cada cuenta tiene su etiqueta de Gmail, responsable,
+límites y estado. Una pausa o un error en una cuenta permite continuar con las
+demás. El antiguo buzón de pruebas se conserva como antecedente.
 
 ## 3. Autenticación con Google Workspace
 
@@ -39,41 +40,25 @@ navegador ni dependencia de una sesión personal de Gmail — ver
 | Variable | Default | Propósito |
 |---|---|---|
 | `IMPORTACIONES_EMAIL_SYNC_ENABLED` | `false` (cualquier valor distinto de `"true"`) | Activa el job de ingesta. **Debe quedar apagado en desarrollo/tests.** |
-| `IMPORTACIONES_EMAIL_MAILBOX` | — | Buzón central autorizado para la instalación. |
 | `IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON` | — | JSON completo de la cuenta de servicio, como string. Secreto — nunca en el repo. |
-| `IMPORTACIONES_MAX_EMAILS_PER_RUN` | `25` | Tope de correos listados por corrida de ingesta. |
-| `IMPORTACIONES_MAX_ATTACHMENTS_PER_RUN` | `50` | Tope de adjuntos descargados por corrida. |
 | `IMPORTACIONES_PROCESSING_ENABLED` | `false` | Activa el job de procesamiento (clasificación/extracción/matching). **Debe quedar apagado en desarrollo/tests.** |
 | `IMPORTACIONES_EMAIL_SYNC_CRON` | `*/5 * * * *` | Frecuencia del job de ingesta. |
 | `IMPORTACIONES_PROCESSING_CRON` | `*/5 * * * *` | Frecuencia del job de procesamiento. |
 
-## 5. Arquitectura: tenant desconocido al ingerir
+## 5. Empresa, origen y procesamiento
 
-Un correo llega al buzón central sin saber a qué tenant pertenece.
-`ImportacionCorreo.tenantId` es **nullable** por esto — el único modelo
-tenant-scoped de la aplicación con esta excepción además de
-`OrdenCompraIntl`. El flujo:
+El correo nuevo se guarda con la empresa del buzón y su primer origen en una
+transacción. El responsable inicial es el de esa primera cuenta, si está
+activo y puede acceder a Ricol. Repetir el Message-ID en otro buzón de Ricol
+registra otra recepción del mismo caso. Un conflicto con otra empresa queda
+omitido por identidad Gmail y buzón, sin vincular ambos tenants.
 
-1. **Ingesta** (`importaciones-bandeja-ingesta.job.ts`): guarda el
-   correo y sus adjuntos con `tenantId: null`. La idempotencia es por
-   `messageId` (Message-ID RFC 5322), sin tenant en la clave única —
-   nunca se sabe a cuál tenant pertenece antes de identificarlo.
-2. **Procesamiento** (`importaciones-bandeja-procesamiento.job.ts`):
-   clasifica el correo, extrae datos, e identifica al proveedor
-   usando el correo exacto del remitente en el catálogo de proveedores.
-   El dominio, la razón social y el identificador fiscal del adjunto
-   aportan candidatos para revisión. Una discrepancia de identidad
-   detectada impide la asociación automática. Con remitente exacto, la
-   discrepancia se evalúa solo contra los proveedores de la empresa de ese
-   proveedor (`hayConflictoIdentidadProveedor`).
-3. Si el proveedor no se identifica de forma única, el correo queda en
-   `REQUIERE_REVISION` con la excepción `PROVEEDOR_NO_IDENTIFICADO`.
-   El correo sigue sin empresa y queda fuera de las bandejas de empresa.
-   Las rutas `/api/importaciones/bandeja/sin-asignar*` devuelven 403.
-
-`ImportacionCorreo` e `ImportacionExcepcion` están explícitamente
-excluidos de `MODELOS_TENANT_SCOPED` en `tenant-prisma.ts` — el
-controlador aplica el filtro de tenant manualmente en cada consulta.
+El procesador toma los correos cuya ingesta concluyó. Los proveedores se
+buscan dentro del tenant del correo. Los casos históricos se muestran como
+Origen anterior. Sistemas puede conservarlos en su estado actual y los
+usuarios con permiso de procesamiento pueden reencolar manualmente los
+pendientes o en error de Ricol desde el detalle. Los correos históricos sin
+empresa siguen fuera de la Bandeja de Ricol.
 
 ## 6. Qué automatiza y qué no
 
@@ -139,34 +124,26 @@ retención de datos del proveedor de IA, etc.) antes de habilitarse.
 
 ## 10. Configuración operativa
 
-`GET /api/importaciones/bandeja/configuracion` (permiso
-`importaciones.correos_configurar`) expone únicamente el estado
-(habilitado/deshabilitado, buzón con máscara) — nunca el JSON de la
-cuenta de servicio ni ningún secreto. Los jobs (`iniciarSchedulerIngestaCorreos`/
-`iniciarSchedulerProcesamientoCorreos`) se registran en `src/index.ts`
-junto a los demás schedulers existentes (Siesa, servicios de renovación)
-y respetan el mismo patrón `noOverlap: true` + flag de entorno.
+En **Configuración → Monitoreo → Correo de Importaciones**, Sistemas registra
+el buzón, lo aprueba, prueba la conexión, guarda la etiqueta de esa cuenta,
+selecciona el responsable y la activa. Se pueden activar o pausar cuentas
+individuales. El panel muestra la última ejecución y el error por buzón.
+La programación general permite activar lectura y procesamiento y elegir
+la frecuencia. Los valores iniciales por buzón son 25 correos, 50 adjuntos
+y 120 segundos por ciclo. Un disparo del cron se omite si otro sigue activo.
 
+En **Importaciones → Bandeja de Correos**, se muestran todos los orígenes y
+el responsable de cada caso. Sistemas puede cambiar el responsable desde
+el detalle. La acción queda en auditoría.
 
-## Panel de Sistemas y piloto con etiqueta
-
-Configuración → Monitoreo → Correo de Importaciones permite probar la conexión,
-seleccionar una etiqueta de usuario de Gmail, ajustar frecuencia y límites y
-pausar o activar la lectura y el procesamiento. Sistemas crea la etiqueta en Gmail
-y la aplica a los mensajes de prueba. El panel obtiene su ID al probar la conexión.
-
-Aplicar la migración de configuración. En el servidor, definir el buzón autorizado
-y la credencial de lectura existentes, IMPORTACIONES_SISTEMAS_TENANT_ID (UUID de la
-empresa administradora) e IMPORTACIONES_SISTEMAS_USUARIOS (UUID de los operadores
-designados separados por comas). El operador debe iniciar sesión en esa empresa
-con el permiso importaciones.correos_configurar. La clave se aprovisiona fuera de la interfaz.
-
-El piloto inicia pausado. Los ajustes guardados son globales a la instalación.
-Al guardar, el proceso atiende el cambio y los demás procesos vuelven a leer la
-configuración cada 30 segundos. El filtro de Gmail usa el ID de etiqueta y permite
-incorporar mensajes antiguos recién etiquetados. El procesamiento del piloto toma
-los correos pendientes ingresados con la etiqueta seleccionada.
-
+Antes del despliegue, aplica las migraciones
+`20261125120000_buzones_importaciones` y
+`20261125150000_ingesta_segura_buzones`. Confirma que
+`IMPORTACIONES_SISTEMAS_TENANT_ID` corresponde a Ricol y que
+`IMPORTACIONES_SISTEMAS_USUARIOS` identifica a sus operadores autorizados.
+El operador también requiere el permiso `importaciones.correos_configurar`.
+Las direcciones y etiquetas se administran desde RicoSoft. La credencial
+de lectura de Google Workspace sigue protegida en el servidor.
 
 ## Evidencia del piloto
 

@@ -130,6 +130,8 @@ function BandejaCorreosPage() {
                     >
                       <p className="text-xs font-bold text-slate-900 truncate">{c.asunto}</p>
                       <p className="text-[11px] text-slate-500 truncate">{c.remitente}</p>
+                      <p className="text-[11px] text-slate-600">{c.origenes?.map((o) => o.buzon.direccion).join(" · ") || "Origen anterior"}</p>
+                      <p className="text-[11px] text-slate-600">{c.responsable?.nombre ?? "Sin responsable"}</p>
                     </Link>
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-xs text-slate-700">

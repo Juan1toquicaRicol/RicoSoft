@@ -1,9 +1,3 @@
-import { aplicarPiloto, pilotoInicial } from "./config";
-vi.mock("../../config/prisma", () => ({
-  prisma: {
-    importacionCorreo: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
-  },
-}));
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
@@ -85,17 +79,15 @@ describe("GoogleWorkspaceEmailProvider", () => {
     usersMessagesGet.mockReset();
     usersMessagesAttachmentsGet.mockReset();
     process.env.IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON = SERVICE_ACCOUNT_JSON;
-    process.env.IMPORTACIONES_EMAIL_MAILBOX = "importaciones@ricol.com.co";
   });
 
   afterEach(() => {
     delete process.env.IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON;
-    delete process.env.IMPORTACIONES_EMAIL_MAILBOX;
   });
 
   it("autenticación: usa JWT con Domain-Wide Delegation, nunca contraseñas de usuario", async () => {
     usersMessagesList.mockResolvedValue({ data: { messages: [] } });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await provider.listNewMessages(null, 10);
 
@@ -110,21 +102,21 @@ describe("GoogleWorkspaceEmailProvider", () => {
 
   it("error de autenticación: credenciales faltantes lanza EmailProviderError, no revienta el proceso", async () => {
     delete process.env.IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON;
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await expect(provider.listNewMessages(null, 10)).rejects.toBeInstanceOf(EmailProviderError);
   });
 
   it("error de autenticación: JSON de la cuenta de servicio inválido lanza EmailProviderError", async () => {
     process.env.IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON = "{no es json}";
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await expect(provider.listNewMessages(null, 10)).rejects.toBeInstanceOf(EmailProviderError);
   });
 
   it("lectura incremental: sin cursor no filtra por fecha; con cursor arma 'after:<segundos>'", async () => {
     usersMessagesList.mockResolvedValue({ data: { messages: [] } });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await provider.listNewMessages(null, 10);
     expect(usersMessagesList).toHaveBeenCalledWith(expect.objectContaining({ q: undefined }));
@@ -148,7 +140,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
         internalDate: String({ g1: 1000, g2: 2000, g3: 3000 }[id]),
       }),
     }));
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     const resultado = await provider.listNewMessages(null, 2);
 
@@ -163,7 +155,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
     usersMessagesGet.mockResolvedValue({
       data: mensajeGmailFalso({ messageId: "<real-message-id@example.com>" }),
     });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     const resultado = await provider.listNewMessages(null, 10);
 
@@ -191,7 +183,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
           payload: { headers: [], mimeType: "text/plain" },
         },
       });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     const resultado = await provider.listNewMessages(null, 10);
 
@@ -204,7 +196,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
   it("adjuntos: recorre partes MIME anidadas y extrae adjuntos con su attachmentId", async () => {
     usersMessagesList.mockResolvedValue({ data: { messages: [{ id: "gmail-id-1" }] } });
     usersMessagesGet.mockResolvedValue({ data: mensajeGmailFalso() });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     const resultado = await provider.listNewMessages(null, 10);
 
@@ -224,7 +216,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
     usersMessagesAttachmentsGet.mockResolvedValue({
       data: { data: original.toString("base64url") },
     });
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     const contenido = await provider.getAttachmentContent("gmail-id-1", "att-1");
 
@@ -236,7 +228,7 @@ describe("GoogleWorkspaceEmailProvider", () => {
 
   it("errores de API: listar mensajes fallido se envuelve en EmailProviderError", async () => {
     usersMessagesList.mockRejectedValue(new Error("500 desde Gmail"));
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await expect(provider.listNewMessages(null, 10)).rejects.toBeInstanceOf(EmailProviderError);
   });
@@ -244,14 +236,14 @@ describe("GoogleWorkspaceEmailProvider", () => {
   it("errores de API: obtener el detalle de un mensaje fallido se envuelve en EmailProviderError", async () => {
     usersMessagesList.mockResolvedValue({ data: { messages: [{ id: "gmail-id-1" }] } });
     usersMessagesGet.mockRejectedValue(new Error("404 desde Gmail"));
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await expect(provider.listNewMessages(null, 10)).rejects.toBeInstanceOf(EmailProviderError);
   });
 
   it("errores de API: descargar un adjunto fallido se envuelve en EmailProviderError", async () => {
     usersMessagesAttachmentsGet.mockRejectedValue(new Error("403 desde Gmail"));
-    const provider = new GoogleWorkspaceEmailProvider();
+    const provider = new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co");
 
     await expect(provider.getAttachmentContent("gmail-id-1", "att-1")).rejects.toBeInstanceOf(
       EmailProviderError,
@@ -260,13 +252,11 @@ describe("GoogleWorkspaceEmailProvider", () => {
 });
 
 it("filtra por ID de etiqueta incluso sin cursor y descarta mensajes que pierden la etiqueta", async () => {
-  aplicarPiloto({ ...pilotoInicial, lectura: true, etiqueta: "Label_qa" });
   vi.stubEnv("IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON", SERVICE_ACCOUNT_JSON);
-  vi.stubEnv("IMPORTACIONES_EMAIL_MAILBOX", "prueba@example.com");
   try {
     usersMessagesList.mockResolvedValue({ data: { messages: [{ id: "uno" }] } });
     usersMessagesGet.mockResolvedValue({ data: { ...mensajeGmailFalso(), labelIds: ["INBOX"] } });
-    const respuesta = await new GoogleWorkspaceEmailProvider().listNewMessages("1700000000000", 25);
+    const respuesta = await new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co").listNewMessages("1700000000000", 25, { etiqueta: "Label_qa" });
     expect(usersMessagesList).toHaveBeenCalledWith(
       expect.objectContaining({ labelIds: ["Label_qa"], q: undefined }),
     );
@@ -274,10 +264,27 @@ it("filtra por ID de etiqueta incluso sin cursor y descarta mensajes que pierden
     usersMessagesGet.mockResolvedValue({
       data: { ...mensajeGmailFalso(), labelIds: ["Label_qa"] },
     });
-    const incluido = await new GoogleWorkspaceEmailProvider().listNewMessages(null, 25);
+    const incluido = await new GoogleWorkspaceEmailProvider("importaciones@ricol.com.co").listNewMessages(null, 25, { etiqueta: "Label_qa" });
     expect(incluido.messages).toHaveLength(1);
   } finally {
-    aplicarPiloto(null);
+    vi.unstubAllEnvs();
+  }
+});
+
+it("propaga la cancelación al transporte de listado y de adjuntos", async () => {
+  vi.stubEnv("IMPORTACIONES_EMAIL_SERVICE_ACCOUNT_JSON", SERVICE_ACCOUNT_JSON);
+  try {
+    const provider = new GoogleWorkspaceEmailProvider("logistica@ricol.com.co");
+    const { signal } = new AbortController();
+    usersMessagesList.mockResolvedValue({ data: { messages: [{ id: "uno" }] } });
+    usersMessagesGet.mockResolvedValue({ data: { ...mensajeGmailFalso(), labelIds: ["Label_qa"] } });
+    await provider.listNewMessages(null, 1, { etiqueta: "Label_qa", signal });
+    expect(usersMessagesList).toHaveBeenLastCalledWith(expect.anything(), { signal, retry: false });
+    expect(usersMessagesGet).toHaveBeenLastCalledWith(expect.anything(), { signal, retry: false });
+    usersMessagesAttachmentsGet.mockResolvedValueOnce({ data: { data: base64Url("archivo") } });
+    await provider.getAttachmentContent("uno", "adjunto", signal);
+    expect(usersMessagesAttachmentsGet).toHaveBeenLastCalledWith(expect.anything(), { signal, retry: false });
+  } finally {
     vi.unstubAllEnvs();
   }
 });

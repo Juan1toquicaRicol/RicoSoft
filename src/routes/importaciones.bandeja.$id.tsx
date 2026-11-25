@@ -1,3 +1,4 @@
+import { SelectorResponsable, rutaOperacionCorreo, type ResponsableCorreo } from "@/components/importaciones/panel-correo";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, FileText, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -53,7 +54,7 @@ function ContenidoCorreo({ id }: { id: string }) {
   const puedeResolver = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_RESOLVER);
   const puedeProcesar = hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_PROCESAR);
 
-  const { correo, loading, error, resolverExcepcion, reprocesar } = useCorreoBandeja(id);
+  const { correo, loading, error, refresh, resolverExcepcion, reprocesar } = useCorreoBandeja(id);
   const [excepcionActiva, setExcepcionActiva] = useState<ExcepcionBandeja | null>(null);
   const [proveedorId, setProveedorId] = useState("");
   const [ordenId, setOrdenId] = useState("");
@@ -185,7 +186,7 @@ function ContenidoCorreo({ id }: { id: string }) {
                 </Link>
               </Button>
             )}
-          {puedeProcesar && correo.estadoProcesamiento === "ERROR" && (
+          {puedeProcesar && correo.reprocesable && (
             <Button size="sm" variant="outline" onClick={handleReprocesar} className="gap-1.5">
               <RefreshCw className="h-3.5 w-3.5" /> Reprocesar
             </Button>
@@ -193,6 +194,14 @@ function ContenidoCorreo({ id }: { id: string }) {
         </div>
       }
     >
+      <section className="mb-4 space-y-2 rounded-lg border bg-white p-4">
+        <p className="text-sm"><strong>Buzones de origen</strong> · {correo.origenes?.map((o) => o.buzon.direccion).join(" · ") || "Origen anterior"}</p>
+        <p className="text-sm"><strong>Responsable</strong> · {correo.responsable?.nombre ?? "Sin asignar"}</p>
+        {hasPermission(user, PERMISOS_SISTEMA.IMPORTACIONES_CORREOS_CONFIGURAR) && (
+          <ReasignarCorreo key={correo.responsable?.id ?? "sin-responsable"} id={id}
+            responsableId={correo.responsable?.id ?? ""} onGuardado={refresh} />
+        )}
+      </section>
       <div className="grid gap-4 lg:grid-cols-4">
         <div className="panel bg-white border-slate-200 rounded-lg p-4 shadow-2xs">
           <p className="text-[10px] uppercase font-bold text-slate-500">Estado</p>
@@ -471,5 +480,49 @@ function ContenidoCorreo({ id }: { id: string }) {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+function ReasignarCorreo({ id, responsableId, onGuardado }: {
+  id: string;
+  responsableId: string;
+  onGuardado: () => Promise<void>;
+}) {
+  const [usuarios, setUsuarios] = useState<ResponsableCorreo[] | null>(null);
+  const [responsable, setResponsable] = useState(responsableId);
+  const [ocupado, setOcupado] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+  useEffect(() => {
+    let vigente = true;
+    fetchAuth(rutaOperacionCorreo + "/responsables")
+      .then((data) => { if (vigente) setUsuarios(data.usuarios); })
+      .catch(() => undefined);
+    return () => { vigente = false; };
+  }, []);
+
+  async function guardar() {
+    setOcupado(true);
+    setMensaje("");
+    try {
+      await fetchAuth("/importaciones/bandeja/correos/" + id + "/responsable", {
+        method: "PUT", body: JSON.stringify({ responsableUsuarioId: responsable || null }),
+      });
+      await onGuardado();
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : "No se pudo reasignar el correo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  if (!usuarios) return null;
+  return (
+    <fieldset disabled={ocupado} className="flex flex-wrap items-center gap-2">
+      <SelectorResponsable usuarios={usuarios} valor={responsable} onChange={setResponsable} />
+      <Button size="sm" variant="outline" disabled={responsable === responsableId} onClick={guardar}>
+        Guardar responsable
+      </Button>
+      {mensaje && <p role="status" className="text-sm">{mensaje}</p>}
+    </fieldset>
   );
 }

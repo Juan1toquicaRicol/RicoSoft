@@ -2,6 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { schedule, type ScheduledTask } from "node-cron";
+import type { BuzonImportaciones } from "@prisma/client";
 import {
   ejecutarRegistrado,
   quitarScheduler,
@@ -9,86 +10,177 @@ import {
   reportarFalloEnCorrida,
 } from "../../lib/job-registry";
 import { prisma } from "../../config/prisma";
-import { GoogleWorkspaceEmailProvider } from "../../integrations/email/google-workspace-email-provider";
-import { EmailProviderError, type EmailProvider } from "../../integrations/email/email-provider";
+import { EmailProviderError, type EmailMessage, type EmailProvider } from "../../integrations/email/email-provider";
 import {
-  etiquetaPiloto,
   leerConfigEmailImportaciones,
   leerConfigProcesamientoImportaciones,
 } from "../../integrations/email/config";
+import {
+  _establecerFabricaProveedorParaTests,
+  proveedorParaBuzon,
+  responsableValido,
+} from "./buzones-importaciones.service";
+import { puedeIngerir, type EstadoBuzon } from "./buzones-importaciones.reglas";
 
 /**
- * Job de INGESTA (§3 de la especificación) — SOLO trae correos+adjuntos del
- * buzón y los persiste. Deliberadamente separado del job de PROCESAMIENTO
- * (clasificar/extraer/matchear, ver .procesamiento.job.ts): un correo con
- * cientos de adjuntos nunca debe bloquear la ingesta de los demás correos
- * nuevos, y viceversa. tenantId queda NULL aquí a propósito — se resuelve
- * en el job de procesamiento (ver comentario en schema.prisma).
+ * Job de INGESTA de la Bandeja. Recorre los buzones ACTIVOS con etiqueta en
+ * secuencia dentro de cada ciclo. Cada buzón tiene su propio límite de
+ * correos y adjuntos, su tiempo de espera y su estado: si uno falla o agota
+ * el tiempo, se registra en ese buzón y el siguiente sigue.
  *
- * Usa `prisma` global, NUNCA tenantPrisma: en este punto no hay ningún
- * tenant conocido todavía.
+ * Reglas:
+ * - El correo nuevo nace con el tenant del buzón y con el responsable inicial
+ *   del buzón, desde el primer guardado.
+ * - Un mensaje ya existente (mismo Message-ID) no se duplica: si pertenece al
+ *   mismo tenant solo se agrega el origen de este buzón, sin volver a bajar
+ *   adjuntos ni cambiar responsable. Si pertenece a otro tenant, se omite.
+ * - Alta del correo y su primer origen en la misma transacción.
+ *
+ * Usa `prisma` global: el job corre sin sesión de usuario.
  */
 
-let provider: EmailProvider = new GoogleWorkspaceEmailProvider();
-
-/** Solo para tests: inyecta un EmailProvider falso en vez de Gmail real —
- * "usar mocks, NUNCA depender del Gmail real en tests" (spec §24). */
+/** Solo para tests: reemplaza el proveedor de Gmail de TODOS los buzones. */
 export function _establecerProviderParaTests(p: EmailProvider): void {
-  provider = p;
+  _establecerFabricaProveedorParaTests(() => p);
+}
+
+/** Solo para tests: fábrica por buzón (p. ej., un falso distinto por dirección). */
+export function _establecerFabricaProveedorIngestaParaTests(
+  fabrica: ((direccion: string) => EmailProvider) | null,
+): void {
+  _establecerFabricaProveedorParaTests(fabrica);
 }
 
 const UPLOADS_DIR_CORREOS = "importaciones-correos";
 
+/** Mensaje seguro para guardar en el buzón: nunca detalles de la API de Google. */
+function mensajeDeFallo(error: unknown): string {
+  if (error instanceof EmailProviderError) return error.message.slice(0, 500);
+  if (error instanceof Error && error.name === "TimeoutBuzon") return error.message;
+  return "Falló la lectura del buzón.";
+}
+
+function esperarGmail<T>(promesa: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const cancelar = () => reject(signal.reason);
+    signal.addEventListener("abort", cancelar, { once: true });
+    if (signal.aborted) cancelar();
+    void promesa.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancelar));
+  });
+}
+
 /**
- * Un ciclo completo de ingesta: pide mensajes nuevos desde el último
- * cursor conocido, los persiste con sus adjuntos, y avanza el cursor.
- * Nunca lanza — un fallo de Gmail (rate limit, token expirado, etc.) se
- * loguea y el próximo tick lo reintenta, mismo principio que
- * crosschex-sync.job.ts.
+ * Un ciclo completo: cada buzón activo se lee en secuencia. Nunca lanza.
  */
 export async function ejecutarCicloIngestaCorreos(): Promise<void> {
   const config = leerConfigEmailImportaciones();
   if (!config.habilitado) return;
 
-  const etiqueta = etiquetaPiloto();
-  const cursorActual = etiqueta ? null : await obtenerCursorActual();
+  const buzones = await prisma.buzonImportaciones.findMany({
+    where: { estado: "ACTIVO" },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const buzon of buzones) {
+    if (!puedeIngerir(buzon.estado as EstadoBuzon, buzon.etiquetaId)) continue;
+    try {
+      await ingerirBuzon(buzon);
+    } catch {
+      reportarFalloEnCorrida("bandeja-ingesta", "No se pudo registrar el estado de un buzón.");
+    }
+  }
+}
 
-  let resultado;
+/** Lee un buzón. Nunca lanza: el error queda registrado en el propio buzón. */
+export async function ingerirBuzon(buzon: BuzonImportaciones): Promise<void> {
+  const provider = proveedorParaBuzon(buzon.direccion);
+  const cancelacion = new AbortController();
+  const errorTiempo = new Error("El buzón no respondió en el tiempo permitido.");
+  errorTiempo.name = "TimeoutBuzon";
+  const temporizador = setTimeout(() => cancelacion.abort(errorTiempo), buzon.timeoutSegundos * 1000);
+  const { signal } = cancelacion;
   try {
-    resultado = await provider.listNewMessages(cursorActual, config.maxEmailsPerRun);
+    const conocidos = await prisma.importacionCorreoOrigen.findMany({
+      where: { buzonId: buzon.id, gmailId: { not: null } },
+      select: { gmailId: true },
+    });
+    const omitirIds = new Set(conocidos.map((f) => f.gmailId!));
+
+    const omitidos = await prisma.importacionMensajeOmitido.findMany({
+      where: { buzonId: buzon.id }, select: { gmailId: true },
+    });
+    for (const omision of omitidos) omitirIds.add(omision.gmailId);
+    const resultado = await esperarGmail(provider.listNewMessages(null, buzon.correosPorCiclo, {
+      etiqueta: buzon.etiquetaId!, omitirIds, signal,
+    }), signal);
+    signal.throwIfAborted();
+
+    const responsableVigente = await responsableVigenteDelBuzon(buzon);
+    let adjuntosDeLaCorrida = 0;
+    for (const mensaje of resultado.messages) {
+      const cantidad = mensaje.attachments.length;
+      // Tope de adjuntos por ciclo: un correo nunca se trunca; si no cabe,
+      // queda para el próximo ciclo (no está en omitirIds).
+      if (adjuntosDeLaCorrida > 0 && adjuntosDeLaCorrida + cantidad > buzon.adjuntosPorCiclo) break;
+      adjuntosDeLaCorrida += cantidad;
+      signal.throwIfAborted();
+      await persistirMensajeDeBuzon(buzon, provider, mensaje, responsableVigente, signal);
+    }
+
+    await prisma.buzonImportaciones.update({
+      where: { id: buzon.id },
+      data: { ultimaEjecucion: new Date(), ultimoError: null },
+    });
   } catch (error) {
-    reportarFalloEnCorrida("bandeja-ingesta", "No se pudo leer la bandeja de Gmail.");
-    console.error(
-      "[bandeja-ingesta] Error al listar mensajes nuevos:",
-      error instanceof Error ? error.message : "Error de Gmail",
-    );
+    console.error(`[bandeja-ingesta] Buzón ${buzon.direccion}:`, error instanceof Error ? error.name : "error");
+    reportarFalloEnCorrida("bandeja-ingesta", "Falló la lectura de un buzón.");
+    await prisma.buzonImportaciones.update({
+      where: { id: buzon.id },
+      data: { ultimaEjecucion: new Date(), ultimoError: mensajeDeFallo(signal.aborted ? signal.reason : error) },
+    });
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
+/** El responsable del buzón solo se usa si sigue activo y es de la empresa del buzón. */
+async function responsableVigenteDelBuzon(buzon: BuzonImportaciones): Promise<string | null> {
+  if (!buzon.responsableUsuarioId) return null;
+  return await responsableValido(buzon.tenantId, buzon.responsableUsuarioId)
+    ? buzon.responsableUsuarioId : null;
+}
+
+async function persistirMensajeDeBuzon(
+  buzon: BuzonImportaciones,
+  provider: EmailProvider,
+  mensaje: EmailMessage,
+  responsableVigente: string | null,
+  signal: AbortSignal,
+): Promise<void> {
+  const existente = await prisma.importacionCorreo.findUnique({
+    where: { messageId: mensaje.messageId },
+    select: { id: true, tenantId: true },
+  });
+
+  if (existente) {
+    if (existente.tenantId !== buzon.tenantId) {
+      // Otro tenant ya tiene este correo: no se agrega origen ni se cambia de empresa.
+      await registrarOmitido(buzon.id, mensaje.providerMessageId);
+      console.warn(`[bandeja-ingesta] Correo ${mensaje.messageId} pertenece a otra empresa; omitido en ${buzon.direccion}.`);
+      return;
+    }
+    await agregarOrigen(existente.id, buzon, mensaje);
     return;
   }
 
-  // Los mensajes llegan del más antiguo al más nuevo (ver el proveedor): si
-  // la corrida se corta, el cursor (fecha máxima persistida) nunca queda por
-  // encima de un mensaje que no se llegó a guardar.
-  if (etiqueta !== etiquetaPiloto() || !leerConfigEmailImportaciones().habilitado) return;
-  let adjuntosDeLaCorrida = 0;
-  for (const mensaje of resultado.messages) {
-    try {
-      const yaExiste = await prisma.importacionCorreo.findUnique({
-        where: { messageId: mensaje.messageId },
-        select: { id: true },
-      });
-      if (yaExiste) continue; // idempotencia real — nunca duplica
-
-      // maxAttachmentsPerRun es un tope POR CORRIDA: un correo nunca se
-      // trunca (se perderían adjuntos); si no cabe, queda para la próxima.
-      const cantidad = mensaje.attachments.length;
-      if (adjuntosDeLaCorrida > 0 && adjuntosDeLaCorrida + cantidad > config.maxAttachmentsPerRun) {
-        break;
-      }
-      adjuntosDeLaCorrida += cantidad;
-
-      const correo = await prisma.importacionCorreo.create({
+  let correoId: string;
+  try {
+    correoId = await prisma.$transaction(async (tx) => {
+      const correo = await tx.importacionCorreo.create({
         data: {
-          ...(etiqueta ? { etiquetaPiloto: etiqueta, gmailId: mensaje.providerMessageId } : {}),
+          tenantId: buzon.tenantId,
+          responsableUsuarioId: responsableVigente,
+          etiquetaPiloto: buzon.etiquetaId,
+          gmailId: mensaje.providerMessageId,
           messageId: mensaje.messageId,
           remitente: mensaje.from,
           destinatarios: mensaje.to.join(", "),
@@ -96,110 +188,122 @@ export async function ejecutarCicloIngestaCorreos(): Promise<void> {
           fechaRecibido: mensaje.date,
           cuerpoTexto: mensaje.bodyText,
           estadoProcesamiento: "PENDIENTE",
+          ingestaCompleta: mensaje.attachments.length === 0,
         },
       });
+      await tx.importacionCorreoOrigen.create({
+        data: {
+          correoId: correo.id,
+          buzonId: buzon.id,
+          gmailId: mensaje.providerMessageId,
+          etiquetaId: buzon.etiquetaId,
+        },
+      });
+      return correo.id;
+    });
+  } catch (error) {
+    if (esViolacionUnica(error)) {
+      // Otro ciclo o instancia lo guardó entre la consulta y el alta: queda como origen.
+      const ganador = await prisma.importacionCorreo.findUnique({
+        where: { messageId: mensaje.messageId },
+        select: { id: true, tenantId: true },
+      });
+      if (ganador?.tenantId === buzon.tenantId) await agregarOrigen(ganador.id, buzon, mensaje);
+      else if (ganador) await registrarOmitido(buzon.id, mensaje.providerMessageId);
+      return;
+    }
+    throw error;
+  }
 
-      const adjuntosFallidos: string[] = [];
-      for (const adjunto of mensaje.attachments) {
-        try {
-          const contenido = await provider.getAttachmentContent(
-            mensaje.providerMessageId,
-            adjunto.providerAttachmentId,
-          );
-          const hash = crypto.createHash("sha256").update(contenido).digest("hex");
+  if (mensaje.attachments.length) await guardarAdjuntos(correoId, provider, mensaje, signal);
+}
 
-          const yaExisteAdjunto = await prisma.importacionCorreoAdjunto.findUnique({
-            where: { correoId_hashSha256: { correoId: correo.id, hashSha256: hash } },
-          });
-          if (yaExisteAdjunto) continue;
+async function registrarOmitido(buzonId: string, gmailId: string): Promise<void> {
+  try {
+    await prisma.importacionMensajeOmitido.create({ data: { buzonId, gmailId } });
+  } catch (error) {
+    if (!esViolacionUnica(error)) throw error;
+  }
+}
 
-          const ruta = guardarAdjuntoEnDisco(correo.id, adjunto.filename, contenido);
-          await prisma.importacionCorreoAdjunto.create({
-            data: {
-              correoId: correo.id,
-              nombreOriginal: adjunto.filename,
-              mimeType: adjunto.mimeType,
-              tamano: adjunto.size,
-              ruta,
-              hashSha256: hash,
-              estadoExtraccion: "PENDIENTE",
-            },
-          });
-        } catch (error) {
-          console.error(
-            `[bandeja-ingesta] Error al descargar adjunto "${adjunto.filename}" del correo ${mensaje.messageId}:`,
-            error,
-          );
-          adjuntosFallidos.push(adjunto.filename);
-        }
-      }
+async function agregarOrigen(correoId: string, buzon: BuzonImportaciones, mensaje: EmailMessage): Promise<void> {
+  try {
+    await prisma.importacionCorreoOrigen.create({
+      data: {
+        correoId,
+        buzonId: buzon.id,
+        gmailId: mensaje.providerMessageId,
+        etiquetaId: buzon.etiquetaId,
+      },
+    });
+  } catch (error) {
+    // Ya existía este origen (carrera entre instancias): no es un fallo.
+    if (!esViolacionUnica(error)) throw error;
+  }
+}
 
-      if (adjuntosFallidos.length > 0) {
-        reportarFalloEnCorrida("bandeja-ingesta", "Falló la descarga de un adjunto.");
-        // El correo queda guardado pero NO se procesa como si estuviera
-        // completo: pasa a ERROR con la lista de adjuntos que faltan, visible
-        // para una persona, en vez de omitirse en silencio en la siguiente
-        // corrida (el correo ya existe y se saltaría por idempotencia).
-        await prisma.importacionCorreo.update({
-          where: { id: correo.id },
-          data: {
-            estadoProcesamiento: "ERROR",
-            ultimoError:
-              `No se pudieron descargar ${adjuntosFallidos.length} adjunto(s): ${adjuntosFallidos.join(", ")}. Revisar el correo original en el buzón.`.slice(
-                0,
-                2000,
-              ),
-          },
-        });
-      }
+function esViolacionUnica(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
+}
+
+async function guardarAdjuntos(correoId: string, provider: EmailProvider, mensaje: EmailMessage, signal: AbortSignal): Promise<void> {
+  const adjuntosFallidos: string[] = [];
+  for (const adjunto of mensaje.attachments) {
+    try {
+      const contenido = await esperarGmail(provider.getAttachmentContent(
+        mensaje.providerMessageId,
+        adjunto.providerAttachmentId,
+        signal,
+      ), signal);
+      signal.throwIfAborted();
+      const hash = crypto.createHash("sha256").update(contenido).digest("hex");
+
+      const yaExisteAdjunto = await prisma.importacionCorreoAdjunto.findUnique({
+        where: { correoId_hashSha256: { correoId, hashSha256: hash } },
+      });
+      if (yaExisteAdjunto) continue;
+
+      const ruta = guardarAdjuntoEnDisco(correoId, adjunto.filename, contenido);
+      await prisma.importacionCorreoAdjunto.create({
+        data: {
+          correoId,
+          nombreOriginal: adjunto.filename,
+          mimeType: adjunto.mimeType,
+          tamano: adjunto.size,
+          ruta,
+          hashSha256: hash,
+          estadoExtraccion: "PENDIENTE",
+        },
+      });
     } catch (error) {
-      // Fallo al persistir el correo mismo: se corta la corrida. Continuar
-      // con mensajes más nuevos dejaría el cursor por encima de este.
-      reportarFalloEnCorrida("bandeja-ingesta", "Falló el guardado del correo.");
-      console.error(`[bandeja-ingesta] Error al persistir el correo ${mensaje.messageId}:`, error);
-      break;
+      console.error(`[bandeja-ingesta] Error al descargar adjunto "${adjunto.filename}" del correo ${mensaje.messageId}:`, error);
+      adjuntosFallidos.push(adjunto.filename);
+      if (signal.aborted) break;
     }
   }
 
-  if (resultado.nextCursor) {
-    await guardarCursor(resultado.nextCursor);
+  if (adjuntosFallidos.length > 0) {
+    reportarFalloEnCorrida("bandeja-ingesta", "Falló la descarga de un adjunto.");
+    // El correo queda guardado pero NO se procesa como si estuviera completo.
+    await prisma.importacionCorreo.update({
+      where: { id: correoId },
+      data: {
+        estadoProcesamiento: "ERROR",
+        ultimoError:
+          `No se pudieron descargar ${adjuntosFallidos.length} adjunto(s): ${adjuntosFallidos.join(", ")}. Revisar el correo original en el buzón.`.slice(
+            0,
+            2000,
+          ),
+      },
+    });
+    signal.throwIfAborted();
+  } else {
+    await prisma.importacionCorreo.update({ where: { id: correoId }, data: { ingestaCompleta: true } });
   }
 }
 
-/** Cursor persistido como el `fechaRecibido` (epoch ms) del correo más
- * reciente ya ingerido — consulta GLOBAL (sin tenantId, `prisma` directo):
- * el cursor de un buzón único no pertenece a ningún tenant. */
-async function obtenerCursorActual(): Promise<string | null> {
-  const ultimo = await prisma.importacionCorreo.findFirst({
-    orderBy: { fechaRecibido: "desc" },
-    select: { fechaRecibido: true },
-  });
-  return ultimo ? String(ultimo.fechaRecibido.getTime()) : null;
-}
-
-// El cursor real que usa GoogleWorkspaceEmailProvider ya se deriva de
-// fechaRecibido (ver obtenerCursorActual) — este helper existe para que la
-// interfaz quede simétrica si en el futuro el cursor deja de poder
-// derivarse de una columna existente (ej. al migrar a la History API de
-// Gmail, que si necesita un valor persistido aparte).
-async function guardarCursor(_cursor: string): Promise<void> {
-  // No-op en V1: ver comentario arriba.
-}
-
-function guardarAdjuntoEnDisco(
-  correoId: string,
-  nombreOriginal: string,
-  contenido: Buffer,
-): string {
-  const dirDefinitivo = path.join(
-    __dirname,
-    "..",
-    "..",
-    "..",
-    "uploads",
-    UPLOADS_DIR_CORREOS,
-    correoId,
-  );
+function guardarAdjuntoEnDisco(correoId: string, nombreOriginal: string, contenido: Buffer): string {
+  const dirDefinitivo = path.join(__dirname, "..", "..", "..", "uploads", UPLOADS_DIR_CORREOS, correoId);
   fs.mkdirSync(dirDefinitivo, { recursive: true });
   const nombreSeguro = `${crypto.randomUUID()}-${path.basename(nombreOriginal)}`;
   const destino = path.join(dirDefinitivo, nombreSeguro);
@@ -214,9 +318,7 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
   const configEmail = leerConfigEmailImportaciones();
   const configProcesamiento = leerConfigProcesamientoImportaciones();
   if (!configEmail.habilitado) {
-    console.log(
-      "[bandeja-ingesta] Scheduler deshabilitado (IMPORTACIONES_EMAIL_SYNC_ENABLED distinto de 'true').",
-    );
+    console.log("[bandeja-ingesta] Scheduler deshabilitado (lectura de la Bandeja apagada).");
     return null;
   }
   if (tareaProgramada) return tareaProgramada;
@@ -224,7 +326,7 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
   tareaProgramada = schedule(
     configProcesamiento.cronIngesta,
     async () => {
-      if (cicloEnCurso) return;
+      if (cicloEnCurso) return; // omite el disparo si el ciclo anterior sigue corriendo
       cicloEnCurso = true;
       try {
         await ejecutarRegistrado("bandeja-ingesta", ejecutarCicloIngestaCorreos);
@@ -237,9 +339,7 @@ export function iniciarSchedulerIngestaCorreos(): ScheduledTask | null {
     { noOverlap: true, name: "bandeja-ingesta-correos" },
   );
   registrarScheduler("bandeja-ingesta", configProcesamiento.cronIngesta, tareaProgramada);
-  console.log(
-    `[bandeja-ingesta] Scheduler iniciado (expresión cron: "${configProcesamiento.cronIngesta}").`,
-  );
+  console.log(`[bandeja-ingesta] Scheduler iniciado (expresión cron: "${configProcesamiento.cronIngesta}").`);
   return tareaProgramada;
 }
 
